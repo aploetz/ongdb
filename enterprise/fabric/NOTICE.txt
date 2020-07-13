@@ -23,6 +23,7 @@ Apache Software License, Version 2.0
   Apache Commons BeanUtils
   Apache Commons Collections
   Apache Commons Compress
+  Apache Commons Configuration
   Apache Commons IO
   Apache Commons Lang
   Apache Commons Text
@@ -36,6 +37,7 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
+  Commons Lang
   hazelcast-all
   Jackson-annotations
   Jackson-core
@@ -52,6 +54,7 @@ Apache Software License, Version 2.0
   Lucene Core
   Lucene QueryParsers
   LZ4 and xxHash
+  Neo4j Java Driver
   Netty/All-in-One
   Non-Blocking Reactive Foundation for the JVM
   parboiled-core
@@ -67,10 +70,7 @@ BSD License
   asm-analysis
   asm-tree
   asm-util
-  JLine
   Scala Compiler
-  scala-xml
-  Scalap
   Zstandard
 
 BSD License 2-clause
@@ -95,12 +95,8 @@ GNU Lesser General Public License, Version 2.1
   Java Native Access
 
 MIT License
-  scallop
   SLF4J API Module
   SLF4J NOP Binding
-
-Mozilla Public License, Version 2.0
-  kiama
 
 Dependencies with multiple licenses
 -----------------------------------

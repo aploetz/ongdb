@@ -6,7 +6,12 @@ This product includes software ("Software") developed and owned by Neo4j.
 
 The Software is subject to the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
 Version 3 (http://www.fsf.org/licensing/licenses/agpl-3.0.html),
-included in the LICENSE.txt file.
+included in the LICENSE.txt file, with the Commons Clause.
+
+Neo4j Enterprise object code can be licensed independently from the source
+under separate commercial terms. Email inquiries can be directed
+to: licensing@neo4j.com. More information is also available
+at: https://neo4j.com/licensing/
 
 Full license texts are found in LICENSES.txt.
 
@@ -17,7 +22,12 @@ Third-party licenses
 Apache Software License, Version 2.0
   Apache Commons BeanUtils
   Apache Commons Collections
+  Apache Commons Text
+  Java Concurrency Tools Core Library
+  Lucene codecs
+  Lucene Common Analyzers
   Lucene Core
+  Lucene QueryParsers
   Netty/All-in-One
 
 Bouncy Castle License
@@ -31,6 +41,9 @@ Eclipse Distribution License - v 1.0
 Eclipse Public License - v 1.0
   Eclipse Collections API
   Eclipse Collections Main Library
+
+GNU Lesser General Public License, Version 2.1
+  Java Native Access
 
 Dependencies with multiple licenses
 -----------------------------------

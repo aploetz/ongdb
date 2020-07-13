@@ -22,8 +22,6 @@ Third-party licenses
 Apache Software License, Version 2.0
   Apache Commons BeanUtils
   Apache Commons Collections
-  Apache Commons Compress
-  Apache Commons IO
   Apache Commons Lang
   Apache Commons Text
   Apache Shiro :: Cache
@@ -36,52 +34,26 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
-  hazelcast-all
-  Jackson-annotations
-  Jackson-core
-  jackson-databind
   Java Concurrency Tools Core Library
-  Jetty :: Asynchronous HTTP Client
-  Jetty :: Http Utility
-  Jetty :: IO Utility
-  Jetty :: Utilities
-  jPowerShell
-  jProcesses
   Lucene codecs
   Lucene Common Analyzers
   Lucene Core
   Lucene QueryParsers
-  LZ4 and xxHash
   Netty/All-in-One
-  Non-Blocking Reactive Foundation for the JVM
   parboiled-core
   parboiled-scala
-  picocli - a mighty tiny Command Line Interface
-  WMI4Java
 
 BSD - Scala License
   Scala Library
 
 BSD License
   asm
-  asm-analysis
   asm-tree
-  asm-util
-  JLine
   Scala Compiler
-  scala-xml
-  Scalap
-  Zstandard
-
-BSD License 2-clause
-  zstd-jni
 
 Bouncy Castle License
   Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
   Bouncy Castle Provider
-
-Creative Commons 0
-  reactive-streams
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API
@@ -95,12 +67,7 @@ GNU Lesser General Public License, Version 2.1
   Java Native Access
 
 MIT License
-  scallop
   SLF4J API Module
-  SLF4J NOP Binding
-
-Mozilla Public License, Version 2.0
-  kiama
 
 Dependencies with multiple licenses
 -----------------------------------
