@@ -15,8 +15,8 @@
   </target>
 
   <!-- TODO: temporary workaround for browser dependency -->
-  <property name="browser.dir" location="src/main/distribution/neo4j-browser"/>
-  <property name="browser.flat.dir" location="src/main/distribution/neo4j-browser-flat"/>
+  <property name="browser.dir" location="src/main/distribution/ongdb-browser"/>
+  <property name="browser.flat.dir" location="src/main/distribution/ongdb-browser-flat"/>
   <target name="find-browser" description="See if browser is injected">
     <available file="${browser.dir}" property="browser.present"/>
     <echo>Checking if ${browser.dir} exists: ${browser.present}</echo>
