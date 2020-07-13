@@ -7,6 +7,7 @@
     <groupId>org.graphfoundation.ongdb</groupId>
     <artifactId>cypher-parent</artifactId>
     <version>4.0.7-SNAPSHOT</version>
+	<relativePath>../../community/cypher/</relativePath>
   </parent>
 
   <artifactId>cypher-enterprise-parent</artifactId>

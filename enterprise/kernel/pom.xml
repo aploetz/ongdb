@@ -2,7 +2,36 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<name>ONgDB - Enterprise Graph Database Kernel Features</name>
+
+	<packaging>jar</packaging>
+
+	<parent>
+	    <artifactId>parent</artifactId>
+	    <groupId>org.graphfoundation.ongdb</groupId>
+	    <relativePath>../..</relativePath>
+	    <version>4.0.7-SNAPSHOT</version>
+	</parent>
+
+	<properties>
+	    <license-text.header>headers/AGPL-3-header.txt</license-text.header>
+	    <maven.test.skip>true</maven.test.skip>
+
+	    <!-- Added to skip test compilation and running temporarily in enterprise as we upgrade 4.x -->
+	    <moduleName>org.neo4j.kernel.enterprise</moduleName>
+	</properties>
+
+	<scm>
+	    <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+	    <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+	    <url>https://github.com/graphfoundation/ongdb</url>
+	</scm>
+
+	 <version>4.0.7-SNAPSHOT</version>
+
     <artifactId>ongdb-enterprise-kernel</artifactId>
+	
     <build>
         <plugins>
             <plugin>
@@ -171,32 +200,6 @@
             <url>http://www.gnu.org/licenses/agpl-3.0-standalone.html</url>
         </license>
     </licenses>
-    <modelVersion>4.0.0</modelVersion>
-    <name>ONgDB - Enterprise Graph Database Kernel Features</name>
 
-    <packaging>jar</packaging>
-
-    <parent>
-        <artifactId>parent</artifactId>
-        <groupId>org.graphfoundation.ongdb</groupId>
-        <relativePath>../..</relativePath>
-        <version>4.0.7-SNAPSHOT</version>
-    </parent>
-
-    <properties>
-        <license-text.header>headers/AGPL-3-header.txt</license-text.header>
-        <maven.test.skip>true</maven.test.skip>
-
-        <!-- Added to skip test compilation and running temporarily in enterprise as we upgrade 4.x -->
-        <moduleName>org.neo4j.kernel.enterprise</moduleName>
-    </properties>
-
-    <scm>
-        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
-        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
-        <url>https://github.com/graphfoundation/ongdb</url>
-    </scm>
-
-    <version>4.0.7-SNAPSHOT</version>
 
 </project>

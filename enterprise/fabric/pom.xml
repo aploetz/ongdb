@@ -5,6 +5,7 @@
 	         <groupId>org.graphfoundation.ongdb</groupId>
 	         <artifactId>parent</artifactId>
 	         <version>4.0.7-SNAPSHOT</version>
+			 <relativePath>../..</relativePath>
 	     </parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-fabric</artifactId>
