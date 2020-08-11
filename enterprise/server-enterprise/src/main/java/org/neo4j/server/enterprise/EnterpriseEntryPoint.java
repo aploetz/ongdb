@@ -17,6 +17,7 @@
 
 package org.neo4j.server.enterprise;
 
+import org.neo4j.internal.unsafe.UnsafeUtil;
 import org.neo4j.server.BlockingBootstrapper;
 import org.neo4j.server.Bootstrapper;
 import org.neo4j.server.ServerBootstrapper;
@@ -26,11 +27,9 @@ public class EnterpriseEntryPoint
 {
     private static Bootstrapper bootstrapper;
 
-    /**
-     *
-     */
     private EnterpriseEntryPoint()
     {
+
     }
 
     /**
@@ -38,6 +37,7 @@ public class EnterpriseEntryPoint
      */
     public static void main( String[] args )
     {
+        UnsafeUtil.disableIllegalAccessLogger();
         int status = ServerBootstrapper.start( new EnterpriseBootstrapper(), args );
         if ( status != 0 )
         {
@@ -50,6 +50,8 @@ public class EnterpriseEntryPoint
      */
     public static void start( String[] args )
     {
+
+
         bootstrapper = new BlockingBootstrapper( new EnterpriseBootstrapper() );
         System.exit( ServerBootstrapper.start( bootstrapper, args ) );
     }

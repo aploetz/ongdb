@@ -19,59 +19,44 @@
 package org.neo4j.server.rest;
 
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 
-import org.neo4j.kernel.configuration.Config;
-import org.neo4j.logging.Log;
-import org.neo4j.logging.LogProvider;
+import org.neo4j.configuration.Config;
 import org.neo4j.server.configuration.ServerSettings;
 import org.neo4j.server.modules.ServerModule;
-import org.neo4j.server.rest.causalclustering.CausalClusteringService;
 import org.neo4j.server.web.WebServer;
-
-import static java.util.Arrays.asList;
 
 public class DatabaseRoleInfoServerModule implements ServerModule
 {
     private final WebServer server;
     private final Config config;
-    private final Log log;
 
-    public DatabaseRoleInfoServerModule( WebServer server, Config config, LogProvider logProvider )
+    public DatabaseRoleInfoServerModule( WebServer server, Config config )
     {
         this.server = server;
         this.config = config;
-        this.log = logProvider.getLog( getClass() );
     }
 
-    @Override
+    private static List<Class<?>> jaxRsClasses()
+    {
+        return Collections.emptyList();
+        //return List.of( CausalClusteringService.class );
+    }
+
     public void start()
     {
-        URI baseUri = managementApiUri();
-        server.addJAXRSClasses( getClassNames(), baseUri.toString(), null );
-
-        log.info( "Mounted REST API at: %s", baseUri.toString() );
+        String mountPoint = this.mountPoint();
+        this.server.addJAXRSClasses( jaxRsClasses(), mountPoint, null );
     }
 
-    @Override
     public void stop()
     {
-        URI baseUri = managementApiUri();
-        server.removeJAXRSClasses( getClassNames(), baseUri.toString() );
+        this.server.removeJAXRSClasses( jaxRsClasses(), this.mountPoint() );
     }
 
-    private List<String> getClassNames()
+    private String mountPoint()
     {
-        return asList(
-                MasterInfoService.class.getName(),
-                CoreDatabaseAvailabilityService.class.getName(),
-                ReadReplicaDatabaseAvailabilityService.class.getName(),
-                CausalClusteringService.class.getName()
-        );
-    }
-
-    private URI managementApiUri()
-    {
-        return config.get( ServerSettings.management_api_path );
+        return ((URI) this.config.get( ServerSettings.db_api_path )).toString();
     }
 }
