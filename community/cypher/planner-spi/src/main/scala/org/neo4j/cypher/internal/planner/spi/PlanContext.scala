@@ -19,8 +19,10 @@
  */
 package org.neo4j.cypher.internal.planner.spi
 
-import org.neo4j.cypher.internal.v4_0.frontend.phases.InternalNotificationLogger
-import org.neo4j.cypher.internal.logical.plans.{ProcedureSignature, QualifiedName, UserFunctionSignature}
+import org.neo4j.cypher.internal.frontend.phases.InternalNotificationLogger
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.logical.plans.UserFunctionSignature
 
 /**
  * PlanContext is an internal access layer to the graph that is solely used during plan building
@@ -32,28 +34,28 @@ import org.neo4j.cypher.internal.logical.plans.{ProcedureSignature, QualifiedNam
 trait PlanContext extends TokenContext with ProcedureSignatureResolver {
 
   /**
-    * Return all indexes (general and unique) for a given label
-    */
+   * Return all indexes (general and unique) for a given label
+   */
   def indexesGetForLabel(labelId: Int): Iterator[IndexDescriptor]
 
   /**
-    * Return all unique indexes for a given label
-    */
+   * Return all unique indexes for a given label
+   */
   def uniqueIndexesGetForLabel(labelId: Int): Iterator[IndexDescriptor]
 
   /**
-    * Checks if an index exists (general or unique) for a given label
-    */
+   * Checks if an index exists (general or unique) for a given label
+   */
   def indexExistsForLabel(labelId: Int): Boolean
 
   /**
-    * Gets an index index if it exists (general or unique) for a given label and properties
-    */
+   * Gets an index index if it exists (general or unique) for a given label and properties
+   */
   def indexGetForLabelAndProperties(labelName: String, propertyKeys: Seq[String]): Option[IndexDescriptor]
 
   /**
-    * Checks if an index exists (general or unique) for a given label and properties
-    */
+   * Checks if an index exists (general or unique) for a given label and properties
+   */
   def indexExistsForLabelAndProperties(labelName: String, propertyKey: Seq[String]): Boolean
 
   def hasPropertyExistenceConstraint(labelName: String, propertyKey: String): Boolean

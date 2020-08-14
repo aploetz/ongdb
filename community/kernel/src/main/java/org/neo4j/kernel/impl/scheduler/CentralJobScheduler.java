@@ -22,8 +22,8 @@ package org.neo4j.kernel.impl.scheduler;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +35,9 @@ import org.neo4j.kernel.impl.scheduler.ThreadPool.ThreadPoolParameters;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.resources.Profiler;
 import org.neo4j.scheduler.ActiveGroup;
+import org.neo4j.scheduler.CancelListener;
+import org.neo4j.scheduler.CallableExecutor;
+import org.neo4j.scheduler.CallableExecutorService;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.JobScheduler;
@@ -119,9 +122,9 @@ public class CentralJobScheduler extends LifecycleAdapter implements JobSchedule
     }
 
     @Override
-    public Executor executor( Group group )
+    public CallableExecutor executor( Group group )
     {
-        return getThreadPool( group ).getExecutorService();
+        return new CallableExecutorService( getThreadPool( group ).getExecutorService() );
     }
 
     @Override
@@ -136,26 +139,36 @@ public class CentralJobScheduler extends LifecycleAdapter implements JobSchedule
     }
 
     @Override
-    public JobHandle schedule( Group group, Runnable job )
+    public <T> JobHandle<T> schedule( Group group, Callable<T> job )
     {
         if ( !started )
         {
             throw new RejectedExecutionException( "Scheduler is not started" );
         }
-        return getThreadPool( group ).submit( job );
+        return tryRegisterCancelListener( job, getThreadPool( group ).submit( job ) );
     }
 
     @Override
-    public JobHandle scheduleRecurring( Group group, final Runnable runnable, long period, TimeUnit timeUnit )
+    public JobHandle<?> schedule( Group group, Runnable job )
+    {
+        if ( !started )
+        {
+            throw new RejectedExecutionException( "Scheduler is not started" );
+        }
+        return tryRegisterCancelListener( job, getThreadPool( group ).submit( job ) );
+    }
+
+    @Override
+    public JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long period, TimeUnit timeUnit )
     {
         return scheduleRecurring( group, runnable, 0, period, timeUnit );
     }
 
     @Override
-    public JobHandle scheduleRecurring( Group group, Runnable runnable, long initialDelay, long period, TimeUnit unit )
+    public JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long initialDelay, long period, TimeUnit unit )
     {
-        return scheduler.submit(
-                group, runnable, unit.toNanos( initialDelay ), unit.toNanos( period ) );
+        return tryRegisterCancelListener( runnable, scheduler.submit(
+                group, runnable, unit.toNanos( initialDelay ), unit.toNanos( period ) ) );
     }
 
     @Override
@@ -184,9 +197,9 @@ public class CentralJobScheduler extends LifecycleAdapter implements JobSchedule
     }
 
     @Override
-    public JobHandle schedule( Group group, final Runnable runnable, long initialDelay, TimeUnit unit )
+    public JobHandle<?> schedule( Group group, Runnable runnable, long initialDelay, TimeUnit unit )
     {
-        return scheduler.submit( group, runnable, unit.toNanos( initialDelay ), 0 );
+        return tryRegisterCancelListener( runnable, scheduler.submit( group, runnable, unit.toNanos( initialDelay ), 0 ) );
     }
 
     @Override
@@ -225,5 +238,14 @@ public class CentralJobScheduler extends LifecycleAdapter implements JobSchedule
             return e;
         }
         return null;
+    }
+
+    private <T> JobHandle<T> tryRegisterCancelListener( Object maybeCancelListener, JobHandle<T> handle )
+    {
+        if ( maybeCancelListener instanceof CancelListener )
+        {
+            handle.registerCancelListener( (CancelListener) maybeCancelListener );
+        }
+        return handle;
     }
 }

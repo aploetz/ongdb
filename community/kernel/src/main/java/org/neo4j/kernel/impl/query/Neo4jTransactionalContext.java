@@ -68,7 +68,7 @@ public class Neo4jTransactionalContext implements TransactionalContext
         this.executingQuery = executingQuery;
 
         this.transaction = transaction;
-        this.namedDatabaseId = executingQuery.databaseId();
+        this.namedDatabaseId = initialStatement.namedDatabaseId();
         this.kernelTransaction = transaction.kernelTransaction();
         this.statement = initialStatement;
         this.valueMapper = new DefaultValueMapper( transaction );
@@ -108,7 +108,7 @@ public class Neo4jTransactionalContext implements TransactionalContext
     @Override
     public boolean isTopLevelTx()
     {
-        return transaction.transactionType() == KernelTransaction.Type.implicit;
+        return transaction.transactionType() == KernelTransaction.Type.IMPLICIT;
     }
 
     @Override

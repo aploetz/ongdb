@@ -23,6 +23,7 @@ import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexOrder;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
@@ -37,7 +38,7 @@ public interface Read
      * Ensure there is an IndexReadSession for the given index bound to this transaction, and return it. Not Thread-safe.
      *
      * @param index descriptor for the index to read from
-     * @return the IndexReadSession
+     * @return the IndexReadSession.
      */
     IndexReadSession indexReadSession( IndexDescriptor index ) throws IndexNotFoundKernelException;
 
@@ -50,48 +51,32 @@ public interface Read
      * Seek all nodes matching the provided index query in an index.
      * @param index {@link IndexReadSession} referencing index to query.
      * @param cursor the cursor to use for consuming the results.
-     * @param indexOrder requested {@link IndexOrder} of result. Must be among the capabilities of
-     * {@link IndexDescriptor referenced index}, or {@link IndexOrder#NONE}.
-     * @param needsValues if the index should fetch property values together with node ids for index queries
+     * @param constraints The requested constraints on the query result, such as the {@link IndexOrder}, or whether the index should fetch property values
+     * together with node ids for index queries. The constraints must be satisfiable given the capabilities of the index.
      * @param query Combination of {@link IndexQuery index queries} to run against referenced index.
      */
-    void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
+    void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
             throws KernelException;
 
     /**
      * Seek all relationships matching the provided index query in an index.
      *
      * This is almost but not quite a relationship counterpart to
-     * {@link #nodeIndexSeek(IndexReadSession, NodeValueIndexCursor, IndexOrder, boolean, IndexQuery...)}, in that this method <em>currently</em> cannot return
-     * values from the index. This may be added in the future. When this happens, this method may be extended with parameters for {@code indexOrder} and
+     * {@link #nodeIndexSeek(IndexReadSession, NodeValueIndexCursor, IndexQueryConstraints, IndexQuery...)}, in that this method <em>currently</em> cannot
+     * return values from the index. This may be added in the future. When this happens, this method may be extended with parameters for {@code indexOrder} and
      * {@code needsValues}, and the cursor parameter will likely require a "value" cursor instead of just an "index" cursor.
      *
      * @param index {@link IndexDescriptor} for the index to query. This must be an index of relationships.
      * @param cursor the cursor to use for consuming the results.
+     * @param constraints The requested constraints on the query result, such as the {@link IndexOrder}, or whether the index should fetch property values
+     * together with relationship ids for index queries. The constraints must be satisfiable given the capabilities of the index.
      * @param query Combination of {@link IndexQuery index queries} to run against referenced index.
      */
-    void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQuery... query ) throws KernelException;
+    void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
+            throws KernelException;
 
     /**
-     * Access all distinct counts in an index. Entries fed to the {@code cursor} will be (count,Value[]),
-     * where the count (number of nodes having the particular value) will be accessed using {@link NodeValueIndexCursor#nodeReference()}
-     * and the value (if the index can provide it) using {@link NodeValueIndexCursor#propertyValue(int)}.
-     * Before accessing a property value the caller should check {@link NodeValueIndexCursor#hasValue()} to see
-     * whether or not the index could yield values.
-     *
-     * For merely counting distinct values in an index, loop over and sum iterations.
-     * For counting number of indexed nodes in an index, loop over and sum all counts.
-     *
-     * NOTE distinct values may not be 100% accurate for point values that are very close to each other. In those cases they can be
-     * reported as a single distinct values with a higher count instead of several separate values.
-     * @param index {@link IndexDescriptor} for the index.
-     * @param cursor {@link NodeValueIndexCursor} receiving distinct count data.
-     * @param needsValues whether or not values should be loaded and given to the cursor.
-     */
-    void nodeIndexDistinctValues( IndexDescriptor index, NodeValueIndexCursor cursor, boolean needsValues ) throws IndexNotFoundKernelException;
-
-    /**
-     * Returns node id of node found in unique index or -1 if no node was found.
+     * Returns node id of node found in the unique index, or -1 if no node was found.
      *
      * Note that this is a very special method and should be use with caution. It has special locking semantics in
      * order to facilitate unique creation of nodes. If a node is found; a shared lock for the index entry will be
@@ -114,12 +99,19 @@ public interface Read
      *
      * @param index {@link IndexReadSession} index read session to query.
      * @param cursor the cursor to use for consuming the results.
-     * @param indexOrder requested {@link IndexOrder} of result. Must be among the capabilities of the index, or {@link IndexOrder#NONE}.
-     * @param needsValues if the index should fetch property values together with node ids for index queries
+     * @param constraints The requested constraints on the query result, such as the {@link IndexOrder}, or whether the index should fetch property values
+     * together with node ids for index queries. The constraints must be satisfiable given the capabilities of the index.
      */
-    void nodeIndexScan( IndexReadSession index, NodeValueIndexCursor cursor, IndexOrder indexOrder, boolean needsValues ) throws KernelException;
+    void nodeIndexScan( IndexReadSession index, NodeValueIndexCursor cursor, IndexQueryConstraints constraints ) throws KernelException;
 
-    void nodeLabelScan( int label, NodeLabelIndexCursor cursor );
+    /**
+     * Scan all nodes with a label.
+     *
+     * @param label the label
+     * @param cursor the cursor to use for consuming the results.
+     * @param order the requested order on the query result.
+     */
+    void nodeLabelScan( int label, NodeLabelIndexCursor cursor, IndexOrder order );
 
     Scan<NodeLabelIndexCursor> nodeLabelScan( int label );
 
@@ -305,27 +297,20 @@ public interface Read
 
     void relationshipTypeScan( int type, RelationshipScanCursor cursor );
 
-    /**
-     * @param nodeReference
-     *         a reference from {@link NodeCursor#nodeReference()}.
-     * @param reference
-     *         a reference from {@link NodeCursor#relationshipGroupReference()}.
-     * @param cursor
-     *         the cursor to use for consuming the results.
-     */
-    void relationshipGroups( long nodeReference, long reference, RelationshipGroupCursor cursor );
+    void relationshipTypeScan( int type, RelationshipTypeIndexCursor relationshipTypeIndexCursor );
 
     /**
      * @param nodeReference
      *         a reference from {@link NodeCursor#nodeReference()}.
      * @param reference
-     *         a reference from {@link RelationshipGroupCursor#outgoingReference()},
-     *         {@link RelationshipGroupCursor#incomingReference()},
-     *         or {@link RelationshipGroupCursor#loopsReference()}.
+     *         a reference to start of relationships.
+     * @param selection
+     *         which relationships to select.
      * @param cursor
      *         the cursor to use for consuming the results.
      */
-    void relationships( long nodeReference, long reference, RelationshipTraversalCursor cursor );
+    // Used by APOC.
+    void relationships( long nodeReference, long reference, RelationshipSelection selection, RelationshipTraversalCursor cursor );
 
     /**
      * @param nodeReference
@@ -335,6 +320,7 @@ public interface Read
      * @param cursor
      *         the cursor to use for consuming the results.
      */
+    // Used by APOC and GDS.
     void nodeProperties( long nodeReference, long reference, PropertyCursor cursor );
 
     /**

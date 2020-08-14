@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.store;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.map.primitive.IntObjectMap;
 import org.eclipse.collections.api.map.primitive.MutableIntObjectMap;
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.api.tuple.Pair;
 import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
 
@@ -51,6 +52,7 @@ import org.neo4j.internal.schema.SchemaDescriptorImplementation;
 import org.neo4j.internal.schema.SchemaRule;
 import org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.RecordStorageCapability;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
@@ -130,7 +132,7 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
             LogProvider logProvider,
             PropertyStore propertyStore,
             RecordFormats recordFormats,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, conf, idType, idGeneratorFactory, pageCache, logProvider, TYPE_DESCRIPTOR, recordFormats.schema(),
                 getStoreHeaderFormat( recordFormats ), recordFormats.storeVersion(), openOptions );
@@ -143,9 +145,9 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, SchemaRecord record ) throws FAILURE
+    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, SchemaRecord record, PageCursorTracer cursorTracer ) throws FAILURE
     {
-        processor.processSchema( this, record );
+        processor.processSchema( this, record, cursorTracer );
     }
 
     public PropertyStore propertyStore()
@@ -320,10 +322,10 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
         }
     }
 
-    public static SchemaRule readSchemaRule( SchemaRecord record, PropertyStore propertyStore, TokenHolders tokenHolders )
+    public static SchemaRule readSchemaRule( SchemaRecord record, PropertyStore propertyStore, TokenHolders tokenHolders, PageCursorTracer cursorTracer )
             throws MalformedSchemaRuleException
     {
-        Map<String,Value> map = schemaRecordToMap( record, propertyStore, tokenHolders );
+        Map<String,Value> map = schemaRecordToMap( record, propertyStore, tokenHolders, cursorTracer );
         return unmapifySchemaRule( record.getId(), map );
     }
 
@@ -422,8 +424,8 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
         }
     }
 
-    private static Map<String,Value> schemaRecordToMap( SchemaRecord record, PropertyStore propertyStore, TokenHolders tokenHolders )
-            throws MalformedSchemaRuleException
+    private static Map<String,Value> schemaRecordToMap( SchemaRecord record, PropertyStore propertyStore, TokenHolders tokenHolders,
+            PageCursorTracer cursorTracer ) throws MalformedSchemaRuleException
     {
         Map<String,Value> props = new HashMap<>();
         PropertyRecord propRecord = propertyStore.newRecord();
@@ -432,7 +434,7 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
         {
             try
             {
-                propertyStore.getRecord( nextProp, propRecord, RecordLoad.NORMAL );
+                propertyStore.getRecord( nextProp, propRecord, RecordLoad.NORMAL, cursorTracer );
             }
             catch ( InvalidRecordException e )
             {
@@ -441,7 +443,7 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
             }
             for ( PropertyBlock propertyBlock : propRecord )
             {
-                PropertyKeyValue propertyKeyValue = propertyBlock.newPropertyKeyValue( propertyStore );
+                PropertyKeyValue propertyKeyValue = propertyBlock.newPropertyKeyValue( propertyStore, cursorTracer );
                 insertPropertyIntoMap( propertyKeyValue, props, tokenHolders );
             }
             nextProp = propRecord.getNextProp();
@@ -478,11 +480,11 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
     private static IndexConfig extractIndexConfig( Map<String,Value> props )
     {
         Map<String,Value> configMap = new HashMap<>();
-        for ( String key : props.keySet() )
+        for ( Map.Entry<String,Value> entry : props.entrySet() )
         {
-            if ( key.startsWith( PROP_INDEX_CONFIG_PREFIX ) )
+            if ( entry.getKey().startsWith( PROP_INDEX_CONFIG_PREFIX ) )
             {
-                configMap.put( key.substring( PROP_INDEX_CONFIG_PREFIX.length() ), props.get( key ) );
+                configMap.put( entry.getKey().substring( PROP_INDEX_CONFIG_PREFIX.length() ), entry.getValue() );
             }
         }
         return IndexConfig.with( configMap );
@@ -576,7 +578,7 @@ public class SchemaStore extends CommonAbstractStore<SchemaRecord,IntStoreHeader
 
     private static void putStringProperty( Map<String,Value> map, String property, String value )
     {
-        map.put( property, Values.stringValue( value ) );
+        map.put( property, Values.utf8Value( value ) );
     }
 
     private static void putIndexConfigProperty( Map<String,Value> map, String key, Value value )

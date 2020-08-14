@@ -29,23 +29,17 @@ import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
-import org.neo4j.logging.AssertableLogProvider;
-import org.neo4j.logging.Log;
 import org.neo4j.logging.NullLog;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.extension.EphemeralFileSystemExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
+import org.neo4j.time.Clocks;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.configuration.GraphDatabaseSettings.pagecache_memory;
-import static org.neo4j.configuration.GraphDatabaseSettings.pagecache_swapper;
-import static org.neo4j.kernel.impl.pagecache.PageSwapperFactoryForTesting.TEST_PAGESWAPPER_NAME;
 
 @ExtendWith( EphemeralFileSystemExtension.class )
 class ConfiguringPageCacheFactoryTest
@@ -59,8 +53,6 @@ class ConfiguringPageCacheFactoryTest
     void setUp()
     {
         jobScheduler = new ThreadPoolJobScheduler();
-        PageSwapperFactoryForTesting.createdCounter.set( 0 );
-        PageSwapperFactoryForTesting.configuredCounter.set( 0 );
     }
 
     @AfterEach
@@ -80,47 +72,13 @@ class ConfiguringPageCacheFactoryTest
 
         // When
         ConfiguringPageCacheFactory factory = new ConfiguringPageCacheFactory(
-            fs, config, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL,
-                NullLog.getInstance(), EmptyVersionContextSupplier.EMPTY, jobScheduler );
+            fs, config, PageCacheTracer.NULL, NullLog.getInstance(), EmptyVersionContextSupplier.EMPTY, jobScheduler, Clocks.nanoClock(), new MemoryPools() );
 
         // Then
         try ( PageCache cache = factory.getOrCreatePageCache() )
         {
-            assertThat( cache.pageSize(), equalTo( PageCache.PAGE_SIZE ) );
-            assertThat( cache.maxCachedPages(), equalTo( pageCount ) );
+            assertThat( cache.pageSize() ).isEqualTo( PageCache.PAGE_SIZE );
+            assertThat( cache.maxCachedPages() ).isEqualTo( pageCount );
         }
-    }
-
-    @Test
-    void mustUseAndLogConfiguredPageSwapper()
-    {
-        // Given
-        Config config = Config.newBuilder()
-                .set( pagecache_memory, "8m" )
-                .set( pagecache_swapper, TEST_PAGESWAPPER_NAME ).build();
-        AssertableLogProvider logProvider = new AssertableLogProvider();
-        Log log = logProvider.getLog( PageCache.class );
-
-        // When
-        ConfiguringPageCacheFactory cacheFactory = new ConfiguringPageCacheFactory( fs, config, PageCacheTracer.NULL,
-                        PageCursorTracerSupplier.NULL, log, EmptyVersionContextSupplier.EMPTY, jobScheduler );
-        cacheFactory.getOrCreatePageCache().close();
-
-        // Then
-        assertThat( PageSwapperFactoryForTesting.countCreatedPageSwapperFactories(), is( 1 ) );
-        assertThat( PageSwapperFactoryForTesting.countConfiguredPageSwapperFactories(), is( 1 ) );
-        logProvider.rawMessageMatcher().assertContains( TEST_PAGESWAPPER_NAME );
-    }
-
-    @Test
-    void mustThrowIfConfiguredPageSwapperCannotBeFound()
-    {
-        // Given
-        Config config = Config.newBuilder()
-                .set( pagecache_memory, "8m" )
-                .set( pagecache_swapper, "non-existing" ).build();
-        // When
-        assertThrows( IllegalArgumentException.class, () -> new ConfiguringPageCacheFactory( fs, config, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL,
-                NullLog.getInstance(), EmptyVersionContextSupplier.EMPTY, jobScheduler ).getOrCreatePageCache().close() );
     }
 }

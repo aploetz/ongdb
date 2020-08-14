@@ -19,8 +19,12 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.{NODE_TYPE, CachedProperty, PropertyKeyName, PropertyKeyToken, Variable}
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.NODE_TYPE
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.PropertyKeyToken
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.util.InputPosition
 
 case class IndexedProperty(propertyKeyToken: PropertyKeyToken, getValueFromIndex: GetValueFromIndexBehavior) {
   def shouldGetValue: Boolean = getValueFromIndex == GetValue
@@ -32,6 +36,8 @@ case class IndexedProperty(propertyKeyToken: PropertyKeyToken, getValueFromIndex
     if (shouldGetValue)
       Some(asCachedProperty(entity))
     else None
+
+  def propertyKeyId: Int = propertyKeyToken.nameId.id
 }
 
 // This can be extended later on with: GetValuesPartially

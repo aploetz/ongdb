@@ -40,12 +40,12 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.TransactionIdStore;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.neo4j.internal.kernel.api.security.LoginContext.AUTH_DISABLED;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.test.assertion.Assert.assertEventually;
+import static org.neo4j.test.conditions.Conditions.FALSE;
 
 class KernelIT extends KernelIntegrationTest
 {
@@ -91,7 +91,7 @@ class KernelIT extends KernelIntegrationTest
         // THEN schema state is eventually updated (clearing the schema cache is not atomic with respect to flipping
         // the new index to the ONLINE state, but happens as soon as possible *after* the index becomes ONLINE).
         assertEventually( "Schema state should have been updated",
-                () -> schemaStateContains( "my key" ), is( false ), 1, TimeUnit.SECONDS );
+                () -> schemaStateContains( "my key" ), FALSE, 10, TimeUnit.SECONDS );
     }
 
     @Test
@@ -138,7 +138,7 @@ class KernelIT extends KernelIntegrationTest
         KernelTransaction tx = newTransaction( AUTH_DISABLED );
         tx.dataWrite().nodeCreate();
 
-        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertEquals( KernelTransaction.ROLLBACK_ID, tx.closeTransaction() );
         assertFalse( tx.isOpen() );
     }
 
@@ -151,7 +151,7 @@ class KernelIT extends KernelIntegrationTest
         tx.dataWrite().nodeCreate();
         tx.markForTermination( Status.Transaction.Terminated );
 
-        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertEquals( KernelTransaction.ROLLBACK_ID, tx.closeTransaction() );
         assertFalse( tx.isOpen() );
     }
 
@@ -164,7 +164,7 @@ class KernelIT extends KernelIntegrationTest
         tx.dataWrite().nodeCreate();
         tx.markForTermination( Status.Transaction.Terminated );
 
-        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertEquals( KernelTransaction.ROLLBACK_ID, tx.closeTransaction() );
         assertFalse( tx.isOpen() );
     }
 
@@ -174,13 +174,13 @@ class KernelIT extends KernelIntegrationTest
         executeDummyTxs( db, 42 );
 
         KernelTransaction tx = newTransaction();
-        try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+        try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
         {
             tx.dataRead().singleNode( 1, node );
             node.next();
         }
 
-        assertEquals( KernelTransaction.READ_ONLY, tx.commit() );
+        assertEquals( KernelTransaction.READ_ONLY_ID, tx.commit() );
         assertFalse( tx.isOpen() );
     }
 

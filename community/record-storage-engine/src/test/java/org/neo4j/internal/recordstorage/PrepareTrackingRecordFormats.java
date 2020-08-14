@@ -25,6 +25,7 @@ import java.util.Set;
 
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.StoreHeader;
 import org.neo4j.kernel.impl.store.format.FormatFamily;
 import org.neo4j.kernel.impl.store.format.RecordFormat;
@@ -208,22 +209,22 @@ public class PrepareTrackingRecordFormats implements RecordFormats
         }
 
         @Override
-        public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize ) throws IOException
+        public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage ) throws IOException
         {
-            actual.read( record, cursor, mode, recordSize );
+            actual.read( record, cursor, mode, recordSize, recordsPerPage );
         }
 
         @Override
-        public void prepare( RECORD record, int recordSize, IdSequence idSequence )
+        public void prepare( RECORD record, int recordSize, IdSequence idSequence, PageCursorTracer cursorTracer )
         {
             prepare.add( record );
-            actual.prepare( record, recordSize, idSequence );
+            actual.prepare( record, recordSize, idSequence, cursorTracer );
         }
 
         @Override
-        public void write( RECORD record, PageCursor cursor, int recordSize ) throws IOException
+        public void write( RECORD record, PageCursor cursor, int recordSize, int recordsPerPage ) throws IOException
         {
-            actual.write( record, cursor, recordSize );
+            actual.write( record, cursor, recordSize, recordsPerPage );
         }
 
         @Override
@@ -236,6 +237,12 @@ public class PrepareTrackingRecordFormats implements RecordFormats
         public long getMaxId()
         {
             return actual.getMaxId();
+        }
+
+        @Override
+        public int getPageSize( int pageCachePageSize, int recordSize )
+        {
+            return actual.getPageSize( pageCachePageSize, recordSize );
         }
 
         @Override

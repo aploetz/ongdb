@@ -21,8 +21,8 @@ package org.neo4j.server.http.cypher;
 
 import org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo;
 import org.neo4j.internal.kernel.api.security.LoginContext;
-import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.server.http.cypher.format.api.TransactionUriScheme;
 
 /**
@@ -47,24 +47,21 @@ import org.neo4j.server.http.cypher.format.api.TransactionUriScheme;
  */
 class TransactionFacade
 {
-    private final TransitionalPeriodTransactionMessContainer kernel;
+    private final GraphDatabaseAPI databaseAPI;
     private final QueryExecutionEngine engine;
     private final TransactionRegistry registry;
-    private final GraphDatabaseQueryService queryService;
 
-    TransactionFacade( TransitionalPeriodTransactionMessContainer kernel, QueryExecutionEngine engine, GraphDatabaseQueryService queryService,
-            TransactionRegistry registry )
+    TransactionFacade( GraphDatabaseAPI databaseAPI, QueryExecutionEngine engine, TransactionRegistry registry )
     {
-        this.kernel = kernel;
+        this.databaseAPI = databaseAPI;
         this.engine = engine;
-        this.queryService = queryService;
         this.registry = registry;
     }
 
     TransactionHandle newTransactionHandle( TransactionUriScheme uriScheme, boolean implicitTransaction,
             LoginContext loginContext, ClientConnectionInfo connectionInfo, long customTransactionTimeout )
     {
-        return new TransactionHandle( kernel, engine, queryService, registry, uriScheme, implicitTransaction,
+        return new TransactionHandle( databaseAPI, engine, registry, uriScheme, implicitTransaction,
                 loginContext, connectionInfo, customTransactionTimeout );
     }
 
@@ -76,10 +73,5 @@ class TransactionFacade
     TransactionHandle terminate( long txId ) throws TransactionLifecycleException
     {
         return registry.terminate( txId );
-    }
-
-    TransitionalPeriodTransactionMessContainer getTransactionContainer()
-    {
-        return kernel;
     }
 }

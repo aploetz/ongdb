@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.impl.api.constraints;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -64,6 +65,7 @@ import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.values.storable.Values;
 
+import static java.lang.String.format;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -73,10 +75,11 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class ConstraintIndexCreatorTest
 {
@@ -93,12 +96,22 @@ class ConstraintIndexCreatorTest
     private final SchemaWrite schemaWrite = mock( SchemaWrite.class );
     private final TokenRead tokenRead = mock( TokenRead.class );
     private final AssertableLogProvider logProvider = new AssertableLogProvider();
+    private StubKernel kernel;
+
+    @BeforeEach
+    void setUp() throws Exception
+    {
+        kernel = new StubKernel();
+        when( tokenRead.nodeLabelName( LABEL_ID ) ).thenReturn( "Label" );
+        when( tokenRead.labelGetName( LABEL_ID ) ).thenReturn( "Label" );
+        when( tokenRead.propertyKeyName( PROPERTY_KEY_ID ) ).thenReturn( "prop" );
+        when( tokenRead.propertyKeyGetName( PROPERTY_KEY_ID ) ).thenReturn( "prop" );
+    }
 
     @Test
     void shouldCreateIndexInAnotherTransaction() throws Exception
     {
         // given
-        StubKernel kernel = new StubKernel();
         IndexProxy indexProxy = mock( IndexProxy.class );
         IndexingService indexingService = mock( IndexingService.class );
         when( indexingService.getIndexProxy( index ) ).thenReturn( indexProxy );
@@ -120,8 +133,6 @@ class ConstraintIndexCreatorTest
     void shouldDropIndexIfPopulationFails() throws Exception
     {
         // given
-        StubKernel kernel = new StubKernel();
-
         IndexingService indexingService = mock( IndexingService.class );
         IndexProxy indexProxy = mock( IndexProxy.class );
         when( indexingService.getIndexProxy( index ) ).thenReturn( indexProxy );
@@ -141,8 +152,8 @@ class ConstraintIndexCreatorTest
         KernelTransactionImplementation transaction = createTransaction();
         UniquePropertyValueValidationException exception = assertThrows( UniquePropertyValueValidationException.class,
                 () -> creator.createUniquenessConstraintIndex( transaction, constraint, prototype ) );
-        assertEquals( "Existing data does not satisfy CONSTRAINT ON ( label[123]:label[123] ) " +
-                "ASSERT (label[123].property[456]) IS UNIQUE: Both node 2 and node 1 share the property value ( String(\"a\") )",
+        assertEquals( "Existing data does not satisfy Constraint( name='constraint', type='UNIQUENESS', schema=(:Label {prop}) ): " +
+                        "Both node 2 and node 1 share the property value ( String(\"a\") )",
                 exception.getMessage() );
         assertEquals( 2, kernel.transactions.size() );
         KernelTransactionImplementation tx1 = kernel.transactions.get( 0 );
@@ -157,7 +168,6 @@ class ConstraintIndexCreatorTest
     void shouldDropIndexInAnotherTransaction() throws Exception
     {
         // given
-        StubKernel kernel = new StubKernel();
         IndexingService indexingService = mock( IndexingService.class );
 
         ConstraintIndexCreator creator = new ConstraintIndexCreator( () -> kernel, indexingService, logProvider );
@@ -168,14 +178,13 @@ class ConstraintIndexCreatorTest
         // then
         assertEquals( 1, kernel.transactions.size() );
         verify( kernel.transactions.get( 0 ) ).addIndexDoDropToTxState( index );
-        verifyZeroInteractions( indexingService );
+        verifyNoInteractions( indexingService );
     }
 
     @Test
     void shouldReleaseLabelLockWhileAwaitingIndexPopulation() throws Exception
     {
         // given
-        StubKernel kernel = new StubKernel();
         IndexingService indexingService = mock( IndexingService.class );
 
         IndexProxy indexProxy = mock( IndexProxy.class );
@@ -202,9 +211,6 @@ class ConstraintIndexCreatorTest
     {
         // given
         IndexingService indexingService = mock( IndexingService.class );
-        StubKernel kernel = new StubKernel();
-        when( tokenRead.nodeLabelName( LABEL_ID ) ).thenReturn( "Label" );
-        when( tokenRead.propertyKeyName( PROPERTY_KEY_ID ) ).thenReturn( "prop" );
 
         long orphanedConstraintIndexId = 111;
         String orphanedName = "constraint";
@@ -232,7 +238,6 @@ class ConstraintIndexCreatorTest
     {
         // given
         IndexingService indexingService = mock( IndexingService.class );
-        StubKernel kernel = new StubKernel();
 
         long orphanedConstraintIndexId = 111;
         String orphanedName = "blabla";
@@ -258,18 +263,15 @@ class ConstraintIndexCreatorTest
     }
 
     @Test
-    void shouldFailOnExistingOwnedConstraintIndex() throws Exception
+    void shouldFailOnExistingOwnedConstraintIndex()
     {
         // given
         IndexingService indexingService = mock( IndexingService.class );
-        StubKernel kernel = new StubKernel();
 
         long constraintIndexOwnerId = 222;
         when( schemaRead.index( schema ) ).thenReturn( Iterators.iterator( index ) );
         when( schemaRead.indexGetForName( constraint.getName() ) ).thenReturn( index );
         when( schemaRead.indexGetOwningUniquenessConstraintId( index ) ).thenReturn( constraintIndexOwnerId ); // which means there's an owner
-        when( tokenRead.nodeLabelName( LABEL_ID ) ).thenReturn( "MyLabel" );
-        when( tokenRead.propertyKeyName( PROPERTY_KEY_ID ) ).thenReturn( "MyKey" );
         ConstraintIndexCreator creator = new ConstraintIndexCreator( () -> kernel, indexingService, logProvider );
 
         // when
@@ -290,7 +292,6 @@ class ConstraintIndexCreatorTest
     {
         // given
         IndexingService indexingService = mock( IndexingService.class );
-        StubKernel kernel = new StubKernel();
 
         IndexProviderDescriptor providerDescriptor = new IndexProviderDescriptor( "Groovy", "1.2" );
         IndexPrototype prototype = this.prototype.withIndexProvider( providerDescriptor );
@@ -316,7 +317,6 @@ class ConstraintIndexCreatorTest
     void logMessagesAboutConstraintCreation()
             throws SchemaKernelException, UniquePropertyValueValidationException, TransactionFailureException, IndexNotFoundKernelException
     {
-        StubKernel kernel = new StubKernel();
         IndexProxy indexProxy = mock( IndexProxy.class );
         IndexingService indexingService = mock( IndexingService.class );
         when( indexingService.getIndexProxy( index ) ).thenReturn( indexProxy );
@@ -327,9 +327,10 @@ class ConstraintIndexCreatorTest
 
         creator.createUniquenessConstraintIndex( transaction, constraint, prototype );
 
-        logProvider.rawMessageMatcher().assertContains( "Starting constraint creation: %s." );
-        logProvider.rawMessageMatcher().assertContains( "Constraint %s populated, starting verification." );
-        logProvider.rawMessageMatcher().assertContains( "Constraint %s verified." );
+        String constraintString = constraint.userDescription( tokenRead );
+        assertThat( logProvider ).containsMessages( format( "Starting constraint creation: %s.", constraintString ),
+                                                    format( "Constraint %s populated, starting verification.", constraintString ),
+                                                    format( "Constraint %s verified.", constraintString ) );
     }
 
     private class StubKernel implements Kernel

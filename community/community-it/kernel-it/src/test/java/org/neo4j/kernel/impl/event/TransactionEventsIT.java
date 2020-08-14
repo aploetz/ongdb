@@ -59,9 +59,7 @@ import org.neo4j.test.rule.RandomRule;
 import org.neo4j.util.concurrent.BinaryLatch;
 
 import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -194,8 +192,8 @@ class TransactionEventsIT
     {
         dbms.registerTransactionEventListener( DEFAULT_DATABASE_NAME, getBeforeCommitListener( txData ->
         {
-            assertThat( "Should have no username", txData.username(), equalTo( "" ) );
-            assertThat( "Should have no metadata", txData.metaData(), equalTo( Collections.emptyMap() ) );
+            assertThat( txData.username() ).as( "Should have no username" ).isEqualTo( "" );
+            assertThat( txData.metaData() ).as( "Should have no metadata" ).isEqualTo( Collections.emptyMap() );
         }) );
         runTransaction();
     }
@@ -229,8 +227,20 @@ class TransactionEventsIT
         Map<String,Object> metadata = genericMap( "username", "joe" );
         runTransaction( loginContext, metadata );
 
-        assertThat( "Should have specified username", usernameRef.get(), equalTo( "Christof" ) );
-        assertThat( "Should have metadata with specified username", metaDataRef.get(), equalTo( metadata ) );
+        assertThat( usernameRef.get() ).as( "Should have specified username" ).isEqualTo( "Christof" );
+        assertThat( metaDataRef.get() ).as( "Should have metadata with specified username" ).isEqualTo( metadata );
+    }
+
+    @Test
+    void exceptionMessageShouldGetPassedThrough()
+    {
+        var message = "some message from a transaction event handler";
+        dbms.registerTransactionEventListener( DEFAULT_DATABASE_NAME, getBeforeCommitListener( transactionData ->
+        {
+            throw new RuntimeException( message );
+        } ) );
+        var e = assertThrows( TransactionFailureException.class, this::runTransaction );
+        assertThat( e ).hasRootCauseMessage( message );
     }
 
     @Test
@@ -366,7 +376,7 @@ class TransactionEventsIT
 
     private void runTransaction( LoginContext loginContext, Map<String,Object> metaData )
     {
-        try ( var transaction = db.beginTransaction( KernelTransaction.Type.explicit, loginContext ) )
+        try ( var transaction = db.beginTransaction( KernelTransaction.Type.EXPLICIT, loginContext ) )
         {
             KernelTransaction kernelTransaction = transaction.kernelTransaction();
             kernelTransaction.setMetaData( metaData );
@@ -691,14 +701,14 @@ class TransactionEventsIT
         public void afterCommit( TransactionData data, CountingTransactionEventListener state, GraphDatabaseService databaseService )
         {
             getAndDecrement();
-            assertThat( state, sameInstance( this ) );
+            assertThat( state ).isSameAs( this );
         }
 
         @Override
         public void afterRollback( TransactionData data, CountingTransactionEventListener state, GraphDatabaseService databaseService )
         {
             getAndDecrement();
-            assertThat( state, sameInstance( this ) );
+            assertThat( state ).isSameAs( this );
         }
     }
 

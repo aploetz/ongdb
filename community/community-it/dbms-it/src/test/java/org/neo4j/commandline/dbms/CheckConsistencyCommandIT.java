@@ -52,10 +52,7 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -92,17 +89,19 @@ class CheckConsistencyCommandIT
         {
             CommandLine.usage( command, new PrintStream( out ) );
         }
-        assertThat( baos.toString().trim(), equalTo( String.format(
+        assertThat( baos.toString().trim() ).isEqualTo( String.format(
                 "Check the consistency of a database.%n" +
                 "%n" +
                 "USAGE%n" +
                 "%n" +
-                "check-consistency ([--database=<database>] | [--backup=<path>]) [--verbose]%n" +
+                "check-consistency (--database=<database> | --backup=<path>) [--verbose]%n" +
                 "                  [--additional-config=<path>] [--check-graph=<true/false>]%n" +
                 "                  [--check-index-structure=<true/false>]%n" +
                 "                  [--check-indexes=<true/false>]%n" +
                 "                  [--check-label-scan-store=<true/false>]%n" +
-                "                  [--check-property-owners=<true/false>] [--report-dir=<path>]%n" +
+                "                  [--check-property-owners=<true/false>]%n" +
+                "                  [--check-relationship-type-scan-store=<true/false>]%n" +
+                "                  [--report-dir=<path>]%n" +
                 "%n" +
                 "DESCRIPTION%n" +
                 "%n" +
@@ -137,12 +136,16 @@ class CheckConsistencyCommandIT
                 "      --check-label-scan-store=<true/false>%n" +
                 "                            Perform consistency checks on the label scan store.%n" +
                 "                              Default: true%n" +
+                "      --check-relationship-type-scan-store=<true/false>%n" +
+                "                            Perform consistency checks on the relationship type%n" +
+                "                              scan store.%n" +
+                "                              Default: false%n" +
                 "      --check-property-owners=<true/false>%n" +
                 "                            Perform additional consistency checks on property%n" +
                 "                              ownership. This check is very expensive in time%n" +
                 "                              and memory.%n" +
                 "                              Default: false"
-        ) ) );
+        ) );
     }
 
     @Test
@@ -185,8 +188,8 @@ class CheckConsistencyCommandIT
         {
             CommandLine.populateCommand( checkConsistencyCommand, "--database=mydb", "--verbose" );
             CommandFailedException exception = assertThrows( CommandFailedException.class, checkConsistencyCommand::execute );
-            assertThat( exception.getCause(), instanceOf( FileLockException.class ) );
-            assertThat( exception.getMessage(), equalTo( "The database is in use. Stop database 'mydb' and try again." ) );
+            assertThat( exception.getCause() ).isInstanceOf( FileLockException.class );
+            assertThat( exception.getMessage() ).isEqualTo( "The database is in use. Stop database 'mydb' and try again." );
         }
     }
 
@@ -234,7 +237,7 @@ class CheckConsistencyCommandIT
                     CommandLine.populateCommand( checkConsistencyCommand, "--database=mydb", "--verbose" );
                     checkConsistencyCommand.execute();
                 } );
-        assertThat( commandFailed.getMessage(), containsString( new File( "/the/report/path" ).toString() ) );
+        assertThat( commandFailed.getMessage() ).contains( new File( "/the/report/path" ).toString() );
     }
 
     @Test
@@ -317,12 +320,13 @@ class CheckConsistencyCommandIT
                 .thenReturn( ConsistencyCheckService.Result.success( null, null ) );
 
         CommandLine.populateCommand( checkConsistencyCommand, "--database=mydb", "--check-graph=false",
-            "--check-indexes=false", "--check-index-structure=false", "--check-label-scan-store=false", "--check-property-owners=true" );
+                "--check-indexes=false", "--check-index-structure=false", "--check-label-scan-store=false", "--check-relationship-type-scan-store=false",
+                "--check-property-owners=true" );
         checkConsistencyCommand.execute();
 
         verify( consistencyCheckService )
                 .runFullConsistencyCheck( any(), any(), any(), any(), any(), anyBoolean(),
-                        any(), eq( new ConsistencyFlags( false, false, false, false, true ) ) );
+                        any(), eq( new ConsistencyFlags( false, false, false, false, false, true ) ) );
     }
 
     @Test
@@ -343,7 +347,7 @@ class CheckConsistencyCommandIT
                     CommandLine.populateCommand( checkConsistencyCommand, "--database=foo", "--backup=bar" );
                     checkConsistencyCommand.execute();
                 } );
-        assertThat( incorrectUsage.getMessage(), containsString( "--database=<database>, --backup=<path> are mutually exclusive (specify only one)" ) );
+        assertThat( incorrectUsage.getMessage() ).contains( "--database=<database>, --backup=<path> are mutually exclusive (specify only one)" );
     }
 
     @Test
@@ -361,7 +365,7 @@ class CheckConsistencyCommandIT
             CommandLine.populateCommand( checkConsistencyCommand, "--backup=" + backupPath );
             checkConsistencyCommand.execute();
         } );
-        assertThat( commandFailed.getMessage(), containsString( "Report directory path doesn't exist or not a directory" ) );
+        assertThat( commandFailed.getMessage() ).contains( "Report directory path doesn't exist or not a directory" );
     }
 
     @Test

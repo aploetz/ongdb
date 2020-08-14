@@ -38,17 +38,18 @@ import org.neo4j.graphdb.DatabaseShutdownException;
 import org.neo4j.graphdb.TransactionFailureException;
 import org.neo4j.internal.id.IdController;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.schema.SchemaState;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.KernelTransactionHandle;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
 import org.neo4j.kernel.availability.AvailabilityGuard;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -58,14 +59,13 @@ import org.neo4j.kernel.impl.factory.AccessCapability;
 import org.neo4j.kernel.impl.locking.StatementLocks;
 import org.neo4j.kernel.impl.locking.StatementLocksFactory;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
-import org.neo4j.kernel.impl.transaction.tracing.TransactionTracer;
 import org.neo4j.kernel.impl.util.MonotonicCounter;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
-import org.neo4j.lock.LockTracer;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
+import org.neo4j.memory.ScopedMemoryPool;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.TransactionId;
 import org.neo4j.storageengine.api.TransactionIdStore;
@@ -73,6 +73,7 @@ import org.neo4j.time.SystemNanoClock;
 import org.neo4j.token.TokenHolders;
 
 import static java.util.stream.Collectors.toSet;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_transaction_database_max_size;
 
 /**
  * Central source of transactions in the database.
@@ -94,7 +95,6 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
     private final GlobalProcedures globalProcedures;
     private final TransactionIdStore transactionIdStore;
     private final AtomicReference<CpuClock> cpuClockRef;
-    private final AtomicReference<HeapAllocation> heapAllocationRef;
     private final AccessCapability accessCapability;
     private final SystemNanoClock clock;
     private final VersionContextSupplier versionContextSupplier;
@@ -104,14 +104,12 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
     private final NamedDatabaseId namedDatabaseId;
     private final IndexingService indexingService;
     private final LabelScanStore labelScanStore;
+    private final RelationshipTypeScanStore relationshipTypeScanStore;
     private final IndexStatisticsStore indexStatisticsStore;
     private final Dependencies databaseDependendies;
     private final Config config;
     private final CollectionsFactorySupplier collectionsFactorySupplier;
     private final SchemaState schemaState;
-    private final TransactionTracer transactionTracer;
-    private final PageCursorTracerSupplier pageCursorTracerSupplier;
-    private final LockTracer lockTracer;
     private final LeaseService leaseService;
 
     /**
@@ -136,6 +134,7 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
     private final ConstraintSemantics constraintSemantics;
     private final AtomicInteger activeTransactionCounter = new AtomicInteger();
     private final TokenHoldersIdLookup tokenHoldersIdLookup;
+    private final ScopedMemoryPool transactionMemoryPool;
 
     /**
      * Kernel transactions component status. True when stopped, false when started.
@@ -148,11 +147,12 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
             TransactionCommitProcess transactionCommitProcess,
             DatabaseTransactionEventListeners eventListeners, TransactionMonitor transactionMonitor, AvailabilityGuard databaseAvailabilityGuard,
             StorageEngine storageEngine, GlobalProcedures globalProcedures, TransactionIdStore transactionIdStore, SystemNanoClock clock,
-            AtomicReference<CpuClock> cpuClockRef, AtomicReference<HeapAllocation> heapAllocationRef, AccessCapability accessCapability,
+            AtomicReference<CpuClock> cpuClockRef, AccessCapability accessCapability,
             VersionContextSupplier versionContextSupplier, CollectionsFactorySupplier collectionsFactorySupplier, ConstraintSemantics constraintSemantics,
             SchemaState schemaState, TokenHolders tokenHolders, NamedDatabaseId namedDatabaseId, IndexingService indexingService, LabelScanStore labelScanStore,
-            IndexStatisticsStore indexStatisticsStore, Dependencies databaseDependencies, TransactionTracer transactionTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier, LockTracer lockTracer, LeaseService leaseService )
+            RelationshipTypeScanStore relationshipTypeScanStore, IndexStatisticsStore indexStatisticsStore,
+            Dependencies databaseDependencies, DatabaseTracers tracers, LeaseService leaseService,
+            GlobalMemoryGroupTracker transactionsMemoryPool )
     {
         this.config = config;
         this.statementLocksFactory = statementLocksFactory;
@@ -165,13 +165,13 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
         this.globalProcedures = globalProcedures;
         this.transactionIdStore = transactionIdStore;
         this.cpuClockRef = cpuClockRef;
-        this.heapAllocationRef = heapAllocationRef;
         this.accessCapability = accessCapability;
         this.tokenHolders = tokenHolders;
         this.tokenHoldersIdLookup = new TokenHoldersIdLookup( tokenHolders );
         this.namedDatabaseId = namedDatabaseId;
         this.indexingService = indexingService;
         this.labelScanStore = labelScanStore;
+        this.relationshipTypeScanStore = relationshipTypeScanStore;
         this.indexStatisticsStore = indexStatisticsStore;
         this.databaseDependendies = databaseDependencies;
         this.versionContextSupplier = versionContextSupplier;
@@ -179,13 +179,13 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
         this.collectionsFactorySupplier = collectionsFactorySupplier;
         this.constraintSemantics = constraintSemantics;
         this.schemaState = schemaState;
-        this.transactionTracer = transactionTracer;
-        this.pageCursorTracerSupplier = pageCursorTracerSupplier;
-        this.lockTracer = lockTracer;
         this.leaseService = leaseService;
-        this.factory = new KernelTransactionImplementationFactory( allTransactions );
+        this.factory = new KernelTransactionImplementationFactory( allTransactions, tracers );
         this.globalTxPool = new GlobalKernelTransactionPool( allTransactions, factory );
         this.localTxPool = new LocalKernelTransactionPool( globalTxPool, activeTransactionCounter, config );
+        this.transactionMemoryPool = transactionsMemoryPool.newDatabasePool( namedDatabaseId.name(),
+                config.get( memory_transaction_database_max_size ), memory_transaction_database_max_size.name() );
+        config.addListener( memory_transaction_database_max_size, ( before, after ) -> transactionMemoryPool.setSize( after ) );
         doBlockNewTransactions();
     }
 
@@ -296,6 +296,7 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
     @Override
     public void shutdown()
     {
+        transactionMemoryPool.close();
         disposeAll();
     }
 
@@ -381,10 +382,12 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
     private class KernelTransactionImplementationFactory implements Factory<KernelTransactionImplementation>
     {
         private final Set<KernelTransactionImplementation> transactions;
+        private final DatabaseTracers tracers;
 
-        KernelTransactionImplementationFactory( Set<KernelTransactionImplementation> transactions )
+        KernelTransactionImplementationFactory( Set<KernelTransactionImplementation> transactions, DatabaseTracers tracers )
         {
             this.transactions = transactions;
+            this.tracers = tracers;
         }
 
         @Override
@@ -393,11 +396,16 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
             KernelTransactionImplementation tx =
                     new KernelTransactionImplementation( config, eventListeners,
                             constraintIndexCreator, globalProcedures,
-                            transactionCommitProcess, transactionMonitor, localTxPool, clock, cpuClockRef, heapAllocationRef,
-                            transactionTracer, lockTracer, pageCursorTracerSupplier, storageEngine, accessCapability,
+                            transactionCommitProcess, transactionMonitor, localTxPool, clock, cpuClockRef,
+                            tracers, storageEngine, accessCapability,
                             versionContextSupplier, collectionsFactorySupplier, constraintSemantics,
+<<<<<<< HEAD
                             schemaState, tokenHolders, indexingService, labelScanStore, indexStatisticsStore,
                             databaseDependendies, namedDatabaseId, leaseService );
+=======
+                            schemaState, tokenHolders, indexingService, labelScanStore, relationshipTypeScanStore, indexStatisticsStore,
+                            databaseDependendies, namedDatabaseId, leaseService, transactionMemoryPool );
+>>>>>>> neo4j/4.1
             this.transactions.add( tx );
             return tx;
         }

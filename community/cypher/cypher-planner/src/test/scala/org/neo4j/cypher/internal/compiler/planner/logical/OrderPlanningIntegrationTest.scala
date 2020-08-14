@@ -19,17 +19,31 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
+import org.neo4j.cypher.internal.compiler.helpers.LogicalPlanBuilder
 import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher.beLike
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
 import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Distinct
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.OrderedAggregation
+import org.neo4j.cypher.internal.logical.plans.OrderedDistinct
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.Skip
+import org.neo4j.cypher.internal.logical.plans.Sort
+import org.neo4j.cypher.internal.logical.plans.Top
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
   test("ORDER BY previously unprojected column in WITH") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.age RETURN a.name")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -43,7 +57,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in WITH and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.age RETURN a.name, a.age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = cachedNodeProp("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -57,7 +71,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in WITH and project and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a, a.age AS age ORDER BY age RETURN a.name, age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -69,39 +83,35 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   }
 
   test("ORDER BY renamed column old name in WITH and project and return that column") {
-    val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY a RETURN b.name, age")._2
+    val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY a RETURN b.name, age", stripProduceResults = false)._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
-    val ageProperty = prop("a", "age")
-    val nameProperty = prop("b", "name")
-
-    val projection = Projection(labelScan, Map("b" -> varFor("a")))
-    val sort = Sort(projection, Seq(Ascending("b")))
-    val projection2 = Projection(sort, Map("age" -> ageProperty))
-    val result = Projection(projection2, Map("b.name" -> nameProperty))
-
-    plan should equal(result)
+    plan should equal(
+      new LogicalPlanBuilder()
+        .produceResults("`b.name`", "age")
+        .projection("b.name AS `b.name`")
+        .projection("a AS b", "a.age AS age")
+        .nodeByLabelScan("a", "A", IndexOrderAscending)
+        .build()
+    )
   }
 
   test("ORDER BY renamed column new name in WITH and project and return that column") {
-    val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY b RETURN b.name, age")._2
+    val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY b RETURN b.name, age", stripProduceResults = false)._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
-    val ageProperty = prop("a", "age")
-    val nameProperty = prop("b", "name")
-
-    val projection = Projection(labelScan, Map("b" -> varFor("a")))
-    val sort = Sort(projection, Seq(Ascending("b")))
-    val projection2 = Projection(sort, Map("age" -> ageProperty))
-    val result = Projection(projection2, Map("b.name" -> nameProperty))
-
-    plan should equal(result)
+    plan should equal(
+      new LogicalPlanBuilder()
+        .produceResults("`b.name`", "age")
+        .projection("b.name AS `b.name`")
+        .projection("a AS b", "a.age AS age")
+        .nodeByLabelScan("a", "A", IndexOrderAscending)
+        .build()
+    )
   }
 
   test("ORDER BY renamed column expression with old name in WITH and project and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY a.foo, a.age + 5 RETURN b.name, age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("b", "name")
     val fooProperty = prop("b", "foo")
@@ -117,7 +127,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY renamed column expression with new name in WITH and project and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a AS b, a.age AS age ORDER BY b.foo, b.age + 5 RETURN b.name, age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageAProperty = cachedNodeProp("a", "age")
     val nameProperty = prop("b", "name")
     val fooProperty = prop("b", "foo")
@@ -134,7 +144,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) RETURN a.name ORDER BY a.age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -148,7 +158,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN and return that column") {
     val plan = new given().getLogicalPlanFor("""MATCH (a:A) RETURN a.name, a.age ORDER BY a.age""")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -162,7 +172,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN and project and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) RETURN a.name, a.age AS age ORDER BY age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -176,7 +186,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN *") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) RETURN * ORDER BY a.age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
 
     val projection = Projection(labelScan, Map("a.age" -> ageProperty))
@@ -188,7 +198,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN * and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) RETURN *, a.age ORDER BY a.age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
 
     val projection = Projection(labelScan, Map("a.age" -> ageProperty))
@@ -200,7 +210,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column in RETURN * and project and return that column") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) RETURN *, a.age AS age ORDER BY age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
 
     val projection = Projection(labelScan, Map("age" -> ageProperty))
@@ -212,7 +222,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected column with expression in WITH") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.age + 4 RETURN a.name")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
 
@@ -226,7 +236,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected DISTINCT column in WITH and project and return it") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH DISTINCT a.age AS age ORDER BY age RETURN age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
 
     val distinct = Distinct(labelScan, Map("age" -> ageProperty))
@@ -240,7 +250,11 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
 
     val aAt7 = "  a@7"
     val aAt43 = "  a@43"
+<<<<<<< HEAD
     val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty)
+=======
+    val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty, IndexOrderNone)
+>>>>>>> neo4j/4.1
     val ageProperty = prop(aAt43, "age")
     val nameProperty = prop(aAt7, "name")
 
@@ -254,7 +268,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected AGGREGATING column in WITH and project and return it") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a.name AS name, sum(a.age) AS age ORDER BY age RETURN name, age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
     val ageSum = sum(ageProperty)
@@ -268,7 +282,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("ORDER BY previously unprojected GROUPING column in WITH and project and return it") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a.name AS name, sum(a.age) AS age ORDER BY name RETURN name, age")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val ageProperty = prop("a", "age")
     val nameProperty = prop("a", "name")
     val ageSum = sum(ageProperty)
@@ -284,7 +298,11 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
 
     val aAt7 = "  a@7"
     val aAt34 = "  a@34"
+<<<<<<< HEAD
     val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty)
+=======
+    val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty, IndexOrderNone)
+>>>>>>> neo4j/4.1
     val ageProperty = prop(aAt7, "age")
     val nameProperty = prop(aAt7, "name")
     val fooProperty = prop(aAt34, "foo")
@@ -297,10 +315,10 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
     plan should equal(sort)
   }
 
-    test("should use ordered aggregation if there is one grouping column, ordered") {
+  test("should use ordered aggregation if there is one grouping column, ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo RETURN a.foo, count(a.foo)")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
     val fooCount = count(fooProperty)
 
@@ -314,7 +332,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("should use ordered aggregation if there are two grouping columns, one ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo RETURN a.foo, a.bar, count(a.foo)")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
     val barProperty = prop("a", "bar")
     val fooCount = count(fooProperty)
@@ -329,7 +347,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("should use ordered aggregation if there are two grouping columns, both ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo, a.bar RETURN a.foo, a.bar, count(a.foo)")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
     val barProperty = cachedNodeProp("a", "bar")
     val fooCount = count(fooProperty)
@@ -344,7 +362,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("should use ordered distinct if there is one grouping column, ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo RETURN DISTINCT a.foo")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
 
     val projection = Projection(labelScan, Map("a.foo" -> fooProperty))
@@ -357,7 +375,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("should use ordered distinct if there are two grouping columns, one ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo RETURN DISTINCT a.foo, a.bar")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
     val barProperty = prop("a", "bar")
 
@@ -371,7 +389,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   test("should use ordered distinct if there are two grouping columns, both ordered") {
     val plan = new given().getLogicalPlanFor("MATCH (a:A) WITH a ORDER BY a.foo, a.bar RETURN DISTINCT a.foo, a.bar")._2
 
-    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val labelScan = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val fooProperty = cachedNodeProp("a", "foo")
     val barProperty = cachedNodeProp("a", "bar")
 
@@ -394,6 +412,72 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
     }
   }
 
+  test("should mark leveragedOrder in collect with ORDER BY") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) WITH a ORDER BY a.age RETURN collect(a.name)")
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(true)
+  }
+
+  test("should not mark leveragedOrder in count with ORDER BY") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) WITH a ORDER BY a.age RETURN count(a.name)")
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(false)
+  }
+
+  test("should not mark leveragedOrder in collect with no ORDER BY") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) RETURN collect(a.name)")
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(false)
+  }
+
+  test("should mark leveragedOrder if using ORDER BY in RETURN") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) RETURN a ORDER BY a.age", stripProduceResults = false)
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(true)
+  }
+
+  test("should mark leveragedOrder if using ORDER BY in RETURN after a WITH") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) WITH a AS a, 1 AS foo RETURN a ORDER BY a.age", stripProduceResults = false)
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(true)
+  }
+
+  test("should not mark leveragedOrder if using ORDER BY in RETURN in a UNION") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) RETURN a ORDER BY a.age UNION RETURN 1 AS a", stripProduceResults = false)
+    val leveragedOrders = attrs.leveragedOrders
+
+    leveragedOrders.get(plan.id) should be(false)
+  }
+
+  test("should mark leveragedOrder in LIMIT with ORDER BY") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) WITH a ORDER BY a.age LIMIT 1 RETURN a.name")
+    val leveragedOrders = attrs.leveragedOrders
+
+    val projection = plan.asInstanceOf[Projection]
+    val top = projection.lhs.get.asInstanceOf[Top]
+
+    leveragedOrders.get(projection.id) should be(false)
+    leveragedOrders.get(top.id) should be(true)
+  }
+
+  test("should mark leveragedOrder in SKIP with ORDER BY") {
+    val (_, plan, _, attrs) = new given().getLogicalPlanFor("MATCH (a) WITH a ORDER BY a.age SKIP 1 RETURN a.name")
+    val leveragedOrders = attrs.leveragedOrders
+
+    val projection = plan.asInstanceOf[Projection]
+    val skip = projection.source.asInstanceOf[Skip]
+    val sort = skip.source.asInstanceOf[Sort]
+
+    leveragedOrders.get(projection.id) should be(false)
+    leveragedOrders.get(skip.id) should be(true)
+    leveragedOrders.get(sort.id) should be(true)
+  }
+
   test("Should plan sort before first expand when sorting on property") {
     val query =
       """MATCH (u:Person)-[f:FRIEND]->(p:Person)-[r:READ]->(b:Book)
@@ -408,9 +492,9 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
           Expand(
             Selection(_,
               Expand(
-                Sort(_,Seq(Ascending("u.name"))), _, _, _, _, _, _
+                Sort(_,Seq(Ascending("u.name"))), _, _, _, _, _, _, _
               )
-            ), _, _, _, _, _, _
+            ), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -418,8 +502,10 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
   }
 
   test("Should plan sort before first expand when sorting on node") {
+    // Not having a label on u, otherwise we can take the order from the label scan and don't need to sort at all,
+    // which would make this test useless.
     val query =
-      """MATCH (u:Person)-[f:FRIEND]->(p:Person)-[r:READ]->(b:Book)
+      """MATCH (u)-[f:FRIEND]->(p:Person)-[r:READ]->(b:Book)
         |WHERE u.name STARTS WITH 'Joe'
         |RETURN u.name, b.title
         |ORDER BY u""".stripMargin
@@ -431,9 +517,9 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
           Expand(
             Selection(_,
               Expand(
-                Sort(_,Seq(Ascending("u"))), _, _, _, _, _, _
+                Sort(_,Seq(Ascending("u"))), _, _, _, _, _, _, _
               )
-            ), _, _, _, _, _, _
+            ), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -454,9 +540,9 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
           Expand(
             Selection(_,
               Expand(
-                Sort(_,Seq(Ascending("name"))), _, _, _, _, _, _
+                Sort(_,Seq(Ascending("name"))), _, _, _, _, _, _, _
               )
-            ), _, _, _, _, _, _
+            ), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -477,9 +563,9 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
           Expand(
             Selection(_,
               Expand(
-                Sort(_,Seq(Ascending("name"))), _, _, _, _, _, _
+                Sort(_,Seq(Ascending("name"))), _, _, _, _, _, _, _
               )
-            ), _, _, _, _, _, _
+            ), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -500,9 +586,9 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
           Expand(
             Selection(_,
               Expand(
-                Sort(_,Seq(Ascending("v.name"))), _, _, _, _, _, _
+                Sort(_,Seq(Ascending("v.name"))), _, _, _, _, _, _, _
               )
-            ), _, _, _, _, _, _
+            ), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -531,7 +617,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
       case Projection(
         Selection(_,
           Expand(
-            Sort(_,Seq(Ascending("u.name"))), _, _, _, _, _, _
+            Sort(_,Seq(Ascending("u.name"))), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -580,7 +666,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
       case Projection(
         Selection(_,
           Expand(
-            Sort(_,Seq(Ascending("add"))), _, _, _, _, _, _
+            Sort(_,Seq(Ascending("add"))), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -599,7 +685,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
       case Projection(
         Selection(_,
           Expand(
-            Sort(_,Seq(Ascending("u.name + p.name"))), _, _, _, _, _, _
+            Sort(_,Seq(Ascending("u.name + p.name"))), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -618,7 +704,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
       case Projection(
         Selection(_,
           Expand(
-            Sort(_,Seq(Ascending("uname + pname"))), _, _, _, _, _, _
+            Sort(_,Seq(Ascending("uname + pname"))), _, _, _, _, _, _, _
           )
         ), _
       ) => ()
@@ -650,7 +736,11 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         |  Label_OPERATIONS_Operation: [(n_labels)-[:`OPERATIONS`]->(n_labels_operations:`Operation`)|n_labels_operations{.id, .date, .description, .amount}]}]} ORDER by n.id
         |""".stripMargin
 
+<<<<<<< HEAD
     val (_, plan, _, _, _) = new given().getLogicalPlanFor(query)
+=======
+    val (_, plan, _, _) = new given().getLogicalPlanFor(query)
+>>>>>>> neo4j/4.1
     plan shouldBe a[Sort]
   }
 }

@@ -19,9 +19,9 @@
  */
 package org.neo4j.schema;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.RuleChain;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,7 +29,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.ToIntFunction;
 
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
@@ -52,13 +51,15 @@ import org.neo4j.internal.batchimport.input.BadCollector;
 import org.neo4j.internal.batchimport.input.Collector;
 import org.neo4j.internal.batchimport.input.IdType;
 import org.neo4j.internal.batchimport.input.Input;
+import org.neo4j.internal.batchimport.input.PropertySizeCalculator;
 import org.neo4j.internal.batchimport.input.ReadableGroups;
 import org.neo4j.internal.batchimport.staging.ExecutionMonitors;
 import org.neo4j.internal.helpers.TimeUtil;
 import org.neo4j.internal.helpers.collection.Iterables;
+import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
-import org.neo4j.kernel.impl.api.index.BatchingMultipleIndexPopulator;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.api.index.MultipleIndexPopulator;
 import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
@@ -67,22 +68,20 @@ import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.NullLogService;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
-import org.neo4j.test.rule.CleanupRule;
+import org.neo4j.test.extension.Inject;
+import org.neo4j.test.extension.RandomExtension;
+import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.RandomRule;
-import org.neo4j.test.rule.RepeatRule;
 import org.neo4j.test.rule.TestDirectory;
-import org.neo4j.test.rule.fs.DefaultFileSystemRule;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 import org.neo4j.util.FeatureToggles;
 import org.neo4j.values.storable.RandomValues;
-import org.neo4j.values.storable.Value;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
-import static org.neo4j.configuration.GraphDatabaseSettings.multi_threaded_schema_index_population_enabled;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.internal.batchimport.AdditionalInitialIds.EMPTY;
 import static org.neo4j.internal.batchimport.Configuration.DEFAULT;
@@ -90,86 +89,83 @@ import static org.neo4j.internal.batchimport.GeneratingInputIterator.EMPTY_ITERA
 import static org.neo4j.internal.batchimport.ImportLogic.NO_MONITOR;
 import static org.neo4j.internal.batchimport.input.Input.knownEstimates;
 import static org.neo4j.internal.helpers.progress.ProgressMonitorFactory.NONE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 /**
- * Idea is to test a {@link MultipleIndexPopulator} and {@link BatchingMultipleIndexPopulator} with a bunch of indexes,
- * some which can fail randomly.
+ * Idea is to test a {@link MultipleIndexPopulator} with a bunch of indexes, some of which can fail randomly.
  * Also updates are randomly streaming in during population. In the end all the indexes should have been populated
  * with correct data.
  */
-public class MultipleIndexPopulationStressIT
+@ExtendWith( RandomExtension.class )
+@TestDirectoryExtension
+class MultipleIndexPopulationStressIT
 {
     private static final String[] TOKENS = new String[]{"One", "Two", "Three", "Four"};
-    private final TestDirectory directory = TestDirectory.testDirectory();
+    private ExecutorService executor;
 
-    private final RandomRule random = new RandomRule();
-    private final CleanupRule cleanup = new CleanupRule();
-    private final RepeatRule repeat = new RepeatRule();
-    private final DefaultFileSystemRule fileSystemRule = new DefaultFileSystemRule();
+    @Inject
+    private RandomRule random;
 
-    @Rule
-    public final RuleChain ruleChain = RuleChain.outerRule( random ).around( repeat ).around( directory )
-                                                .around( cleanup ).around( fileSystemRule );
+    @Inject
+    private TestDirectory directory;
 
-    @Test
-    public void populateMultipleIndexWithSeveralNodesSingleThreaded() throws Exception
+    @Inject
+    private DefaultFileSystemAbstraction fileSystemAbstraction;
+
+    @AfterEach
+    public void tearDown()
     {
-        prepareAndRunTest( false, 10, TimeUnit.SECONDS.toMillis( 5 ) );
+        if ( executor != null )
+        {
+            executor.shutdown();
+        }
     }
 
     @Test
     public void populateMultipleIndexWithSeveralNodesMultiThreaded() throws Exception
     {
-        prepareAndRunTest( true, 10, TimeUnit.SECONDS.toMillis( 5 ) );
-    }
-
-    @Test
-    public void shouldPopulateMultipleIndexPopulatorsUnderStressSingleThreaded() throws Exception
-    {
-        readConfigAndRunTest( false );
+        prepareAndRunTest( 10, TimeUnit.SECONDS.toMillis( 5 ) );
     }
 
     @Test
     public void shouldPopulateMultipleIndexPopulatorsUnderStressMultiThreaded() throws Exception
     {
         int concurrentUpdatesQueueFlushThreshold = random.nextInt( 100, 5000 );
-        FeatureToggles.set( BatchingMultipleIndexPopulator.class, BatchingMultipleIndexPopulator.QUEUE_THRESHOLD_NAME,
-                concurrentUpdatesQueueFlushThreshold );
+        FeatureToggles.set( MultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME, concurrentUpdatesQueueFlushThreshold );
         try
         {
-            readConfigAndRunTest( true );
+            readConfigAndRunTest();
         }
         finally
         {
-            FeatureToggles.clear( BatchingMultipleIndexPopulator.class,
-                    BatchingMultipleIndexPopulator.QUEUE_THRESHOLD_NAME );
+            FeatureToggles.clear( MultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME );
         }
     }
 
-    private void readConfigAndRunTest( boolean multiThreaded ) throws Exception
+    private void readConfigAndRunTest() throws Exception
     {
         // GIVEN a database with random data in it
         int nodeCount = (int) SettingValueParsers.parseLongWithUnit( System.getProperty( getClass().getName() + ".nodes", "200k" ) );
         long duration = TimeUtil.parseTimeMillis.apply( System.getProperty( getClass().getName() + ".duration", "5s" ) );
-        prepareAndRunTest( multiThreaded, nodeCount, duration );
+        prepareAndRunTest( nodeCount, duration );
     }
 
-    private void prepareAndRunTest( boolean multiThreaded, int nodeCount, long durationMillis ) throws Exception
+    private void prepareAndRunTest( int nodeCount, long durationMillis ) throws Exception
     {
         createRandomData( nodeCount );
         long endTime = currentTimeMillis() + durationMillis;
 
         // WHEN/THEN run tests for at least the specified durationMillis
-        for ( int i = 0; currentTimeMillis() < endTime; i++ )
+        while ( currentTimeMillis() < endTime )
         {
-            runTest( nodeCount, multiThreaded );
+            runTest( nodeCount );
         }
     }
 
-    private void runTest( int nodeCount, boolean multiThreaded ) throws Exception
+    private void runTest( int nodeCount ) throws Exception
     {
         // WHEN creating the indexes under stressful updates
-        populateDbAndIndexes( nodeCount, multiThreaded );
+        populateDbAndIndexes( nodeCount );
         ConsistencyCheckService cc = new ConsistencyCheckService();
         Config config = Config.newBuilder()
                 .set( neo4j_home, directory.homeDir().toPath() )
@@ -182,18 +178,16 @@ public class MultipleIndexPopulationStressIT
         dropIndexes();
     }
 
-    private void populateDbAndIndexes( int nodeCount, boolean multiThreaded ) throws InterruptedException
+    private void populateDbAndIndexes( int nodeCount ) throws InterruptedException
     {
         DatabaseManagementService managementService =
-                new TestDatabaseManagementServiceBuilder( directory.homeDir() )
-                        .setConfig( multi_threaded_schema_index_population_enabled, multiThreaded )
-                        .build();
+                new TestDatabaseManagementServiceBuilder( directory.homeDir() ).build();
         final GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
         try
         {
             createIndexes( db );
             final AtomicBoolean end = new AtomicBoolean();
-            ExecutorService executor = cleanup.add( Executors.newCachedThreadPool() );
+            executor = Executors.newCachedThreadPool();
             for ( int i = 0; i < 10; i++ )
             {
                 executor.submit( () ->
@@ -213,6 +207,7 @@ public class MultipleIndexPopulationStressIT
             end.set( true );
             executor.shutdown();
             executor.awaitTermination( 10, SECONDS );
+            executor = null;
         }
         finally
         {
@@ -316,8 +311,14 @@ public class MultipleIndexPopulationStressIT
         {
             DatabaseLayout layout = Neo4jLayout.of( directory.homeDir() ).databaseLayout( DEFAULT_DATABASE_NAME );
             BatchImporter importer = new ParallelBatchImporter(
+<<<<<<< HEAD
                     layout, fileSystemRule.get(), null, DEFAULT, NullLogService.getInstance(), ExecutionMonitors.invisible(), EMPTY, config, recordFormats,
                     NO_MONITOR, jobScheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer() );
+=======
+                    layout, fileSystemAbstraction, null, PageCacheTracer.NULL, DEFAULT, NullLogService.getInstance(),
+                    ExecutionMonitors.invisible(), EMPTY, config, recordFormats, NO_MONITOR, jobScheduler, Collector.EMPTY,
+                    TransactionLogInitializer.getLogFilesInitializer(), INSTANCE );
+>>>>>>> neo4j/4.1
             importer.doImport( input );
         }
     }
@@ -376,7 +377,7 @@ public class MultipleIndexPopulationStressIT
         {
             try
             {
-                return new BadCollector( fileSystemRule.get().openAsOutputStream( new File( directory.homeDir(), "bad" ), false ), 0, 0 );
+                return new BadCollector( fileSystemAbstraction.openAsOutputStream( new File( directory.homeDir(), "bad" ), false ), 0, 0 );
             }
             catch ( IOException e )
             {
@@ -385,7 +386,7 @@ public class MultipleIndexPopulationStressIT
         }
 
         @Override
-        public Estimates calculateEstimates( ToIntFunction<Value[]> valueSizeCalculator )
+        public Estimates calculateEstimates( PropertySizeCalculator valueSizeCalculator ) throws IOException
         {
             return knownEstimates( count, 0, count * TOKENS.length / 2, 0, count * TOKENS.length / 2 * Long.BYTES, 0, 0 );
         }

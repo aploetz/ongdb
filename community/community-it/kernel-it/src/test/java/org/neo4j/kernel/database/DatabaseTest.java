@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.database;
 
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -50,7 +51,7 @@ import org.neo4j.logging.internal.DatabaseLogService;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.SimpleLogService;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
+import org.neo4j.kernel.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Health;
 import org.neo4j.test.rule.DatabaseRule;
 import org.neo4j.test.rule.PageCacheConfig;
@@ -59,15 +60,9 @@ import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.rule.fs.DefaultFileSystemRule;
 
 import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
-import static org.hamcrest.Matchers.arrayContainingInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -75,7 +70,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyVararg;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -87,7 +82,8 @@ import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAM
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
 import static org.neo4j.kernel.database.DatabaseFileHelper.filesToKeepOnTruncation;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 public class DatabaseTest
 {
@@ -181,7 +177,7 @@ public class DatabaseTest
         assertTrue( fs.fileExists( databaseDirectory ) );
         assertTrue( fs.fileExists( transactionLogsDirectory ) );
         File[] currentDatabaseFiles = databaseDirectory.listFiles();
-        assertThat( currentDatabaseFiles, arrayContainingInAnyOrder( databaseFilesShouldExist ) );
+        assertThat( currentDatabaseFiles ).contains( databaseFilesShouldExist );
     }
 
     @Test
@@ -201,7 +197,7 @@ public class DatabaseTest
         Set<File> files = databaseLayout.storeFiles();
         files.removeAll( filesToKeepOnTruncation( databaseLayout ) );
         File[] filesShouldBeDeleted = files.stream().filter( File::exists ).toArray( File[]::new );
-        assertThat( removedFiles, hasItems( filesShouldBeDeleted ) );
+        assertThat( removedFiles ).contains( filesShouldBeDeleted );
     }
 
     @Test
@@ -231,8 +227,8 @@ public class DatabaseTest
         File[] logFiles = fs.listFiles( transactionLogsDirectory );
 
         // files are equal by name - every store file is recreated as result
-        assertThat( databaseFilesBeforeTruncate, arrayContainingInAnyOrder( databaseFiles ) );
-        assertThat( logFilesBeforeTruncate, arrayContainingInAnyOrder( logFiles ) );
+        assertThat( databaseFilesBeforeTruncate ).contains( databaseFiles );
+        assertThat( logFilesBeforeTruncate ).contains( logFiles );
     }
 
     @Test
@@ -303,11 +299,12 @@ public class DatabaseTest
         {
             PagedFile file = spy( realPageCache.map( invocation.getArgument( 0, File.class ),
                                                      invocation.getArgument( 1, VersionContextSupplier.class ),
-                                                     invocation.getArgument( 2, Integer.class ) ) );
+                                                     invocation.getArgument( 2, Integer.class ),
+                                                     invocation.getArgument( 3, ImmutableSet.class ) ) );
             files.add( file );
             return file;
         } )
-        .when( pageCache ).map( any( File.class ), any( VersionContextSupplier.class ), anyInt() );
+        .when( pageCache ).map( any( File.class ), any( VersionContextSupplier.class ), anyInt(), any() );
 
         Database database = databaseRule.getDatabase( databaseLayout, fs.get(), pageCache );
         files.clear();
@@ -321,7 +318,7 @@ public class DatabaseTest
         verify( pageCache, never() ).flushAndForce( IOLimiter.UNLIMITED );
         for ( PagedFile file : files )
         {
-            verify( file ).flushAndForce( IOLimiter.UNLIMITED );
+            verify( file, atLeastOnce() ).flushAndForce( IOLimiter.UNLIMITED );
         }
     }
 
@@ -335,11 +332,12 @@ public class DatabaseTest
         {
             PagedFile file = spy( realPageCache.map( invocation.getArgument( 0, File.class ),
                                                      invocation.getArgument( 1, VersionContextSupplier.class ),
-                                                     invocation.getArgument( 2, Integer.class ) ) );
+                                                     invocation.getArgument( 2, Integer.class ),
+                                                     invocation.getArgument( 3, ImmutableSet.class ) ) );
             files.add( file );
             return file;
         } )
-        .when( pageCache ).map( any( File.class ), any( VersionContextSupplier.class ), anyInt() );
+        .when( pageCache ).map( any( File.class ), any( VersionContextSupplier.class ), anyInt(), any() );
 
         Database database = databaseRule.getDatabase( databaseLayout, fs.get(), pageCache );
         files.clear();
@@ -352,7 +350,7 @@ public class DatabaseTest
         verify( pageCache, never() ).flushAndForce( IOLimiter.UNLIMITED );
         for ( PagedFile file : files )
         {
-            verify( file ).flushAndForce( IOLimiter.UNLIMITED );
+            verify( file, atLeastOnce() ).flushAndForce( IOLimiter.UNLIMITED );
         }
     }
 
@@ -381,7 +379,7 @@ public class DatabaseTest
         IdGeneratorFactory idGeneratorFactory = mock( IdGeneratorFactory.class );
         Throwable openStoresError = new RuntimeException( "Can't set up modules" );
         doThrow( openStoresError ).when( idGeneratorFactory )
-                .create( any(), any( File.class ), any(), anyLong(), anyBoolean(), anyLong(), anyBoolean(), anyVararg() );
+                .create( any(), any( File.class ), any(), anyLong(), anyBoolean(), anyLong(), anyBoolean(), any(), any() );
 
         AssertableLogProvider logProvider = new AssertableLogProvider();
         SimpleLogService logService = new SimpleLogService( logProvider, logProvider );
@@ -402,9 +400,9 @@ public class DatabaseTest
             assertSame( openStoresError, getRootCause( e ) );
         }
 
-        logProvider.assertAtLeastOnce( inLog( Database.class ).warn(
-                containsString( "Exception occurred while starting the database. Trying to stop already started components." ),
-                equalTo( openStoresError ) ) );
+        assertThat( logProvider ).forClass( Database.class ).forLevel( WARN )
+              .containsMessageWithException( "Exception occurred while starting the database. Trying to stop already started components.",
+                      openStoresError );
     }
 
     @Test
@@ -448,7 +446,7 @@ public class DatabaseTest
         {
             var logService = database.getDependencyResolver().resolveDependency( LogService.class );
             assertEquals( database.getLogService(), logService );
-            assertThat( logService, instanceOf( DatabaseLogService.class ) );
+            assertThat( logService ).isInstanceOf( DatabaseLogService.class );
         }
         finally
         {
@@ -466,7 +464,7 @@ public class DatabaseTest
         }
 
         @Override
-        public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize, OpenOption... openOptions ) throws IOException
+        public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize, ImmutableSet<OpenOption> openOptions ) throws IOException
         {
             PagedFile pagedFile = super.map( file, versionContextSupplier, pageSize, openOptions );
             pagedFiles.add( pagedFile );

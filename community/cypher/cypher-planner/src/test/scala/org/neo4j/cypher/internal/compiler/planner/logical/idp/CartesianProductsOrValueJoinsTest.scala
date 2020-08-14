@@ -19,20 +19,27 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.idp
 
-import org.neo4j.cypher.internal.compiler.planner._
-import org.neo4j.cypher.internal.ir.{QueryGraph, RegularSinglePlannerQuery, Selections, InterestingOrder, ProvidedOrder}
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.ir.ordering.ProvidedOrder
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.ValueHashJoin
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.{Cardinalities, ProvidedOrders, Solveds}
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.util.Cardinality
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class CartesianProductsOrValueJoinsTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
   private val planA = allNodesScan("a")
   private val planB = allNodesScan("b")
   private val planC = allNodesScan("c")
 
-  private def allNodesScan(n: String, planningAttributes: PlanningAttributes = PlanningAttributes(new Solveds, new Cardinalities, new ProvidedOrders)): LogicalPlan = {
+  private def allNodesScan(n: String, planningAttributes: PlanningAttributes = PlanningAttributes.newAttributes): LogicalPlan = {
     val solved = RegularSinglePlannerQuery(queryGraph = QueryGraph(patternNodes = Set(n)))
     val cardinality = Cardinality(0)
     val res = AllNodesScan(n, Set.empty)
@@ -46,8 +53,8 @@ class CartesianProductsOrValueJoinsTest extends CypherFunSuite with LogicalPlann
     testThis(
       graph = QueryGraph(patternNodes = Set("a", "b")),
       input = (planningAttributes: PlanningAttributes) => Set(
-          PlannedComponent(QueryGraph(patternNodes = Set("a")), allNodesScan("a", planningAttributes)),
-          PlannedComponent(QueryGraph(patternNodes = Set("b")), allNodesScan("b", planningAttributes))),
+        PlannedComponent(QueryGraph(patternNodes = Set("a")), allNodesScan("a", planningAttributes)),
+        PlannedComponent(QueryGraph(patternNodes = Set("b")), allNodesScan("b", planningAttributes))),
       expectedPlans =
         List(planA, planB).permutations.map { l =>
           val (a, b) = (l.head, l(1))
@@ -106,7 +113,7 @@ class CartesianProductsOrValueJoinsTest extends CypherFunSuite with LogicalPlann
       expectedPlans =
         List((planA, "a"), (planB, "b")).permutations.map { l =>
           val ((a, aName), (b, bName)) = (l.head, l(1))
-            ValueHashJoin(a, b, equals(prop(aName, "id"), prop(bName, "id")))
+          ValueHashJoin(a, b, equals(prop(aName, "id"), prop(bName, "id")))
         }.toSeq : _*)
   }
 

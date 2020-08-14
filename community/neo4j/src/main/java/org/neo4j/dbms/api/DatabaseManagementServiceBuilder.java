@@ -34,6 +34,7 @@ import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.common.Edition;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.event.DatabaseEventListener;
@@ -44,11 +45,13 @@ import org.neo4j.graphdb.factory.module.edition.AbstractEditionModule;
 import org.neo4j.graphdb.factory.module.edition.CommunityEditionModule;
 import org.neo4j.graphdb.security.URLAccessRule;
 import org.neo4j.kernel.extension.ExtensionFactory;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.logging.NullLogProvider;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.service.Services;
 
+import static java.lang.Boolean.FALSE;
 import static org.neo4j.graphdb.facade.GraphDatabaseDependencies.newDependencies;
 
 /**
@@ -60,7 +63,7 @@ public class DatabaseManagementServiceBuilder
     protected final List<ExtensionFactory<?>> extensions = new ArrayList<>();
     protected final List<DatabaseEventListener> databaseEventListeners = new ArrayList<>();
     protected Monitors monitors;
-    protected LogProvider userLogProvider;
+    protected LogProvider userLogProvider = NullLogProvider.getInstance();
     protected DependencyResolver dependencies = new Dependencies();
     protected final Map<String,URLAccessRule> urlAccessRules = new HashMap<>();
     protected File homeDirectory;
@@ -80,17 +83,17 @@ public class DatabaseManagementServiceBuilder
 
     protected DatabaseManagementService newDatabaseManagementService( Config config, ExternalDependencies dependencies )
     {
-        config.set( GraphDatabaseSettings.ephemeral_lucene, false );
-        return new DatabaseManagementServiceFactory( getDatabaseInfo(), getEditionFactory() )
+        config.set( GraphDatabaseInternalSettings.ephemeral_lucene, FALSE );
+        return new DatabaseManagementServiceFactory( getDbmsInfo( config ), getEditionFactory( config ) )
                 .build( augmentConfig( config ), dependencies );
     }
 
-    protected DatabaseInfo getDatabaseInfo()
+    protected DbmsInfo getDbmsInfo( Config config )
     {
-        return DatabaseInfo.COMMUNITY;
+        return DbmsInfo.COMMUNITY;
     }
 
-    protected Function<GlobalModule,AbstractEditionModule> getEditionFactory()
+    protected Function<GlobalModule,AbstractEditionModule> getEditionFactory( Config config )
     {
         return CommunityEditionModule::new;
     }
@@ -175,7 +178,7 @@ public class DatabaseManagementServiceBuilder
         return this;
     }
 
-    public DatabaseManagementServiceBuilder loadPropertiesFromFile( String fileName ) throws IllegalArgumentException
+    public DatabaseManagementServiceBuilder loadPropertiesFromFile( String fileName )
     {
         try
         {
@@ -187,7 +190,7 @@ public class DatabaseManagementServiceBuilder
         }
     }
 
-    private DatabaseManagementServiceBuilder loadPropertiesFromURL( URL url ) throws IllegalArgumentException
+    private DatabaseManagementServiceBuilder loadPropertiesFromURL( URL url )
     {
         try
         {

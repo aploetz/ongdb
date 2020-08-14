@@ -19,8 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.Iterators
+import org.neo4j.cypher.internal.util.attribution.Id
+
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 case class NodeRightOuterHashJoinPipe(nodeVariables: Set[String],
                                       lhs: Pipe,
@@ -29,21 +32,21 @@ case class NodeRightOuterHashJoinPipe(nodeVariables: Set[String],
                                      (val id: Id = Id.INVALID_ID)
   extends NodeOuterHashJoinPipe(nodeVariables, lhs, rhs, nullableVariables) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
 
     val rhsResult = rhs.createResults(state)
     if (rhsResult.isEmpty)
       return Iterator.empty
 
-    val probeTable = buildProbeTableAndFindNullRows(input, withNulls = false)
-    (
+    val probeTable = buildProbeTableAndFindNullRows(input, state.memoryTracker.memoryTrackerForOperator(id.x), withNulls = false)
+    val resultIterator = (
       for {rhsRow <- rhsResult}
         yield {
           computeKey(rhsRow) match {
             case Some(joinKey) =>
               val lhsRows = probeTable(joinKey)
-              if(lhsRows.nonEmpty) {
-                lhsRows.map { lhsRow =>
+              if(lhsRows.hasNext) {
+                lhsRows.asScala.map { lhsRow =>
                   val outputRow = executionContextFactory.copyWith(rhsRow)
                   outputRow.mergeWith(lhsRow, state.query)
                   outputRow
@@ -55,5 +58,6 @@ case class NodeRightOuterHashJoinPipe(nodeVariables: Set[String],
               Seq(addNulls(rhsRow))
           }
         }).flatten
+    Iterators.resourceClosingIterator(resultIterator, probeTable)
   }
 }

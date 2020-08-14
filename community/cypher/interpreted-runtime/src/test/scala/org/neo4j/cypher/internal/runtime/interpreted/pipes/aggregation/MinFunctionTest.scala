@@ -20,9 +20,12 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.values.storable.Values.{doubleValue, intValue, stringValue}
-import org.neo4j.values.storable.{IntValue, Values}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.values.storable.IntValue
+import org.neo4j.values.storable.Values
+import org.neo4j.values.storable.Values.doubleValue
+import org.neo4j.values.storable.Values.intValue
+import org.neo4j.values.storable.Values.stringValue
 
 class MinFunctionTest extends CypherFunSuite with AggregateTest {
   test("singleValueReturnsThatNumber") {

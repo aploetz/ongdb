@@ -31,7 +31,6 @@ import org.neo4j.collection.PrimitiveLongCollections;
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.io.IOUtils;
@@ -51,7 +50,9 @@ import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexQueryHelper.add;
 
 @TestDirectoryExtension
@@ -84,7 +85,7 @@ class NonUniqueDatabaseIndexPopulatorTest
     {
         if ( populator != null )
         {
-            populator.close( false );
+            populator.close( false, NULL );
         }
         IOUtils.closeAll( index, dirFactory );
     }
@@ -94,7 +95,7 @@ class NonUniqueDatabaseIndexPopulatorTest
     {
         populator = newPopulator();
 
-        IndexSample sample = populator.sampleResult();
+        IndexSample sample = populator.sample( NULL );
 
         assertEquals( new IndexSample(), sample );
     }
@@ -111,7 +112,7 @@ class NonUniqueDatabaseIndexPopulatorTest
 
         updates.forEach( populator::includeSample );
 
-        IndexSample sample = populator.sampleResult();
+        IndexSample sample = populator.sample( NULL );
 
         assertEquals( new IndexSample( 3, 3, 3 ), sample );
     }
@@ -128,7 +129,7 @@ class NonUniqueDatabaseIndexPopulatorTest
 
         updates.forEach( populator::includeSample );
 
-        IndexSample sample = populator.sampleResult();
+        IndexSample sample = populator.sample( NULL );
 
         assertEquals( new IndexSample( 3, 2, 3 ), sample );
     }
@@ -143,14 +144,14 @@ class NonUniqueDatabaseIndexPopulatorTest
                 add( 2, labelSchemaDescriptor, "bar" ),
                 add( 42, labelSchemaDescriptor, "bar" ) );
 
-        populator.add( updates );
+        populator.add( updates, NULL );
 
         index.maybeRefreshBlocking();
         try ( IndexReader reader = index.getIndexReader();
               NodeValueIterator allEntities = new NodeValueIterator() )
         {
             int propertyKeyId = labelSchemaDescriptor.getPropertyId();
-            reader.query( NULL_CONTEXT, allEntities, IndexOrder.NONE, false, IndexQuery.exists( propertyKeyId ) );
+            reader.query( NULL_CONTEXT, allEntities, unconstrained(), IndexQuery.exists( propertyKeyId ) );
             assertArrayEquals( new long[]{1, 2, 42}, PrimitiveLongCollections.asArray( allEntities ) );
         }
     }

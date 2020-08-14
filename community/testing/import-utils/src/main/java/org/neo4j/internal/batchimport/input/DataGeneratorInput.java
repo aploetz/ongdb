@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.ToIntFunction;
 
 import org.neo4j.csv.reader.Extractors;
 import org.neo4j.internal.batchimport.InputIterable;
@@ -31,10 +30,11 @@ import org.neo4j.internal.batchimport.InputIterator;
 import org.neo4j.internal.batchimport.input.csv.Header;
 import org.neo4j.internal.batchimport.input.csv.Header.Entry;
 import org.neo4j.internal.batchimport.input.csv.Type;
-import org.neo4j.values.storable.Value;
 
 import static java.util.Arrays.asList;
 import static org.neo4j.internal.batchimport.input.csv.CsvInput.idExtractor;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 /**
  * {@link Input} which generates data on the fly. This input wants to know number of nodes and relationships
@@ -75,6 +75,7 @@ public class DataGeneratorInput implements Input
     private final float factorBadRelationshipData;
     private final long startId;
     private final Groups groups = new Groups();
+    private int maxStringLength = 20;
 
     public DataGeneratorInput( long nodes, long relationships, IdType idType, long seed, long startId,
             Header nodeHeader, Header relationshipHeader, int labelCount, int relationshipTypeCount,
@@ -97,14 +98,14 @@ public class DataGeneratorInput implements Input
     public InputIterable nodes( Collector badCollector )
     {
         return () -> new RandomEntityDataGenerator( nodes, nodes, 10_000, seed, startId, nodeHeader, labels, relationshipTypes,
-                factorBadNodeData, factorBadRelationshipData );
+                factorBadNodeData, factorBadRelationshipData, maxStringLength );
     }
 
     @Override
     public InputIterable relationships( Collector badCollector )
     {
         return () -> new RandomEntityDataGenerator( nodes, relationships, 10_000, seed, startId, relationshipHeader,
-                labels, relationshipTypes, factorBadNodeData, factorBadRelationshipData );
+                labels, relationshipTypes, factorBadNodeData, factorBadRelationshipData, maxStringLength );
     }
 
     @Override
@@ -120,7 +121,7 @@ public class DataGeneratorInput implements Input
     }
 
     @Override
-    public Estimates calculateEstimates( ToIntFunction<Value[]> valueSizeCalculator )
+    public Estimates calculateEstimates( PropertySizeCalculator valueSizeCalculator )
     {
         int sampleSize = 100;
         InputEntity[] nodeSample = sample( nodes( Collector.EMPTY ), sampleSize );
@@ -169,7 +170,7 @@ public class DataGeneratorInput implements Input
         return (double) labels / nodes.length;
     }
 
-    private static double[] sampleProperties( InputEntity[] sample, ToIntFunction<Value[]> valueSizeCalculator )
+    private static double[] sampleProperties( InputEntity[] sample, PropertySizeCalculator valueSizeCalculator )
     {
         int propertiesPerEntity = sample[0].propertyCount();
         long propertiesSize = 0;
@@ -177,20 +178,11 @@ public class DataGeneratorInput implements Input
         {
             if ( entity != null )
             {
-                propertiesSize += Inputs.calculatePropertySize( entity, valueSizeCalculator );
+                propertiesSize += Inputs.calculatePropertySize( entity, valueSizeCalculator, NULL, INSTANCE );
             }
         }
         double propertySizePerEntity = (double) propertiesSize / sample.length;
         return new double[] {propertiesPerEntity, propertySizePerEntity};
-    }
-
-    public static Header sillyNodeHeader( IdType idType, Extractors extractors )
-    {
-        return new Header( new Entry( null, Type.ID, null, idExtractor( idType, extractors ) ),
-                new Entry( "name", Type.PROPERTY, null, extractors.string() ),
-                new Entry( "age", Type.PROPERTY, null, extractors.int_() ),
-                new Entry( "something", Type.PROPERTY, null, extractors.string() ),
-                new Entry( null, Type.LABEL, null, extractors.stringArray() ) );
     }
 
     public static Header bareboneNodeHeader( IdType idType, Extractors extractors )

@@ -25,10 +25,16 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 
 import org.neo4j.io.ByteUnit;
-import org.neo4j.io.memory.ByteBuffers;
+import org.neo4j.io.memory.HeapScopedBuffer;
+import org.neo4j.io.memory.ScopedBuffer;
+import org.neo4j.memory.MemoryTracker;
 
 import static java.lang.Math.min;
 import static java.lang.Math.toIntExact;
+<<<<<<< HEAD
+=======
+import static org.neo4j.io.memory.HeapScopedBuffer.EMPTY_BUFFER;
+>>>>>>> neo4j/4.1
 
 /**
  * The main implementation of {@link FlushableChannel}. This class provides buffering over a simple {@link StoreChannel}
@@ -40,18 +46,26 @@ public class PhysicalFlushableChannel implements FlushableChannel
 
     private volatile boolean closed;
 
-    protected ByteBuffer buffer;
+    protected ScopedBuffer scopedBuffer;
     protected StoreChannel channel;
+    protected ByteBuffer buffer;
 
+<<<<<<< HEAD
     public PhysicalFlushableChannel( StoreChannel channel )
     {
         this( channel, ByteBuffers.allocate( DEFAULT_BUFFER_SIZE ) );
+=======
+    public PhysicalFlushableChannel( StoreChannel channel, MemoryTracker memoryTracker )
+    {
+        this( channel, new HeapScopedBuffer( DEFAULT_BUFFER_SIZE, memoryTracker ) );
+>>>>>>> neo4j/4.1
     }
 
-    public PhysicalFlushableChannel( StoreChannel channel, ByteBuffer byteBuffer )
+    public PhysicalFlushableChannel( StoreChannel channel, ScopedBuffer scopedBuffer )
     {
         this.channel = channel;
-        this.buffer = byteBuffer;
+        this.scopedBuffer = scopedBuffer;
+        this.buffer = scopedBuffer.getBuffer();
     }
 
     /**
@@ -85,35 +99,35 @@ public class PhysicalFlushableChannel implements FlushableChannel
     @Override
     public FlushableChannel putShort( short value ) throws IOException
     {
-        bufferWithGuaranteedSpace( 2 ).putShort( value );
+        bufferWithGuaranteedSpace( Short.BYTES ).putShort( value );
         return this;
     }
 
     @Override
     public FlushableChannel putInt( int value ) throws IOException
     {
-        bufferWithGuaranteedSpace( 4 ).putInt( value );
+        bufferWithGuaranteedSpace( Integer.BYTES ).putInt( value );
         return this;
     }
 
     @Override
     public FlushableChannel putLong( long value ) throws IOException
     {
-        bufferWithGuaranteedSpace( 8 ).putLong( value );
+        bufferWithGuaranteedSpace( Long.BYTES ).putLong( value );
         return this;
     }
 
     @Override
     public FlushableChannel putFloat( float value ) throws IOException
     {
-        bufferWithGuaranteedSpace( 4 ).putFloat( value );
+        bufferWithGuaranteedSpace( Float.BYTES ).putFloat( value );
         return this;
     }
 
     @Override
     public FlushableChannel putDouble( double value ) throws IOException
     {
-        bufferWithGuaranteedSpace( 8 ).putDouble( value );
+        bufferWithGuaranteedSpace( Double.BYTES ).putDouble( value );
         return this;
     }
 
@@ -141,6 +155,8 @@ public class PhysicalFlushableChannel implements FlushableChannel
         prepareForFlush().flush();
         this.closed = true;
         this.channel.close();
+        this.scopedBuffer.close();
+        this.scopedBuffer = EMPTY_BUFFER;
     }
 
     /**

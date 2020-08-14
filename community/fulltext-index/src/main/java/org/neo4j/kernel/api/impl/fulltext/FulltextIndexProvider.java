@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.FulltextSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.graphdb.schema.AnalyzerProvider;
 import org.neo4j.internal.helpers.Exceptions;
@@ -42,7 +43,11 @@ import org.neo4j.internal.schema.IndexType;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.ByteBufferFactory;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.impl.index.DatabaseIndex;
+import org.neo4j.kernel.api.impl.index.DroppableIndex;
+import org.neo4j.kernel.api.impl.index.DroppableLuceneIndex;
+import org.neo4j.kernel.api.impl.index.LuceneMinimalIndexAccessor;
 import org.neo4j.kernel.api.impl.index.partition.ReadOnlyIndexPartitionFactory;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
 import org.neo4j.kernel.api.impl.index.storage.IndexStorageFactory;
@@ -51,17 +56,17 @@ import org.neo4j.kernel.api.impl.schema.LuceneSchemaIndexBuilder;
 import org.neo4j.kernel.api.impl.schema.SchemaIndex;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
-import org.neo4j.kernel.api.index.IndexDropper;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
 import org.neo4j.logging.Log;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.service.Services;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.migration.SchemaIndexMigrator;
 import org.neo4j.storageengine.migration.StoreMigrationParticipant;
-import org.neo4j.token.NonTransactionalTokenNameLookup;
 import org.neo4j.token.TokenHolders;
 import org.neo4j.token.api.NamedToken;
 import org.neo4j.token.api.TokenHolder;
@@ -103,12 +108,13 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
         defaultAnalyzerName = config.get( FulltextSettings.fulltext_default_analyzer );
         defaultEventuallyConsistentSetting = config.get( FulltextSettings.eventually_consistent );
         indexUpdateSink = new IndexUpdateSink( scheduler, config.get( FulltextSettings.eventually_consistent_index_update_queue_max_length ) );
-        indexStorageFactory = buildIndexStorageFactory( fileSystem, directoryFactory );
+        indexStorageFactory = buildIndexStorageFactory( fileSystem, directoryFactory, directoryStructure() );
     }
 
-    private IndexStorageFactory buildIndexStorageFactory( FileSystemAbstraction fileSystem, DirectoryFactory directoryFactory )
+    private static IndexStorageFactory buildIndexStorageFactory( FileSystemAbstraction fileSystem, DirectoryFactory directoryFactory,
+            IndexDirectoryStructure structure )
     {
-        return new IndexStorageFactory( directoryFactory, fileSystem, directoryStructure() );
+        return new IndexStorageFactory( directoryFactory, fileSystem, structure );
     }
 
     private boolean indexIsOnline( PartitionedIndexStorage indexStorage, IndexDescriptor descriptor ) throws IOException
@@ -156,13 +162,13 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
     }
 
     @Override
-    public String getPopulationFailure( IndexDescriptor descriptor )
+    public String getPopulationFailure( IndexDescriptor descriptor, PageCursorTracer cursorTracer )
     {
         return defaultIfEmpty( getIndexStorage( descriptor.getId() ).getStoredIndexFailure(), StringUtils.EMPTY );
     }
 
     @Override
-    public InternalIndexState getInitialState( IndexDescriptor index )
+    public InternalIndexState getInitialState( IndexDescriptor index, PageCursorTracer cursorTracer )
     {
         PartitionedIndexStorage indexStorage = getIndexStorage( index.getId() );
         String failure = indexStorage.getStoredIndexFailure();
@@ -202,13 +208,13 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
     }
 
     @Override
-    public IndexDropper getDropper( IndexDescriptor descriptor )
+    public MinimalIndexAccessor getMinimalIndexAccessor( IndexDescriptor descriptor )
     {
         PartitionedIndexStorage indexStorage = getIndexStorage( descriptor.getId() );
-        DatabaseIndex<FulltextIndexReader> fulltextIndex = new DroppableFulltextIndex(
-                new DroppableLuceneFulltextIndex( indexStorage, new ReadOnlyIndexPartitionFactory(), descriptor ) );
+        DatabaseIndex<FulltextIndexReader> fulltextIndex = new DroppableIndex<>(
+                new DroppableLuceneIndex<>( indexStorage, new ReadOnlyIndexPartitionFactory(), descriptor ) );
         log.debug( "Creating dropper for fulltext schema index: %s", descriptor );
-        return new FulltextIndexDropper( descriptor, fulltextIndex, isReadOnly() );
+        return new LuceneMinimalIndexAccessor<>( descriptor, fulltextIndex, isReadOnly() );
     }
 
     private boolean isReadOnly()
@@ -218,7 +224,7 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
 
     @Override
     public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig,
-            ByteBufferFactory bufferFactory )
+            ByteBufferFactory bufferFactory, MemoryTracker memoryTracker )
     {
         if ( isReadOnly() )
         {
@@ -227,9 +233,8 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
         try
         {
             PartitionedIndexStorage indexStorage = getIndexStorage( descriptor.getId() );
-            NonTransactionalTokenNameLookup tokenNameLookup = new NonTransactionalTokenNameLookup( tokenHolders );
-            Analyzer analyzer = createAnalyzer( descriptor, tokenNameLookup );
-            String[] propertyNames = createPropertyNames( descriptor, tokenNameLookup );
+            Analyzer analyzer = createAnalyzer( descriptor, tokenHolders );
+            String[] propertyNames = createPropertyNames( descriptor, tokenHolders );
             DatabaseIndex<FulltextIndexReader> fulltextIndex = FulltextIndexBuilder
                     .create( descriptor, config, tokenHolders.propertyKeyTokens(), analyzer, propertyNames )
                     .withFileSystem( fileSystem )
@@ -243,8 +248,8 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
         catch ( Exception e )
         {
             PartitionedIndexStorage indexStorage = getIndexStorage( descriptor.getId() );
-            DatabaseIndex<FulltextIndexReader> fulltextIndex = new DroppableFulltextIndex(
-                    new DroppableLuceneFulltextIndex( indexStorage, new ReadOnlyIndexPartitionFactory(), descriptor ) );
+            DatabaseIndex<FulltextIndexReader> fulltextIndex = new DroppableIndex<>(
+                    new DroppableLuceneIndex<>( indexStorage, new ReadOnlyIndexPartitionFactory(), descriptor ) );
             log.debug( "Creating failed index populator for fulltext schema index: %s", descriptor, e );
             return new FailedFulltextIndexPopulator( descriptor, fulltextIndex, e );
         }
@@ -254,9 +259,8 @@ public class FulltextIndexProvider extends IndexProvider implements FulltextAdap
     public IndexAccessor getOnlineAccessor( IndexDescriptor index, IndexSamplingConfig samplingConfig ) throws IOException
     {
         PartitionedIndexStorage indexStorage = getIndexStorage( index.getId() );
-        NonTransactionalTokenNameLookup tokenNameLookup = new NonTransactionalTokenNameLookup( tokenHolders );
-        Analyzer analyzer = createAnalyzer( index, tokenNameLookup );
-        String[] propertyNames = createPropertyNames( index, tokenNameLookup );
+        Analyzer analyzer = createAnalyzer( index, tokenHolders );
+        String[] propertyNames = createPropertyNames( index, tokenHolders );
         FulltextIndexBuilder fulltextIndexBuilder = FulltextIndexBuilder
                 .create( index, config, tokenHolders.propertyKeyTokens(), analyzer, propertyNames )
                 .withFileSystem( fileSystem )

@@ -19,23 +19,23 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.NameId
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.NameId
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.values.storable.Values
 
 /**
-  * Retrieves node counts from count store, for nodes with specified (optional) labels.
-  * Can also be used to compute node count for cartesian product of multiple pattern nodes.
-  * E.g.,
-  * MATCH (n:L1), (n2:L2), (n3) RETURN count(*)
-  *
-  * @param labels list of labels, of different pattern nodes
-  */
+ * Retrieves node counts from count store, for nodes with specified (optional) labels.
+ * Can also be used to compute node count for cartesian product of multiple pattern nodes.
+ * E.g.,
+ * MATCH (n:L1), (n2:L2), (n3) RETURN count(*)
+ *
+ * @param labels list of labels, of different pattern nodes
+ */
 case class NodeCountFromCountStorePipe(ident: String, labels: List[Option[LazyLabel]])
                                       (val id: Id = Id.INVALID_ID) extends Pipe {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
     var count = 1L
     val it = labels.iterator
     while (it.hasNext) {
@@ -52,7 +52,7 @@ case class NodeCountFromCountStorePipe(ident: String, labels: List[Option[LazyLa
       }
     }
 
-    val baseContext = state.newExecutionContext(executionContextFactory)
+    val baseContext = state.newExecutionContextWithInitialContext(executionContextFactory)
     Iterator(executionContextFactory.copyWith(baseContext, ident, Values.longValue(count)))
   }
 }

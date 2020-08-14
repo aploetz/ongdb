@@ -23,6 +23,8 @@ import org.neo4j.values.AnyValueWriter;
 import org.neo4j.values.storable.TextValue;
 
 import static java.lang.String.format;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.values.AnyValueWriter.EntityMode.REFERENCE;
 
 public abstract class RelationshipValue extends VirtualRelationshipValue
 {
@@ -36,7 +38,14 @@ public abstract class RelationshipValue extends VirtualRelationshipValue
     @Override
     public <E extends Exception> void writeTo( AnyValueWriter<E> writer ) throws E
     {
-        writer.writeRelationship( id, startNode().id(), endNode().id(), type(), properties() );
+        if ( writer.entityMode() == REFERENCE )
+        {
+            writer.writeRelationshipReference( id );
+        }
+        else
+        {
+            writer.writeRelationship( id, startNode().id(), endNode().id(), type(), properties() );
+        }
     }
 
     @Override
@@ -75,6 +84,7 @@ public abstract class RelationshipValue extends VirtualRelationshipValue
         return "Relationship";
     }
 
+    private static final long DIRECT_RELATIONSHIP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( DirectRelationshipValue.class );
     static class DirectRelationshipValue extends RelationshipValue
     {
         private final NodeValue startNode;
@@ -118,9 +128,13 @@ public abstract class RelationshipValue extends VirtualRelationshipValue
         }
 
         @Override
-        protected long estimatedPayloadSize()
+        public long estimatedHeapUsage()
         {
-            return 12 + Long.BYTES + startNode().estimatedHeapUsage() + endNode().estimatedHeapUsage() + type.estimatedHeapUsage();
+            return DIRECT_RELATIONSHIP_VALUE_SHALLOW_SIZE +
+                    startNode.estimatedHeapUsage() +
+                    endNode.estimatedHeapUsage() +
+                    type.estimatedHeapUsage() +
+                    properties.estimatedHeapUsage();
         }
     }
 }

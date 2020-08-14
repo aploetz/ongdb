@@ -16,7 +16,11 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-token-api</artifactId>
+=======
+    <artifactId>neo4j-token-api</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Token API</name>
@@ -56,6 +60,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-io</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.eclipse.collections</groupId>
             <artifactId>eclipse-collections</artifactId>
         </dependency>
@@ -65,8 +74,8 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>

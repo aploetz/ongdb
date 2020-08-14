@@ -23,6 +23,7 @@ import java.io.IOException;
 
 import org.neo4j.common.ProgressReporter;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.internal.helpers.ArrayUtil;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
@@ -30,6 +31,8 @@ import org.neo4j.internal.id.ScanOnOpenReadOnlyIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
@@ -38,6 +41,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.logging.NullLogProvider;
 
+import static org.eclipse.collections.impl.factory.Sets.immutable;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.ArrayUtil.contains;
 
@@ -47,15 +51,18 @@ import static org.neo4j.internal.helpers.ArrayUtil.contains;
  */
 class DirectRecordStoreMigrator
 {
+    private static final String DIRECT_STORE_MIGRATOR_TAG = "directStoreMigrator";
     private final PageCache pageCache;
     private final FileSystemAbstraction fs;
     private final Config config;
+    private final PageCacheTracer cacheTracer;
 
-    DirectRecordStoreMigrator( PageCache pageCache, FileSystemAbstraction fs, Config config )
+    DirectRecordStoreMigrator( PageCache pageCache, FileSystemAbstraction fs, Config config, PageCacheTracer cacheTracer )
     {
         this.pageCache = pageCache;
         this.fs = fs;
         this.config = config;
+        this.cacheTracer = cacheTracer;
     }
 
     public void migrate( DatabaseLayout fromDirectoryStructure, RecordFormats fromFormat, DatabaseLayout toDirectoryStructure,
@@ -66,32 +73,33 @@ class DirectRecordStoreMigrator
 
         try (
                 NeoStores fromStores = new StoreFactory( fromDirectoryStructure, config, new ScanOnOpenReadOnlyIdGeneratorFactory(),
-                    pageCache, fs, fromFormat, NullLogProvider.getInstance() )
+                    pageCache, fs, fromFormat, NullLogProvider.getInstance(), cacheTracer, immutable.empty() )
                         .openNeoStores( true, storesToOpen );
                 NeoStores toStores = new StoreFactory( toDirectoryStructure, withPersistedStoreHeadersAsConfigFrom( fromStores, storesToOpen ),
-                    new DefaultIdGeneratorFactory( fs, immediate() ), pageCache, fs, toFormat, NullLogProvider.getInstance() )
-                        .openNeoStores( true, storesToOpen ) )
+                    new DefaultIdGeneratorFactory( fs, immediate() ), pageCache, fs, toFormat, NullLogProvider.getInstance(), cacheTracer, immutable.empty() )
+                        .openNeoStores( true, storesToOpen );
+                var cursorTracer = cacheTracer.createPageCursorTracer( DIRECT_STORE_MIGRATOR_TAG ) )
         {
-            toStores.start();
+            toStores.start( cursorTracer );
             for ( StoreType type : types )
             {
                 // This condition will exclude counts store first and foremost.
-                migrate( fromStores.getRecordStore( type ), toStores.getRecordStore( type ) );
+                migrate( fromStores.getRecordStore( type ), toStores.getRecordStore( type ), cursorTracer );
                 progressReporter.progress( 1 );
             }
         }
     }
 
-    private static <RECORD extends AbstractBaseRecord> void migrate( RecordStore<RECORD> from, RecordStore<RECORD> to )
+    private static <RECORD extends AbstractBaseRecord> void migrate( RecordStore<RECORD> from, RecordStore<RECORD> to, PageCursorTracer cursorTracer )
     {
-        to.setHighestPossibleIdInUse( from.getHighestPossibleIdInUse() );
+        to.setHighestPossibleIdInUse( from.getHighestPossibleIdInUse( cursorTracer ) );
 
         from.scanAllRecords( record ->
         {
-            to.prepareForCommit( record );
-            to.updateRecord( record );
+            to.prepareForCommit( record, cursorTracer );
+            to.updateRecord( record, cursorTracer );
             return false;
-        } );
+        }, cursorTracer );
     }
 
     /**
@@ -112,12 +120,12 @@ class DirectRecordStoreMigrator
         }
         if ( contains( types, StoreType.PROPERTY ) )
         {
-            config.set( GraphDatabaseSettings.array_block_size, legacyStores.getPropertyStore().getArrayStore().getRecordDataSize() );
-            config.set( GraphDatabaseSettings.string_block_size, legacyStores.getPropertyStore().getStringStore().getRecordDataSize() );
+            config.set( GraphDatabaseInternalSettings.array_block_size, legacyStores.getPropertyStore().getArrayStore().getRecordDataSize() );
+            config.set( GraphDatabaseInternalSettings.string_block_size, legacyStores.getPropertyStore().getStringStore().getRecordDataSize() );
         }
         if ( contains( types, StoreType.NODE_LABEL ) )
         {
-            config.set( GraphDatabaseSettings.label_block_size, legacyStores.getNodeStore().getDynamicLabelStore().getRecordDataSize() );
+            config.set( GraphDatabaseInternalSettings.label_block_size, legacyStores.getNodeStore().getDynamicLabelStore().getRecordDataSize() );
         }
         return config;
     }

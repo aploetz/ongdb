@@ -19,14 +19,15 @@
  */
 package org.neo4j.bolt.transport;
 
-import org.hamcrest.CoreMatchers;
-import org.hamcrest.Matcher;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,29 +35,46 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.bolt.AbstractBoltTransportsTest;
+import org.neo4j.bolt.packstream.Neo4jPack;
 import org.neo4j.bolt.testing.client.TransportConnection;
+import org.neo4j.test.extension.Inject;
+import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasKey;
-import static org.neo4j.bolt.testing.MessageMatchers.msgSuccess;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.bolt.testing.MessageConditions.msgSuccess;
 
 /**
  * Multiple concurrent users should be able to connect simultaneously. We test this with multiple users running
  * load that they roll back, asserting they don't see each others changes.
  */
+@EphemeralTestDirectoryExtension
+@Neo4jWithSocketExtension
 public class ConcurrentAccessIT extends AbstractBoltTransportsTest
 {
-    @Rule
-    public Neo4jWithSocket server = new Neo4jWithSocket( getClass(), getSettingsFunction() );
+    @Inject
+    private Neo4jWithSocket server;
 
-    @Test
-    public void shouldRunSimpleStatement() throws Throwable
+    @BeforeEach
+    public void setup( TestInfo testInfo ) throws IOException
     {
+        server.setConfigure( getSettingsFunction() );
+        server.init( testInfo );
+    }
+
+    @AfterEach
+    public void cleanup()
+    {
+        server.shutdownDatabase();
+    }
+
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldRunSimpleStatement( Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
+    {
+        initParameters( connectionClass, neo4jPack, name );
+
         // Given
         int numWorkers = 5;
         int numRequests = 1_000;
@@ -104,7 +122,7 @@ public class ConcurrentAccessIT extends AbstractBoltTransportsTest
                 // Connect
                 TransportConnection client = newConnection();
                 client.connect( server.lookupDefaultConnector() ).send( util.defaultAcceptedVersions() );
-                assertThat( client, util.eventuallyReceivesSelectedProtocolVersion() );
+                assertThat( client ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
 
                 init( client );
 
@@ -119,25 +137,25 @@ public class ConcurrentAccessIT extends AbstractBoltTransportsTest
             private void init( TransportConnection client ) throws Exception
             {
                 client.send( init );
-                assertThat( client, util.eventuallyReceives( msgSuccess() ) );
+                assertThat( client ).satisfies( util.eventuallyReceives( msgSuccess() ) );
             }
 
             private void createAndRollback( TransportConnection client ) throws Exception
             {
                 client.send( createAndRollback );
-                Matcher<Map<? extends String,?>> entryMatcher = hasEntry( is( "fields" ), equalTo( emptyList() ) );
-                assertThat( client, util.eventuallyReceives(
+                assertThat( client ).satisfies( util.eventuallyReceives(
                         msgSuccess(), // begin
-                        msgSuccess( CoreMatchers.allOf( entryMatcher, hasKey( "t_first" ), hasKey( "qid" ) ) ), // run
-                        msgSuccess( CoreMatchers.allOf( hasKey( "t_last" ), hasKey( "db" ) ) ), // pull_all
+                        msgSuccess( message -> assertThat( message ).containsKeys( "t_first", "qid" )
+                        .containsEntry( "fields", emptyList() ) ), // run
+                        msgSuccess( message -> assertThat( message ).containsKeys( "t_last", "db" ) ), // pull_all
                         msgSuccess() // roll_back
                         ) );
 
                 client.send( matchAll );
-                Matcher<Map<? extends String,?>> fieldsMatcher = hasEntry( is( "fields" ), equalTo( singletonList( "n" ) ) );
-                assertThat( client, util.eventuallyReceives(
-                        msgSuccess( CoreMatchers.allOf( fieldsMatcher, hasKey( "t_first" ) ) ), // run
-                        msgSuccess( CoreMatchers.allOf( hasKey( "t_last" ), hasKey( "db" ) ) ) ) );// pull_all
+                assertThat( client ).satisfies( util.eventuallyReceives(
+                        msgSuccess( message -> assertThat( message ).containsKey( "t_first" )
+                        .containsEntry( "fields", singletonList( "n" ) ) ), // run
+                        msgSuccess( message -> assertThat( message ).containsKeys( "t_last", "db" ) ) ) );// pull_all
             }
         };
 

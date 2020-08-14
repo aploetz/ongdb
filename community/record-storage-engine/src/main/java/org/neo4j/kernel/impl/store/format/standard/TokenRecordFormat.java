@@ -31,13 +31,13 @@ public abstract class TokenRecordFormat<RECORD extends TokenRecord> extends Base
 
     private static final byte INTERNAL_FLAG = IN_USE_BIT << 1;
 
-    TokenRecordFormat( int recordSize, int idBits )
+    TokenRecordFormat( int recordSize, int idBits, boolean pageAligned )
     {
-        super( fixedRecordSize( recordSize ), 0, IN_USE_BIT, idBits );
+        super( fixedRecordSize( recordSize ), 0, IN_USE_BIT, idBits, pageAligned );
     }
 
     @Override
-    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         byte headerByte = cursor.getByte();
         boolean inUse = isInUse( headerByte );
@@ -55,7 +55,7 @@ public abstract class TokenRecordFormat<RECORD extends TokenRecord> extends Base
     }
 
     @Override
-    public void write( RECORD record, PageCursor cursor, int recordSize )
+    public void write( RECORD record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

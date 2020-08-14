@@ -19,52 +19,55 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.eclipse.collections.api.block.function.Function2
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.AggregationExpression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTableFactory
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.DistinctPipe.GroupingCol
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.AggregationFunction
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.memory.HeapEstimator
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
-import org.neo4j.values.virtual.{ListValue, VirtualValues}
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.VirtualValues
 
 /**
-  * This abstracts all the logic of aggregating, potentially per group.
-  */
+ * This abstracts all the logic of aggregating, potentially per group.
+ */
 abstract class AggregationPipe(source: Pipe,
                                tableFactory: AggregationTableFactory)
   extends PipeWithSource(source) {
-  tableFactory.registerOwningPipe(this)
 }
 
 object AggregationPipe {
 
   /**
-    * An AggregationTable is initialized by calling `clear`, followed by `processRow` for each row.
-    * The result iterator is finally obtained by calling `result`.
-    */
+   * An AggregationTable is initialized by calling `clear`, followed by `processRow` for each row.
+   * The result iterator is finally obtained by calling `result`.
+   */
   trait AggregationTable {
     def clear(): Unit
 
-    def processRow(row: ExecutionContext): Unit
+    def processRow(row: CypherRow): Unit
 
-    def result(): Iterator[ExecutionContext]
+    def result(): Iterator[CypherRow]
   }
 
   /**
-    * A Factory to obtain [[AggregationTable]]s at runtime.
-    */
+   * A Factory to obtain [[AggregationTable]]s at runtime.
+   */
   trait AggregationTableFactory {
-    def table(state: QueryState, executionContextFactory: ExecutionContextFactory): AggregationTable
-
-    def registerOwningPipe(pipe: Pipe): Unit
+    def table(state: QueryState, executionContextFactory: ExecutionContextFactory, operatorId: Id): AggregationTable
   }
 
   case class AggregatingCol(key: String, expression: AggregationExpression)
 
   /**
-    * Precompute a function that computes the grouping key of a row.
-    * The reason we precompute this is that we can specialize code depending on the amount of grouping keys.
-    */
-  def computeGroupingFunction(groupingColumns: Array[GroupingCol]): (ExecutionContext, QueryState) => AnyValue = {
+   * Precompute a function that computes the grouping key of a row.
+   * The reason we precompute this is that we can specialize code depending on the amount of grouping keys.
+   */
+  def computeGroupingFunction(groupingColumns: Array[GroupingCol]): (CypherRow, QueryState) => AnyValue = {
     groupingColumns.length match {
       case 0 =>
         (_, _) => null
@@ -90,10 +93,10 @@ object AggregationPipe {
   }
 
   /**
-    * Precompute a function that adds the grouping key columns to a result row.
-    * The reason we precompute this is that we can specialize code depending on the amount of grouping keys.
-    */
-  def computeAddKeysToResultRowFunction(groupingColumns: Array[GroupingCol]): (ExecutionContext, AnyValue) => Unit =
+   * Precompute a function that adds the grouping key columns to a result row.
+   * The reason we precompute this is that we can specialize code depending on the amount of grouping keys.
+   */
+  def computeAddKeysToResultRowFunction(groupingColumns: Array[GroupingCol]): (CypherRow, AnyValue) => Unit =
     groupingColumns.length match {
       case 0 =>
         // Do nothing
@@ -131,4 +134,21 @@ object AggregationPipe {
           }
         }
     }
+
+  /**
+   * Precompute a function that creates new aggregators for a given grouping key
+   */
+  def computeNewAggregatorsFunction[KeyType <: AnyValue](aggregations: Array[AggregationExpression]): Function2[KeyType, MemoryTracker, Array[AggregationFunction]] =
+    (groupingValue: KeyType, scopedMemoryTracker: MemoryTracker) => {
+      val nAggregations = aggregations.length
+      scopedMemoryTracker.allocateHeap(groupingValue.estimatedHeapUsage() + HeapEstimator.shallowSizeOfObjectArray(nAggregations))
+      val functions = new Array[AggregationFunction](nAggregations)
+      var i = 0
+      while (i < nAggregations) {
+        functions(i) = aggregations(i).createAggregationFunction(scopedMemoryTracker)
+        i += 1
+      }
+      functions
+    }
+
 }

@@ -20,25 +20,35 @@
 package org.neo4j.codegen.api
 
 import org.neo4j.codegen
+import org.neo4j.codegen.ClassHandle
+import org.neo4j.codegen.CodeGenerationNotSupportedException
+import org.neo4j.codegen.CodeGenerator
 import org.neo4j.codegen.CodeGenerator.generateCode
-import org.neo4j.codegen.Expression._
-import org.neo4j.codegen.FieldReference.{field, staticField}
+import org.neo4j.codegen.CodeGeneratorOption
+import org.neo4j.codegen.DisassemblyVisitor
+import org.neo4j.codegen.Expression
+import org.neo4j.codegen.Expression.constant
+import org.neo4j.codegen.Expression.getStatic
+import org.neo4j.codegen.Expression.invoke
+import org.neo4j.codegen.Expression.invokeSuper
+import org.neo4j.codegen.Expression.newInitializedArray
+import org.neo4j.codegen.FieldReference
+import org.neo4j.codegen.FieldReference.field
+import org.neo4j.codegen.FieldReference.staticField
 import org.neo4j.codegen.Parameter.param
+import org.neo4j.codegen.TypeReference
 import org.neo4j.codegen.TypeReference.OBJECT
-import org.neo4j.codegen._
 import org.neo4j.codegen.bytecode.ByteCode.BYTECODE
 import org.neo4j.codegen.bytecode.ByteCode.PRINT_BYTECODE
-import org.neo4j.codegen.source.SourceCode.SOURCECODE
 import org.neo4j.codegen.source.SourceCode.PRINT_SOURCE
+import org.neo4j.codegen.source.SourceCode.SOURCECODE
 import org.neo4j.codegen.source.SourceVisitor
-import org.neo4j.codegen.{CodeGenerator, CodeGeneratorOption, DisassemblyVisitor, TypeReference}
 
 import scala.collection.mutable.ArrayBuffer
-import org.neo4j.codegen.source.SourceCode.{PRINT_SOURCE, SOURCECODE}
 
 /**
-  * Produces runnable code from an IntermediateRepresentation
-  */
+ * Produces runnable code from an IntermediateRepresentation
+ */
 object CodeGeneration {
 
   // Use these options for Debugging. They will print generated code to stdout
@@ -85,10 +95,13 @@ object CodeGeneration {
     def bytecode: Seq[(String, String)] = _bytecode
   }
 
-  def compileClass[T](c: ClassDeclaration[T], generator: CodeGenerator): Class[T] = {
-    val handle = compileClassDeclaration(c, generator)
+  def compileClass[T](c: ClassDeclaration[T], generator: CodeGenerator): ClassHandle = {
+    compileClassDeclaration(c, generator)
+  }
+
+  def loadAndSetConstants[T](handle: ClassHandle, declaration: ClassDeclaration[T]): Class[T] = {
     val clazz = handle.loadClass()
-    setConstants(clazz, c.fields)
+    setConstants(clazz, declaration.fields)
     clazz.asInstanceOf[Class[T]]
   }
 
@@ -151,6 +164,14 @@ object CodeGeneration {
     //Foo.method(p1, p2,...)
     case InvokeStatic(method, params) =>
       invoke(method.asReference, params.map(p => compileExpression(p, block)): _*)
+
+    //Foo.method(p1, p2,...)
+    case InvokeStaticSideEffect(method, params) =>
+      val invocation = invoke(method.asReference, params.map(p => compileExpression(p, block)): _*)
+      if (method.returnType.isVoid) block.expression(invocation)
+      else block.expression(codegen.Expression.pop(invocation))
+      codegen.Expression.EMPTY
+
     //target.method(p1,p2,...)
     case Invoke(target, method, params) =>
       invoke(compileExpression(target, block), method.asReference, params.map(p => compileExpression(p, block)): _*)
@@ -158,7 +179,6 @@ object CodeGeneration {
     case InvokeSideEffect(target, method, params) =>
       val invocation = invoke(compileExpression(target, block), method.asReference,
                               params.map(p => compileExpression(p, block)): _*)
-
       if (method.returnType.isVoid) block.expression(invocation)
       else block.expression(codegen.Expression.pop(invocation))
       codegen.Expression.EMPTY
@@ -191,7 +211,7 @@ object CodeGeneration {
      codegen.Expression.arrayLength(compileExpression(array, block))
 
     // array[offset]
-    case ArrayLoad(array, offset) => codegen.Expression.arrayLoad(compileExpression(array, block), constant(offset))
+    case ArrayLoad(array, offset) => codegen.Expression.arrayLoad(compileExpression(array, block), compileExpression(offset, block))
 
     //Foo.BAR
     case GetStatic(owner, typ, name) => getStatic(staticField(owner.getOrElse(block.classGenerator().handle()), typ, name))
@@ -359,6 +379,8 @@ object CodeGeneration {
 
       codegen.Expression.invoke(codegen.Expression.newInstance(classHandle), constructor, args.map(compileExpression(_, block)):_*)
 
+    case unknownIr =>
+      throw new CodeGenerationNotSupportedException(null, s"Unknown ir `$unknownIr`") {}
   }
 
   private def compileClassDeclaration(c: ClassDeclaration[_], generator: CodeGenerator): codegen.ClassHandle = {

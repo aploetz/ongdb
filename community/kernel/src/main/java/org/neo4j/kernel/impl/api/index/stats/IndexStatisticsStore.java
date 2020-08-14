@@ -38,10 +38,13 @@ import org.neo4j.index.internal.gbptree.Writer;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.impl.index.schema.ConsistencyCheckable;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
-import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.util.VisibleForTesting;
+
+import static org.eclipse.collections.api.factory.Sets.immutable;
 
 /**
  * A simple store for keeping index statistics counts, like number of updates, index size, number of unique values a.s.o.
@@ -52,13 +55,17 @@ import org.neo4j.util.VisibleForTesting;
  */
 public class IndexStatisticsStore extends LifecycleAdapter implements IndexStatisticsVisitor.Visitable, ConsistencyCheckable
 {
+    private static final ImmutableIndexStatistics EMPTY_STATISTICS = new ImmutableIndexStatistics( 0, 0, 0, 0 );
+
     // Used in GBPTree.seek. Please don't use for writes
     private static final IndexStatisticsKey LOWEST_KEY = new IndexStatisticsKey( Long.MIN_VALUE );
     private static final IndexStatisticsKey HIGHEST_KEY = new IndexStatisticsKey( Long.MAX_VALUE );
+    private static final String INIT_TAG = "Initialize IndexStatisticsStore";
 
     private final PageCache pageCache;
     private final File file;
     private final RecoveryCleanupWorkCollector recoveryCleanupWorkCollector;
+    private final PageCacheTracer pageCacheTracer;
     private final IndexStatisticsLayout layout;
     private final boolean readOnly;
     private GBPTree<IndexStatisticsKey,IndexStatisticsValue> tree;
@@ -66,19 +73,21 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
     // It's assumed that the data in this map will be so small that everything can just be in it always.
     private final ConcurrentHashMap<Long,ImmutableIndexStatistics> cache = new ConcurrentHashMap<>();
 
-    public IndexStatisticsStore( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, boolean readOnly )
+    public IndexStatisticsStore( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, boolean readOnly,
+            PageCacheTracer pageCacheTracer )
     {
         this.pageCache = pageCache;
         this.file = file;
         this.recoveryCleanupWorkCollector = recoveryCleanupWorkCollector;
+        this.pageCacheTracer = pageCacheTracer;
         this.layout = new IndexStatisticsLayout();
         this.readOnly = readOnly;
     }
 
     public IndexStatisticsStore( PageCache pageCache, DatabaseLayout databaseLayout, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector,
-            boolean readOnly )
+            boolean readOnly, PageCacheTracer pageCacheTracer )
     {
-        this( pageCache, databaseLayout.indexStatisticsStore(), recoveryCleanupWorkCollector, readOnly );
+        this( pageCache, databaseLayout.indexStatisticsStore(), recoveryCleanupWorkCollector, readOnly, pageCacheTracer );
     }
 
     @Override
@@ -87,13 +96,14 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
         try
         {
             tree = new GBPTree<>( pageCache, file, layout, 0, GBPTree.NO_MONITOR, GBPTree.NO_HEADER_READER, GBPTree.NO_HEADER_WRITER,
-                    recoveryCleanupWorkCollector, readOnly );
+                    recoveryCleanupWorkCollector, readOnly, pageCacheTracer, immutable.empty() );
         }
         catch ( TreeFileNotFoundException e )
         {
             throw new IllegalStateException(
                     "Index statistics store file could not be found, most likely this database needs to be recovered, file:" + file, e );
         }
+<<<<<<< HEAD
         scanTree( ( key, value ) -> cache.put( key.getIndexId(), new ImmutableIndexStatistics( value ) ) );
     }
 
@@ -139,44 +149,56 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
             target.write( value.sampleUniqueValues, value.sampleSize );
         }
         else
+=======
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INIT_TAG ) )
+>>>>>>> neo4j/4.1
         {
-            target.write( 0, 0 );
+            scanTree( ( key, value ) -> cache.put( key.getIndexId(), new ImmutableIndexStatistics( value ) ), cursorTracer );
         }
-        return target;
     }
 
-    public void replaceStats( long indexId, long numberOfUniqueValuesInSample, long sampleSize, long indexSize )
+    public IndexSample indexSample( long indexId )
     {
-        replaceStats( indexId, numberOfUniqueValuesInSample, sampleSize, 0, indexSize );
+        ImmutableIndexStatistics value = cache.getOrDefault( indexId, EMPTY_STATISTICS );
+        return new IndexSample( value.indexSize, value.sampleUniqueValues, value.sampleSize, value.updatesCount );
     }
 
-    @VisibleForTesting
-    void replaceStats( long indexId, long numberOfUniqueValuesInSample, long sampleSize, long updatesCount, long indexSize )
+    public void replaceStats( long indexId, IndexSample sample )
     {
+<<<<<<< HEAD
         assertNotReadOnly();
         cache.put( indexId, new ImmutableIndexStatistics( numberOfUniqueValuesInSample, sampleSize, updatesCount, indexSize ) );
+=======
+        cache.put( indexId, new ImmutableIndexStatistics( sample.uniqueValues(), sample.sampleSize(), sample.updates(), sample.indexSize() ) );
+>>>>>>> neo4j/4.1
     }
 
     public void removeIndex( long indexId )
     {
+<<<<<<< HEAD
         assertNotReadOnly();
+=======
+>>>>>>> neo4j/4.1
         cache.remove( indexId );
     }
 
     public void incrementIndexUpdates( long indexId, long delta )
     {
+<<<<<<< HEAD
         assertNotReadOnly();
+=======
+>>>>>>> neo4j/4.1
         cache.computeIfPresent( indexId, ( id, existing ) ->
                 new ImmutableIndexStatistics( existing.sampleUniqueValues, existing.sampleSize, existing.updatesCount + delta, existing.indexSize ) );
     }
 
     @Override
-    public void visit( IndexStatisticsVisitor visitor )
+    public void visit( IndexStatisticsVisitor visitor, PageCursorTracer cursorTracer )
     {
         try
         {
             scanTree( ( key, value ) -> visitor.visitIndexStatistics( key.getIndexId(),
-                    value.getSampleUniqueValues(), value.getSampleSize(), value.getUpdatesCount(), value.getIndexSize() ) );
+                    value.getSampleUniqueValues(), value.getSampleSize(), value.getUpdatesCount(), value.getIndexSize() ), cursorTracer );
         }
         catch ( IOException e )
         {
@@ -184,28 +206,28 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
         }
     }
 
-    public void checkpoint( IOLimiter ioLimiter ) throws IOException
+    public void checkpoint( IOLimiter ioLimiter, PageCursorTracer cursorTracer ) throws IOException
     {
         if ( !readOnly )
         {
             // There's an assumption that there will never be concurrent calls to checkpoint. This is guarded outside.
-            clearTree();
-            writeCacheContentsIntoTree();
-            tree.checkpoint( ioLimiter );
+            clearTree( cursorTracer );
+            writeCacheContentsIntoTree( cursorTracer );
+            tree.checkpoint( ioLimiter, cursorTracer );
         }
     }
 
     @Override
-    public boolean consistencyCheck( ReporterFactory reporterFactory )
+    public boolean consistencyCheck( ReporterFactory reporterFactory, PageCursorTracer cursorTracer )
     {
-        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ) );
+        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ), cursorTracer );
     }
 
-    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<IndexStatisticsKey> visitor )
+    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<IndexStatisticsKey> visitor, PageCursorTracer cursorTracer )
     {
         try
         {
-            return tree.consistencyCheck( visitor );
+            return tree.consistencyCheck( visitor, cursorTracer );
         }
         catch ( IOException e )
         {
@@ -213,9 +235,9 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
         }
     }
 
-    private void scanTree( BiConsumer<IndexStatisticsKey,IndexStatisticsValue> consumer ) throws IOException
+    private void scanTree( BiConsumer<IndexStatisticsKey,IndexStatisticsValue> consumer, PageCursorTracer cursorTracer ) throws IOException
     {
-        try ( Seeker<IndexStatisticsKey,IndexStatisticsValue> seek = tree.seek( LOWEST_KEY, HIGHEST_KEY ) )
+        try ( Seeker<IndexStatisticsKey,IndexStatisticsValue> seek = tree.seek( LOWEST_KEY, HIGHEST_KEY, cursorTracer ) )
         {
             while ( seek.next() )
             {
@@ -226,14 +248,14 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
         }
     }
 
-    private void clearTree() throws IOException
+    private void clearTree( PageCursorTracer cursorTracer ) throws IOException
     {
         // Read all keys from the tree, we can't do this while having a writer since it will grab write lock on pages
         List<IndexStatisticsKey> keys = new ArrayList<>( cache.size() );
-        scanTree( ( key, value ) -> keys.add( key ) );
+        scanTree( ( key, value ) -> keys.add( key ), cursorTracer );
 
         // Remove all those read keys
-        try ( Writer<IndexStatisticsKey,IndexStatisticsValue> writer = tree.writer() )
+        try ( Writer<IndexStatisticsKey,IndexStatisticsValue> writer = tree.writer( cursorTracer ) )
         {
             for ( IndexStatisticsKey key : keys )
             {
@@ -243,9 +265,9 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
         }
     }
 
-    private void writeCacheContentsIntoTree() throws IOException
+    private void writeCacheContentsIntoTree( PageCursorTracer cursorTracer ) throws IOException
     {
-        try ( Writer<IndexStatisticsKey,IndexStatisticsValue> writer = tree.writer() )
+        try ( Writer<IndexStatisticsKey,IndexStatisticsValue> writer = tree.writer( cursorTracer ) )
         {
             for ( Map.Entry<Long,ImmutableIndexStatistics> entry : cache.entrySet() )
             {
@@ -253,14 +275,6 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
                 writer.put( new IndexStatisticsKey( entry.getKey() ),
                         new IndexStatisticsValue( stats.sampleUniqueValues, stats.sampleSize, stats.updatesCount, stats.indexSize ) );
             }
-        }
-    }
-
-    private void assertNotReadOnly()
-    {
-        if ( readOnly )
-        {
-            throw new UnsupportedOperationException( "Can not write to index statistics store while in read only mode." );
         }
     }
 

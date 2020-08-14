@@ -19,11 +19,11 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * Produce first the 'left' rows, and then the 'right' rows. This operator does not guarantee row uniqueness.
-  */
+ * Produce first the 'left' rows, and then the 'right' rows. This operator does not guarantee row uniqueness.
+ */
 case class Union(left: LogicalPlan, right: LogicalPlan)(implicit idGen: IdGen) extends LogicalPlan(idGen) with LazyLogicalPlan {
 
   val lhs = Some(left)

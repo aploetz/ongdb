@@ -18,7 +18,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.server.rest.repr;
+<<<<<<< HEAD
 
+=======
+>>>>>>> neo4j/4.1
 public class PasswordChangeRepresentation
 {
     private String password;

@@ -19,23 +19,10 @@
  */
 package org.neo4j.server.security.systemgraph;
 
-import org.apache.shiro.authc.AuthenticationException;
-import org.apache.shiro.authc.AuthenticationInfo;
-import org.apache.shiro.authc.AuthenticationToken;
-import org.apache.shiro.authc.DisabledAccountException;
-import org.apache.shiro.authc.ExcessiveAttemptsException;
-import org.apache.shiro.authc.IncorrectCredentialsException;
-import org.apache.shiro.authc.UnknownAccountException;
-import org.apache.shiro.authc.credential.CredentialsMatcher;
-import org.apache.shiro.authc.pam.UnsupportedTokenException;
-import org.apache.shiro.authz.AuthorizationInfo;
-import org.apache.shiro.realm.AuthorizingRealm;
-import org.apache.shiro.subject.PrincipalCollection;
-
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import org.neo4j.cypher.internal.security.FormatException;
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.security.SecureHasher;
 import org.neo4j.cypher.internal.security.SystemGraphCredential;
 import org.neo4j.dbms.database.DatabaseManager;
@@ -45,6 +32,8 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.security.AuthProviderFailedException;
+=======
+>>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.security.AuthenticationResult;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
@@ -52,46 +41,27 @@ import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
 import org.neo4j.kernel.api.security.AuthManager;
 import org.neo4j.kernel.api.security.AuthToken;
 import org.neo4j.kernel.api.security.exception.InvalidAuthTokenException;
-import org.neo4j.kernel.impl.security.Credential;
 import org.neo4j.kernel.impl.security.User;
 import org.neo4j.server.security.auth.AuthenticationStrategy;
 import org.neo4j.server.security.auth.BasicLoginContext;
-import org.neo4j.server.security.auth.ShiroAuthToken;
 
-import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
 import static org.neo4j.kernel.api.security.AuthToken.invalidToken;
-import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
 
 /**
  * Shiro realm using a Neo4j graph to store users
  */
-public class BasicSystemGraphRealm extends AuthorizingRealm implements AuthManager, CredentialsMatcher
+public class BasicSystemGraphRealm extends AuthManager
 {
-    private final SecurityGraphInitializer systemGraphInitializer;
-    private final DatabaseManager<?> databaseManager;
-    private final SecureHasher secureHasher;
+    private final SystemGraphRealmHelper systemGraphRealmHelper;
     private final AuthenticationStrategy authenticationStrategy;
-    private final boolean authenticationEnabled;
-
-    /**
-     * This flag is used in the same way as User.PASSWORD_CHANGE_REQUIRED, but it's
-     * placed here because of user suspension not being a part of community edition
-     */
-    public static final String IS_SUSPENDED = "is_suspended";
 
     public BasicSystemGraphRealm(
-            SecurityGraphInitializer systemGraphInitializer,
-            DatabaseManager<?> databaseManager,
-            SecureHasher secureHasher,
-            AuthenticationStrategy authenticationStrategy,
-            boolean authenticationEnabled )
+            SystemGraphRealmHelper systemGraphRealmHelper,
+            AuthenticationStrategy authenticationStrategy )
     {
-        super();
-
-        this.systemGraphInitializer = systemGraphInitializer;
-        this.databaseManager = databaseManager;
-        this.secureHasher = secureHasher;
+        this.systemGraphRealmHelper = systemGraphRealmHelper;
         this.authenticationStrategy = authenticationStrategy;
+<<<<<<< HEAD
         this.authenticationEnabled = authenticationEnabled;
 
         setAuthenticationCachingEnabled( true );
@@ -287,6 +257,8 @@ public class BasicSystemGraphRealm extends AuthorizingRealm implements AuthManag
             throw new InvalidArgumentsException(
                     "Username '" + username + "' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces." );
         }
+=======
+>>>>>>> neo4j/4.1
     }
 
     @Override
@@ -301,7 +273,7 @@ public class BasicSystemGraphRealm extends AuthorizingRealm implements AuthManag
 
             try
             {
-                User user = getUser( username );
+                User user = systemGraphRealmHelper.getUser( username );
                 AuthenticationResult result = authenticationStrategy.authenticate( user, password );
                 if ( result == AuthenticationResult.SUCCESS && user.passwordChangeRequired() )
                 {
@@ -336,11 +308,5 @@ public class BasicSystemGraphRealm extends AuthorizingRealm implements AuthManag
         {
             throw invalidToken( ", scheme '" + scheme + "' is not supported." );
         }
-    }
-
-    protected GraphDatabaseService getSystemDb()
-    {
-        return databaseManager.getDatabaseContext( NAMED_SYSTEM_DATABASE_ID ).orElseThrow(
-                () -> new AuthProviderFailedException( "No database called `" + SYSTEM_DATABASE_NAME + "` was found." ) ).databaseFacade();
     }
 }

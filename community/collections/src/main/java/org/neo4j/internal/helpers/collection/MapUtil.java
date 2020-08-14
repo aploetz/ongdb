@@ -21,11 +21,11 @@ package org.neo4j.internal.helpers.collection;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Writer;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,8 +39,12 @@ import java.util.stream.Stream;
 /**
  * Utility to create {@link Map}s.
  */
-public abstract class MapUtil
+public final class MapUtil
 {
+    private MapUtil()
+    {
+        // Utility class
+    }
     /**
      * A short-hand method for creating a {@link Map} of key/value pairs.
      *
@@ -140,7 +144,7 @@ public abstract class MapUtil
         Properties props = new Properties();
         props.load( stream );
 
-        HashMap<String,String> result = new HashMap<>();
+        Map<String,String> result = new HashMap<>();
         for ( Map.Entry<Object,Object> entry : props.entrySet() )
         {
             // Properties does not trim whitespace from the right side of values
@@ -159,7 +163,7 @@ public abstract class MapUtil
      */
     public static void store( Map<String, String> config, File file ) throws IOException
     {
-        try ( OutputStream stream = new BufferedOutputStream( new FileOutputStream( file ) ) )
+        try ( OutputStream stream = new BufferedOutputStream( Files.newOutputStream( file.toPath() ) ) )
         {
             store( config, stream );
         }

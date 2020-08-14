@@ -19,17 +19,16 @@
  */
 package org.neo4j.io.mem;
 
-import org.neo4j.io.ByteUnit;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 
 /**
  * A MemoryAllocator is simple: it only allocates memory, until it is closed and frees it all in one go.
  */
 public interface MemoryAllocator
 {
-    static MemoryAllocator createAllocator( String expectedMemory, MemoryAllocationTracker memoryTracker )
+    static MemoryAllocator createAllocator( long expectedMemory, MemoryTracker memoryTracker )
     {
-        return new GrabAllocator( ByteUnit.parse( expectedMemory ), memoryTracker );
+        return new GrabAllocator( expectedMemory, memoryTracker );
     }
 
     /**

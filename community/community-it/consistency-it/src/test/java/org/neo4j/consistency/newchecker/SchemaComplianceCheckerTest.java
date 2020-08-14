@@ -31,6 +31,7 @@ import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.TokenWrite;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexUpdater;
@@ -47,6 +48,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.neo4j.common.EntityType.NODE;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.kernel.impl.api.index.IndexUpdateMode.ONLINE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 import static org.neo4j.values.storable.Values.intValue;
 import static org.neo4j.values.storable.Values.pointValue;
@@ -87,7 +89,8 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
         mandatoryProperties.put( label3, IntSets.mutable.of( propertyKey1 ) );
 
         // when
-        try ( SchemaComplianceChecker checker = new SchemaComplianceChecker( context(), mandatoryProperties, context().indexAccessors.onlineRules( NODE ) ) )
+        try ( SchemaComplianceChecker checker = new SchemaComplianceChecker( context(), mandatoryProperties, context().indexAccessors.onlineRules( NODE ),
+                PageCursorTracer.NULL, INSTANCE ) )
         {
             checker.checkContainsMandatoryProperties( new NodeRecord( nodeId ), labels, propertyValues, reporter::forNode );
         }
@@ -108,15 +111,15 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
             TextValue value = stringValue( "a" );
             // (N1) indexed w/ property A
             {
-                long propId = propertyStore.nextId();
-                nodeId = node( nodeStore.nextId(), propId, NULL, label1 );
+                long propId = propertyStore.nextId( PageCursorTracer.NULL );
+                nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId, value );
             }
             // (N2) indexed w/ property A
             {
-                long propId = propertyStore.nextId();
-                long nodeId2 = node( nodeStore.nextId(), propId, NULL, label1 );
+                long propId = propertyStore.nextId( PageCursorTracer.NULL );
+                long nodeId2 = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId2, value );
             }
@@ -139,8 +142,8 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
         try ( AutoCloseable ignored = tx() )
         {
             // (N1) w/ property A (NOT indexed)
-            long propId = propertyStore.nextId();
-            nodeId = node( nodeStore.nextId(), propId, NULL, label1 );
+            long propId = propertyStore.nextId( PageCursorTracer.NULL );
+            nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
             property( propId, NULL, NULL, propertyValue( propertyKey1, stringValue( "a" ) ) );
         }
 
@@ -164,16 +167,26 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
 
             // (N1) w/ property
             {
+<<<<<<< HEAD
                 long propId = propertyStore.nextId();
                 nodeId = node( nodeStore.nextId(), propId, NULL, label1 );
+=======
+                long propId = propertyStore.nextId( PageCursorTracer.NULL );
+                nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
+>>>>>>> neo4j/4.1
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId, value );
             }
 
             // (N2) w/ property
             {
+<<<<<<< HEAD
                 long propId = propertyStore.nextId();
                 long nodeId2 = node( nodeStore.nextId(), propId, NULL, label1 );
+=======
+                long propId = propertyStore.nextId( PageCursorTracer.NULL );
+                long nodeId2 = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
+>>>>>>> neo4j/4.1
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId2, value );
             }
@@ -190,7 +203,11 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
             throws IndexNotFoundKernelException, IndexEntryConflictException
     {
         IndexingService indexingService = db.getDependencyResolver().resolveDependency( IndexingService.class );
+<<<<<<< HEAD
         try ( IndexUpdater indexUpdater = indexingService.getIndexProxy( indexId ).newUpdater( ONLINE ) )
+=======
+        try ( IndexUpdater indexUpdater = indexingService.getIndexProxy( indexId ).newUpdater( ONLINE, PageCursorTracer.NULL ) )
+>>>>>>> neo4j/4.1
         {
             indexUpdater.process( add( nodeId, descriptor, value ) );
         }
@@ -199,7 +216,7 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
     private void checkIndexed( long nodeId ) throws Exception
     {
         try ( SchemaComplianceChecker checker = new SchemaComplianceChecker( context(), new IntObjectHashMap<>(),
-                context().indexAccessors.onlineRules( NODE ) ) )
+                context().indexAccessors.onlineRules( NODE ), PageCursorTracer.NULL, INSTANCE ) )
         {
             NodeRecord node = loadNode( nodeId );
             checker.checkCorrectlyIndexed( node, nodeLabels( node ), readPropertyValues( nodeId ), reporter::forNode );
@@ -208,11 +225,11 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
 
     private MutableIntObjectMap<Value> readPropertyValues( long nodeId ) throws Exception
     {
-        try ( SafePropertyChainReader reader = new SafePropertyChainReader( context().withoutReporting() ) )
+        try ( SafePropertyChainReader reader = new SafePropertyChainReader( context().withoutReporting(), PageCursorTracer.NULL ) )
         {
             NodeRecord node = loadNode( nodeId );
             MutableIntObjectMap<Value> values = new IntObjectHashMap<>();
-            reader.read( values, node, reporter::forNode );
+            reader.read( values, node, reporter::forNode, PageCursorTracer.NULL );
             return values;
         }
     }

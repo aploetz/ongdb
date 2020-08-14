@@ -20,42 +20,61 @@
 package org.neo4j.kernel.impl.transaction.state.storeview;
 
 import java.util.function.IntPredicate;
+import javax.annotation.Nullable;
 
 import org.neo4j.internal.helpers.collection.Visitor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.lock.LockService;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.StorageRelationshipScanCursor;
 
+import static org.neo4j.collection.PrimitiveLongCollections.EMPTY_LONG_ARRAY;
+
+/**
+ * Scan the relationship store and produce {@link EntityUpdates updates for indexes} and/or {@link EntityTokenUpdate updates for relationship type index}
+ * depending on which {@link Visitor visitors} that are used.
+ */
 public class RelationshipStoreScan<FAILURE extends Exception> extends PropertyAwareEntityStoreScan<StorageRelationshipScanCursor,FAILURE>
 {
-    private final int[] relationshipTypeIds;
+    private final Visitor<EntityTokenUpdate,FAILURE> relationshipTypeUpdateVisitor;
+    final int[] relationshipTypeIds;
     private final Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor;
 
     public RelationshipStoreScan( StorageReader storageReader, LockService locks,
-            Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor, int[] relationshipTypeIds, IntPredicate propertyKeyIdFilter )
+            @Nullable Visitor<EntityTokenUpdate,FAILURE> relationshipTypeUpdateVisitor,
+            @Nullable Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor,
+            int[] relationshipTypeIds, IntPredicate propertyKeyIdFilter, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         super( storageReader, storageReader.relationshipsGetCount(), propertyKeyIdFilter,
-                id -> locks.acquireRelationshipLock( id, LockService.LockType.READ_LOCK ) );
-        this.relationshipTypeIds = relationshipTypeIds;
+                id -> locks.acquireRelationshipLock( id, LockService.LockType.READ_LOCK ), cursorTracer, memoryTracker );
+        this.relationshipTypeUpdateVisitor = relationshipTypeUpdateVisitor;
         this.propertyUpdatesVisitor = propertyUpdatesVisitor;
+        this.relationshipTypeIds = relationshipTypeIds;
     }
 
     @Override
-    protected StorageRelationshipScanCursor allocateCursor( StorageReader storageReader )
+    protected StorageRelationshipScanCursor allocateCursor( StorageReader storageReader, PageCursorTracer cursorTracer )
     {
-        return storageReader.allocateRelationshipScanCursor();
+        return storageReader.allocateRelationshipScanCursor( cursorTracer );
     }
 
     @Override
     protected boolean process( StorageRelationshipScanCursor cursor ) throws FAILURE
     {
-        int reltype = cursor.type();
+        int relType = cursor.type();
 
-        if ( propertyUpdatesVisitor != null && containsAnyEntityToken( relationshipTypeIds, reltype ) )
+        if ( relationshipTypeUpdateVisitor != null )
+        {
+            relationshipTypeUpdateVisitor.visit( EntityTokenUpdate.tokenChanges( cursor.entityReference(), EMPTY_LONG_ARRAY, new long[]{relType} ) );
+        }
+
+        if ( propertyUpdatesVisitor != null && containsAnyEntityToken( relationshipTypeIds, relType ) )
         {
             // Notify the property update visitor
-            EntityUpdates.Builder updates = EntityUpdates.forEntity( cursor.entityReference(), true ).withTokens( reltype );
+            EntityUpdates.Builder updates = EntityUpdates.forEntity( cursor.entityReference(), true ).withTokens( relType );
 
             if ( hasRelevantProperty( cursor, updates ) )
             {

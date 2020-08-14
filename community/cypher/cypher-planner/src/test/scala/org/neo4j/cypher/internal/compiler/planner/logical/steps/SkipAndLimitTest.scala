@@ -19,12 +19,21 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.neo4j.cypher.internal.compiler.planner._
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
 import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, Limit, Skip, DoNotIncludeTies}
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.QueryPagination
+import org.neo4j.cypher.internal.ir.QueryProjection
+import org.neo4j.cypher.internal.ir.RegularQueryProjection
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.DoNotIncludeTies
+import org.neo4j.cypher.internal.logical.plans.Limit
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.Skip
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class SkipAndLimitTest extends CypherFunSuite with LogicalPlanningTestSupport {
 

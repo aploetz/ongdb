@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.factory;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.neo4j.common.DependencyResolver;
@@ -36,6 +37,7 @@ import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.KernelTransaction.Type;
+import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.availability.DatabaseAvailabilityGuard;
 import org.neo4j.kernel.availability.UnavailableException;
 import org.neo4j.kernel.database.Database;
@@ -45,7 +47,6 @@ import org.neo4j.kernel.impl.coreapi.TransactionImpl;
 import org.neo4j.kernel.impl.query.Neo4jTransactionalContextFactory;
 import org.neo4j.kernel.impl.query.TransactionalContextFactory;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.storageengine.api.StoreId;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Objects.requireNonNull;
@@ -61,25 +62,25 @@ import static org.neo4j.internal.kernel.api.security.LoginContext.AUTH_DISABLED;
 public class GraphDatabaseFacade implements GraphDatabaseAPI
 {
     private final Database database;
-    private final TransactionalContextFactory contextFactory;
+    protected final TransactionalContextFactory contextFactory;
     private final Config config;
     private final DatabaseAvailabilityGuard availabilityGuard;
-    private final DatabaseInfo databaseInfo;
+    private final DbmsInfo dbmsInfo;
     private Function<LoginContext, LoginContext> loginContextTransformer = Function.identity();
 
     public GraphDatabaseFacade( GraphDatabaseFacade facade, Function<LoginContext,LoginContext> loginContextTransformer )
     {
-        this( facade.database, facade.config, facade.databaseInfo, facade.availabilityGuard );
+        this( facade.database, facade.config, facade.dbmsInfo, facade.availabilityGuard );
         this.loginContextTransformer = requireNonNull( loginContextTransformer );
     }
 
-    public GraphDatabaseFacade( Database database, Config config, DatabaseInfo databaseInfo,
+    public GraphDatabaseFacade( Database database, Config config, DbmsInfo dbmsInfo,
             DatabaseAvailabilityGuard availabilityGuard )
     {
         this.database = requireNonNull( database );
         this.config = requireNonNull( config );
         this.availabilityGuard = requireNonNull( availabilityGuard );
-        this.databaseInfo = requireNonNull( databaseInfo );
+        this.dbmsInfo = requireNonNull( dbmsInfo );
         this.contextFactory = Neo4jTransactionalContextFactory.create( () -> getDependencyResolver().resolveDependency( GraphDatabaseQueryService.class ),
                 new FacadeKernelTransactionFactory( config, this ) );
     }
@@ -98,13 +99,13 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
 
     protected InternalTransaction beginTransaction()
     {
-        return beginTransaction( Type.explicit, AUTH_DISABLED );
+        return beginTransaction( Type.EXPLICIT, AUTH_DISABLED );
     }
 
     @Override
     public Transaction beginTx( long timeout, TimeUnit unit )
     {
-        return beginTransaction( Type.explicit, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout, unit );
+        return beginTransaction( Type.EXPLICIT, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout, unit );
     }
 
     @Override
@@ -116,14 +117,21 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public InternalTransaction beginTransaction( Type type, LoginContext loginContext, ClientConnectionInfo clientInfo )
     {
-        return beginTransactionInternal( type, loginContext, clientInfo, config.get( transaction_timeout ).toMillis() );
+        return beginTransactionInternal( type, loginContext, clientInfo, config.get( transaction_timeout ).toMillis(), null, null );
     }
 
     @Override
     public InternalTransaction beginTransaction( Type type, LoginContext loginContext, ClientConnectionInfo clientInfo, long timeout,
             TimeUnit unit )
     {
-        return beginTransactionInternal( type, loginContext, clientInfo, unit.toMillis( timeout ) );
+        return beginTransactionInternal( type, loginContext, clientInfo, unit.toMillis( timeout ), null, null );
+    }
+
+    public InternalTransaction beginTransaction( Type type, LoginContext loginContext, ClientConnectionInfo clientInfo, Consumer<Status> terminationCallback,
+            Function<Exception, RuntimeException> customSafeTerminalOperationErrorMapper )
+    {
+        return beginTransactionInternal( type, loginContext, clientInfo, config.get( transaction_timeout ).toMillis(), terminationCallback,
+                customSafeTerminalOperationErrorMapper );
     }
 
     @Override
@@ -149,7 +157,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
             throws QueryExecutionException
     {
         T transformedResult;
-        try ( var internalTransaction = beginTransaction( Type.implicit, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout.toMillis(), MILLISECONDS ) )
+        try ( var internalTransaction = beginTransaction( Type.IMPLICIT, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout.toMillis(), MILLISECONDS ) )
         {
             try ( var result = internalTransaction.execute( query, parameters ) )
             {
@@ -160,10 +168,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         return transformedResult;
     }
 
-    private InternalTransaction beginTransactionInternal( Type type, LoginContext loginContext, ClientConnectionInfo connectionInfo, long timeoutMillis )
+    protected InternalTransaction beginTransactionInternal( Type type, LoginContext loginContext, ClientConnectionInfo connectionInfo,
+            long timeoutMillis, Consumer<Status> terminationCallback, Function<Exception, RuntimeException> customSafeTerminalOperationErrorMapper )
     {
         var kernelTransaction = beginKernelTransaction( type, loginContext, connectionInfo, timeoutMillis );
-        return new TransactionImpl( database.getTokenHolders(), contextFactory, availabilityGuard, database.getExecutionEngine(), kernelTransaction );
+        return new TransactionImpl( database.getTokenHolders(), contextFactory, availabilityGuard, database.getExecutionEngine(), kernelTransaction,
+                terminationCallback, customSafeTerminalOperationErrorMapper );
     }
 
     @Override
@@ -173,9 +183,9 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     }
 
     @Override
-    public DatabaseInfo databaseInfo()
+    public DbmsInfo dbmsInfo()
     {
-        return databaseInfo;
+        return dbmsInfo;
     }
 
     KernelTransaction beginKernelTransaction( Type type, LoginContext loginContext, ClientConnectionInfo connectionInfo, long timeout )
@@ -204,12 +214,6 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     }
 
     @Override
-    public StoreId storeId()
-    {
-        return database.getStoreId();
-    }
-
-    @Override
     public DatabaseLayout databaseLayout()
     {
         return database.getDatabaseLayout();
@@ -218,6 +222,6 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public String toString()
     {
-        return databaseInfo + " [" + databaseLayout() + "]";
+        return dbmsInfo + " [" + databaseLayout() + "]";
     }
 }

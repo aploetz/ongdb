@@ -19,14 +19,19 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates._
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.ComparablePredicate
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.GreaterThan
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.GreaterThanOrEqual
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.LessThan
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.LessThanOrEqual
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.values.AnyValues
 import org.neo4j.values.storable.Values
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 
 class ComparablePredicateTest extends CypherFunSuite {
 
@@ -109,7 +114,7 @@ class ComparablePredicateTest extends CypherFunSuite {
 
   class compareUsing(left: Any, right: Any, operator: String) extends Matcher[ComparablePredicate] {
     def apply(predicate: ComparablePredicate): MatchResult = {
-      val actual = predicate.isMatch(ExecutionContext.empty, QueryStateHelper.empty)
+      val actual = predicate.isMatch(CypherRow.empty, QueryStateHelper.empty)
 
       if (isIncomparable(left, right))
         buildResult(actual.isEmpty, "null", actual)

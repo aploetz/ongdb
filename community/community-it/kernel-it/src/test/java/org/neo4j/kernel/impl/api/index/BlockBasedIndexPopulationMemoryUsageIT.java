@@ -31,7 +31,6 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.impl.index.schema.BlockBasedIndexPopulator;
-import org.neo4j.kernel.impl.index.schema.GenericNativeIndexPopulator;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.test.extension.DbmsExtension;
@@ -40,12 +39,10 @@ import org.neo4j.util.FeatureToggles;
 
 import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.lessThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.kernel.impl.index.schema.BlockBasedIndexPopulator.BLOCK_SIZE_NAME;
-import static org.neo4j.kernel.impl.index.schema.GenericNativeIndexProvider.BLOCK_BASED_POPULATION_NAME;
 
 @DbmsExtension
 class BlockBasedIndexPopulationMemoryUsageIT
@@ -56,20 +53,20 @@ class BlockBasedIndexPopulationMemoryUsageIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private Monitors monitors;
 
     @BeforeAll
     static void setUpFeatureToggles()
     {
         // Configure populator so that it will use block-based population and reduce batch size and increase number of workers
         // so that population will very likely create more batches in more threads (affecting number of buffers used)
-        FeatureToggles.set( GenericNativeIndexPopulator.class, BLOCK_BASED_POPULATION_NAME, true );
         FeatureToggles.set( BlockBasedIndexPopulator.class, BLOCK_SIZE_NAME, TEST_BLOCK_SIZE );
     }
 
     @AfterAll
     static void restoreFeatureToggles()
     {
-        FeatureToggles.clear( GenericNativeIndexPopulator.class, BLOCK_BASED_POPULATION_NAME );
         FeatureToggles.clear( BlockBasedIndexPopulator.class, BLOCK_SIZE_NAME );
     }
 
@@ -78,7 +75,7 @@ class BlockBasedIndexPopulationMemoryUsageIT
     {
         // given
         IndexPopulationMemoryUsageMonitor monitor = new IndexPopulationMemoryUsageMonitor();
-        db.getDependencyResolver().resolveDependency( Monitors.class ).addMonitorListener( monitor );
+        monitors.addMonitorListener( monitor );
         someData();
 
         // when
@@ -89,7 +86,7 @@ class BlockBasedIndexPopulationMemoryUsageIT
         // given all parameters of data size, number of workers and number of indexes will amount
         // to a maximum of 10 MiB. Previously this would easily be 10-fold of that for this scenario.
         long targetMemoryConsumption = TEST_BLOCK_SIZE * (8 /*mergeFactor*/ + 1 /*write buffer*/) * 8 /*numberOfWorkers*/;
-        assertThat( monitor.peakDirectMemoryUsage, lessThan( targetMemoryConsumption * 2 + 1 ) );
+        assertThat( monitor.peakDirectMemoryUsage ).isLessThan( targetMemoryConsumption * 2 + 1 );
     }
 
     private void createLotsOfIndexesInOneTransaction()

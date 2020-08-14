@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.transaction.state;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
@@ -62,6 +61,7 @@ import org.neo4j.test.extension.Inject;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @ImpermanentDbmsExtension( configurationCallback = "configure" )
 class RelationshipCreatorTest
@@ -70,20 +70,15 @@ class RelationshipCreatorTest
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private IdGeneratorFactory idGeneratorFactory;
+    @Inject
+    private RecordStorageEngine storageEngine;
 
     @ExtensionCallback
     static void configure( TestDatabaseManagementServiceBuilder builder )
     {
         builder.setConfig( GraphDatabaseSettings.dense_node_threshold, DENSE_NODE_THRESHOLD );
-    }
-
-    private IdGeneratorFactory idGeneratorFactory;
-
-    @BeforeEach
-    void before()
-    {
-        idGeneratorFactory = db.getDependencyResolver().resolveDependency(
-                IdGeneratorFactory.class );
     }
 
     @Test
@@ -94,11 +89,11 @@ class RelationshipCreatorTest
         NeoStores neoStores = flipToNeoStores();
 
         Tracker tracker = new Tracker( neoStores, idGeneratorFactory );
-        RelationshipGroupGetter groupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore() );
-        RelationshipCreator relationshipCreator = new RelationshipCreator( groupGetter, 5 );
+        RelationshipGroupGetter groupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore(), NULL );
+        RelationshipCreator relationshipCreator = new RelationshipCreator( groupGetter, 5, NULL );
 
         // WHEN
-        relationshipCreator.relationshipCreate( idGeneratorFactory.get( IdType.RELATIONSHIP ).nextId(), 0,
+        relationshipCreator.relationshipCreate( idGeneratorFactory.get( IdType.RELATIONSHIP ).nextId( NULL ), 0,
                 nodeId, nodeId, tracker, tracker );
 
         // THEN
@@ -108,8 +103,7 @@ class RelationshipCreatorTest
 
     private NeoStores flipToNeoStores()
     {
-        return db.getDependencyResolver().resolveDependency(
-                RecordStorageEngine.class ).testAccessNeoStores();
+        return storageEngine.testAccessNeoStores();
     }
 
     private long createNodeWithRelationships( int count )
@@ -203,12 +197,6 @@ class RelationshipCreatorTest
         public RecordAccess<RelationshipTypeTokenRecord, Void> getRelationshipTypeTokenChanges()
         {
             return delegate.getRelationshipTypeTokenChanges();
-        }
-
-        @Override
-        public void close()
-        {
-            delegate.close();
         }
 
         @Override

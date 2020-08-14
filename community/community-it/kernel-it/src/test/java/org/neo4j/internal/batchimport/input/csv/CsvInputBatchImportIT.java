@@ -19,11 +19,6 @@
  */
 package org.neo4j.internal.batchimport.input.csv;
 
-import org.hamcrest.MatcherAssert;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
@@ -55,6 +50,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+>>>>>>> neo4j/4.1
 import org.neo4j.configuration.Config;
 import org.neo4j.counts.CountsAccessor;
 import org.neo4j.csv.reader.Configuration;
@@ -78,6 +79,7 @@ import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.TokenStore;
 import org.neo4j.kernel.impl.transaction.log.files.TransactionLogInitializer;
@@ -99,7 +101,7 @@ import org.neo4j.values.storable.PointValue;
 
 import static java.lang.String.format;
 import static java.nio.charset.Charset.defaultCharset;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.db_timezone;
@@ -109,9 +111,11 @@ import static org.neo4j.internal.batchimport.AdditionalInitialIds.EMPTY;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.kernel.api.TokenRead.ANY_LABEL;
 import static org.neo4j.internal.kernel.api.TokenRead.ANY_RELATIONSHIP_TYPE;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.format.RecordFormatSelector.defaultFormat;
 import static org.neo4j.kernel.impl.util.AutoCreatingHashMap.nested;
 import static org.neo4j.kernel.impl.util.AutoCreatingHashMap.values;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 @ExtendWith( RandomExtension.class )
@@ -142,8 +146,14 @@ class CsvInputBatchImportIT
         try ( JobScheduler scheduler = new ThreadPoolJobScheduler() )
         {
             BatchImporter importer = new ParallelBatchImporter(
+<<<<<<< HEAD
                     databaseLayout, fileSystem, null, smallBatchSizeConfig(), NullLogService.getInstance(), ExecutionMonitors.invisible(), EMPTY, dbConfig,
                     defaultFormat(), ImportLogic.NO_MONITOR, scheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer() );
+=======
+                    databaseLayout, fileSystem, null, PageCacheTracer.NULL, smallBatchSizeConfig(), NullLogService.getInstance(), ExecutionMonitors.invisible(),
+                    EMPTY, dbConfig, defaultFormat(), ImportLogic.NO_MONITOR, scheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer(),
+                    INSTANCE );
+>>>>>>> neo4j/4.1
             List<InputEntity> nodeData = randomNodeData();
             List<InputEntity> relationshipData = randomRelationshipData( nodeData );
 
@@ -163,7 +173,7 @@ class CsvInputBatchImportIT
                 DataFactories.defaultFormatRelationshipFileHeader( testDefaultTimeZone, false ),
                 idType,
                 configuration,
-                CsvInput.NO_MONITOR );
+                CsvInput.NO_MONITOR, INSTANCE );
     }
 
     private static Configuration lowBufferSize( Configuration actual )
@@ -245,12 +255,15 @@ class CsvInputBatchImportIT
             for ( InputEntity node : nodeData )
             {
                 String csvLabels = csvLabels( node.labels() );
-                StringBuilder sb = new StringBuilder( node.id() + "," );
+                StringBuilder sb = new StringBuilder().append( node.id() ).append( ',' );
                 for ( int i = 0; i < node.propertyCount(); i++ )
                 {
-                    sb.append( node.propertyValue( i ) + "," );
+                    sb.append( node.propertyValue( i ) ).append( ',' );
                 }
-                sb.append( csvLabels != null && csvLabels.length() > 0 ? csvLabels : "" );
+                if ( csvLabels != null && !csvLabels.isEmpty() )
+                {
+                    sb.append( csvLabels );
+                }
                 println( writer, sb.toString() );
             }
         }
@@ -344,7 +357,7 @@ class CsvInputBatchImportIT
                 Map<String, AtomicInteger> innerInner = inner.get( endNodeName );
                 String type = relationship.getType().name();
                 int countAfterwards = innerInner.get( type ).decrementAndGet();
-                MatcherAssert.assertThat( countAfterwards, greaterThanOrEqualTo( 0 ) );
+                assertThat( countAfterwards ).isGreaterThanOrEqualTo( 0 );
                 if ( countAfterwards == 0 )
                 {
                     innerInner.remove( type );
@@ -367,7 +380,7 @@ class CsvInputBatchImportIT
                     translationTable( neoStores.getLabelTokenStore(), ANY_LABEL );
             for ( Pair<Integer,Long> count : allNodeCounts( labelTranslationTable, expectedNodeCounts ) )
             {
-                assertEquals( count.other().longValue(), counts.nodeCount( count.first() ), "Label count mismatch for label " + count.first() );
+                assertEquals( count.other().longValue(), counts.nodeCount( count.first(), NULL ), "Label count mismatch for label " + count.first() );
             }
 
             Function<String, Integer> relationshipTypeTranslationTable =
@@ -376,7 +389,7 @@ class CsvInputBatchImportIT
                     relationshipTypeTranslationTable, expectedRelationshipCounts ) )
             {
                 RelationshipCountKey key = count.first();
-                assertEquals( count.other().longValue(), counts.relationshipCount( key.startLabel, key.type, key.endLabel ),
+                assertEquals( count.other().longValue(), counts.relationshipCount( key.startLabel, key.type, key.endLabel, NULL ),
                         "Label count mismatch for label " + key );
             }
 
@@ -446,7 +459,7 @@ class CsvInputBatchImportIT
     private Function<String, Integer> translationTable( TokenStore<?> tokenStore, final int anyValue )
     {
         final Map<String, Integer> translationTable = new HashMap<>();
-        for ( NamedToken token : tokenStore.getTokens() )
+        for ( NamedToken token : tokenStore.getTokens( NULL ) )
         {
             translationTable.put( token.name(), token.id() );
         }
@@ -524,7 +537,7 @@ class CsvInputBatchImportIT
                 {
                     verify = actualValue -> assertEquals( expectedValue, actualValue );
                 }
-                propertyVerifiers.put( (String) node.propertyKey( i ), verify  );
+                propertyVerifiers.put( (String) node.propertyKey( i ), verify );
             }
 
             // Special verifier for pointA property
@@ -534,9 +547,9 @@ class CsvInputBatchImportIT
                 PointValue v = (PointValue) actualValue;
                 double actualY = v.getCoordinates().get( 0 ).getCoordinate().get( 1 );
                 double expectedY = indexOf( node ) % 90;
-                String message = actualValue.toString() + " does not have y=" + expectedY;
+                String message = actualValue + " does not have y=" + expectedY;
                 assertEquals( expectedY, actualY, 0.1, message );
-                message = actualValue.toString() + " does not have crs=wgs-84";
+                message = actualValue + " does not have crs=wgs-84";
                 assertEquals( CoordinateReferenceSystem.WGS84.getName(), v.getCoordinateReferenceSystem().getName(), message );
             };
             propertyVerifiers.put( "pointA", verifyPointA );
@@ -548,9 +561,9 @@ class CsvInputBatchImportIT
                 PointValue v = (PointValue) actualValue;
                 double actualY = v.getCoordinates().get( 0 ).getCoordinate().get( 1 );
                 double expectedY = indexOf( node );
-                String message = actualValue.toString() + " does not have y=" + expectedY;
+                String message = actualValue + " does not have y=" + expectedY;
                 assertEquals( expectedY, actualY, 0.1, message );
-                message = actualValue.toString() + " does not have crs=cartesian";
+                message = actualValue + " does not have crs=cartesian";
                 assertEquals( CoordinateReferenceSystem.Cartesian.getName(), v.getCoordinateReferenceSystem().getName(), message );
             };
             propertyVerifiers.put( "pointB", verifyPointB );

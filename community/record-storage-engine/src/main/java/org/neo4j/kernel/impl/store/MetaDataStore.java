@@ -19,9 +19,13 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.OpenOption;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.configuration.Config;
@@ -33,6 +37,8 @@ import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.format.standard.MetaDataRecordFormat;
 import org.neo4j.kernel.impl.store.record.MetaDataRecord;
@@ -40,6 +46,7 @@ import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.Logger;
+import org.neo4j.storageengine.api.ExternalStoreId;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.storageengine.api.TransactionId;
 import org.neo4j.storageengine.api.TransactionMetaDataStore;
@@ -48,12 +55,15 @@ import org.neo4j.util.concurrent.ArrayQueueOutOfOrderSequence;
 import org.neo4j.util.concurrent.OutOfOrderSequence;
 
 import static java.lang.String.format;
+import static org.eclipse.collections.impl.factory.Sets.immutable;
 import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_READ_LOCK;
 import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_WRITE_LOCK;
 import static org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier.EMPTY;
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.EXTERNAL_STORE_UUID_LEAST_SIGN_BITS;
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.EXTERNAL_STORE_UUID_MOST_SIGN_BITS;
 import static org.neo4j.kernel.impl.store.format.standard.MetaDataRecordFormat.FIELD_NOT_PRESENT;
 import static org.neo4j.kernel.impl.store.format.standard.MetaDataRecordFormat.RECORD_SIZE;
-import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.ALWAYS;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
 
 public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHeader> implements TransactionMetaDataStore
@@ -61,6 +71,8 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     public static final String TYPE_DESCRIPTOR = "NeoStore";
     // This value means the field has not been refreshed from the store. Normally, this should happen only once
     public static final long FIELD_NOT_INITIALIZED = Long.MIN_VALUE;
+    private static final String METADATA_REFRESH_TAG = "metadataRefresh";
+    private static final UUID NOT_INITIALISED_EXTERNAL_STORE_UUID = new UUID( FIELD_NOT_INITIALIZED, FIELD_NOT_INITIALIZED );
     /*
      *  9 longs in header (long + in use), time | random | version | txid | store version | graph next prop | latest
      *  constraint tx | upgrade time | upgrade id
@@ -86,7 +98,11 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                                                      "has been written into" ),
         LAST_TRANSACTION_COMMIT_TIMESTAMP( 13, "Commit time timestamp for last committed transaction" ),
         UPGRADE_TRANSACTION_COMMIT_TIMESTAMP( 14, "Commit timestamp of transaction the most recent upgrade was performed at" ),
-        LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP( 15, "Timestamp of last attempt to perform a recovery on the store with missing files." );
+        LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP( 15, "Timestamp of last attempt to perform a recovery on the store with missing files." ),
+        EXTERNAL_STORE_UUID_MOST_SIGN_BITS( 16, "Database identifier exposed as external store identity. " +
+                "Generated on creation and never updated. Most significant bits." ),
+        EXTERNAL_STORE_UUID_LEAST_SIGN_BITS( 17, "Database identifier exposed as external store identity. " +
+                "Generated on creation and never updated. Least significant bits" );
 
         private final int id;
         private final String description;
@@ -121,6 +137,8 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     private volatile int upgradeTxChecksumField = (int) FIELD_NOT_INITIALIZED;
     private volatile long upgradeTimeField = FIELD_NOT_INITIALIZED;
     private volatile long upgradeCommitTimestampField = FIELD_NOT_INITIALIZED;
+    private volatile UUID externalStoreUUID = NOT_INITIALISED_EXTERNAL_STORE_UUID;
+    private final PageCacheTracer pageCacheTracer;
 
     private volatile TransactionId upgradeTransaction = new TransactionId( FIELD_NOT_INITIALIZED, (int) FIELD_NOT_INITIALIZED, FIELD_NOT_INITIALIZED );
 
@@ -150,47 +168,58 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     MetaDataStore( File file, File idFile, Config conf,
             IdGeneratorFactory idGeneratorFactory,
             PageCache pageCache, LogProvider logProvider, RecordFormat<MetaDataRecord> recordFormat,
-            String storeVersion,
-            OpenOption... openOptions )
+            String storeVersion, PageCacheTracer pageCacheTracer,
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, conf, IdType.NEOSTORE_BLOCK, idGeneratorFactory, pageCache, logProvider,
                 TYPE_DESCRIPTOR, recordFormat, NoStoreHeaderFormat.NO_STORE_HEADER_FORMAT, storeVersion, openOptions );
+        this.pageCacheTracer = pageCacheTracer;
     }
 
     @Override
-    protected void initialiseNewStoreFile() throws IOException
+    protected void initialiseNewStoreFile( PageCursorTracer cursorTracer ) throws IOException
     {
-        super.initialiseNewStoreFile();
+        super.initialiseNewStoreFile( cursorTracer );
 
         long storeVersionAsLong = MetaDataStore.versionStringToLong( storeVersion );
         StoreId storeId = new StoreId( storeVersionAsLong );
 
-        setCreationTime( storeId.getCreationTime() );
-        setRandomNumber( storeId.getRandomId() );
+        setCreationTime( storeId.getCreationTime(), cursorTracer );
+        setRandomNumber( storeId.getRandomId(), cursorTracer );
         // If metaDataStore.creationTime == metaDataStore.upgradeTime && metaDataStore.upgradeTransactionId == BASE_TX_ID
         // then store has never been upgraded
-        setUpgradeTime( storeId.getCreationTime() );
-        setUpgradeTransaction( BASE_TX_ID, BASE_TX_CHECKSUM, BASE_TX_COMMIT_TIMESTAMP );
-        setCurrentLogVersion( 0 );
-        setLastCommittedAndClosedTransactionId( BASE_TX_ID, BASE_TX_CHECKSUM, BASE_TX_COMMIT_TIMESTAMP, BASE_TX_LOG_BYTE_OFFSET, BASE_TX_LOG_VERSION );
-        setStoreVersion( storeVersionAsLong );
-        setLatestConstraintIntroducingTx( 0 );
+        setUpgradeTime( storeId.getCreationTime(), cursorTracer );
+        setUpgradeTransaction( BASE_TX_ID, BASE_TX_CHECKSUM, BASE_TX_COMMIT_TIMESTAMP, cursorTracer );
+        setCurrentLogVersion( 0, cursorTracer );
+        setLastCommittedAndClosedTransactionId( BASE_TX_ID, BASE_TX_CHECKSUM, BASE_TX_COMMIT_TIMESTAMP, BASE_TX_LOG_BYTE_OFFSET, BASE_TX_LOG_VERSION,
+                cursorTracer );
+        setStoreVersion( storeVersionAsLong, cursorTracer );
+        setLatestConstraintIntroducingTx( 0, cursorTracer );
+        setExternalStoreUUID( UUID.randomUUID(), cursorTracer );
 
         initHighId();
-        flush();
+        flush( cursorTracer );
+    }
+
+    private void setExternalStoreUUID( UUID uuid, PageCursorTracer cursorTracer )
+    {
+        assertNotClosed();
+        setRecord( EXTERNAL_STORE_UUID_MOST_SIGN_BITS, uuid.getMostSignificantBits(), cursorTracer );
+        setRecord( EXTERNAL_STORE_UUID_LEAST_SIGN_BITS, uuid.getLeastSignificantBits(), cursorTracer );
     }
 
     // Only for initialization and recovery, so we don't need to lock the records
 
     @Override
-    public void setLastCommittedAndClosedTransactionId( long transactionId, int checksum, long commitTimestamp, long byteOffset, long logVersion )
+    public void setLastCommittedAndClosedTransactionId( long transactionId, int checksum, long commitTimestamp, long byteOffset, long logVersion,
+            PageCursorTracer cursorTracer )
     {
         assertNotClosed();
-        setRecord( Position.LAST_TRANSACTION_ID, transactionId );
-        setRecord( Position.LAST_TRANSACTION_CHECKSUM, checksum );
-        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_VERSION, logVersion );
-        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET, byteOffset );
-        setRecord( Position.LAST_TRANSACTION_COMMIT_TIMESTAMP, commitTimestamp );
+        setRecord( Position.LAST_TRANSACTION_ID, transactionId, cursorTracer );
+        setRecord( Position.LAST_TRANSACTION_CHECKSUM, checksum, cursorTracer );
+        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_VERSION, logVersion, cursorTracer );
+        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET, byteOffset, cursorTracer );
+        setRecord( Position.LAST_TRANSACTION_COMMIT_TIMESTAMP, commitTimestamp, cursorTracer );
         checkInitialized( lastCommittingTxField.get() );
         lastCommittingTxField.set( transactionId );
         lastClosedTx.set( transactionId, new long[]{logVersion, byteOffset} );
@@ -205,17 +234,18 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
      * @param neoStore {@link File} pointing to the neostore.
      * @param position record {@link Position}.
      * @param value value to write in that record.
+     * @param cursorTracer underlying page cursor tracer.
      * @return the previous value before writing.
      * @throws IOException if any I/O related error occurs.
      */
-    public static long setRecord( PageCache pageCache, File neoStore, Position position, long value ) throws IOException
+    public static long setRecord( PageCache pageCache, File neoStore, Position position, long value, PageCursorTracer cursorTracer ) throws IOException
     {
         long previousValue = FIELD_NOT_INITIALIZED;
-        int pageSize = getPageSize( pageCache );
-        try ( PagedFile pagedFile = pageCache.map( neoStore, EMPTY, pageSize ) )
+        int pageSize = pageCache.pageSize();
+        try ( PagedFile pagedFile = pageCache.map( neoStore, EMPTY, pageSize, immutable.empty() ) )
         {
             int offset = offset( position );
-            try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK ) )
+            try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK, cursorTracer ) )
             {
                 if ( cursor.next() )
                 {
@@ -264,18 +294,19 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
      * @param pageCache {@link PageCache} the {@code neostore} file lives in.
      * @param neoStore {@link File} pointing to the neostore.
      * @param position record {@link Position}.
+     * @param cursorTracer underlying page cursor tracer.
      * @return the read record value specified by {@link Position}.
      */
-    public static long getRecord( PageCache pageCache, File neoStore, Position position ) throws IOException
+    public static long getRecord( PageCache pageCache, File neoStore, Position position, PageCursorTracer cursorTracer ) throws IOException
     {
-        MetaDataRecordFormat format = new MetaDataRecordFormat();
-        int pageSize = getPageSize( pageCache );
+        var recordFormat = new MetaDataRecordFormat();
+        int pageSize = pageCache.pageSize();
         long value = FIELD_NOT_PRESENT;
-        try ( PagedFile pagedFile = pageCache.map( neoStore, EMPTY, pageSize ) )
+        try ( PagedFile pagedFile = pageCache.map( neoStore, EMPTY, pageSize, immutable.empty() ) )
         {
             if ( pagedFile.getLastPageId() >= 0 )
             {
-                try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_READ_LOCK ) )
+                try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_READ_LOCK, cursorTracer ) )
                 {
                     if ( cursor.next() )
                     {
@@ -283,7 +314,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                         record.setId( position.id );
                         do
                         {
-                            format.read( record, cursor, RecordLoad.CHECK, RECORD_SIZE );
+                            recordFormat.read( record, cursor, RecordLoad.CHECK, RECORD_SIZE, pageSize / RECORD_SIZE );
                             if ( record.inUse() )
                             {
                                 value = record.getValue();
@@ -307,22 +338,17 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return value;
     }
 
-    static int getPageSize( PageCache pageCache )
+    public static void setStoreId( PageCache pageCache, File neoStore, StoreId storeId, long upgradeTxChecksum, long upgradeTxCommitTimestamp,
+            PageCursorTracer cursorTracer ) throws IOException
     {
-        return filePageSize( pageCache.pageSize(), RECORD_SIZE );
-    }
+        setRecord( pageCache, neoStore, Position.TIME, storeId.getCreationTime(), cursorTracer );
+        setRecord( pageCache, neoStore, Position.RANDOM_NUMBER, storeId.getRandomId(), cursorTracer );
+        setRecord( pageCache, neoStore, Position.STORE_VERSION, storeId.getStoreVersion(), cursorTracer );
+        setRecord( pageCache, neoStore, Position.UPGRADE_TIME, storeId.getUpgradeTime(), cursorTracer );
+        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_ID, storeId.getUpgradeTxId(), cursorTracer );
 
-    public static void setStoreId( PageCache pageCache, File neoStore, StoreId storeId, long upgradeTxChecksum, long upgradeTxCommitTimestamp )
-            throws IOException
-    {
-        setRecord( pageCache, neoStore, Position.TIME, storeId.getCreationTime() );
-        setRecord( pageCache, neoStore, Position.RANDOM_NUMBER, storeId.getRandomId() );
-        setRecord( pageCache, neoStore, Position.STORE_VERSION, storeId.getStoreVersion() );
-        setRecord( pageCache, neoStore, Position.UPGRADE_TIME, storeId.getUpgradeTime() );
-        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_ID, storeId.getUpgradeTxId() );
-
-        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_CHECKSUM, upgradeTxChecksum );
-        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_COMMIT_TIMESTAMP, upgradeTxCommitTimestamp );
+        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_CHECKSUM, upgradeTxChecksum, cursorTracer );
+        setRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_COMMIT_TIMESTAMP, upgradeTxCommitTimestamp, cursorTracer );
     }
 
     @Override
@@ -331,14 +357,22 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return new StoreId( getCreationTime(), getRandomNumber(), getStoreVersion(), getUpgradeTime(), upgradeTxIdField );
     }
 
-    public static StoreId getStoreId( PageCache pageCache, File neoStore ) throws IOException
+    @Override
+    public Optional<ExternalStoreId> getExternalStoreId()
+    {
+        assertNotClosed();
+        var externalStoreUUID = getExternalStoreUUID();
+        return isNotInitialisedExternalUUID( externalStoreUUID ) ? Optional.empty() : Optional.of( new ExternalStoreId( externalStoreUUID ) );
+    }
+
+    public static StoreId getStoreId( PageCache pageCache, File neoStore, PageCursorTracer cursorTracer ) throws IOException
     {
         return new StoreId(
-                getRecord( pageCache, neoStore, Position.TIME ),
-                getRecord( pageCache, neoStore, Position.RANDOM_NUMBER ),
-                getRecord( pageCache, neoStore, Position.STORE_VERSION ),
-                getRecord( pageCache, neoStore, Position.UPGRADE_TIME ),
-                getRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_ID )
+                getRecord( pageCache, neoStore, Position.TIME, cursorTracer ),
+                getRecord( pageCache, neoStore, Position.RANDOM_NUMBER, cursorTracer ),
+                getRecord( pageCache, neoStore, Position.STORE_VERSION, cursorTracer ),
+                getRecord( pageCache, neoStore, Position.UPGRADE_TIME, cursorTracer ),
+                getRecord( pageCache, neoStore, Position.UPGRADE_TRANSACTION_ID, cursorTracer )
         );
     }
 
@@ -349,22 +383,22 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return upgradeTimeField;
     }
 
-    public void setUpgradeTime( long time )
+    public void setUpgradeTime( long time, PageCursorTracer cursorTracer )
     {
         synchronized ( upgradeTimeLock )
         {
-            setRecord( Position.UPGRADE_TIME, time );
+            setRecord( Position.UPGRADE_TIME, time, cursorTracer );
             upgradeTimeField = time;
         }
     }
 
-    public void setUpgradeTransaction( long id, int checksum, long timestamp )
+    public void setUpgradeTransaction( long id, int checksum, long timestamp, PageCursorTracer cursorTracer )
     {
         long pageId = pageIdForRecord( Position.UPGRADE_TRANSACTION_ID.id );
         assert pageId == pageIdForRecord( Position.UPGRADE_TRANSACTION_CHECKSUM.id );
         synchronized ( upgradeTransactionLock )
         {
-            try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK ) )
+            try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK, cursorTracer ) )
             {
                 if ( !cursor.next() )
                 {
@@ -385,6 +419,21 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         }
     }
 
+    private UUID getExternalStoreUUID()
+    {
+        assertNotClosed();
+        if ( isNotInitialisedExternalUUID( externalStoreUUID ) )
+        {
+            refreshFields();
+        }
+        return externalStoreUUID;
+    }
+
+    private boolean isNotInitialisedExternalUUID( UUID uuid )
+    {
+        return NOT_INITIALISED_EXTERNAL_STORE_UUID.equals( uuid );
+    }
+
     public long getCreationTime()
     {
         assertNotClosed();
@@ -392,11 +441,11 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return creationTimeField;
     }
 
-    public void setCreationTime( long time )
+    public void setCreationTime( long time, PageCursorTracer cursorTracer )
     {
         synchronized ( creationTimeLock )
         {
-            setRecord( Position.TIME, time );
+            setRecord( Position.TIME, time, cursorTracer );
             creationTimeField = time;
         }
     }
@@ -408,12 +457,12 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return randomNumberField;
     }
 
-    public void setRandomNumber( long nr )
+    public void setRandomNumber( long random, PageCursorTracer cursorTracer )
     {
         synchronized ( randomNumberLock )
         {
-            setRecord( Position.RANDOM_NUMBER, nr );
-            randomNumberField = nr;
+            setRecord( Position.RANDOM_NUMBER, random, cursorTracer );
+            randomNumberField = random;
         }
     }
 
@@ -426,17 +475,17 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     }
 
     @Override
-    public void setCurrentLogVersion( long version )
+    public void setCurrentLogVersion( long version, PageCursorTracer cursorTracer )
     {
         synchronized ( logVersionLock )
         {
-            setRecord( Position.LOG_VERSION, version );
+            setRecord( Position.LOG_VERSION, version, cursorTracer );
             versionField = version;
         }
     }
 
     @Override
-    public long incrementAndGetVersion()
+    public long incrementAndGetVersion( PageCursorTracer cursorTracer )
     {
         // This method can expect synchronisation at a higher level,
         // and be effectively single-threaded.
@@ -444,7 +493,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         long version;
         synchronized ( logVersionLock )
         {
-            try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK ) )
+            try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK, cursorTracer ) )
             {
                 if ( cursor.next() )
                 {
@@ -457,7 +506,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                 throw new UnderlyingStorageException( e );
             }
         }
-        flush(); // make sure the new version value is persisted
+        flush( cursorTracer ); // make sure the new version value is persisted
         return version;
     }
 
@@ -482,11 +531,11 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return storeVersionField;
     }
 
-    public void setStoreVersion( long version )
+    public void setStoreVersion( long version, PageCursorTracer cursorTracer )
     {
         synchronized ( storeVersionLock )
         {
-            setRecord( Position.STORE_VERSION, version );
+            setRecord( Position.STORE_VERSION, version, cursorTracer );
             storeVersionField = version;
         }
     }
@@ -498,11 +547,11 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         return latestConstraintIntroducingTxField;
     }
 
-    public void setLatestConstraintIntroducingTx( long latestConstraintIntroducingTx )
+    public void setLatestConstraintIntroducingTx( long latestConstraintIntroducingTx, PageCursorTracer cursorTracer )
     {
         synchronized ( lastConstraintIntroducingTxLock )
         {
-            setRecord( Position.LAST_CONSTRAINT_TRANSACTION, latestConstraintIntroducingTx );
+            setRecord( Position.LAST_CONSTRAINT_TRANSACTION, latestConstraintIntroducingTx, cursorTracer );
             latestConstraintIntroducingTxField = latestConstraintIntroducingTx;
         }
     }
@@ -533,6 +582,8 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
             upgradeCommitTimestampField = getRecordValue( cursor, Position.UPGRADE_TRANSACTION_COMMIT_TIMESTAMP,
                     BASE_TX_COMMIT_TIMESTAMP );
 
+            externalStoreUUID = readExternalStoreUUID( cursor );
+
             upgradeTransaction = new TransactionId( upgradeTxIdField, upgradeTxChecksumField, upgradeCommitTimestampField );
         }
         while ( cursor.shouldRetry() );
@@ -543,6 +594,13 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                     cursor.getCurrentPageId() + " of file " + storageFile.getAbsolutePath() + ", which is " +
                     cursor.getCurrentPageSize() + " bytes in size" );
         }
+    }
+
+    private UUID readExternalStoreUUID( PageCursor cursor )
+    {
+        long mostSignificantBits = getRecordValue( cursor, EXTERNAL_STORE_UUID_MOST_SIGN_BITS, FIELD_NOT_INITIALIZED );
+        long leastSignificantBits = getRecordValue( cursor, EXTERNAL_STORE_UUID_LEAST_SIGN_BITS, FIELD_NOT_INITIALIZED );
+        return new UUID( mostSignificantBits, leastSignificantBits );
     }
 
     long getRecordValue( PageCursor cursor, Position position )
@@ -556,7 +614,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         try
         {
             record.setId( position.id );
-            recordFormat.read( record, cursor, FORCE, RECORD_SIZE );
+            recordFormat.read( record, cursor, ALWAYS, RECORD_SIZE, getRecordsPerPage() );
             if ( record.inUse() )
             {
                 return record.getValue();
@@ -580,7 +638,8 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
 
     private void scanAllFields( int pf_flags, Visitor<PageCursor,IOException> visitor )
     {
-        try ( PageCursor cursor = pagedFile.io( 0, pf_flags ) )
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( METADATA_REFRESH_TAG );
+              PageCursor cursor = pagedFile.io( 0, pf_flags, cursorTracer ) )
         {
             if ( cursor.next() )
             {
@@ -593,12 +652,12 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
         }
     }
 
-    private void setRecord( Position position, long value )
+    private void setRecord( Position position, long value, PageCursorTracer cursorTracer )
     {
         MetaDataRecord record = new MetaDataRecord();
         record.initialize( true, value );
         record.setId( position.id );
-        updateRecord( record );
+        updateRecord( record, cursorTracer );
     }
 
     private void setRecord( PageCursor cursor, Position position, long value )
@@ -618,11 +677,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
      * The following two methods encode and decode a string that is presumably
      * the store version into a long via Latin1 encoding. This leaves room for
      * 7 characters and 1 byte for the length. Current string is
-     * 0.A.0 which is 5 chars, so we have room for expansion. When that
-     * becomes a problem we will be in a yacht, sipping alcoholic
-     * beverages of our choice. Or taking turns crashing golden
-     * helicopters. Anyway, it should suffice for some time and by then
-     * it should have become SEP.
+     * 0.A.0 which is 5 chars, so we have room for expansion.
      */
     public static long versionStringToLong( String storeVersion )
     {
@@ -689,7 +744,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     }
 
     @Override
-    public void transactionCommitted( long transactionId, int checksum, long commitTimestamp )
+    public void transactionCommitted( long transactionId, int checksum, long commitTimestamp, PageCursorTracer cursorTracer )
     {
         assertNotClosed();
         checkInitialized( lastCommittingTxField.get() );
@@ -709,13 +764,13 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                 {
                     long pageId = pageIdForRecord( Position.LAST_TRANSACTION_ID.id );
                     assert pageId == pageIdForRecord( Position.LAST_TRANSACTION_CHECKSUM.id );
-                    try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK ) )
+                    try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK, cursorTracer ) )
                     {
                         if ( cursor.next() )
                         {
                             setRecord( cursor, Position.LAST_TRANSACTION_ID, transactionId );
                             setRecord( cursor, Position.LAST_TRANSACTION_CHECKSUM, checksum );
-                            setRecord( Position.LAST_TRANSACTION_COMMIT_TIMESTAMP, commitTimestamp );
+                            setRecord( cursor, Position.LAST_TRANSACTION_COMMIT_TIMESTAMP, commitTimestamp );
                         }
                     }
                     catch ( IOException e )
@@ -747,7 +802,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     public TransactionId getUpgradeTransaction()
     {
         assertNotClosed();
-        checkInitialized( upgradeTxIdField  );
+        checkInitialized( upgradeTxIdField );
         return upgradeTransaction;
     }
 
@@ -781,7 +836,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     }
 
     @Override
-    public void transactionClosed( long transactionId, long logVersion, long byteOffset )
+    public void transactionClosed( long transactionId, long logVersion, long byteOffset, PageCursorTracer cursorTracer )
     {
         if ( lastClosedTx.offer( transactionId, new long[]{logVersion, byteOffset} ) )
         {
@@ -789,7 +844,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
             assert pageId == pageIdForRecord( Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET.id );
             synchronized ( transactionClosedLock )
             {
-                try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK ) )
+                try ( PageCursor cursor = pagedFile.io( pageId, PF_SHARED_WRITE_LOCK, cursorTracer ) )
                 {
                     if ( cursor.next() )
                     {
@@ -807,15 +862,15 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     }
 
     @Override
-    public void resetLastClosedTransaction( long transactionId, long logVersion, long byteOffset, boolean missingLogs )
+    public void resetLastClosedTransaction( long transactionId, long logVersion, long byteOffset, boolean missingLogs, PageCursorTracer cursorTracer )
     {
         assertNotClosed();
-        setRecord( Position.LAST_TRANSACTION_ID, transactionId );
-        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_VERSION, logVersion );
-        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET, byteOffset );
+        setRecord( Position.LAST_TRANSACTION_ID, transactionId, cursorTracer );
+        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_VERSION, logVersion, cursorTracer );
+        setRecord( Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET, byteOffset, cursorTracer );
         if ( missingLogs )
         {
-            setRecord( Position.LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP, System.currentTimeMillis() );
+            setRecord( Position.LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP, System.currentTimeMillis(), cursorTracer );
         }
         lastClosedTx.set( transactionId, new long[]{logVersion, byteOffset} );
     }
@@ -847,18 +902,18 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, MetaDataRecord record )
+    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, MetaDataRecord record, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void prepareForCommit( MetaDataRecord record )
+    public void prepareForCommit( MetaDataRecord record, PageCursorTracer cursorTracer )
     {   // No need to do anything with these records before commit
     }
 
     @Override
-    public void prepareForCommit( MetaDataRecord record, IdSequence idSequence )
+    public void prepareForCommit( MetaDataRecord record, IdSequence idSequence, PageCursorTracer cursorTracer )
     {   // No need to do anything with these records before commit
     }
 

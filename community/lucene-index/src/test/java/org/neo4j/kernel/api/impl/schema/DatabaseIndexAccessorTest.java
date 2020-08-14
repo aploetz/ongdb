@@ -42,7 +42,6 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
@@ -60,15 +59,18 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.neo4j.collection.PrimitiveLongCollections.toSet;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.kernel.api.IndexQuery.exact;
 import static org.neo4j.internal.kernel.api.IndexQuery.range;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.IOUtils.closeAll;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.test.rule.concurrent.ThreadingRule.waitingWhileIn;
 
 @RunWith( Parameterized.class )
@@ -143,10 +145,9 @@ public class DatabaseIndexAccessorTest
     }
 
     @After
-    public void after()
+    public void after() throws IOException
     {
-        accessor.close();
-        dirFactory.close();
+        closeAll( accessor, dirFactory );
     }
 
     @Test
@@ -174,28 +175,28 @@ public class DatabaseIndexAccessorTest
         IndexReader reader = accessor.newReader();
 
         long[] rangeFromBInclusive = resultsArray( reader, range( PROP_ID, "B", true, null, false ) );
-        assertThat( rangeFromBInclusive, LongArrayMatcher.of( 2, 3 ) );
+        assertThat( rangeFromBInclusive ).contains( 2, 3 );
 
         long[] rangeFromANonInclusive = resultsArray( reader, range( PROP_ID, "A", false, null, false ) );
-        assertThat( rangeFromANonInclusive, LongArrayMatcher.of( 2, 3 ) );
+        assertThat( rangeFromANonInclusive ).contains( 2, 3 );
 
         long[] emptyLowInclusive = resultsArray( reader, range( PROP_ID, "", true, null, false ) );
-        assertThat( emptyLowInclusive, LongArrayMatcher.of( PROP_ID, 2, 3, 4 ) );
+        assertThat( emptyLowInclusive ).contains( PROP_ID, 2, 3, 4 );
 
         long[] emptyUpperNonInclusive = resultsArray( reader, range( PROP_ID, "B", true, "", false ) );
-        assertThat( emptyUpperNonInclusive, LongArrayMatcher.emptyArrayMatcher() );
+        assertThat( emptyUpperNonInclusive ).isEmpty();
 
         long[] emptyInterval = resultsArray( reader, range( PROP_ID, "", true, "", true ) );
-        assertThat( emptyInterval, LongArrayMatcher.of( 4 ) );
+        assertThat( emptyInterval ).contains( 4 );
 
         long[] emptyAllNonInclusive = resultsArray( reader, range( PROP_ID, "", false, null, false ) );
-        assertThat( emptyAllNonInclusive, LongArrayMatcher.of( PROP_ID, 2, 3 ) );
+        assertThat( emptyAllNonInclusive ).contains( PROP_ID, 2, 3 );
 
         long[] nullNonInclusive = resultsArray( reader, range( PROP_ID, (String) null, false, null, false ) );
-        assertThat( nullNonInclusive, LongArrayMatcher.of( PROP_ID, 2, 3, 4 ) );
+        assertThat( nullNonInclusive ).contains( PROP_ID, 2, 3, 4 );
 
         long[] nullInclusive = resultsArray( reader, range( PROP_ID, (String) null, false, null, false ) );
-        assertThat( nullInclusive, LongArrayMatcher.of( PROP_ID, 2, 3, 4 ) );
+        assertThat( nullInclusive ).contains( PROP_ID, 2, 3, 4 );
     }
 
     @Test
@@ -312,7 +313,7 @@ public class DatabaseIndexAccessorTest
         try ( IndexReader reader = indexReader /* do not inline! */;
               IndexSampler sampler = indexSampler /* do not inline! */ )
         {
-            sampler.sampleIndex();
+            sampler.sampleIndex( NULL );
             fail( "expected exception" );
         }
         catch ( IndexNotFoundKernelException e )
@@ -333,7 +334,7 @@ public class DatabaseIndexAccessorTest
     private NodeValueIterator results( IndexReader reader, IndexQuery... queries ) throws IndexNotApplicableKernelException
     {
         NodeValueIterator results = new NodeValueIterator();
-        reader.query( NULL_CONTEXT, results, IndexOrder.NONE, false, queries );
+        reader.query( NULL_CONTEXT, results, unconstrained(), queries );
         return results;
     }
 
@@ -362,7 +363,7 @@ public class DatabaseIndexAccessorTest
 
     private void updateAndCommit( List<IndexEntryUpdate<?>> nodePropertyUpdates ) throws IndexEntryConflictException
     {
-        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
         {
             for ( IndexEntryUpdate<?> update : nodePropertyUpdates )
             {

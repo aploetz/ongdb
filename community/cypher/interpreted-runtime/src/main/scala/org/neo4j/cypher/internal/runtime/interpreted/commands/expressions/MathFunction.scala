@@ -19,15 +19,24 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.symbols.{NumberType, _}
+import org.neo4j.cypher.internal.util.symbols.NumberType
+import org.neo4j.cypher.internal.util.symbols.CTNumber
 import org.neo4j.cypher.operations.CypherFunctions
 import org.neo4j.exceptions.CypherTypeException
-import org.neo4j.values._
+import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values.NO_VALUE
-import org.neo4j.values.storable._
+import org.neo4j.values.storable.Values
+import org.neo4j.values.storable.IntegralValue
+import org.neo4j.values.storable.NumberValues
+import org.neo4j.values.storable.FloatingPointValue
+import org.neo4j.values.storable.DoubleValue
+import org.neo4j.values.storable.IntValue
+import org.neo4j.values.storable.LongValue
+import org.neo4j.values.storable.NumberValue
 
 abstract class MathFunction(arg: Expression) extends Expression {
 
@@ -39,8 +48,8 @@ abstract class MathFunction(arg: Expression) extends Expression {
 
 abstract class NullSafeMathFunction(arg: Expression) extends MathFunction(arg) {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val value = arg(ctx, state)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val value = arg(row, state)
     if (NO_VALUE eq value) NO_VALUE else Values.doubleValue(apply(NumericHelper.asDouble(value).doubleValue()))
   }
 
@@ -80,12 +89,16 @@ object NumericHelper {
     case n: NumberValue => n
     case _ => throw new CypherTypeException("Expected a numeric value for " + toString + ", but got: " + a.toString)
   }
+
+  def evaluateStaticallyKnownNumber(exp: Expression, state: QueryState): NumberValue = {
+    asNumber(exp(CypherRow.empty, state))
+  }
 }
 
 case class AbsFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val value = argument(ctx, state)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val value = argument(row, state)
     if (value eq NO_VALUE) NO_VALUE else CypherFunctions.abs(value)
   }
 
@@ -96,8 +109,7 @@ case class AbsFunction(argument: Expression) extends MathFunction(argument) {
 
 case class AcosFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.acos(v)
   }
@@ -109,8 +121,7 @@ case class AcosFunction(argument: Expression) extends MathFunction(argument) {
 
 case class AsinFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.asin(v)
   }
@@ -122,8 +133,7 @@ case class AsinFunction(argument: Expression) extends MathFunction(argument) {
 
 case class AtanFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.atan(v)
   }
@@ -135,9 +145,9 @@ case class AtanFunction(argument: Expression) extends MathFunction(argument) {
 
 case class Atan2Function(y: Expression, x: Expression) extends Expression {
 
-  def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val yValue = y(ctx, state)
-    val xValue = x(ctx, state)
+  def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val yValue = y(row, state)
+    val xValue = x(row, state)
     if ((NO_VALUE eq yValue) || (NO_VALUE eq xValue))
       NO_VALUE
     else
@@ -153,8 +163,7 @@ case class Atan2Function(y: Expression, x: Expression) extends Expression {
 
 case class CeilFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.ceil(v)
   }
@@ -166,8 +175,7 @@ case class CeilFunction(argument: Expression) extends MathFunction(argument) {
 
 case class CosFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.cos(v)
   }
@@ -179,8 +187,7 @@ case class CosFunction(argument: Expression) extends MathFunction(argument) {
 
 case class CotFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.cot(v)
   }
@@ -192,8 +199,7 @@ case class CotFunction(argument: Expression) extends MathFunction(argument) {
 
 case class DegreesFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.toDegrees(v)
   }
@@ -205,7 +211,7 @@ case class DegreesFunction(argument: Expression) extends MathFunction(argument) 
 
 case class EFunction() extends Expression() {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = Values.E
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = Values.E
 
   override def arguments: Seq[Expression] = Seq.empty
 
@@ -217,8 +223,7 @@ case class EFunction() extends Expression() {
 
 case class ExpFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.exp(v)
   }
@@ -230,8 +235,7 @@ case class ExpFunction(argument: Expression) extends MathFunction(argument) {
 
 case class FloorFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.floor(v)
   }
@@ -243,8 +247,7 @@ case class FloorFunction(argument: Expression) extends MathFunction(argument) {
 
 case class LogFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.log(v)
   }
@@ -256,8 +259,7 @@ case class LogFunction(argument: Expression) extends MathFunction(argument) {
 
 case class Log10Function(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.log10(v)
   }
@@ -269,7 +271,7 @@ case class Log10Function(argument: Expression) extends MathFunction(argument) {
 
 case class PiFunction() extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = Values.PI
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = Values.PI
 
   override def arguments: Seq[Expression] = Seq.empty
 
@@ -280,8 +282,7 @@ case class PiFunction() extends Expression {
 
 case class RadiansFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.toRadians(v)
   }
@@ -293,8 +294,7 @@ case class RadiansFunction(argument: Expression) extends MathFunction(argument) 
 
 case class SinFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.sin(v)
   }
@@ -306,8 +306,7 @@ case class SinFunction(argument: Expression) extends MathFunction(argument) {
 
 case class HaversinFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.haversin(v)
   }
@@ -319,8 +318,7 @@ case class HaversinFunction(argument: Expression) extends MathFunction(argument)
 
 case class TanFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.tan(v)
   }
@@ -332,7 +330,7 @@ case class TanFunction(argument: Expression) extends MathFunction(argument) {
 
 case class RandFunction() extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = CypherFunctions.rand()
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = CypherFunctions.rand()
 
   override def arguments: Seq[Expression] = Seq.empty
 
@@ -343,8 +341,8 @@ case class RandFunction() extends Expression {
 
 case class RangeFunction(start: Expression, end: Expression, step: Expression) extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue =
-    CypherFunctions.range(start(ctx, state), end(ctx, state), step(ctx, state))
+  override def apply(row: ReadableRow, state: QueryState): AnyValue =
+    CypherFunctions.range(start(row, state), end(row, state), step(row, state))
 
   override def arguments: Seq[Expression] = Seq(start, end, step)
 
@@ -357,8 +355,8 @@ case class RangeFunction(start: Expression, end: Expression, step: Expression) e
 
 case class SignFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val value = argument(ctx, state)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val value = argument(row, state)
     if (NO_VALUE eq value) NO_VALUE
     else {
       Values.longValue(Math.signum(NumericHelper.asDouble(value).doubleValue()).toLong)
@@ -372,8 +370,7 @@ case class SignFunction(argument: Expression) extends MathFunction(argument) {
 
 case class RoundFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.round(v)
   }
@@ -385,8 +382,7 @@ case class RoundFunction(argument: Expression) extends MathFunction(argument) {
 
 case class SqrtFunction(argument: Expression) extends MathFunction(argument) {
 
-  override def apply(ctx: ExecutionContext,
-                     state: QueryState): AnyValue = argument(ctx, state) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = argument(row, state) match {
     case x if x eq NO_VALUE => NO_VALUE
     case v => CypherFunctions.sqrt(v)
   }

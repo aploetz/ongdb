@@ -29,7 +29,11 @@ import org.neo4j.internal.batchimport.cache.NumberArrayFactory;
 import org.neo4j.internal.counts.CountsBuilder;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 
+import static org.neo4j.internal.batchimport.cache.NumberArrayFactory.NO_MONITOR;
 import static org.neo4j.internal.batchimport.staging.ExecutionSupervisors.superviseDynamicExecution;
 
 public class CountsComputer implements CountsBuilder
@@ -41,25 +45,29 @@ public class CountsComputer implements CountsBuilder
     private final long lastCommittedTransactionId;
     private final ProgressReporter progressMonitor;
     private final NumberArrayFactory numberArrayFactory;
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
 
-    public CountsComputer( NeoStores stores, PageCache pageCache, DatabaseLayout databaseLayout )
+    public CountsComputer( NeoStores stores, PageCache pageCache, PageCacheTracer pageCacheTracer, DatabaseLayout databaseLayout,
+            MemoryTracker memoryTracker )
     {
         this( stores.getMetaDataStore().getLastCommittedTransactionId(),
                 stores.getNodeStore(), stores.getRelationshipStore(),
                 (int) stores.getLabelTokenStore().getHighId(),
                 (int) stores.getRelationshipTypeTokenStore().getHighId(),
-                NumberArrayFactory.auto( pageCache, databaseLayout.databaseDirectory(), true, NumberArrayFactory.NO_MONITOR ) );
+                NumberArrayFactory.auto( pageCache, pageCacheTracer, databaseLayout.databaseDirectory(), true, NO_MONITOR ),
+                pageCacheTracer, memoryTracker );
     }
 
     private CountsComputer( long lastCommittedTransactionId, NodeStore nodes, RelationshipStore relationships, int highLabelId, int highRelationshipTypeId,
-            NumberArrayFactory numberArrayFactory )
+            NumberArrayFactory numberArrayFactory, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
         this( lastCommittedTransactionId, nodes, relationships, highLabelId, highRelationshipTypeId,
-                numberArrayFactory, ProgressReporter.SILENT );
+                numberArrayFactory, ProgressReporter.SILENT, pageCacheTracer, memoryTracker );
     }
 
-    public CountsComputer( long lastCommittedTransactionId, NodeStore nodes, RelationshipStore relationships,
-            int highLabelId, int highRelationshipTypeId, NumberArrayFactory numberArrayFactory, ProgressReporter progressMonitor )
+    public CountsComputer( long lastCommittedTransactionId, NodeStore nodes, RelationshipStore relationships, int highLabelId, int highRelationshipTypeId,
+            NumberArrayFactory numberArrayFactory, ProgressReporter progressMonitor, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
         this.lastCommittedTransactionId = lastCommittedTransactionId;
         this.nodes = nodes;
@@ -68,34 +76,37 @@ public class CountsComputer implements CountsBuilder
         this.highRelationshipTypeId = highRelationshipTypeId;
         this.numberArrayFactory = numberArrayFactory;
         this.progressMonitor = progressMonitor;
+        this.pageCacheTracer = pageCacheTracer;
+        this.memoryTracker = memoryTracker;
     }
 
     @Override
-    public void initialize( CountsAccessor.Updater countsUpdater )
+    public void initialize( CountsAccessor.Updater countsUpdater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        if ( hasNotEmptyNodesOrRelationshipsStores() )
+        if ( hasNotEmptyNodesOrRelationshipsStores( cursorTracer ) )
         {
-            progressMonitor.start( nodes.getHighestPossibleIdInUse() + relationships.getHighestPossibleIdInUse() );
+            progressMonitor.start( nodes.getHighestPossibleIdInUse( cursorTracer ) + relationships.getHighestPossibleIdInUse( cursorTracer ) );
             populateCountStore( countsUpdater );
         }
         progressMonitor.completed();
     }
 
-    private boolean hasNotEmptyNodesOrRelationshipsStores()
+    private boolean hasNotEmptyNodesOrRelationshipsStores( PageCursorTracer cursorTracer )
     {
-        return (nodes.getHighestPossibleIdInUse() != -1) || (relationships.getHighestPossibleIdInUse() != -1);
+        return (nodes.getHighestPossibleIdInUse( cursorTracer ) != -1) || (relationships.getHighestPossibleIdInUse( cursorTracer ) != -1);
     }
 
     private void populateCountStore( CountsAccessor.Updater countsUpdater )
     {
-        try ( NodeLabelsCache cache = new NodeLabelsCache( numberArrayFactory, highLabelId ) )
+        try ( NodeLabelsCache cache = new NodeLabelsCache( numberArrayFactory, highLabelId, memoryTracker ) )
         {
             // Count nodes
-            superviseDynamicExecution( new NodeCountsStage( Configuration.DEFAULT, cache, nodes, highLabelId, countsUpdater, progressMonitor ) );
+            superviseDynamicExecution(
+                    new NodeCountsStage( Configuration.DEFAULT, cache, nodes, highLabelId, countsUpdater, progressMonitor, pageCacheTracer ) );
             // Count relationships
             superviseDynamicExecution(
                     new RelationshipCountsStage( Configuration.DEFAULT, cache, relationships, highLabelId, highRelationshipTypeId, countsUpdater,
-                            numberArrayFactory, progressMonitor ) );
+                            numberArrayFactory, progressMonitor, pageCacheTracer, memoryTracker ) );
         }
     }
 

@@ -19,7 +19,6 @@
  */
 package org.neo4j.internal.recordstorage;
 
-import org.hamcrest.MatcherAssert;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +28,7 @@ import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
@@ -43,11 +43,12 @@ import org.neo4j.test.extension.pagecache.PageCacheExtension;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -72,10 +73,10 @@ class PropertyPhysicalToLogicalConverterTest
     {
         StoreFactory storeFactory =
                 new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fs, immediate() ), pageCache, fs,
-                        NullLogProvider.getInstance() );
+                        NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = storeFactory.openAllNeoStores( true );
         store = neoStores.getPropertyStore();
-        converter = new PropertyPhysicalToLogicalConverter( store );
+        converter = new PropertyPhysicalToLogicalConverter( store, NULL );
     }
 
     @AfterEach
@@ -94,9 +95,7 @@ class PropertyPhysicalToLogicalConverterTest
         PropertyRecord after = propertyRecord( property( key, value ) );
 
         // WHEN
-        MatcherAssert.assertThat(
-                convert( none, none, change( before, after ) ),
-                equalTo( EntityUpdates.forEntity( 0, false ).added( key, value ).build() ) );
+        assertThat( convert( none, none, change( before, after ) ) ).isEqualTo( EntityUpdates.forEntity( 0, false ).added( key, value ).build() );
     }
 
     @Test
@@ -127,7 +126,7 @@ class PropertyPhysicalToLogicalConverterTest
         PropertyRecord after = propertyRecord( property( key, value ) );
 
         // WHEN
-        assertThat( convert( none, none, change( before, after ) ), equalTo( EntityUpdates.forEntity( 0, false ).build() ) );
+        assertThat( convert( none, none, change( before, after ) ) ).isEqualTo( EntityUpdates.forEntity( 0, false ).build() );
     }
 
     @Test
@@ -156,7 +155,7 @@ class PropertyPhysicalToLogicalConverterTest
         PropertyRecord after = propertyRecord( property( key, longString ) );
 
         // THEN
-        assertThat( convert( none, none, change( before, after ) ), equalTo( EntityUpdates.forEntity( 0, false ).added( key, longString ).build() ) );
+        assertThat( convert( none, none, change( before, after ) ) ).isEqualTo( EntityUpdates.forEntity( 0, false ).added( key, longString ).build() );
     }
 
     @Test
@@ -227,7 +226,7 @@ class PropertyPhysicalToLogicalConverterTest
     private PropertyBlock property( long key, Value value )
     {
         PropertyBlock block = new PropertyBlock();
-        store.encodeValue( block, (int) key, value );
+        store.encodeValue( block, (int) key, value, NULL, INSTANCE );
         return block;
     }
 
@@ -235,7 +234,7 @@ class PropertyPhysicalToLogicalConverterTest
             long[] labelsAfter, Command.PropertyCommand... changes )
     {
         long nodeId = 0;
-        EntityUpdates.Builder updates = EntityUpdates.forEntity( (long) 0, false ).withTokens( labelsBefore ).withTokensAfter( labelsAfter );
+        EntityUpdates.Builder updates = EntityUpdates.forEntity( 0, false ).withTokens( labelsBefore ).withTokensAfter( labelsAfter );
         EntityCommandGrouper grouper = new EntityCommandGrouper<>( Command.NodeCommand.class, 8 );
         grouper.add( new Command.NodeCommand( new NodeRecord( nodeId ), new NodeRecord( nodeId ) ) );
         for ( Command.PropertyCommand change : changes )

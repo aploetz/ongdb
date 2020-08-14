@@ -19,12 +19,28 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.neo4j.cypher.internal.compiler.planner.logical._
-import org.neo4j.cypher.internal.compiler.planner.logical.plans._
-import org.neo4j.cypher.internal.ir.{InterestingOrder, PatternRelationship, QueryGraph}
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, SeekableArgs}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{BOTH, INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.v4_0.expressions._
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlanFromExpression
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlanner
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlansForVariable
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.compiler.planner.logical.plans.AsIdSeekable
+import org.neo4j.cypher.internal.expressions.Equals
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.expressions.FunctionName
+import org.neo4j.cypher.internal.expressions.LogicalVariable
+import org.neo4j.cypher.internal.expressions.Ors
+import org.neo4j.cypher.internal.expressions.RelTypeName
+import org.neo4j.cypher.internal.expressions.SemanticDirection.BOTH
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
+import org.neo4j.cypher.internal.expressions.StringLiteral
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.SeekableArgs
 
 object idSeekLeafPlanner extends LeafPlanner with LeafPlanFromExpression {
 
@@ -39,15 +55,15 @@ object idSeekLeafPlanner extends LeafPlanner with LeafPlanFromExpression {
     }
 
     idSeekPredicates map {
-      case (predicate, idExpr@Variable(id), idValues) if !qg.argumentIds.contains(id) =>
+      case (predicate, variable@Variable(id), idValues) if !qg.argumentIds.contains(id) =>
 
         qg.patternRelationships.find(_.name == id) match {
           case Some(relationship) =>
             val types = relationship.types.toList
-            val seekPlan = planRelationshipByIdSeek(relationship, idValues, Seq(predicate), qg.argumentIds, interestingOrder, context)
-            LeafPlansForVariable(id, Set(planRelTypeFilter(seekPlan, idExpr, types, context)))
+            val seekPlan = planRelationshipByIdSeek(relationship, idValues, Seq(predicate), qg.argumentIds, context)
+            LeafPlansForVariable(id, Set(planRelTypeFilter(seekPlan, variable, types, context)))
           case None =>
-            val plan = context.logicalPlanProducer.planNodeByIdSeek(id, idValues, Seq(predicate), qg.argumentIds, interestingOrder, context)
+            val plan = context.logicalPlanProducer.planNodeByIdSeek(variable, idValues, Seq(predicate), qg.argumentIds, context)
             LeafPlansForVariable(id, Set(plan))
         }
     }
@@ -60,14 +76,13 @@ object idSeekLeafPlanner extends LeafPlanner with LeafPlanFromExpression {
                                        idValues: SeekableArgs,
                                        predicates: Seq[Expression],
                                        argumentIds: Set[String],
-                                       interestingOrder: InterestingOrder,
                                        context: LogicalPlanningContext): LogicalPlan = {
     val (left, right) = relationship.nodes
     val name = relationship.name
     relationship.dir match {
-      case BOTH     => context.logicalPlanProducer.planUndirectedRelationshipByIdSeek(name, idValues, left, right, relationship, argumentIds, predicates, interestingOrder, context)
-      case INCOMING => context.logicalPlanProducer.planDirectedRelationshipByIdSeek(name, idValues, right, left, relationship, argumentIds, predicates, interestingOrder, context)
-      case OUTGOING => context.logicalPlanProducer.planDirectedRelationshipByIdSeek(name, idValues, left, right, relationship, argumentIds, predicates, interestingOrder, context)
+      case BOTH     => context.logicalPlanProducer.planUndirectedRelationshipByIdSeek(name, idValues, left, right, relationship, argumentIds, predicates, context)
+      case INCOMING => context.logicalPlanProducer.planDirectedRelationshipByIdSeek(name, idValues, right, left, relationship, argumentIds, predicates, context)
+      case OUTGOING => context.logicalPlanProducer.planDirectedRelationshipByIdSeek(name, idValues, left, right, relationship, argumentIds, predicates, context)
     }
   }
 

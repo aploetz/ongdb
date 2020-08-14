@@ -19,8 +19,9 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.{CastSupport, ExecutionContext}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CastSupport
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.MergeConstraintConflictException
 import org.neo4j.values.virtual.VirtualNodeValue
 
@@ -28,7 +29,7 @@ case class AssertSameNodePipe(source: Pipe, inner: Pipe, node: String)
                              (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  protected def internalCreateResults(lhsResult: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(lhsResult: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     val rhsResults = inner.createResults(state)
     if (lhsResult.isEmpty != rhsResults.isEmpty) {
       throw new MergeConstraintConflictException(

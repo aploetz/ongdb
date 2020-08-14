@@ -30,8 +30,10 @@ public enum Group
     // GENERAL DATABASE GROUPS.
     /** Thread that schedules delayed or recurring tasks. */
     TASK_SCHEDULER( "Scheduler", ExecutorServiceFactory.unschedulable() ),
-    /* Background page cache worker. */
-    PAGE_CACHE( "PageCacheWorker" ),
+    /* Page cache background eviction. */
+    PAGE_CACHE_EVICTION( "PageCacheEviction" ),
+    /* Page cache background eviction. */
+    PAGE_CACHE_PRE_FETCHER( "PageCachePreFetcher", ExecutorServiceFactory.cachedWithDiscard() ),
     /** Watch out for, and report, external manipulation of store files. */
     FILE_WATCHER( "FileWatcher" ),
     /** Monitor and report system-wide pauses, in case they lead to service interruption. */
@@ -42,10 +44,16 @@ public enum Group
     CHECKPOINT( "CheckPoint" ),
     /** Various little periodic tasks that need to be done on a regular basis to keep the store in good shape. */
     STORAGE_MAINTENANCE( "StorageMaintenance" ),
+    /** Index recovery cleanup. */
+    INDEX_CLEANUP( "IndexCleanup" ),
+    /** Index recovery cleanup work. */
+    INDEX_CLEANUP_WORK( "IndexCleanupWork" ),
     /** Terminates kernel transactions that have timed out. */
     TRANSACTION_TIMEOUT_MONITOR( "TransactionTimeoutMonitor" ),
     /** Background index population. */
-    INDEX_POPULATION( "IndexPopulation" ),
+    INDEX_POPULATION( "IndexPopulationMain" ),
+    /** Background index population work. */
+    INDEX_POPULATION_WORK( "IndexPopulationWork", ExecutorServiceFactory.fixedWithBackPressure() ),
     /** Background index sampling */
     INDEX_SAMPLING( "IndexSampling" ),
     /** Background index update applier, for eventually consistent indexes. */
@@ -56,6 +64,7 @@ public enum Group
     METRICS_EVENT( "MetricsEvent" ),
     /** Threads that perform database manager operations necessary to bring databases to their desired states. */
     DATABASE_RECONCILER( "DatabaseReconciler" ),
+    DATABASE_RECONCILER_UNBOUND( "DatabaseReconcilerUnbound" ),
     /** Ensures DatabaseId lookup is not run from an outer transaction that will be tied to a database */
     DATABASE_ID_REPOSITORY( "DatabaseIdRepository" ),
 
@@ -75,10 +84,11 @@ public enum Group
     // CAUSAL CLUSTER, TOPOLOGY & BACKUP.
     RAFT_CLIENT( "RaftClient" ),
     RAFT_SERVER( "RaftServer" ),
-    RAFT_TIMER( "RaftTimer" ),
     RAFT_LOG_PRUNING( "RaftLogPruning" ),
-    RAFT_BATCH_HANDLER( "RaftBatchHandler" ),
+    RAFT_HANDLER( "RaftBatchHandler" ),
     RAFT_READER_POOL_PRUNER( "RaftReaderPoolPruner" ),
+    LEADER_TRANSFER_SERVICE( "LeaderTransferService" ),
+    CORE_STATE_APPLIER( "CoreStateApplier" ),
     AKKA_TOPOLOGY_WORKER( "AkkaTopologyWorkers", ExecutorServiceFactory.workStealingAsync() ),
     DOWNLOAD_SNAPSHOT( "DownloadSnapshot" ),
     CATCHUP_CLIENT( "CatchupClient" ),
@@ -94,7 +104,14 @@ public enum Group
 
     // FABRIC
     FABRIC_IDLE_DRIVER_MONITOR( "FabricIdleDriverMonitor" ),
+<<<<<<< HEAD
     FABRIC_WORKER( "FabricWorker" );
+=======
+    FABRIC_WORKER( "FabricWorker" ),
+
+    //TESTING
+    TESTING( "TestingGroup", ExecutorServiceFactory.callingThread() );
+>>>>>>> neo4j/4.1
 
     private final String name;
     private final ExecutorServiceFactory executorServiceFactory;

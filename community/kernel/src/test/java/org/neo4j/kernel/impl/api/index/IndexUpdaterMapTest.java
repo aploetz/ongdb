@@ -23,10 +23,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.neo4j.internal.schema.IndexDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexUpdater;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor.PROVIDER_DESCRIPTOR;
 
 class IndexUpdaterMapTest
@@ -60,13 +61,13 @@ class IndexUpdaterMapTest
         schemaIndexDescriptor1 = forSchema( forLabel( 2, 3 ), PROVIDER_DESCRIPTOR ).withName( "a" ).materialise( 0 );
         indexUpdater1 = mock( IndexUpdater.class );
         when( indexProxy1.getDescriptor() ).thenReturn( schemaIndexDescriptor1 );
-        when( indexProxy1.newUpdater( any( IndexUpdateMode.class ) ) ).thenReturn( indexUpdater1 );
+        when( indexProxy1.newUpdater( any( IndexUpdateMode.class ), any( PageCursorTracer.class ) ) ).thenReturn( indexUpdater1 );
 
         indexProxy2 = mock( IndexProxy.class );
         schemaIndexDescriptor = forSchema( forLabel( 5, 6 ), PROVIDER_DESCRIPTOR ).withName( "b" ).materialise( 1 );
         IndexUpdater indexUpdater2 = mock( IndexUpdater.class );
         when( indexProxy2.getDescriptor() ).thenReturn( schemaIndexDescriptor );
-        when( indexProxy2.newUpdater( any( IndexUpdateMode.class ) ) ).thenReturn( indexUpdater2 );
+        when( indexProxy2.newUpdater( any( IndexUpdateMode.class ), any( PageCursorTracer.class ) ) ).thenReturn( indexUpdater2 );
 
         updaterMap = new IndexUpdaterMap( indexMap, IndexUpdateMode.ONLINE );
     }
@@ -78,7 +79,7 @@ class IndexUpdaterMapTest
         indexMap.putIndexProxy( indexProxy1 );
 
         // when
-        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1 );
+        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
 
         // then
         assertEquals( indexUpdater1, updater );
@@ -92,10 +93,10 @@ class IndexUpdaterMapTest
         indexMap.putIndexProxy( indexProxy1 );
 
         // when
-        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1 );
+        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
 
         // then
-        assertThat( updater, equalTo( indexUpdater1 ) );
+        assertThat( updater ).isEqualTo( indexUpdater1 );
     }
 
     @Test
@@ -105,8 +106,8 @@ class IndexUpdaterMapTest
         indexMap.putIndexProxy( indexProxy1 );
 
         // when
-        IndexUpdater updater1 = updaterMap.getUpdater( schemaIndexDescriptor1 );
-        IndexUpdater updater2 = updaterMap.getUpdater( schemaIndexDescriptor1 );
+        IndexUpdater updater1 = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
+        IndexUpdater updater2 = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
 
         // then
         assertEquals( updater1, updater2 );
@@ -117,7 +118,7 @@ class IndexUpdaterMapTest
     void shouldRetrieveNoUpdaterForNonExistingIndex()
     {
         // when
-        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1 );
+        IndexUpdater updater = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
 
         // then
         assertNull( updater );
@@ -131,8 +132,8 @@ class IndexUpdaterMapTest
         indexMap.putIndexProxy( indexProxy1 );
         indexMap.putIndexProxy( indexProxy2 );
 
-        IndexUpdater updater1 = updaterMap.getUpdater( schemaIndexDescriptor1 );
-        IndexUpdater updater2 = updaterMap.getUpdater( schemaIndexDescriptor );
+        IndexUpdater updater1 = updaterMap.getUpdater( schemaIndexDescriptor1, NULL );
+        IndexUpdater updater2 = updaterMap.getUpdater( schemaIndexDescriptor, NULL );
 
         // hen
         updaterMap.close();

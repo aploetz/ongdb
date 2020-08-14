@@ -22,7 +22,7 @@ package org.neo4j.kernel.impl.api.security;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.security.AccessMode;
 import org.neo4j.internal.kernel.api.security.PrivilegeAction;
 
@@ -110,7 +110,7 @@ public class RestrictedAccessMode extends WrappedAccessMode
     }
 
     @Override
-    public boolean allowsReadNodeProperty( Supplier<LabelSet> labels, int propertyKey )
+    public boolean allowsReadNodeProperty( Supplier<TokenSet> labels, int propertyKey )
     {
         return original.allowsReadNodeProperty( labels, propertyKey ) && wrapping.allowsReadNodeProperty( labels, propertyKey );
     }
@@ -137,6 +137,54 @@ public class RestrictedAccessMode extends WrappedAccessMode
     public boolean allowsProcedureWith( String[] allowed )
     {
         return false;
+    }
+
+    @Override
+    public boolean allowsSetLabel( long labelId )
+    {
+        return original.allowsSetLabel( labelId ) && wrapping.allowsSetLabel( labelId );
+    }
+
+    @Override
+    public boolean allowsRemoveLabel( long labelId )
+    {
+        return original.allowsRemoveLabel( labelId ) && wrapping.allowsRemoveLabel( labelId );
+    }
+
+    @Override
+    public boolean allowsCreateNode( int[] labelIds )
+    {
+        return original.allowsCreateNode( labelIds ) && wrapping.allowsCreateNode( labelIds );
+    }
+
+    @Override
+    public boolean allowsDeleteNode( Supplier<TokenSet> labelSupplier )
+    {
+        return original.allowsDeleteNode( labelSupplier ) && wrapping.allowsDeleteNode( labelSupplier );
+    }
+
+    @Override
+    public boolean allowsCreateRelationship( int relType )
+    {
+        return original.allowsCreateRelationship( relType ) && wrapping.allowsCreateRelationship( relType );
+    }
+
+    @Override
+    public boolean allowsDeleteRelationship( int relType )
+    {
+        return original.allowsDeleteRelationship( relType ) && wrapping.allowsDeleteRelationship( relType );
+    }
+
+    @Override
+    public boolean allowsSetProperty( Supplier<TokenSet> labels, int propertyKey )
+    {
+        return original.allowsSetProperty( labels, propertyKey ) && wrapping.allowsSetProperty( labels, propertyKey );
+    }
+
+    @Override
+    public boolean allowsSetProperty( IntSupplier relType, int propertyKey )
+    {
+        return original.allowsSetProperty( relType, propertyKey ) && wrapping.allowsSetProperty( relType, propertyKey );
     }
 
     @Override

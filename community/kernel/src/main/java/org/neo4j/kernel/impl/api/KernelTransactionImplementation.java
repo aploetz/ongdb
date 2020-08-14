@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
@@ -31,11 +29,14 @@ import java.util.stream.Stream;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.collection.pool.Pool;
+import org.neo4j.collection.trackable.HeapTrackingArrayList;
+import org.neo4j.collection.trackable.HeapTrackingCollections;
 import org.neo4j.configuration.Config;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.graphdb.NotInTransactionException;
 import org.neo4j.graphdb.TransactionTerminatedException;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.ExecutionStatistics;
 import org.neo4j.internal.kernel.api.NodeCursor;
@@ -62,16 +63,16 @@ import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
 import org.neo4j.kernel.api.query.ExecutingQuery;
 import org.neo4j.kernel.api.txstate.TransactionState;
 import org.neo4j.kernel.api.txstate.TxStateHolder;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -101,6 +102,11 @@ import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
 import org.neo4j.kernel.internal.event.TransactionListenersState;
 import org.neo4j.lock.LockTracer;
+import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.LimitedMemoryTracker;
+import org.neo4j.memory.LocalMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.memory.ScopedMemoryPool;
 import org.neo4j.resources.CpuClock;
 import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.CommandCreationContext;
@@ -110,16 +116,20 @@ import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
 import org.neo4j.time.SystemNanoClock;
 import org.neo4j.token.TokenHolders;
+import org.neo4j.util.FeatureToggles;
 
 import static java.lang.String.format;
 import static java.lang.Thread.currentThread;
 import static java.util.Collections.emptyMap;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static org.apache.commons.lang3.ArrayUtils.EMPTY_BYTE_ARRAY;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_tracking;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_transaction_max_size;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_sampling_percentage;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_tracing_level;
 import static org.neo4j.kernel.impl.api.transaction.trace.TraceProviderFactory.getTraceProvider;
 import static org.neo4j.storageengine.api.TransactionApplicationMode.INTERNAL;
+import static org.neo4j.util.FeatureToggles.flag;
 
 public class KernelTransactionImplementation implements KernelTransaction, TxStateHolder, ExecutionStatistics
 {
@@ -133,6 +143,10 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     // default values for not committed tx id and tx commit time
     private static final long NOT_COMMITTED_TRANSACTION_ID = -1;
     private static final long NOT_COMMITTED_TRANSACTION_COMMIT_TIME = -1;
+    private static final String TRANSACTION_TAG = "transaction";
+    private static final String INITIAL_RESERVED_BYTES_TOGGLE =
+            FeatureToggles.getString( KernelTransactionImplementation.class, "heapGrabSize", "2m" );
+    private static final long INITIAL_RESERVED_BYTES = ByteUnit.parse( INITIAL_RESERVED_BYTES_TOGGLE );
 
     private final CollectionsFactory collectionsFactory;
 
@@ -146,7 +160,6 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     // For committing
     private final TransactionCommitProcess commitProcess;
     private final TransactionMonitor transactionMonitor;
-    private final PageCursorTracerSupplier cursorTracerSupplier;
     private final VersionContextSupplier versionContextSupplier;
     private final LeaseService leaseService;
     private final StorageReader storageReader;
@@ -155,6 +168,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private final ClockContext clocks;
     private final AccessCapability accessCapability;
     private final ConstraintSemantics constraintSemantics;
+    private final PageCursorTracer pageCursorTracer;
 
     // State that needs to be reset between uses. Most of these should be cleared or released in #release(),
     // whereas others, such as timestamp or txId when transaction starts, even locks, needs to be set in #initialize().
@@ -188,6 +202,8 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private InternalTransaction internalTransaction;
     private volatile TraceProvider traceProvider;
     private volatile TransactionInitializationTrace initializationTrace;
+    private final LimitedMemoryTracker memoryTracker;
+    private volatile long transactionHeapBytesLimit;
 
     /**
      * Lock prevents transaction {@link #markForTermination(Status)}  transaction termination} from interfering with
@@ -197,42 +213,51 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
      * instances are pooled.
      */
     private final Lock terminationReleaseLock = new ReentrantLock();
-    private PageCursorTracer pageCursorTracer;
 
     public KernelTransactionImplementation( Config config,
             DatabaseTransactionEventListeners eventListeners, ConstraintIndexCreator constraintIndexCreator, GlobalProcedures globalProcedures,
             TransactionCommitProcess commitProcess, TransactionMonitor transactionMonitor,
             Pool<KernelTransactionImplementation> pool, SystemNanoClock clock,
-            AtomicReference<CpuClock> cpuClockRef, AtomicReference<HeapAllocation> heapAllocationRef, TransactionTracer transactionTracer,
-            LockTracer lockTracer, PageCursorTracerSupplier cursorTracerSupplier, StorageEngine storageEngine, AccessCapability accessCapability,
+            AtomicReference<CpuClock> cpuClockRef, DatabaseTracers tracers,
+            StorageEngine storageEngine, AccessCapability accessCapability,
             VersionContextSupplier versionContextSupplier, CollectionsFactorySupplier collectionsFactorySupplier,
             ConstraintSemantics constraintSemantics, SchemaState schemaState, TokenHolders tokenHolders, IndexingService indexingService,
+<<<<<<< HEAD
             LabelScanStore labelScanStore, IndexStatisticsStore indexStatisticsStore, Dependencies dependencies,
             NamedDatabaseId namedDatabaseId, LeaseService leaseService )
     {
+=======
+            LabelScanStore labelScanStore, RelationshipTypeScanStore relationshipTypeScanStore,
+            IndexStatisticsStore indexStatisticsStore, Dependencies dependencies,
+            NamedDatabaseId namedDatabaseId, LeaseService leaseService, ScopedMemoryPool transactionMemoryPool )
+    {
+        this.pageCursorTracer = tracers.getPageCacheTracer().createPageCursorTracer( TRANSACTION_TAG );
+        this.memoryTracker = config.get( memory_tracking ) ?
+                             new LocalMemoryTracker( transactionMemoryPool, transactionHeapBytesLimit, INITIAL_RESERVED_BYTES,
+                                     memory_transaction_max_size.name() ) : EmptyMemoryTracker.INSTANCE;
+>>>>>>> neo4j/4.1
         this.eventListeners = eventListeners;
         this.constraintIndexCreator = constraintIndexCreator;
         this.commitProcess = commitProcess;
         this.transactionMonitor = transactionMonitor;
         this.storageReader = storageEngine.newReader();
-        this.commandCreationContext = storageEngine.newCommandCreationContext();
+        this.commandCreationContext = storageEngine.newCommandCreationContext( pageCursorTracer, memoryTracker );
         this.namedDatabaseId = namedDatabaseId;
         this.storageEngine = storageEngine;
         this.pool = pool;
         this.clocks = new ClockContext( clock );
-        this.transactionTracer = transactionTracer;
-        this.cursorTracerSupplier = cursorTracerSupplier;
+        this.transactionTracer = tracers.getDatabaseTracer();
         this.versionContextSupplier = versionContextSupplier;
         this.leaseService = leaseService;
-        this.currentStatement = new KernelStatement( this, lockTracer, this.clocks, versionContextSupplier, cpuClockRef, namedDatabaseId );
+        this.currentStatement = new KernelStatement( this, tracers.getLockTracer(), this.clocks, versionContextSupplier, cpuClockRef, namedDatabaseId, config );
         this.accessCapability = accessCapability;
-        this.statistics = new Statistics( this, cpuClockRef, heapAllocationRef );
+        this.statistics = new Statistics( this, cpuClockRef );
         this.userMetaData = emptyMap();
         this.constraintSemantics = constraintSemantics;
         DefaultPooledCursors cursors = new DefaultPooledCursors( storageReader );
         this.allStoreHolder =
-                new AllStoreHolder( storageReader, this, cursors, globalProcedures, schemaState, indexingService, labelScanStore, indexStatisticsStore,
-                        dependencies );
+                new AllStoreHolder( storageReader, this, cursors, globalProcedures, schemaState, indexingService, labelScanStore, relationshipTypeScanStore,
+                        indexStatisticsStore, pageCursorTracer, dependencies, config, memoryTracker );
         this.operations =
                 new Operations(
                         allStoreHolder,
@@ -245,8 +270,9 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
                         constraintIndexCreator,
                         constraintSemantics,
                         indexingService,
-                        config );
+                        config, pageCursorTracer, memoryTracker );
         traceProvider = getTraceProvider( config );
+        transactionHeapBytesLimit = config.get( memory_transaction_max_size );
         registerConfigChangeListeners( config );
         this.collectionsFactory = collectionsFactorySupplier.create();
     }
@@ -273,17 +299,16 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.timeoutMillis = transactionTimeout;
         this.lastTransactionIdWhenStarted = lastCommittedTx;
         this.lastTransactionTimestampWhenStarted = lastTimeStamp;
-        this.transactionEvent = transactionTracer.beginTransaction();
-        assert transactionEvent != null : "transactionEvent was null!";
+        this.transactionEvent = transactionTracer.beginTransaction( pageCursorTracer );
         this.securityContext = frozenSecurityContext;
         this.transactionId = NOT_COMMITTED_TRANSACTION_ID;
         this.commitTime = NOT_COMMITTED_TRANSACTION_COMMIT_TIME;
         this.clientInfo = clientInfo;
-        this.pageCursorTracer = cursorTracerSupplier.get();
         this.statistics.init( currentThread().getId(), pageCursorTracer );
         this.currentStatement.initialize( statementLocks, pageCursorTracer, startTimeMillis );
         this.operations.initialize();
         this.initializationTrace = traceProvider.getTraceInfo();
+        this.memoryTracker.setLimit( transactionHeapBytesLimit );
         return this;
     }
 
@@ -394,6 +419,12 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         return pageCursorTracer;
     }
 
+    @Override
+    public MemoryTracker memoryTracker()
+    {
+        return memoryTracker;
+    }
+
     private boolean markForTerminationIfPossible( Status reason )
     {
         if ( canBeTerminated() )
@@ -405,6 +436,14 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
                 statementLocks.stop();
             }
             transactionMonitor.transactionTerminated( hasTxStateWithChanges() );
+
+            var internalTransaction = this.internalTransaction;
+
+            if ( internalTransaction != null )
+            {
+                internalTransaction.terminate( reason );
+            }
+
             return true;
         }
         return false;
@@ -463,13 +502,13 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     @Override
     public long pageHits()
     {
-        return cursorTracerSupplier.get().hits();
+        return pageCursorTracer.hits();
     }
 
     @Override
     public long pageFaults()
     {
-        return cursorTracerSupplier.get().faults();
+        return pageCursorTracer.faults();
     }
 
     Optional<ExecutingQuery> executingQuery()
@@ -477,7 +516,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         return currentStatement.executingQuery();
     }
 
-    void upgradeToDataWrites() throws InvalidTransactionTypeKernelException
+    private void upgradeToDataWrites() throws InvalidTransactionTypeKernelException
     {
         writeState = writeState.upgradeToDataWrites();
     }
@@ -507,7 +546,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         {
             leaseClient.ensureValid();
             transactionMonitor.upgradeToWriteTransaction();
-            txState = new TxState( collectionsFactory );
+            txState = new TxState( collectionsFactory, memoryTracker );
         }
         return txState;
     }
@@ -595,7 +634,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
             {
                 rollback( null );
                 failOnNonExplicitRollbackIfNeeded();
-                return ROLLBACK;
+                return ROLLBACK_ID;
             }
             else
             {
@@ -669,7 +708,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private long commitTransaction() throws KernelException
     {
         boolean success = false;
-        long txId = READ_ONLY;
+        long txId = READ_ONLY_ID;
         TransactionListenersState listenersState = null;
         try ( CommitEvent commitEvent = transactionEvent.beginCommitEvent() )
         {
@@ -691,7 +730,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
                 Locks.Client commitLocks = statementLocks.pessimistic();
 
                 // Gather up commands from the various sources
-                Collection<StorageCommand> extractedCommands = new ArrayList<>();
+                HeapTrackingArrayList<StorageCommand> extractedCommands = HeapTrackingCollections.newArrayList( memoryTracker );
                 storageEngine.createCommands(
                         extractedCommands,
                         txState,
@@ -699,7 +738,9 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
                         commandCreationContext,
                         commitLocks,
                         lastTransactionIdWhenStarted,
-                        this::enforceConstraints );
+                        this::enforceConstraints,
+                        pageCursorTracer,
+                        memoryTracker );
 
                 /* Here's the deal: we track a quick-to-access hasChanges in transaction state which is true
                  * if there are any changes imposed by this transaction. Some changes made inside a transaction undo
@@ -722,7 +763,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
                     // Commit the transaction
                     success = true;
                     TransactionToApply batch = new TransactionToApply( transactionRepresentation,
-                            versionContextSupplier.getVersionContext() );
+                            versionContextSupplier.getVersionContext(), pageCursorTracer );
                     txId = commitProcess.commit( batch, commitEvent, INTERNAL );
                     commitTime = timeCommitted;
                 }
@@ -732,8 +773,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         }
         catch ( ConstraintValidationException | CreateConstraintFailureException e )
         {
-            throw new ConstraintViolationTransactionFailureException(
-                    e.getUserMessage( new SilentTokenNameLookup( tokenRead() ) ), e );
+            throw new ConstraintViolationTransactionFailureException( e.getUserMessage( tokenRead() ), e );
         }
         finally
         {
@@ -779,7 +819,6 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     public Write dataWrite() throws InvalidTransactionTypeKernelException
     {
         accessCapability.assertCanWrite();
-        assertAllowsWrites();
         upgradeToDataWrites();
         return operations;
     }
@@ -897,15 +936,6 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         return currentStatement.lockTracer();
     }
 
-    private void assertAllowsWrites()
-    {
-        AccessMode accessMode = securityContext().mode();
-        if ( !accessMode.allowsWrites() )
-        {
-            throw accessMode.onViolation( format( "Write operations are not allowed for %s.", securityContext().description() ) );
-        }
-    }
-
     private void assertAllowsSchemaWrites()
     {
         AccessMode accessMode = securityContext().mode();
@@ -1005,6 +1035,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
             pageCursorTracer.reportEvents();
             initializationTrace = null;
             pool.release( this );
+            memoryTracker.reset();
         }
         finally
         {
@@ -1089,7 +1120,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
      *
      * @return the locks held by this transaction.
      */
-    public Stream<? extends ActiveLock> activeLocks()
+    public Stream<ActiveLock> activeLocks()
     {
         StatementLocks locks = this.statementLocks;
         return locks == null ? Stream.empty() : locks.activeLocks();
@@ -1112,7 +1143,8 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
 
     private TxStateVisitor enforceConstraints( TxStateVisitor txStateVisitor )
     {
-        return constraintSemantics.decorateTxStateVisitor( storageReader, operations.dataRead(), operations.cursors(), txState, txStateVisitor );
+        return constraintSemantics.decorateTxStateVisitor( storageReader, operations.dataRead(), operations.cursors(), txState, txStateVisitor,
+                pageCursorTracer, memoryTracker );
     }
 
     /**
@@ -1141,6 +1173,8 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
 
     public static class Statistics
     {
+        private static final boolean ENABLE_HEAP_ALLOCATION_TRACKING = flag( Statistics.class, "enableHeapAllocationTracking", false );
+
         private volatile long cpuTimeNanosWhenQueryStarted;
         private volatile long heapAllocatedBytesWhenQueryStarted;
         private volatile long waitingTimeNanos;
@@ -1148,22 +1182,18 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         private volatile PageCursorTracer pageCursorTracer = PageCursorTracer.NULL;
         private final KernelTransactionImplementation transaction;
         private final AtomicReference<CpuClock> cpuClockRef;
-        private final AtomicReference<HeapAllocation> heapAllocationRef;
         private CpuClock cpuClock;
-        private HeapAllocation heapAllocation;
+        private final HeapAllocation heapAllocation = ENABLE_HEAP_ALLOCATION_TRACKING ? HeapAllocation.HEAP_ALLOCATION : HeapAllocation.NOT_AVAILABLE;
 
-        public Statistics( KernelTransactionImplementation transaction, AtomicReference<CpuClock> cpuClockRef,
-                AtomicReference<HeapAllocation> heapAllocationRef )
+        public Statistics( KernelTransactionImplementation transaction, AtomicReference<CpuClock> cpuClockRef )
         {
             this.transaction = transaction;
             this.cpuClockRef = cpuClockRef;
-            this.heapAllocationRef = heapAllocationRef;
         }
 
         protected void init( long threadId, PageCursorTracer pageCursorTracer )
         {
             this.cpuClock = cpuClockRef.get();
-            this.heapAllocation = heapAllocationRef.get();
             this.transactionThreadId = threadId;
             this.pageCursorTracer = pageCursorTracer;
             this.cpuTimeNanosWhenQueryStarted = cpuClock.cpuTimeNanos( transactionThreadId );
@@ -1180,13 +1210,19 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         }
 
         /**
-         * Returns amount of direct memory allocated by current transaction.
-         *
-         * @return amount of direct memory allocated by the thread in bytes.
+         * @return estimated amount of used heap memory
          */
-        long directAllocatedBytes()
+        long estimatedHeapMemory()
         {
-            return transaction.collectionsFactory.getMemoryTracker().usedDirectMemory();
+            return transaction.memoryTracker().estimatedHeapMemory();
+        }
+
+        /**
+         * @return amount of native memory
+         */
+        long usedNativeMemory()
+        {
+            return transaction.memoryTracker().usedNativeMemory();
         }
 
         /**
@@ -1283,6 +1319,7 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     {
         config.addListener( transaction_tracing_level, ( before, after ) -> traceProvider = getTraceProvider( config ) );
         config.addListener( transaction_sampling_percentage, ( before, after ) -> traceProvider = getTraceProvider( config ) );
+        config.addListener( memory_transaction_max_size, ( before, after ) -> transactionHeapBytesLimit = after );
     }
 
     /**

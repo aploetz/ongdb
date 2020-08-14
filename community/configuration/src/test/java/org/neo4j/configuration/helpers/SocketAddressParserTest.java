@@ -19,7 +19,6 @@
  */
 package org.neo4j.configuration.helpers;
 
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -244,6 +243,6 @@ class SocketAddressParserTest
 
     private static String whitespace( int numberOfWhitespaces )
     {
-        return StringUtils.repeat( " ", numberOfWhitespaces );
+        return " ".repeat( numberOfWhitespaces );
     }
 }

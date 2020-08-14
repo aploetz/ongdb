@@ -19,14 +19,14 @@
  */
 package org.neo4j.kernel.impl.util.diffsets;
 
-import org.eclipse.collections.api.LongIterable;
-import org.eclipse.collections.api.iterator.LongIterator;
 import org.eclipse.collections.api.set.primitive.LongSet;
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
 import org.eclipse.collections.impl.factory.primitive.LongSets;
 
-import org.neo4j.collection.PrimitiveLongResourceIterator;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactory;
+import org.neo4j.memory.HeapEstimator;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.util.VisibleForTesting;
 
 /**
  * Primitive long version of collection that with given a sequence of add and removal operations, tracks
@@ -36,22 +36,32 @@ import org.neo4j.kernel.impl.util.collection.CollectionsFactory;
  */
 public class MutableLongDiffSetsImpl implements MutableLongDiffSets
 {
+    private static final long SHALLOW_SIZE = HeapEstimator.shallowSizeOfInstance( MutableLongDiffSetsImpl.class );
     private static final MutableLongSet NOT_INITIALIZED = LongSets.mutable.empty().asUnmodifiable();
 
     private final CollectionsFactory collectionsFactory;
+    private final MemoryTracker memoryTracker;
     private MutableLongSet added;
     private MutableLongSet removed;
 
-    public MutableLongDiffSetsImpl( MutableLongSet added, MutableLongSet removed, CollectionsFactory collectionsFactory )
+    static MutableLongDiffSetsImpl createMutableLongDiffSetsImpl( CollectionsFactory collectionsFactory, MemoryTracker memoryTracker )
+    {
+        memoryTracker.allocateHeap( SHALLOW_SIZE );
+        return new MutableLongDiffSetsImpl( collectionsFactory, memoryTracker );
+    }
+
+    @VisibleForTesting
+    public MutableLongDiffSetsImpl( MutableLongSet added, MutableLongSet removed, CollectionsFactory collectionsFactory, MemoryTracker memoryTracker )
     {
         this.added = added;
         this.removed = removed;
         this.collectionsFactory = collectionsFactory;
+        this.memoryTracker = memoryTracker;
     }
 
-    public MutableLongDiffSetsImpl( CollectionsFactory collectionsFactory )
+    protected MutableLongDiffSetsImpl( CollectionsFactory collectionsFactory, MemoryTracker memoryTracker )
     {
-        this( NOT_INITIALIZED, NOT_INITIALIZED, collectionsFactory );
+        this( NOT_INITIALIZED, NOT_INITIALIZED, collectionsFactory, memoryTracker );
     }
 
     @Override
@@ -67,20 +77,6 @@ public class MutableLongDiffSetsImpl implements MutableLongDiffSets
     }
 
     @Override
-    public void removeAll( LongIterable elements )
-    {
-        checkRemovedElements();
-        elements.each( this::removeElement );
-    }
-
-    @Override
-    public void addAll( LongIterable elements )
-    {
-        checkAddedElements();
-        elements.each( this::addElement );
-    }
-
-    @Override
     public void add( long element )
     {
         checkAddedElements();
@@ -92,18 +88,6 @@ public class MutableLongDiffSetsImpl implements MutableLongDiffSets
     {
         checkRemovedElements();
         return removeElement( element );
-    }
-
-    @Override
-    public LongIterator augment( LongIterator source )
-    {
-        return DiffApplyingPrimitiveLongIterator.augment( source, added, removed );
-    }
-
-    @Override
-    public PrimitiveLongResourceIterator augment( PrimitiveLongResourceIterator source )
-    {
-        return DiffApplyingPrimitiveLongIterator.augment( source, added, removed );
     }
 
     @Override
@@ -151,7 +135,7 @@ public class MutableLongDiffSetsImpl implements MutableLongDiffSets
     {
         if ( added == NOT_INITIALIZED )
         {
-            added = collectionsFactory.newLongSet();
+            added = collectionsFactory.newLongSet( memoryTracker );
         }
     }
 
@@ -159,7 +143,7 @@ public class MutableLongDiffSetsImpl implements MutableLongDiffSets
     {
         if ( removed == NOT_INITIALIZED )
         {
-            removed = collectionsFactory.newLongSet();
+            removed = collectionsFactory.newLongSet( memoryTracker );
         }
     }
 }

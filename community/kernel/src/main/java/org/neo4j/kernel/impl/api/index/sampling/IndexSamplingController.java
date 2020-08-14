@@ -161,7 +161,7 @@ public class IndexSamplingController
         }
     }
 
-    private void waitForAsyncIndexSamples( List<IndexSamplingJobHandle> asyncSamplingJobs )
+    private static void waitForAsyncIndexSamples( List<IndexSamplingJobHandle> asyncSamplingJobs )
     {
         for ( IndexSamplingJobHandle asyncSamplingJob : asyncSamplingJobs )
         {
@@ -235,7 +235,7 @@ public class IndexSamplingController
         {
             return new IndexSamplingJobHandle( jobTracker.scheduleSamplingJob( job ), descriptor );
         }
-        return new IndexSamplingJobHandle( JobHandle.nullInstance, descriptor );
+        return new IndexSamplingJobHandle( JobHandle.EMPTY, descriptor );
     }
 
     private void sampleIndexOnCurrentThread( IndexMap indexMap, long indexId )

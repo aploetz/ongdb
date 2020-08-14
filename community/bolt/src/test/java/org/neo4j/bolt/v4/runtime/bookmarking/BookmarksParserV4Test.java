@@ -19,7 +19,6 @@
  */
 package org.neo4j.bolt.v4.runtime.bookmarking;
 
-import org.hamcrest.core.StringContains;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -44,12 +43,10 @@ import org.neo4j.values.virtual.MapValueBuilder;
 import org.neo4j.values.virtual.VirtualValues;
 
 import static java.util.Collections.emptyList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.kernel.api.exceptions.Status.Transaction.InvalidBookmark;
 import static org.neo4j.kernel.api.exceptions.Status.Transaction.InvalidBookmarkMixture;
 import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
@@ -106,7 +103,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( bookmarkString, wrongBookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -118,7 +115,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( bookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -131,7 +128,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( bookmarkString, wrongBookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -144,7 +141,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( bookmarkString, wrongBookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmarkMixture ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmarkMixture );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -173,7 +170,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( bookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -211,7 +208,7 @@ class BookmarksParserV4Test
 
         var error = assertThrows( BookmarkParsingException.class, () -> parser.parseBookmarks( metadata ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -222,7 +219,7 @@ class BookmarksParserV4Test
 
         var error = assertThrows( BookmarkParsingException.class, () -> parser.parseBookmarks( metadata ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -293,7 +290,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( wrongBookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -306,7 +303,7 @@ class BookmarksParserV4Test
         var error = assertThrows( BookmarkParsingException.class,
                 () -> parser.parseBookmarks( metadata( List.of( wrongBookmarkString ) ) ) );
 
-        assertThat( error.status(), equalTo( InvalidBookmark ) );
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
         assertTrue( error.causesFailureMessage() );
     }
 
@@ -323,13 +320,14 @@ class BookmarksParserV4Test
     }
 
     @Test
-    void shouldParseCustomBookmarksAndSystemDbBookmark() throws BoltIOException
+    void shouldParseCustomBookmarksMixUp() throws BoltIOException
     {
         var parser = new BookmarksParserV4( databaseIdRepository, new CustomParser() );
 
         var metadata = metadata( List.of(
                 customBookmarkString( "text1" ),
                 bookmarkString( 1234, NAMED_SYSTEM_DATABASE_ID ),
+                bookmarkString( 4321, databaseIdRepository.getRaw( "molly" ) ),
                 customBookmarkString( "text2" )
                 ) );
 
@@ -338,34 +336,35 @@ class BookmarksParserV4Test
         assertEquals( List.of(
                 new CustomBookmark( "text1" ),
                 new CustomBookmark( "text2" ),
-                new BookmarkWithDatabaseId( 1234, NAMED_SYSTEM_DATABASE_ID )
+                new BookmarkWithDatabaseId( 1234, NAMED_SYSTEM_DATABASE_ID ),
+                new BookmarkWithDatabaseId( 4321, databaseIdRepository.getRaw( "molly" ) )
         ), bookmarks );
     }
 
     @Test
-    void shouldParseCustomBookmarksMixUp()
+    void shouldThrowBoltExceptionWhenCustomBookmarksParsingFails()
     {
-        var parser = new BookmarksParserV4( databaseIdRepository, new CustomParser() );
+        var parser = new BookmarksParserV4( databaseIdRepository, new CustomBookmarkFormatParser()
+        {
+            @Override
+            public boolean isCustomBookmark( String string )
+            {
+                return true;
+            }
 
-        var metadata = metadata( List.of(
-                customBookmarkString( "text1" ),
-                bookmarkString( 1234, databaseIdRepository.getRaw( "molly" ) ),
-                customBookmarkString( "text2" )
-        ) );
+            @Override
+            public List<Bookmark> parse( List<String> customBookmarks )
+            {
+                throw new IllegalArgumentException( "This bookmark is just wrong" );
+            }
+        } );
 
-        try
-        {
-            parser.parseBookmarks( metadata );
-            fail( "Exception expected" );
-        }
-        catch ( BookmarkParsingException e )
-        {
-            assertThat( e.getMessage(), StringContains.containsString( "Supplied bookmarks are from different databases" ) );
-        }
-        catch ( Exception e )
-        {
-            fail( "Unexpected exception", e );
-        }
+        var metadata = metadata( List.of( "" ) );
+        var error = assertThrows( BookmarkParsingException.class, () -> parser.parseBookmarks( metadata ) );
+
+        assertThat( error.status() ).isEqualTo( InvalidBookmark );
+        assertTrue( error.causesFailureMessage() );
+        assertThat( error.getMessage() ).contains( "Parsing of supplied bookmarks failed with message: This bookmark is just wrong" );
     }
 
     private static MapValue metadata( Object bookmarks )

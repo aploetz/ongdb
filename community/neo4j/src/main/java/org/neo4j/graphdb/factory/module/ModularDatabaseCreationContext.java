@@ -24,7 +24,6 @@ import java.util.function.LongFunction;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.database.DatabaseConfig;
 import org.neo4j.function.Factory;
@@ -49,7 +48,7 @@ import org.neo4j.kernel.impl.api.CommitProcessFactory;
 import org.neo4j.kernel.impl.api.LeaseService;
 import org.neo4j.kernel.impl.constraints.ConstraintSemantics;
 import org.neo4j.kernel.impl.factory.AccessCapabilityFactory;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.StatementLocksFactory;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
@@ -58,17 +57,17 @@ import org.neo4j.kernel.impl.transaction.stats.DatabaseTransactionStats;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.internal.event.GlobalTransactionEventListeners;
 import org.neo4j.kernel.internal.locker.FileLockerService;
+import org.neo4j.kernel.monitoring.DatabaseEventListeners;
+import org.neo4j.kernel.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.internal.DatabaseLogService;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.time.SystemNanoClock;
-import org.neo4j.token.NonTransactionalTokenNameLookup;
 import org.neo4j.token.TokenHolders;
 
 public class ModularDatabaseCreationContext implements DatabaseCreationContext
@@ -80,7 +79,6 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     private final IdGeneratorFactory idGeneratorFactory;
     private final DatabaseLogService databaseLogService;
     private final JobScheduler scheduler;
-    private final TokenNameLookup tokenNameLookup;
     private final DependencyResolver globalDependencies;
     private final TokenHolders tokenHolders;
     private final Locks locks;
@@ -99,7 +97,7 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     private final SystemNanoClock clock;
     private final StoreCopyCheckPointMutex storeCopyCheckPointMutex;
     private final IdController idController;
-    private final DatabaseInfo databaseInfo;
+    private final DbmsInfo dbmsInfo;
     private final VersionContextSupplier versionContextSupplier;
     private final CollectionsFactorySupplier collectionsFactorySupplier;
     private final Iterable<ExtensionFactory<?>> extensionFactories;
@@ -112,6 +110,8 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     private final AccessCapabilityFactory accessCapabilityFactory;
     private final LeaseService leaseService;
     private final DatabaseStartupController startupController;
+    private final GlobalMemoryGroupTracker transactionsMemoryPool;
+    private final GlobalMemoryGroupTracker otherMemoryPool;
 
     public ModularDatabaseCreationContext( NamedDatabaseId namedDatabaseId, GlobalModule globalModule, Dependencies globalDependencies,
                                            Monitors parentMonitors, EditionDatabaseComponents editionComponents, GlobalProcedures globalProcedures,
@@ -125,12 +125,13 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
         DatabaseIdContext idContext = editionComponents.getIdContext();
         this.idGeneratorFactory = idContext.getIdGeneratorFactory();
         this.idController = idContext.getIdController();
+        this.transactionsMemoryPool = globalModule.getTransactionsMemoryPool();
+        this.otherMemoryPool = globalModule.getOtherMemoryPool();
         this.databaseLayout = globalModule.getNeo4jLayout().databaseLayout( namedDatabaseId.name() );
         this.databaseLogService = new DatabaseLogService( new DatabaseNameLogContext( namedDatabaseId ), globalModule.getLogService() );
         this.scheduler = globalModule.getJobScheduler();
         this.globalDependencies = globalDependencies;
         this.tokenHolders = editionComponents.getTokenHolders();
-        this.tokenNameLookup = new NonTransactionalTokenNameLookup( tokenHolders );
         this.locks = editionComponents.getLocks();
         this.statementLocksFactory = editionComponents.getStatementLocksFactory();
         this.transactionEventListeners = globalModule.getTransactionEventListeners();
@@ -138,8 +139,7 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
         this.fs = globalModule.getFileSystem();
         this.transactionStats = editionComponents.getTransactionMonitor();
         this.eventListeners = globalModule.getDatabaseEventListeners();
-        this.databaseHealthFactory = () -> globalModule.getGlobalHealthService()
-                .createDatabaseHealth( new DatabasePanicEventGenerator( eventListeners, namedDatabaseId.name() ),
+        this.databaseHealthFactory = () -> new DatabaseHealth( new DatabasePanicEventGenerator( eventListeners, namedDatabaseId ),
                         databaseLogService.getInternalLog( DatabaseHealth.class ) );
         this.commitProcessFactory = editionComponents.getCommitProcessFactory();
         this.pageCache = globalModule.getPageCache();
@@ -149,7 +149,7 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
         this.ioLimiter = editionComponents.getIoLimiter();
         this.clock = globalModule.getGlobalClock();
         this.storeCopyCheckPointMutex = new StoreCopyCheckPointMutex();
-        this.databaseInfo = globalModule.getDatabaseInfo();
+        this.dbmsInfo = globalModule.getDbmsInfo();
         this.collectionsFactorySupplier = globalModule.getCollectionsFactorySupplier();
         this.extensionFactories = globalModule.getExtensionFactories();
         this.watcherServiceFactory = editionComponents.getWatcherServiceFactory();
@@ -202,12 +202,6 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     public JobScheduler getScheduler()
     {
         return scheduler;
-    }
-
-    @Override
-    public TokenNameLookup getTokenNameLookup()
-    {
-        return tokenNameLookup;
     }
 
     @Override
@@ -325,9 +319,9 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     }
 
     @Override
-    public DatabaseInfo getDatabaseInfo()
+    public DbmsInfo getDbmsInfo()
     {
-        return databaseInfo;
+        return dbmsInfo;
     }
 
     @Override
@@ -394,6 +388,18 @@ public class ModularDatabaseCreationContext implements DatabaseCreationContext
     public DatabaseStartupController getStartupController()
     {
         return startupController;
+    }
+
+    @Override
+    public GlobalMemoryGroupTracker getTransactionsMemoryPool()
+    {
+        return transactionsMemoryPool;
+    }
+
+    @Override
+    public GlobalMemoryGroupTracker getOtherMemoryPool()
+    {
+        return otherMemoryPool;
     }
 
     private DatabaseAvailabilityGuard databaseAvailabilityGuardFactory( NamedDatabaseId namedDatabaseId, GlobalModule globalModule, long databaseTimeoutMillis )

@@ -49,12 +49,12 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.IsEqual.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_schema_provider;
 import static org.neo4j.graphdb.Label.label;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @RunWith( Parameterized.class )
 public class UniqueIndexRecoveryTest
@@ -128,9 +128,7 @@ public class UniqueIndexRecoveryTest
         // it should just not blow up!
         try ( Transaction tx = db.beginTx() )
         {
-            assertThat(
-                    tx.findNode( LABEL, PROPERTY_KEY, PROPERTY_VALUE ),
-                    equalTo( unLabeledNode ) );
+            assertThat( tx.findNode( LABEL, PROPERTY_KEY, PROPERTY_VALUE ) ).isEqualTo( unLabeledNode );
             tx.commit();
         }
     }
@@ -239,6 +237,6 @@ public class UniqueIndexRecoveryTest
 
     private void flushAll() throws IOException
     {
-        db.getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class ).flushAndForce( IOLimiter.UNLIMITED );
+        db.getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class ).flushAndForce( IOLimiter.UNLIMITED, NULL );
     }
 }

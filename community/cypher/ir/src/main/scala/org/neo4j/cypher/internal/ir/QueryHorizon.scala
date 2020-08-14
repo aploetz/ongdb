@@ -19,9 +19,11 @@
  */
 package org.neo4j.cypher.internal.ir
 
-import org.neo4j.cypher.internal.ir.helpers.ExpressionConverters._
-import org.neo4j.cypher.internal.v4_0.ast.AliasedReturnItem
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, StringLiteral, Variable}
+import org.neo4j.cypher.internal.ast.AliasedReturnItem
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.StringLiteral
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.helpers.ExpressionConverters.PredicateConverter
 import org.neo4j.exceptions.InternalException
 
 trait QueryHorizon {
@@ -64,7 +66,7 @@ case class LoadCSVProjection(variable: String, url: Expression, format: CSVForma
   override def preferredStrictness(sorted: Boolean): Option[StrictnessMode] = None
 }
 
-case class CallSubqueryHorizon(callSubquery: PlannerQueryPart) extends QueryHorizon {
+case class CallSubqueryHorizon(callSubquery: PlannerQueryPart, correlated: Boolean) extends QueryHorizon {
   override def exposedSymbols(coveredIds: Set[String]): Set[String] = coveredIds ++ callSubquery.returns
 
   override def dependingExpressions: Seq[Expression] = Seq.empty

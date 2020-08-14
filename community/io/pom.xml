@@ -16,7 +16,11 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-io</artifactId>
+=======
+    <artifactId>neo4j-io</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - IO</name>
@@ -60,6 +64,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-native</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
@@ -79,13 +88,14 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
         </dependency>
+<<<<<<< HEAD
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
@@ -96,34 +106,7 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+=======
+>>>>>>> neo4j/4.1
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <!--
-          Run mutation tests like this:
-          mvn org.pitest:pitest-maven:mutationCoverage
-
-          NOTE: This takes about 9 to 10 minutes to run.
-        -->
-                <groupId>org.pitest</groupId>
-                <artifactId>pitest-maven</artifactId>
-                <version>1.4.3</version>
-                <configuration>
-                    <targetTests>
-                        <param>org.neo4j.io.pagecache.*</param>
-                    </targetTests>
-                    <targetClasses>
-                        <param>org.neo4j.io.pagecache.impl.*</param>
-                    </targetClasses>
-                    <threads>8</threads>
-                    <jvmArgs>
-                        <value>-ea</value>
-                    </jvmArgs>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-
 </project>

@@ -24,6 +24,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.io.PrintStream;
 
 import static java.lang.String.format;
+import static org.neo4j.index.internal.gbptree.TreeNode.NO_OFFLOAD_ID;
 
 public class PrintingGBPTreeVisitor<KEY,VALUE> extends GBPTreeVisitor.Adaptor<KEY,VALUE>
 {
@@ -33,26 +34,22 @@ public class PrintingGBPTreeVisitor<KEY,VALUE> extends GBPTreeVisitor.Adaptor<KE
     private final boolean printState;
     private final boolean printHeader;
     private final boolean printFreelist;
+    private final boolean printOffload;
 
     /**
      * Prints a {@link GBPTree} in human readable form, very useful for debugging.
      * Will print sub-tree from that point. Leaves cursor at same page as when called. No guarantees on offset.
-     *
-     * @param out target to print tree at.
-     * @param printPosition whether or not to include positional (slot number) information.
-     * @param printState whether or not to also print state pages
-     * @param printHeader whether or not to also print header (type, generation, keyCount) of every node
-     * @param printFreelist whether or not to also print freelist
+     * @param printConfig {@link PrintConfig} containing configurations for this printing.
      */
-    public PrintingGBPTreeVisitor( PrintStream out, boolean printValues, boolean printPosition, boolean printState, boolean printHeader, boolean printFreelist )
+    public PrintingGBPTreeVisitor( PrintConfig printConfig )
     {
-
-        this.out = out;
-        this.printValues = printValues;
-        this.printPosition = printPosition;
-        this.printState = printState;
-        this.printHeader = printHeader;
-        this.printFreelist = printFreelist;
+        this.out = printConfig.getPrintStream();
+        this.printValues = printConfig.getPrintValues();
+        this.printPosition = printConfig.getPrintPosition();
+        this.printState = printConfig.getPrintState();
+        this.printHeader = printConfig.getPrintHeader();
+        this.printFreelist = printConfig.getPrintFreelist();
+        this.printOffload = printConfig.getPrintOffload();
     }
 
     @Override
@@ -96,9 +93,10 @@ public class PrintingGBPTreeVisitor<KEY,VALUE> extends GBPTreeVisitor.Adaptor<KE
     }
 
     @Override
-    public void key( KEY key, boolean isLeaf )
+    public void key( KEY key, boolean isLeaf, long offloadId )
     {
-        out.print( isLeaf ? key : "[" + key + "]" );
+        boolean doPrintOffload = printOffload && offloadId != NO_OFFLOAD_ID;
+        out.print( doPrintOffload ? "__" + offloadId + "__" + key : key );
     }
 
     @Override

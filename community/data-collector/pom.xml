@@ -12,10 +12,17 @@
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
         <licensing.prepend.text>licensing/notice-gpl-prefix.txt</licensing.prepend.text>
         <moduleName>org.neo4j.data.collector</moduleName>
+        <test.runner.jvm.settings.additional>
+            -javaagent:${settings.localRepository}/com/github/jbellis/jamm/${jamm.version}/jamm-${jamm.version}.jar
+        </test.runner.jvm.settings.additional>
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-data-collector</artifactId>
+=======
+    <artifactId>neo4j-data-collector</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Data Collector</name>
@@ -75,6 +82,7 @@
 
         <!-- Test are located with other IT tests to solve problems with depending of TestGraphDatabaseFactory et.c. -->
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-parser-4.0</artifactId>
             <version>${project.version}</version>
@@ -82,6 +90,15 @@
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-rewriting-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-parser</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-rewriting</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -95,6 +112,17 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.jbellis</groupId>
+            <artifactId>jamm</artifactId>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>

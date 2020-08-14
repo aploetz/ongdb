@@ -22,7 +22,7 @@ package org.neo4j.cypher.internal.profiling;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id;
+import org.neo4j.cypher.internal.util.attribution.Id;
 import org.neo4j.cypher.result.OperatorProfile;
 import org.neo4j.cypher.result.QueryProfile;
 
@@ -65,6 +65,12 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         }
     }
 
+    @Override
+    public long maxAllocatedMemory()
+    {
+        return OperatorProfile.NO_DATA;
+    }
+
     public long timeOf( Id operatorId )
     {
         return operatorProfile( operatorId.x() ).time();
@@ -86,6 +92,7 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         return executeOperator( operatorId, true );
     }
 
+    @Override
     public OperatorProfileEvent executeOperator( Id operatorId, boolean trackTime )
     {
         ProfilingTracerData operatorData = this.data.get( operatorId.x() );
@@ -102,6 +109,12 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         {
             return new ExecutionEvent( statisticProvider, operatorData );
         }
+    }
+
+    @Override
+    public String toString()
+    {
+        return String.format( "ProfilingTracer { %s }", data );
     }
 
     private static class ExecutionEvent extends OperatorProfileEvent
@@ -122,7 +135,7 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         {
             long pageCacheHits = statisticProvider.getPageCacheHits();
             long pageCacheFaults = statisticProvider.getPageCacheMisses();
-            data.update( OperatorProfile.NO_DATA, hitCount, rowCount, pageCacheHits, pageCacheFaults );
+            data.update( OperatorProfile.NO_DATA, hitCount, rowCount, pageCacheHits, pageCacheFaults, OperatorProfile.NO_DATA );
         }
 
         @Override
@@ -132,7 +145,7 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         }
 
         @Override
-        public void dbHits( int hits )
+        public void dbHits( long hits )
         {
             hitCount += hits;
         }
@@ -153,7 +166,7 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
         }
 
         @Override
-        public void rows( int n )
+        public void rows( long n )
         {
             rowCount += n;
         }
@@ -177,7 +190,7 @@ public class ProfilingTracer implements QueryProfiler, QueryProfile
             long pageCacheHits = statisticProvider.getPageCacheHits();
             long pageCacheFaults = statisticProvider.getPageCacheMisses();
             long executionTime = clock.nanoTime() - start;
-            data.update( executionTime, hitCount, rowCount, pageCacheHits, pageCacheFaults );
+            data.update( executionTime, hitCount, rowCount, pageCacheHits, pageCacheFaults, OperatorProfile.NO_DATA );
         }
     }
 }

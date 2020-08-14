@@ -23,8 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.index.internal.gbptree.TreeNode.Type.INTERNAL;
@@ -57,7 +56,7 @@ class InternalTreeLogicDynamicSizeTest extends InternalTreeLogicTestBase<RawByte
     }
 
     @Test
-    void shouldFailToInsertTooLargeKeys() throws IOException
+    void shouldFailToInsertTooLargeKeys()
     {
         RawBytes key = layout.newKey();
         RawBytes value = layout.newValue();
@@ -68,7 +67,7 @@ class InternalTreeLogicDynamicSizeTest extends InternalTreeLogicTestBase<RawByte
     }
 
     @Test
-    void shouldFailToInsertTooLargeKeyAndValueLargeKey() throws IOException
+    void shouldFailToInsertTooLargeKeyAndValueLargeKey()
     {
         RawBytes key = layout.newKey();
         RawBytes value = layout.newValue();
@@ -79,7 +78,7 @@ class InternalTreeLogicDynamicSizeTest extends InternalTreeLogicTestBase<RawByte
     }
 
     @Test
-    void shouldFailToInsertTooLargeKeyAndValueLargeValue() throws IOException
+    void shouldFailToInsertTooLargeKeyAndValueLargeValue()
     {
         RawBytes key = layout.newKey();
         RawBytes value = layout.newValue();
@@ -89,11 +88,11 @@ class InternalTreeLogicDynamicSizeTest extends InternalTreeLogicTestBase<RawByte
         shouldFailToInsertTooLargeKeyAndValue( key, value );
     }
 
-    private void shouldFailToInsertTooLargeKeyAndValue( RawBytes key, RawBytes value ) throws IOException
+    private void shouldFailToInsertTooLargeKeyAndValue( RawBytes key, RawBytes value )
     {
         initialize();
         var e = assertThrows( IllegalArgumentException.class, () -> insert( key, value ) );
-        assertThat( e.getMessage(), containsString( "Index key-value size it to large. Please see index documentation for limitations." ) );
+        assertThat( e.getMessage() ).contains( "Index key-value size it to large. Please see index documentation for limitations." );
     }
 
     @Test
@@ -112,6 +111,6 @@ class InternalTreeLogicDynamicSizeTest extends InternalTreeLogicTestBase<RawByte
         RawBytes rawBytes = keyAt( root.id(), 0, INTERNAL );
 
         // then
-        assertEquals( Long.BYTES, rawBytes.bytes.length, "expected no tail on internal key but was " + rawBytes.toString() );
+        assertEquals( Long.BYTES, rawBytes.bytes.length, "expected no tail on internal key but was " + rawBytes );
     }
 }

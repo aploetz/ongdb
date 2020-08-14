@@ -23,23 +23,53 @@ import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 
-import org.apache.commons.math3.stat.regression.{OLSMultipleLinearRegression, SimpleRegression}
+import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression
+import org.apache.commons.math3.stat.regression.SimpleRegression
 import org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.expressions.PropertyKeyToken
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.frontend.phases.devNullLogger
 import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.logical.plans.{DoNotGetValue, IndexOrderNone, IndexedProperty, SingleQueryExpression}
+=======
+import org.neo4j.cypher.internal.logical.plans.DoNotGetValue
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.IndexedProperty
+import org.neo4j.cypher.internal.logical.plans.SingleQueryExpression
+import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
+import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext
+>>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.ResourceManager
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.IndexSearchMonitor
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Literal, Property, Variable}
+import org.neo4j.cypher.internal.runtime.interpreted.TransactionalContextWrapper
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Property
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
 import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Equals
 import org.neo4j.cypher.internal.runtime.interpreted.commands.values.TokenType.PropertyKey
-import org.neo4j.cypher.internal.runtime.interpreted.pipes._
-import org.neo4j.cypher.internal.runtime.interpreted.{QueryStateHelper, TransactionBoundQueryContext, TransactionalContextWrapper}
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AllNodesScanPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.EagerPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExpandAllPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.FilterPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.IndexSeek
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.LazyLabel
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NodeByIdSeekPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NodeByLabelScanPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NodeHashJoinPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NodeIndexScanPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NodeIndexSeekPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.Pipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.RelationshipTypes
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.SingleSeekArg
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.UndirectedRelationshipByIdSeekPipe
 import org.neo4j.cypher.internal.spi.TransactionBoundPlanContext
-import org.neo4j.cypher.internal.v4_0.expressions.{LabelToken, PropertyKeyToken, SemanticDirection}
-import org.neo4j.cypher.internal.v4_0.frontend.phases.devNullLogger
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.{LabelId, PropertyKeyId}
-import org.neo4j.graphdb._
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.RelationshipType
 import org.neo4j.internal.kernel.api.security.LoginContext
 import org.neo4j.kernel.GraphDatabaseQueryService
 import org.neo4j.kernel.api.KernelTransaction.Type
@@ -293,7 +323,7 @@ class ActualCostCalculationTest extends CypherFunSuite {
     }
   }
 
-  private def labelScan(variable: String, label: String) = NodeByLabelScanPipe(variable, LazyLabel(label))()
+  private def labelScan(variable: String, label: String) = NodeByLabelScanPipe(variable, LazyLabel(label), IndexOrderNone)()
 
   private def hashJoin(l: Pipe, r: Pipe) = NodeHashJoinPipe(Set("x"), l, r)()
 
@@ -310,7 +340,7 @@ class ActualCostCalculationTest extends CypherFunSuite {
   private def indexSeek(graph: GraphDatabaseQueryService) = {
     graph.withTx { tx =>
       val transactionalContext = TransactionalContextWrapper(transactionContext(graph, tx))
-      val ctx = TransactionBoundPlanContext(transactionalContext, devNullLogger)
+      val ctx = TransactionBoundPlanContext(transactionalContext, devNullLogger, null)
       val literal = Literal(42)
 
       val labelId = ctx.getOptLabelId(LABEL.name()).get
@@ -327,7 +357,7 @@ class ActualCostCalculationTest extends CypherFunSuite {
   private def indexScan(graph: GraphDatabaseQueryService): NodeIndexScanPipe = {
     graph.withTx { tx =>
       val transactionalContext = TransactionalContextWrapper(transactionContext(graph, tx))
-      val ctx = TransactionBoundPlanContext(transactionalContext, devNullLogger)
+      val ctx = TransactionBoundPlanContext(transactionalContext, devNullLogger, null)
 
       val labelId = ctx.getOptLabelId(LABEL.name()).get
       val propKeyId = ctx.getOptPropertyKeyId(PROPERTY).get
@@ -352,7 +382,7 @@ class ActualCostCalculationTest extends CypherFunSuite {
     val gds: GraphDatabaseFacade = graph.asInstanceOf[GraphDatabaseCypherService].getGraphDatabaseService
 
     def withTx[T](f: InternalTransaction => T): T = {
-      val tx = graph.beginTransaction(Type.explicit, LoginContext.AUTH_DISABLED)
+      val tx = graph.beginTransaction(Type.EXPLICIT, LoginContext.AUTH_DISABLED)
       try {
         val result = f(tx)
         tx.commit()

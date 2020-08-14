@@ -19,10 +19,15 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsNoValue
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExpandIntoPipe.getRowNode
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExpandIntoPipe.relationshipIterator
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.graphdb.Direction
+import org.neo4j.internal.kernel.api.helpers.CachingExpandInto
 import org.neo4j.values.storable.Values
 import org.neo4j.values.virtual.NodeValue
 
@@ -31,6 +36,7 @@ import scala.collection.mutable.ListBuffer
 case class OptionalExpandIntoPipe(source: Pipe, fromName: String, relName: String, toName: String,
                                   dir: SemanticDirection, types: RelationshipTypes, predicate: Option[Expression])
                                  (val id: Id = Id.INVALID_ID)
+<<<<<<< HEAD
   extends PipeWithSource(source) with CachingExpandInto {
   private final val CACHE_SIZE = 100000
 
@@ -39,7 +45,19 @@ case class OptionalExpandIntoPipe(source: Pipe, fromName: String, relName: Strin
   protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
     //cache of known connected nodes
     val relCache = new RelationshipsCache(CACHE_SIZE, state.memoryTracker)
+=======
+  extends PipeWithSource(source)  {
+  private val kernelDirection = dir match {
+    case SemanticDirection.OUTGOING => Direction.OUTGOING
+    case SemanticDirection.INCOMING => Direction.INCOMING
+    case SemanticDirection.BOTH => Direction.BOTH
+  }
+>>>>>>> neo4j/4.1
 
+  protected def internalCreateResults(input: Iterator[CypherRow],
+                                      state: QueryState): Iterator[CypherRow] = {
+    val query = state.query
+    val expandInto = new CachingExpandInto(query.transactionalContext.dataRead, kernelDirection, state.memoryTracker.memoryTrackerForOperator(id.x))
     input.flatMap {
       row =>
         val fromNode = getRowNode(row, fromName)
@@ -52,23 +70,31 @@ case class OptionalExpandIntoPipe(source: Pipe, fromName: String, relName: Strin
                 row.set(relName, Values.NO_VALUE)
                 Iterator.single(row)
               case n: NodeValue =>
-                val relationships = relCache.get(fromNode, n, dir)
-                  .getOrElse(findRelationships(state, fromNode, n, relCache, dir, types.types(state.query)))
-
-                val it = relationships.toIterator
-                val filteredRows = ListBuffer.empty[ExecutionContext]
-                while (it.hasNext) {
-                  val candidateRow = executionContextFactory.copyWith(row, relName, it.next())
-                  if (predicate.forall(p => p(candidateRow, state) eq Values.TRUE)){
-                    filteredRows.append(candidateRow)
+                val traversalCursor = query.traversalCursor()
+                val nodeCursor = query.nodeCursor()
+                try {
+                  val selectionCursor = expandInto.connectingRelationships(nodeCursor,
+                                                                           traversalCursor,
+                                                                           fromNode.id(),
+                                                                           types.types(query),
+                                                                           n.id())
+                  query.resources.trace(selectionCursor)
+                  val relationships = relationshipIterator(selectionCursor, query)
+                  val filteredRows = ListBuffer.empty[CypherRow]
+                  while (relationships.hasNext) {
+                    val candidateRow = executionContextFactory.copyWith(row, relName, relationships.next())
+                    if (predicate.forall(p => p(candidateRow, state) eq Values.TRUE)) {
+                      filteredRows.append(candidateRow)
+                    }
                   }
+                  if (filteredRows.isEmpty) {
+                    row.set(relName, Values.NO_VALUE)
+                    Iterator.single(row)
+                  }
+                  else filteredRows
+                } finally {
+                  nodeCursor.close()
                 }
-
-                if (filteredRows.isEmpty) {
-                  row.set(relName, Values.NO_VALUE)
-                  Iterator.single(row)
-                }
-                else filteredRows
             }
 
           case IsNoValue() =>

@@ -31,6 +31,7 @@ import org.neo4j.exceptions.ParameterWrongTypeException;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
+import org.neo4j.util.CalledFromGeneratedCode;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.SequenceValue;
 import org.neo4j.values.storable.ArrayValue;
@@ -70,7 +71,7 @@ import static org.neo4j.values.virtual.VirtualValues.EMPTY_LIST;
 /**
  * This class contains static helper methods for the set of Cypher functions
  */
-@SuppressWarnings( {"unused", "ReferenceEquality"} )
+@SuppressWarnings( {"ReferenceEquality"} )
 public final class CypherFunctions
 {
     private static final BigDecimal MAX_LONG = BigDecimal.valueOf( Long.MAX_VALUE );
@@ -323,6 +324,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static ListValue range( AnyValue startValue, AnyValue endValue )
     {
         return VirtualValues.range( asLong( startValue ), asLong( endValue ), 1L );
@@ -339,6 +341,7 @@ public final class CypherFunctions
         return VirtualValues.range( asLong( startValue ), asLong( endValue ), step );
     }
 
+    @CalledFromGeneratedCode
     public static LongValue signum( AnyValue in )
     {
         assert in != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -429,6 +432,7 @@ public final class CypherFunctions
         return access.nodeById( cursor.targetNodeReference() );
     }
 
+    @CalledFromGeneratedCode
     public static NodeValue otherNode( AnyValue anyValue, DbAccess access, VirtualNodeValue node, RelationshipScanCursor cursor )
     {
         assert anyValue != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -463,6 +467,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static BooleanValue propertyExists( String key,
                                                AnyValue container,
                                                DbAccess dbAccess,
@@ -492,6 +497,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static AnyValue propertyGet( String key,
                                         AnyValue container,
                                         DbAccess dbAccess,
@@ -534,7 +540,7 @@ public final class CypherFunctions
         }
         else
         {
-            throw new CypherTypeException( format( "Type mismatch: expected a map but was %s", container.toString() ), null );
+            throw new CypherTypeException( format( "Type mismatch: expected a map but was %s", container ), null );
         }
     }
 
@@ -579,6 +585,10 @@ public final class CypherFunctions
         }
     }
 
+<<<<<<< HEAD
+=======
+    @CalledFromGeneratedCode
+>>>>>>> neo4j/4.1
     public static boolean containerIndexExists( AnyValue container,
                                                 AnyValue index,
                                                 DbAccess dbAccess,
@@ -589,17 +599,30 @@ public final class CypherFunctions
         assert container != NO_VALUE && index != NO_VALUE : "NO_VALUE checks need to happen outside this call";
         if ( container instanceof VirtualNodeValue )
         {
+<<<<<<< HEAD
             return dbAccess.nodeHasProperty( ((VirtualNodeValue) container).id(),  dbAccess.propertyKey( asString( index ) ),
+=======
+            return dbAccess.nodeHasProperty( ((VirtualNodeValue) container).id(), dbAccess.propertyKey( asString( index ) ),
+>>>>>>> neo4j/4.1
                                              nodeCursor, propertyCursor );
         }
         else if ( container instanceof VirtualRelationshipValue )
         {
+<<<<<<< HEAD
             return dbAccess.relationshipHasProperty( ((VirtualRelationshipValue) container).id(),  dbAccess.propertyKey( asString( index ) ),
                                              relationshipScanCursor, propertyCursor );
         }
         if ( container instanceof MapValue )
         {
             return ((MapValue) container).containsKey(  asString( index ) );
+=======
+            return dbAccess.relationshipHasProperty( ((VirtualRelationshipValue) container).id(), dbAccess.propertyKey( asString( index ) ),
+                                                     relationshipScanCursor, propertyCursor );
+        }
+        if ( container instanceof MapValue )
+        {
+            return ((MapValue) container).containsKey( asString( index ) );
+>>>>>>> neo4j/4.1
         }
         else
         {
@@ -610,6 +633,10 @@ public final class CypherFunctions
         }
     }
 
+<<<<<<< HEAD
+=======
+    @CalledFromGeneratedCode
+>>>>>>> neo4j/4.1
     public static AnyValue head( AnyValue container )
     {
         assert container != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -629,6 +656,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static ListValue tail( AnyValue container )
     {
         assert container != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -646,6 +674,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static AnyValue last( AnyValue container )
     {
         assert container != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -890,6 +919,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static boolean hasLabel( AnyValue entity, int labelToken, DbAccess access, NodeCursor nodeCursor )
     {
         assert entity != NO_VALUE : "NO_VALUE checks need to happen outside this call";
@@ -1083,7 +1113,7 @@ public final class CypherFunctions
         }
         else
         {
-            throw new ParameterWrongTypeException( "Expected a Boolean or String, got: " + in.toString(), null );
+            throw new ParameterWrongTypeException( "Expected a Boolean or String, got: " + in, null );
         }
     }
 
@@ -1111,7 +1141,7 @@ public final class CypherFunctions
         }
         else
         {
-            throw new ParameterWrongTypeException( "Expected a String or Number, got: " + in.toString(), null );
+            throw new ParameterWrongTypeException( "Expected a String or Number, got: " + in, null );
         }
     }
 
@@ -1132,7 +1162,7 @@ public final class CypherFunctions
         }
         else
         {
-            throw new ParameterWrongTypeException( "Expected a String or Number, got: " + in.toString(), null );
+            throw new ParameterWrongTypeException( "Expected a String or Number, got: " + in, null );
         }
     }
 
@@ -1158,7 +1188,7 @@ public final class CypherFunctions
         else
         {
             throw new ParameterWrongTypeException(
-                    "Expected a String, Number, Boolean, Temporal or Duration, got: " + in.toString(), null );
+                    "Expected a String, Number, Boolean, Temporal or Duration, got: " + in, null );
         }
     }
 
@@ -1222,7 +1252,6 @@ public final class CypherFunctions
 
     public static ListValue asList( AnyValue collection )
     {
-        ListValue list;
         if ( collection == NO_VALUE )
         {
             return VirtualValues.EMPTY_LIST;
@@ -1241,6 +1270,7 @@ public final class CypherFunctions
         }
     }
 
+    @CalledFromGeneratedCode
     public static TextValue asTextValue( AnyValue value )
     {
         if ( !(value instanceof TextValue) )
@@ -1377,11 +1407,10 @@ public final class CypherFunctions
 
     private static AnyValue mapAccess( MapValue container, AnyValue index )
     {
-
         return container.get( asString( index ) );
     }
 
-    static String asString( AnyValue value )
+    private static String asString( AnyValue value )
     {
         return asTextValue( value ).stringValue();
     }
@@ -1416,7 +1445,7 @@ public final class CypherFunctions
         }
         else
         {
-            throw new CypherTypeException( "Expected a numeric value but got: " + value.toString(), null );
+            throw new CypherTypeException( "Expected a numeric value but got: " + value, null );
         }
     }
 

@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Stream;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -165,10 +166,9 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
 
             // Write new signature
             final FileObject file = processingEnv.getFiler().createResource( CLASS_OUTPUT, "", GENERATED_SIGNATURE_DESTINATION );
-            try ( Writer writer = file.openWriter();
-                    BufferedWriter out = new BufferedWriter( writer ) )
+            try ( BufferedWriter writer = new BufferedWriter( file.openWriter() ) )
             {
-                out.write( newSignature );
+                writer.write( newSignature );
             }
 
             if ( !testExecution )
@@ -196,8 +196,15 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
                 String oldSignature = Files.readString( oldSignaturePath, UTF_8 );
                 if ( !oldSignature.equals( newSignature ) )
                 {
-                    error( format( "Public API signature mismatch. The generated signature, %s, does not match the old signature in %s.%n" +
-                            "Specify `-Doverwrite` to maven to replace it.", path, oldSignaturePath ) );
+                    oldSignature = oldSignature.replace( "\r\n", "\n" );
+                    newSignature = newSignature.replace( "\r\n", "\n" );
+                    if ( !oldSignature.equals( newSignature ) )
+                    {
+                        StringBuilder diff = diff( oldSignaturePath );
+                        error( format( "Public API signature mismatch. The generated signature, %s, does not match the old signature in %s.%n" +
+                                "Specify `-Doverwrite` to maven to replace it. Changed public elements, compared to the committed PublicApi.txt:%n%s%n",
+                                path, oldSignaturePath, diff ) );
+                    }
                 }
                 else
                 {
@@ -207,12 +214,36 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
         }
     }
 
+    private StringBuilder diff( Path oldSignaturePath ) throws IOException
+    {
+        Set<String> oldLines = new HashSet<>();
+        try ( Stream<String> lines = Files.lines( oldSignaturePath, UTF_8 ) )
+        {
+            lines.forEach( oldLines::add );
+        }
+        StringBuilder diff = new StringBuilder();
+        diffSide( diff, oldLines, publicElements, '-' );
+        diffSide( diff, publicElements, oldLines, '+' );
+        return diff;
+    }
+
+    private void diffSide( StringBuilder diff, Set<String> left, Set<String> right, char diffSign )
+    {
+        for ( String oldPublicElement : left )
+        {
+            if ( !right.contains( oldPublicElement ) )
+            {
+                diff.append( diffSign ).append( oldPublicElement ).append( format( "%n" ) );
+            }
+        }
+    }
+
     private static Path getAndAssertParent( Path path, String name )
     {
         Path parent = path.getParent();
         if ( !parent.getFileName().toString().equals( name ) )
         {
-            throw new IllegalStateException( path.toAbsolutePath().toString() + " parent is not " + name );
+            throw new IllegalStateException( path.toAbsolutePath() + " parent is not " + name );
         }
         return parent;
     }
@@ -261,17 +292,17 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
                 case ENUM:
                 case INTERFACE:
                 case CLASS:
-                    pushScope( "." + element.getSimpleName().toString() );
+                    pushScope( "." + element.getSimpleName() );
                     processType( (TypeElement) element );
                     break;
                 case ENUM_CONSTANT:
                 case FIELD:
-                    pushScope( "#" + element.toString() );
+                    pushScope( "#" + element );
                     processField( (VariableElement) element );
                     break;
                 case CONSTRUCTOR:
                 case METHOD:
-                    pushScope( "::" + element.toString() );
+                    pushScope( "::" + element );
                     processMethod( (ExecutableElement) element );
                     break;
                 default:
@@ -390,7 +421,7 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
         {
             return typeParameter.toString();
         }
-        return typeParameter.toString() + " extends " + String.join( " & ", bounds );
+        return typeParameter + " extends " + String.join( " & ", bounds );
     }
 
     private void addFieldName( StringBuilder sb, VariableElement variableElement )
@@ -492,7 +523,7 @@ public class PublicApiAnnotationProcessor extends AbstractProcessor
         if ( kind == TypeKind.TYPEVAR )
         {
             TypeVariable typeVariable = (TypeVariable) type;
-            return "#" + typeVariable.toString();
+            return "#" + typeVariable;
         }
         if ( kind == TypeKind.DECLARED )
         {

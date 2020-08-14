@@ -21,10 +21,14 @@ package org.neo4j.internal.recordstorage;
 
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
-import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
 
-import org.neo4j.internal.helpers.collection.Iterables;
+import java.util.Collection;
+
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.util.LocalIntCounter;
+
+import static org.neo4j.collection.trackable.HeapTrackingCollections.newLongObjectMap;
 
 /**
  * Manages changes to records in a transaction. Before/after state is supported as well as
@@ -36,13 +40,14 @@ import org.neo4j.util.LocalIntCounter;
  */
 public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADDITIONAL>
 {
-    private MutableLongObjectMap<RecordProxy<RECORD, ADDITIONAL>> recordChanges = new LongObjectHashMap<>();
+    private final MutableLongObjectMap<RecordProxy<RECORD, ADDITIONAL>> recordChanges;
     private final Loader<RECORD,ADDITIONAL> loader;
     private final MutableInt changeCounter;
 
-    public RecordChanges( Loader<RECORD,ADDITIONAL> loader, MutableInt globalCounter )
+    public RecordChanges( Loader<RECORD,ADDITIONAL> loader, MutableInt globalCounter, MemoryTracker memoryTracker )
     {
         this.loader = loader;
+        this.recordChanges = newLongObjectMap( memoryTracker );
         this.changeCounter = new LocalIntCounter( globalCounter );
     }
 
@@ -61,28 +66,22 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
     }
 
     @Override
-    public RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData )
+    public RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
         RecordProxy<RECORD, ADDITIONAL> result = recordChanges.get( key );
         if ( result == null )
         {
-            RECORD record = loader.load( key, additionalData );
-            result = new RecordChange<>( recordChanges, changeCounter, key, record, loader, false, additionalData );
+            RECORD record = loader.load( key, additionalData, cursorTracer );
+            result = new RecordChange<>( recordChanges, changeCounter, key, record, loader, false, additionalData, cursorTracer );
         }
         return result;
     }
 
     @Override
-    public void setTo( long key, RECORD newRecord, ADDITIONAL additionalData )
-    {
-        setRecord( key, newRecord, additionalData );
-    }
-
-    @Override
-    public RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData )
+    public RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
         RecordChange<RECORD, ADDITIONAL> recordChange =
-                new RecordChange<>( recordChanges, changeCounter, key, record, loader, false, additionalData );
+                new RecordChange<>( recordChanges, changeCounter, key, record, loader, false, additionalData, cursorTracer );
         recordChanges.put( key, recordChange );
         return recordChange;
     }
@@ -94,22 +93,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
     }
 
     @Override
-    public void close()
-    {
-        if ( recordChanges.size() <= 32 )
-        {
-            recordChanges.clear();
-        }
-        else
-        {
-            // Let's not allow the internal maps to grow too big over time.
-            recordChanges = new LongObjectHashMap<>();
-        }
-        changeCounter.setValue( 0 );
-    }
-
-    @Override
-    public RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData )
+    public RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
         if ( recordChanges.containsKey( key ) )
         {
@@ -118,15 +102,15 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
 
         RECORD record = loader.newUnused( key, additionalData );
         RecordChange<RECORD,ADDITIONAL> change =
-                new RecordChange<>( recordChanges, changeCounter, key, record, loader, true, additionalData );
+                new RecordChange<>( recordChanges, changeCounter, key, record, loader, true, additionalData, cursorTracer );
         recordChanges.put( key, change );
         return change;
     }
 
     @Override
-    public Iterable<RecordProxy<RECORD,ADDITIONAL>> changes()
+    public Collection<RecordProxy<RECORD,ADDITIONAL>> changes()
     {
-        return Iterables.filter( RecordProxy::isChanged, recordChanges.values() );
+        return recordChanges.values();
     }
 
     public static class RecordChange<RECORD,ADDITIONAL> implements RecordProxy<RECORD, ADDITIONAL>
@@ -136,6 +120,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         private final Loader<RECORD,ADDITIONAL> loader;
 
         private final ADDITIONAL additionalData;
+        private final PageCursorTracer cursorTracer;
         private final RECORD record;
         private final boolean created;
         private final long key;
@@ -144,7 +129,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         private boolean changed;
 
         public RecordChange( MutableLongObjectMap<RecordProxy<RECORD, ADDITIONAL>> allChanges, MutableInt changeCounter,
-                long key, RECORD record, Loader<RECORD,ADDITIONAL> loader, boolean created, ADDITIONAL additionalData )
+                long key, RECORD record, Loader<RECORD,ADDITIONAL> loader, boolean created, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
         {
             this.allChanges = allChanges;
             this.changeCounter = changeCounter;
@@ -153,6 +138,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
             this.loader = loader;
             this.created = created;
             this.additionalData = additionalData;
+            this.cursorTracer = cursorTracer;
         }
 
         @Override
@@ -176,7 +162,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         @Override
         public RECORD forChangingData()
         {
-            ensureHeavy();
+            ensureHeavy( cursorTracer );
             return prepareForChange();
         }
 
@@ -197,14 +183,14 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
             return this.record;
         }
 
-        private void ensureHeavy()
+        private void ensureHeavy( PageCursorTracer cursorTracer )
         {
             if ( !created )
             {
-                loader.ensureHeavy( record );
+                loader.ensureHeavy( record, cursorTracer );
                 if ( before != null )
                 {
-                    loader.ensureHeavy( before );
+                    loader.ensureHeavy( before, cursorTracer );
                 }
             }
         }
@@ -218,7 +204,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         @Override
         public RECORD forReadingData()
         {
-            ensureHeavy();
+            ensureHeavy( cursorTracer );
             return this.record;
         }
 
@@ -239,7 +225,11 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         {
             if ( before == null )
             {
+<<<<<<< HEAD
                 this.before = loader.clone( record );
+=======
+                this.before = loader.copy( record );
+>>>>>>> neo4j/4.1
             }
         }
 

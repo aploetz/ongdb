@@ -24,9 +24,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -34,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 
 import org.neo4j.common.EntityType;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.exceptions.KernelException;
@@ -51,23 +56,29 @@ import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.impl.api.DatabaseSchemaState;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.kernel.impl.transaction.state.DefaultIndexProviderMap;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.AssertableLogProvider;
-import org.neo4j.logging.AssertableLogProvider.LogMatcherBuilder;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobHandle;
+import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.test.DoubleLatch;
 import org.neo4j.test.OtherThreadExecutor;
@@ -76,23 +87,16 @@ import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.String.format;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.sameInstance;
-import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
@@ -101,10 +105,14 @@ import static org.neo4j.internal.helpers.collection.MapUtil.genericMap;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
 import static org.neo4j.internal.kernel.api.security.LoginContext.AUTH_DISABLED;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
-import static org.neo4j.kernel.api.KernelTransaction.Type.implicit;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
+import static org.neo4j.kernel.api.KernelTransaction.Type.IMPLICIT;
 import static org.neo4j.kernel.impl.api.index.IndexingService.NO_MONITOR;
 import static org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor.PROVIDER_DESCRIPTOR;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.ERROR;
+import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
+import static org.neo4j.logging.LogAssertions.assertThat;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 
 class IndexPopulationJobTest
@@ -119,11 +127,13 @@ class IndexPopulationJobTest
     private static final RelationshipType knows = RelationshipType.withName( "knows" );
 
     private Kernel kernel;
+    private TokenNameLookup tokens;
     private IndexStoreView indexStoreView;
     private DatabaseSchemaState stateHolder;
     private int labelId;
     private IndexStatisticsStore indexStatisticsStore;
     private DatabaseManagementService managementService;
+    private JobScheduler jobScheduler;
 
     @BeforeEach
     void before() throws Exception
@@ -131,11 +141,13 @@ class IndexPopulationJobTest
         managementService = new TestDatabaseManagementServiceBuilder().impermanent().build();
         db = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
         kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
+        tokens = db.getDependencyResolver().resolveDependency( TokenNameLookup.class );
         stateHolder = new DatabaseSchemaState( NullLogProvider.getInstance() );
         indexStoreView = indexStoreView();
         indexStatisticsStore = db.getDependencyResolver().resolveDependency( IndexStatisticsStore.class );
+        jobScheduler = db.getDependencyResolver().resolveDependency( JobScheduler.class );
 
-        try ( KernelTransaction tx = kernel.beginTransaction( implicit, AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( IMPLICIT, AUTH_DISABLED ) )
         {
             labelId = tx.tokenWrite().labelGetOrCreateForName( FIRST.name() );
             tx.tokenWrite().labelGetOrCreateForName( SECOND.name() );
@@ -155,7 +167,8 @@ class IndexPopulationJobTest
         // GIVEN
         String value = "Taylor";
         long nodeId = createNode( map( name, value ), FIRST );
-        IndexPopulator populator = spy( indexPopulator( false ) );
+        IndexPopulator actualPopulator = indexPopulator( false );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
         LabelSchemaDescriptor descriptor = SchemaDescriptor.forLabel( 0, 0 );
         IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.NODE, IndexPrototype.forSchema( descriptor ) );
 
@@ -165,24 +178,52 @@ class IndexPopulationJobTest
         // THEN
         IndexEntryUpdate<?> update = IndexEntryUpdate.add( nodeId, descriptor, Values.of( value ) );
 
-        verify( populator ).create();
-        verify( populator ).includeSample( update );
-        verify( populator, times( 2 ) ).add( any( Collection.class ) );
-        verify( populator ).sampleResult();
-        verify( populator ).close( true );
+        assertTrue( populator.created );
+        assertEquals( Collections.singletonList( update ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
     }
 
     @Test
-    void shouldPopulateIndexWithOneRelationship() throws Exception
+    void tracePageCacheAccessIndexWithOneNodePopulation() throws KernelException
+    {
+        var value = "value";
+        long nodeId = createNode( map( name, value ), FIRST );
+        IndexPopulator actualPopulator = indexPopulator( false );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
+        LabelSchemaDescriptor descriptor = SchemaDescriptor.forLabel( 0, 0 );
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.NODE, IndexPrototype.forSchema( descriptor ),
+                pageCacheTracer );
+
+        job.run();
+
+        IndexEntryUpdate<?> update = IndexEntryUpdate.add( nodeId, descriptor, Values.of( value ) );
+
+        assertTrue( populator.created );
+        assertEquals( Collections.singletonList( update ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
+
+        assertThat( pageCacheTracer.pins() ).isEqualTo( 19 );
+        assertThat( pageCacheTracer.unpins() ).isEqualTo( 19 );
+        assertThat( pageCacheTracer.hits() ).isEqualTo( 18 );
+        assertThat( pageCacheTracer.faults() ).isEqualTo( 1 );
+    }
+
+    @Test
+    void shouldPopulateIndexWithOneRelationship()
     {
         // GIVEN
         String value = "Taylor";
         long nodeId = createNode( map( name, value ), FIRST );
         long relationship = createRelationship( map( name, age ), likes, nodeId, nodeId );
         IndexPrototype descriptor = IndexPrototype.forSchema( SchemaDescriptor.forRelType( 0, 0 ) );
-        IndexPopulator populator = spy( indexPopulator( descriptor ) );
-        IndexPopulationJob job =
-                newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.RELATIONSHIP, descriptor );
+        IndexPopulator actualPopulator = indexPopulator( descriptor );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
+        IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.RELATIONSHIP, descriptor );
 
         // WHEN
         job.run();
@@ -190,11 +231,39 @@ class IndexPopulationJobTest
         // THEN
         IndexEntryUpdate<?> update = IndexEntryUpdate.add( relationship, descriptor, Values.of( age ) );
 
-        verify( populator ).create();
-        verify( populator ).includeSample( update );
-        verify( populator, times( 2 ) ).add( any( Collection.class ) );
-        verify( populator ).sampleResult();
-        verify( populator ).close( true );
+        assertTrue( populator.created );
+        assertEquals( Collections.singletonList( update ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
+    }
+
+    @Test
+    void tracePageCacheAccessIndexWithOneRelationship()
+    {
+        String value = "value";
+        long nodeId = createNode( map( name, value ), FIRST );
+        long relationship = createRelationship( map( name, age ), likes, nodeId, nodeId );
+        IndexPrototype descriptor = IndexPrototype.forSchema( SchemaDescriptor.forRelType( 0, 0 ) );
+        IndexPopulator actualPopulator = indexPopulator( descriptor );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.RELATIONSHIP, descriptor, pageCacheTracer );
+
+        job.run();
+
+        IndexEntryUpdate<?> update = IndexEntryUpdate.add( relationship, descriptor, Values.of( age ) );
+
+        assertTrue( populator.created );
+        assertEquals( Collections.singletonList( update ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
+
+        assertThat( pageCacheTracer.pins() ).isEqualTo( 17 );
+        assertThat( pageCacheTracer.unpins() ).isEqualTo( 17 );
+        assertThat( pageCacheTracer.hits() ).isEqualTo( 16 );
+        assertThat( pageCacheTracer.faults() ).isEqualTo( 1 );
     }
 
     @Test
@@ -204,7 +273,7 @@ class IndexPopulationJobTest
         String value = "Taylor";
         createNode( map( name, value ), FIRST );
         stateHolder.put( "key", "original_value" );
-        IndexPopulator populator = spy( indexPopulator( false ) );
+        IndexPopulator populator = indexPopulator( false );
         IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.NODE, indexPrototype( FIRST, name, false ) );
 
         // WHEN
@@ -224,7 +293,8 @@ class IndexPopulationJobTest
         createNode( map( name, value ), SECOND );
         createNode( map( age, 31 ), FIRST );
         long node4 = createNode( map( age, 35, name, value ), FIRST );
-        IndexPopulator populator = spy( indexPopulator( false ) );
+        IndexPopulator actualPopulator = indexPopulator( false );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
         LabelSchemaDescriptor descriptor = SchemaDescriptor.forLabel( 0, 0 );
         IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.NODE, IndexPrototype.forSchema( descriptor ) );
 
@@ -235,16 +305,15 @@ class IndexPopulationJobTest
         IndexEntryUpdate<?> update1 = add( node1, descriptor, Values.of( value ) );
         IndexEntryUpdate<?> update2 = add( node4, descriptor, Values.of( value ) );
 
-        verify( populator ).create();
-        verify( populator ).includeSample( update1 );
-        verify( populator ).includeSample( update2 );
-        verify( populator, times( 2 ) ).add( anyCollection() );
-        verify( populator ).sampleResult();
-        verify( populator ).close( true );
+        assertTrue( populator.created );
+        assertEquals( Arrays.asList( update1, update2 ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
     }
 
     @Test
-    void shouldPopulateRelatonshipIndexWithASmallDataset() throws Exception
+    void shouldPopulateRelatonshipIndexWithASmallDataset()
     {
         // GIVEN
         String value = "Philip J.Fry";
@@ -259,9 +328,9 @@ class IndexPopulationJobTest
         long rel4 = createRelationship( map( age, 35, name, value ), likes, node4, node4 );
 
         IndexPrototype descriptor = IndexPrototype.forSchema( SchemaDescriptor.forRelType( 0, 0 ) );
-        IndexPopulator populator = spy( indexPopulator( descriptor ) );
-        IndexPopulationJob job =
-                newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.RELATIONSHIP, descriptor );
+        IndexPopulator actualPopulator = indexPopulator( descriptor );
+        TrackingIndexPopulator populator = new TrackingIndexPopulator( actualPopulator );
+        IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.RELATIONSHIP, descriptor );
 
         // WHEN
         job.run();
@@ -270,12 +339,11 @@ class IndexPopulationJobTest
         IndexEntryUpdate<?> update1 = add( rel1, descriptor, Values.of( value ) );
         IndexEntryUpdate<?> update2 = add( rel4, descriptor, Values.of( value ) );
 
-        verify( populator ).create();
-        verify( populator ).includeSample( update1 );
-        verify( populator ).includeSample( update2 );
-        verify( populator, times( 2 ) ).add( anyCollection() );
-        verify( populator ).sampleResult();
-        verify( populator ).close( true );
+        assertTrue( populator.created );
+        assertEquals( Arrays.asList( update1, update2 ), populator.includedSamples );
+        assertEquals( 2, populator.adds.size() );
+        assertTrue( populator.resultSampled );
+        assertTrue( populator.closeCall );
     }
 
     @Test
@@ -292,8 +360,7 @@ class IndexPopulationJobTest
         @SuppressWarnings( "UnnecessaryLocalVariable" )
         long changeNode = node1;
         int propertyKeyId = getPropertyKeyForName( name );
-        NodeChangingWriter populator = new NodeChangingWriter( changeNode, propertyKeyId, value1, changedValue,
-                labelId );
+        NodeChangingWriter populator = new NodeChangingWriter( changeNode, propertyKeyId, value1, changedValue, labelId );
         IndexPopulationJob job = newIndexPopulationJob( populator, new FlippableIndexProxy(), EntityType.NODE, indexPrototype( FIRST, name, false ) );
         populator.setJob( job );
 
@@ -339,7 +406,7 @@ class IndexPopulationJobTest
     {
         // GIVEN
         IndexPopulator failingPopulator = mock( IndexPopulator.class );
-        doThrow( new RuntimeException( "BORK BORK" ) ).when( failingPopulator ).add( any( Collection.class ) );
+        doThrow( new RuntimeException( "BORK BORK" ) ).when( failingPopulator ).add( any( Collection.class ), any( PageCursorTracer.class ) );
 
         FlippableIndexProxy index = new FlippableIndexProxy();
 
@@ -350,11 +417,11 @@ class IndexPopulationJobTest
         job.run();
 
         // THEN
-        assertThat( index.getState(), equalTo( InternalIndexState.FAILED ) );
+        assertThat( index.getState() ).isEqualTo( InternalIndexState.FAILED );
     }
 
     @Test
-    void shouldBeAbleToCancelPopulationJob() throws Exception
+    void shouldBeAbleToStopPopulationJob() throws Exception
     {
         // GIVEN
         createNode( map( name, "Mattias" ), FIRST );
@@ -364,9 +431,9 @@ class IndexPopulationJobTest
         ControlledStoreScan storeScan = new ControlledStoreScan();
         when( storeView.visitNodes( any(int[].class), any( IntPredicate.class ),
                 ArgumentMatchers.any(),
-                ArgumentMatchers.<Visitor<NodeLabelUpdate,RuntimeException>>any(), anyBoolean() ) )
+                ArgumentMatchers.<Visitor<EntityTokenUpdate,RuntimeException>>any(), anyBoolean(), any(), any() ) )
                 .thenReturn(storeScan );
-        when( storeView.newPropertyAccessor() ).thenReturn( mock( NodePropertyAccessor.class ) );
+        when( storeView.newPropertyAccessor( any( PageCursorTracer.class ), any() ) ).thenReturn( mock( NodePropertyAccessor.class ) );
 
         final IndexPopulationJob job =
                 newIndexPopulationJob( populator, index, storeView, NullLogProvider.getInstance(), EntityType.NODE, indexPrototype( FIRST, name, false ) );
@@ -385,7 +452,7 @@ class IndexPopulationJobTest
                 } );
 
             storeScan.latch.waitForAllToStart();
-            job.cancel();
+            job.stop();
             job.awaitCompletion( 0, TimeUnit.SECONDS );
             storeScan.latch.waitForAllToFinish();
 
@@ -394,7 +461,7 @@ class IndexPopulationJobTest
         }
 
         // THEN
-        verify( populator ).close( false );
+        verify( populator ).close( false, PageCursorTracer.NULL );
         verify( index, never() ).flip( any(), any() );
         verify( jobHandle ).cancel();
     }
@@ -407,7 +474,7 @@ class IndexPopulationJobTest
         AssertableLogProvider logProvider = new AssertableLogProvider();
         FlippableIndexProxy index = mock( FlippableIndexProxy.class );
         when( index.getState() ).thenReturn( InternalIndexState.ONLINE );
-        IndexPopulator populator = spy( indexPopulator( false ) );
+        IndexPopulator populator = indexPopulator( false );
         try
         {
             IndexPopulationJob job = newIndexPopulationJob( populator, index, indexStoreView, logProvider,
@@ -417,13 +484,19 @@ class IndexPopulationJobTest
             job.run();
 
             // Then
+<<<<<<< HEAD
             LogMatcherBuilder match = inLog( IndexPopulationJob.class );
             logProvider.assertExactly( match.info( "Index population started: [%s]", ":FIRST(name)" ),
                     match.info( containsString( "TIME/PHASE Final: SCAN[" ) ) );
+=======
+            var matcher = assertThat( logProvider ).forClass( IndexPopulationJob.class ).forLevel( INFO );
+            matcher.containsMessageWithArguments( "Index population started: [%s]", ":FIRST(name)" )
+                    .containsMessages( "TIME/PHASE Final: SCAN[" );
+>>>>>>> neo4j/4.1
         }
         finally
         {
-            populator.close( true );
+            populator.close( true, PageCursorTracer.NULL );
         }
     }
 
@@ -435,7 +508,7 @@ class IndexPopulationJobTest
         AssertableLogProvider logProvider = new AssertableLogProvider();
         FlippableIndexProxy index = mock( FlippableIndexProxy.class );
         when( index.getState() ).thenReturn( InternalIndexState.POPULATING );
-        IndexPopulator populator = spy( indexPopulator( false ) );
+        IndexPopulator populator = indexPopulator( false );
         try
         {
             IndexPopulationJob job = newIndexPopulationJob( populator, index, indexStoreView, logProvider,
@@ -445,13 +518,19 @@ class IndexPopulationJobTest
             job.run();
 
             // Then
+<<<<<<< HEAD
             LogMatcherBuilder match = inLog( IndexPopulationJob.class );
             logProvider.assertExactly( match.info( "Index population started: [%s]", ":FIRST(name)" ),
                     match.info( containsString( "TIME/PHASE Final: SCAN[" ) ));
+=======
+            var matcher = assertThat( logProvider ).forClass( IndexPopulationJob.class ).forLevel( INFO );
+            matcher.containsMessageWithArguments( "Index population started: [%s]", ":FIRST(name)" )
+                    .containsMessages( "TIME/PHASE Final: SCAN[" );
+>>>>>>> neo4j/4.1
         }
         finally
         {
-            populator.close( true );
+            populator.close( true, PageCursorTracer.NULL );
         }
     }
 
@@ -472,10 +551,8 @@ class IndexPopulationJobTest
         job.run();
 
         // Then
-        LogMatcherBuilder match = inLog( IndexPopulationJob.class );
-        logProvider.assertAtLeastOnce(
-                match.error( is( "Failed to populate index: [:FIRST(name)]" ), sameInstance( failure ) )
-        );
+        assertThat( logProvider ).forClass( IndexPopulationJob.class ).forLevel( ERROR )
+                .containsMessageWithException( "Failed to populate index: [:FIRST(name)]", failure );
     }
 
     @Test
@@ -486,10 +563,10 @@ class IndexPopulationJobTest
         IndexPopulator populator = spy( indexPopulator( false ) );
         IndexPopulationJob job =
                 newIndexPopulationJob( failureDelegateFactory, populator, new FlippableIndexProxy(), indexStoreView, NullLogProvider.getInstance(),
-                        EntityType.NODE, indexPrototype( FIRST, name, false ) );
+                        EntityType.NODE, indexPrototype( FIRST, name, false ), NULL );
 
         IllegalStateException failure = new IllegalStateException( "not successful" );
-        doThrow( failure ).when( populator ).close( true );
+        doThrow( failure ).when( populator ).close( true, PageCursorTracer.NULL );
 
         // When
         job.run();
@@ -524,8 +601,8 @@ class IndexPopulationJobTest
         // given
         NullLogProvider logProvider = NullLogProvider.getInstance();
         TrackingMultipleIndexPopulator populator = new TrackingMultipleIndexPopulator( IndexStoreView.EMPTY, logProvider, EntityType.NODE,
-                new DatabaseSchemaState( logProvider ), mock( IndexStatisticsStore.class ) );
-        IndexPopulationJob populationJob = new IndexPopulationJob( populator, NO_MONITOR, false );
+                new DatabaseSchemaState( logProvider ), mock( IndexStatisticsStore.class ), jobScheduler, tokens );
+        IndexPopulationJob populationJob = new IndexPopulationJob( populator, NO_MONITOR, false, NULL, INSTANCE );
 
         // when
         populationJob.run();
@@ -543,7 +620,8 @@ class IndexPopulationJobTest
         {
             @Override
             public <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( int[] labelIds, IntPredicate propertyKeyIdFilter,
-                    Visitor<EntityUpdates,FAILURE> propertyUpdateVisitor, Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor, boolean forceStoreScan )
+                    Visitor<EntityUpdates,FAILURE> propertyUpdateVisitor, Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor, boolean forceStoreScan,
+                    PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
             {
                 return new StoreScan<>()
                 {
@@ -572,8 +650,8 @@ class IndexPopulationJobTest
             }
         };
         TrackingMultipleIndexPopulator populator = new TrackingMultipleIndexPopulator( failingStoreView, logProvider, EntityType.NODE,
-                new DatabaseSchemaState( logProvider ), mock( IndexStatisticsStore.class ) );
-        IndexPopulationJob populationJob = new IndexPopulationJob( populator, NO_MONITOR, false );
+                new DatabaseSchemaState( logProvider ), mock( IndexStatisticsStore.class ), jobScheduler, tokens );
+        IndexPopulationJob populationJob = new IndexPopulationJob( populator, NO_MONITOR, false, NULL, INSTANCE );
 
         // when
         populationJob.run();
@@ -610,7 +688,7 @@ class IndexPopulationJobTest
         }
     }
 
-    private class NodeChangingWriter extends IndexPopulator.Adapter
+    private static class NodeChangingWriter extends IndexPopulator.Adapter
     {
         private final Set<Pair<Long, Object>> added = new HashSet<>();
         private IndexPopulationJob job;
@@ -628,7 +706,7 @@ class IndexPopulationJobTest
         }
 
         @Override
-        public void add( Collection<? extends IndexEntryUpdate<?>> updates )
+        public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer )
         {
             for ( IndexEntryUpdate<?> update : updates )
             {
@@ -646,7 +724,7 @@ class IndexPopulationJobTest
         }
 
         @Override
-        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor )
+        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor, PageCursorTracer cursorTracer )
         {
             return new IndexUpdater()
             {
@@ -677,7 +755,7 @@ class IndexPopulationJobTest
         }
     }
 
-    private class NodeDeletingWriter extends IndexPopulator.Adapter
+    private static class NodeDeletingWriter extends IndexPopulator.Adapter
     {
         private final Map<Long, Object> added = new HashMap<>();
         private final Map<Long, Object> removed = new HashMap<>();
@@ -699,7 +777,7 @@ class IndexPopulationJobTest
         }
 
         @Override
-        public void add( Collection<? extends IndexEntryUpdate<?>> updates )
+        public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer )
         {
             for ( IndexEntryUpdate<?> update : updates )
             {
@@ -717,7 +795,7 @@ class IndexPopulationJobTest
         }
 
         @Override
-        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor )
+        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor, PageCursorTracer cursorTracer )
         {
             return new IndexUpdater()
             {
@@ -758,28 +836,41 @@ class IndexPopulationJobTest
         IndexProvider indexProvider = db.getDependencyResolver().resolveDependency( DefaultIndexProviderMap.class ).getDefaultProvider();
         IndexDescriptor indexDescriptor = prototype.withName( "index_21" ).materialise( 21 );
         indexDescriptor = indexProvider.completeConfiguration( indexDescriptor );
-        return indexProvider.getPopulator( indexDescriptor, samplingConfig, heapBufferFactory( 1024 ) );
+        return indexProvider.getPopulator( indexDescriptor, samplingConfig, heapBufferFactory( 1024 ), INSTANCE );
     }
 
     private IndexPopulationJob newIndexPopulationJob( IndexPopulator populator, FlippableIndexProxy flipper, EntityType type, IndexPrototype prototype )
     {
-        return newIndexPopulationJob( populator, flipper, indexStoreView, NullLogProvider.getInstance(), type, prototype );
+        return newIndexPopulationJob( populator, flipper, indexStoreView, NullLogProvider.getInstance(), type, prototype, NULL );
+    }
+
+    private IndexPopulationJob newIndexPopulationJob( IndexPopulator populator, FlippableIndexProxy flipper, EntityType type, IndexPrototype prototype,
+            PageCacheTracer cacheTracer )
+    {
+        return newIndexPopulationJob( populator, flipper, indexStoreView, NullLogProvider.getInstance(), type, prototype, cacheTracer );
     }
 
     private IndexPopulationJob newIndexPopulationJob( IndexPopulator populator, FlippableIndexProxy flipper, IndexStoreView storeView, LogProvider logProvider,
-            EntityType type, IndexPrototype prototype )
+            EntityType type, IndexPrototype prototype, PageCacheTracer pageCacheTracer )
     {
-        return newIndexPopulationJob( mock( FailedIndexProxyFactory.class ), populator, flipper, storeView, logProvider, type, prototype );
+        return newIndexPopulationJob( mock( FailedIndexProxyFactory.class ), populator, flipper, storeView, logProvider, type, prototype, pageCacheTracer );
+    }
+
+    private IndexPopulationJob newIndexPopulationJob( IndexPopulator populator, FlippableIndexProxy flipper,
+            IndexStoreView storeView, LogProvider logProvider, EntityType type, IndexPrototype prototype )
+    {
+        return newIndexPopulationJob( mock( FailedIndexProxyFactory.class ), populator, flipper, storeView, logProvider, type, prototype, NULL );
     }
 
     private IndexPopulationJob newIndexPopulationJob( FailedIndexProxyFactory failureDelegateFactory, IndexPopulator populator, FlippableIndexProxy flipper,
-            IndexStoreView storeView, LogProvider logProvider, EntityType type, IndexPrototype prototype )
+            IndexStoreView storeView, LogProvider logProvider, EntityType type, IndexPrototype prototype, PageCacheTracer pageCacheTracer )
     {
         long indexId = 0;
         flipper.setFlipTarget( mock( IndexProxyFactory.class ) );
 
-        MultipleIndexPopulator multiPopulator = new MultipleIndexPopulator( storeView, logProvider, type, stateHolder, indexStatisticsStore );
-        IndexPopulationJob job = new IndexPopulationJob( multiPopulator, NO_MONITOR, false );
+        MultipleIndexPopulator multiPopulator =
+                new MultipleIndexPopulator( storeView, logProvider, type, stateHolder, indexStatisticsStore, jobScheduler, tokens, pageCacheTracer, INSTANCE );
+        IndexPopulationJob job = new IndexPopulationJob( multiPopulator, NO_MONITOR, false, pageCacheTracer, INSTANCE );
         IndexDescriptor descriptor = prototype.withName( "index_" + indexId ).materialise( indexId );
         job.addPopulator( populator, descriptor, format( ":%s(%s)", FIRST.name(), name ), flipper, failureDelegateFactory );
         return job;
@@ -787,7 +878,7 @@ class IndexPopulationJobTest
 
     private IndexPrototype indexPrototype( Label label, String propertyKey, boolean constraint ) throws KernelException
     {
-        try ( KernelTransaction tx = kernel.beginTransaction( implicit, AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( IMPLICIT, AUTH_DISABLED ) )
         {
             int labelId = tx.tokenWrite().labelGetOrCreateForName( label.name() );
             int propertyKeyId = tx.tokenWrite().propertyKeyGetOrCreateForName( propertyKey );
@@ -832,7 +923,7 @@ class IndexPopulationJobTest
 
     private int getPropertyKeyForName( String name ) throws TransactionFailureException
     {
-        try ( KernelTransaction tx = kernel.beginTransaction( implicit, AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( IMPLICIT, AUTH_DISABLED ) )
         {
             int result = tx.tokenRead().propertyKey( name );
             tx.commit();
@@ -850,16 +941,65 @@ class IndexPopulationJobTest
         private volatile boolean closed;
 
         TrackingMultipleIndexPopulator( IndexStoreView storeView, LogProvider logProvider, EntityType type, SchemaState schemaState,
-                IndexStatisticsStore indexStatisticsStore )
+                IndexStatisticsStore indexStatisticsStore, JobScheduler jobScheduler, TokenNameLookup tokens )
         {
-            super( storeView, logProvider, type, schemaState, indexStatisticsStore );
+            super( storeView, logProvider, type, schemaState, indexStatisticsStore, jobScheduler, tokens, NULL, INSTANCE );
         }
 
         @Override
-        public void close( boolean populationCompletedSuccessfully )
+        public void close()
         {
             closed = true;
-            super.close( populationCompletedSuccessfully );
+            super.close();
+        }
+    }
+
+    private static class TrackingIndexPopulator extends IndexPopulator.Delegating
+    {
+        private volatile boolean created;
+        private final List<Collection<? extends IndexEntryUpdate<?>>> adds = new ArrayList<>();
+        private volatile Boolean closeCall;
+        private final List<IndexEntryUpdate<?>> includedSamples = new ArrayList<>();
+        private volatile boolean resultSampled;
+
+        TrackingIndexPopulator( IndexPopulator delegate )
+        {
+            super( delegate );
+        }
+
+        @Override
+        public void create()
+        {
+            created = true;
+            super.create();
+        }
+
+        @Override
+        public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer ) throws IndexEntryConflictException
+        {
+            adds.add( updates );
+            super.add( updates, cursorTracer );
+        }
+
+        @Override
+        public void close( boolean populationCompletedSuccessfully, PageCursorTracer cursorTracer )
+        {
+            closeCall = populationCompletedSuccessfully;
+            super.close( populationCompletedSuccessfully, cursorTracer );
+        }
+
+        @Override
+        public void includeSample( IndexEntryUpdate<?> update )
+        {
+            includedSamples.add( update );
+            super.includeSample( update );
+        }
+
+        @Override
+        public IndexSample sample( PageCursorTracer cursorTracer )
+        {
+            resultSampled = true;
+            return super.sample( cursorTracer );
         }
     }
 }

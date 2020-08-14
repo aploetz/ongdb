@@ -21,15 +21,16 @@ package org.neo4j.storageengine.api;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.stream.Stream;
 
 import org.neo4j.counts.CountsAccessor;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.diagnostics.DiagnosticsManager;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.lock.ResourceLocker;
 import org.neo4j.logging.Log;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
 
@@ -40,10 +41,11 @@ public interface StorageEngine extends Lifecycle
 {
     /**
      * @return a new {@link CommandCreationContext} meant to be kept for multiple calls to
-     * {@link #createCommands(Collection, ReadableTransactionState, StorageReader, CommandCreationContext, ResourceLocker, long, TxStateVisitor.Decorator)}.
+     * {@link #createCommands(Collection, ReadableTransactionState, StorageReader, CommandCreationContext, ResourceLocker, long, TxStateVisitor.Decorator,
+     * PageCursorTracer, MemoryTracker)}.
      * Must be {@link CommandCreationContext#close() closed} after used, before being discarded.
      */
-    CommandCreationContext newCommandCreationContext();
+    CommandCreationContext newCommandCreationContext( PageCursorTracer cursorTracer, MemoryTracker memoryTracker );
 
     /**
      * Adds an {@link IndexUpdateListener} which will receive streams of index updates from changes that gets
@@ -53,11 +55,18 @@ public interface StorageEngine extends Lifecycle
     void addIndexUpdateListener( IndexUpdateListener indexUpdateListener );
 
     /**
-     * Adds an {@link NodeLabelUpdateListener} which will receive streams of node label updates from changes that gets
+     * Adds an {@link EntityTokenUpdateListener} which will receive streams of node label updates from changes that gets
      * {@link #apply(CommandsToApply, TransactionApplicationMode) applied} to this storage engine.
-     * @param nodeLabelUpdateListener {@link NodeLabelUpdateListener} to add.
+     * @param entityTokenUpdateListener {@link EntityTokenUpdateListener} to add.
      */
-    void addNodeLabelUpdateListener( NodeLabelUpdateListener nodeLabelUpdateListener );
+    void addNodeLabelUpdateListener( EntityTokenUpdateListener entityTokenUpdateListener );
+
+    /**
+     * Adds an {@link EntityTokenUpdateListener} which will receive streams of relationship type updates from changes that gets
+     * {@link #apply(CommandsToApply, TransactionApplicationMode) applied} to this storage engine.
+     * @param entityTokenUpdateListener {@link EntityTokenUpdateListener} to add.
+     */
+    void addRelationshipTypeUpdateListener( EntityTokenUpdateListener entityTokenUpdateListener );
 
     /**
      * Generates a list of {@link StorageCommand commands} representing the changes in the given transaction state
@@ -78,8 +87,9 @@ public interface StorageEngine extends Lifecycle
      * The EntityLocker interface is a subset of Locks.Client interface, just to fit in while it's here.
      * @param lastTransactionIdWhenStarted transaction id which was seen as last committed when this
      * transaction started, i.e. before any changes were made and before any data was read.
-     * TODO Transitional (Collection), might be {@link Stream} or whatever.
      * @param additionalTxStateVisitor any additional tx state visitor decoration.
+     * @param cursorTracer underlying page cursor tracer
+     * @param memoryTracker to report allocations to
      * @throws KernelException on known errors while creating commands.
      */
     void createCommands(
@@ -89,7 +99,9 @@ public interface StorageEngine extends Lifecycle
             CommandCreationContext creationContext,
             ResourceLocker locks,
             long lastTransactionIdWhenStarted,
-            TxStateVisitor.Decorator additionalTxStateVisitor )
+            TxStateVisitor.Decorator additionalTxStateVisitor,
+            PageCursorTracer cursorTracer,
+            MemoryTracker memoryTracker )
             throws KernelException;
 
     /**
@@ -106,9 +118,10 @@ public interface StorageEngine extends Lifecycle
      * all changes applied to this storage engine will be durable.
      *
      * @param limiter The {@link IOLimiter} used to moderate the rate of IO caused by the flush process.
+     * @param cursorTracer underlying page cursor tracer
      * @throws IOException on I/O error.
      */
-    void flushAndForce( IOLimiter limiter ) throws IOException;
+    void flushAndForce( IOLimiter limiter, PageCursorTracer cursorTracer ) throws IOException;
 
     /**
      * Dump diagnostics about the storage onto {@link DiagnosticsManager}.

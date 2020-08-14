@@ -39,8 +39,8 @@ import org.neo4j.values.storable.Values;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.neo4j.internal.schema.IndexConfig.spatialMaxSettingForCrs;
-import static org.neo4j.internal.schema.IndexConfig.spatialMinSettingForCrs;
+import static org.neo4j.graphdb.schema.IndexSettingUtil.spatialMaxSettingForCrs;
+import static org.neo4j.graphdb.schema.IndexSettingUtil.spatialMinSettingForCrs;
 
 class GenericNativeIndexProviderTest
 {
@@ -48,7 +48,8 @@ class GenericNativeIndexProviderTest
     void mustCompleteIndexDescriptorConfigurationsWithSpatialConfig()
     {
         // Given
-        GenericNativeIndexProvider provider = new GenericNativeIndexProvider( IndexDirectoryStructure.NONE, null, null, null, null, false, Config.defaults() );
+        DatabaseIndexContext context = DatabaseIndexContext.builder( null, null ).build();
+        GenericNativeIndexProvider provider = new GenericNativeIndexProvider( context, IndexDirectoryStructure.NONE, null, Config.defaults() );
         LabelSchemaDescriptor incompleteSchema = SchemaDescriptor.forLabel( 1, 1 );
         IndexDescriptor incompleteDescriptor = IndexPrototype.forSchema( incompleteSchema, IndexProviderDescriptor.UNDECIDED )
                 .withName( "index" ).materialise( 1 );
@@ -62,8 +63,8 @@ class GenericNativeIndexProviderTest
         assertEquals( 0, sinfulIndexConfig.entries().count( p -> true ), "expected sinful index config to have no entries" );
         for ( CoordinateReferenceSystem crs : CoordinateReferenceSystem.all() )
         {
-            assertNotNull( completedIndexConfig.get( spatialMinSettingForCrs( crs ) ) );
-            assertNotNull( completedIndexConfig.get( spatialMaxSettingForCrs( crs ) ) );
+            assertNotNull( completedIndexConfig.get( spatialMinSettingForCrs( crs ).getSettingName() ) );
+            assertNotNull( completedIndexConfig.get( spatialMaxSettingForCrs( crs ).getSettingName() ) );
         }
     }
 
@@ -71,7 +72,8 @@ class GenericNativeIndexProviderTest
     void completeConfigurationMustNotOverrideExistingSettings()
     {
         // Given
-        GenericNativeIndexProvider provider = new GenericNativeIndexProvider( IndexDirectoryStructure.NONE, null, null, null, null, false, Config.defaults() );
+        DatabaseIndexContext context = DatabaseIndexContext.builder( null, null ).build();
+        GenericNativeIndexProvider provider = new GenericNativeIndexProvider( context, IndexDirectoryStructure.NONE, null, Config.defaults() );
         Map<String,Value> existingSettings = new HashMap<>();
         CoordinateReferenceSystem existingCrs = CoordinateReferenceSystem.Cartesian;
         DoubleArray min = Values.doubleArray( new double[]{0, 0} );
@@ -93,14 +95,14 @@ class GenericNativeIndexProviderTest
             if ( crs.equals( existingCrs ) )
             {
                 // Assert value
-                assertEquals( min, completedIndexConfig.get( spatialMinSettingForCrs( crs ) ) );
-                assertEquals( max, completedIndexConfig.get( spatialMaxSettingForCrs( crs ) ) );
+                assertEquals( min, completedIndexConfig.get( spatialMinSettingForCrs( crs ).getSettingName() ) );
+                assertEquals( max, completedIndexConfig.get( spatialMaxSettingForCrs( crs ).getSettingName() ) );
             }
             else
             {
                 // Simply assert not null
-                assertNotNull( completedIndexConfig.get( spatialMinSettingForCrs( crs ) ) );
-                assertNotNull( completedIndexConfig.get( spatialMaxSettingForCrs( crs ) ) );
+                assertNotNull( completedIndexConfig.get( spatialMinSettingForCrs( crs ).getSettingName() ) );
+                assertNotNull( completedIndexConfig.get( spatialMaxSettingForCrs( crs ).getSettingName() ) );
             }
         }
     }

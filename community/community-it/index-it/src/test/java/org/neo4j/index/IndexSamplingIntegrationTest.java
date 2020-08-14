@@ -19,7 +19,6 @@
  */
 package org.neo4j.index;
 
-import org.hamcrest.MatcherAssert;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
@@ -37,21 +36,18 @@ import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.register.Registers;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.internal.kernel.api.security.LoginContext.AUTH_DISABLED;
 import static org.neo4j.io.fs.FileUtils.deleteFile;
-import static org.neo4j.kernel.api.KernelTransaction.Type.explicit;
+import static org.neo4j.kernel.api.KernelTransaction.Type.EXPLICIT;
 
 @Neo4jLayoutExtension
 class IndexSamplingIntegrationTest
@@ -125,14 +121,12 @@ class IndexSamplingIntegrationTest
         // Then
 
         // lucene will consider also the delete nodes, native won't
-        DoubleLongRegister register = fetchIndexSamplingValues();
-        assertEquals( names.length, register.readFirst() );
-        MatcherAssert.assertThat( register.readSecond(), allOf( greaterThanOrEqualTo( nodes - deletedNodes ), lessThanOrEqualTo( nodes ) ) );
-
+        var indexSample = fetchIndexSamplingValues();
+        assertEquals( names.length, indexSample.uniqueValues() );
+        assertThat( indexSample.sampleSize() ).isGreaterThanOrEqualTo( nodes - deletedNodes ).isLessThanOrEqualTo( nodes );
         // but regardless, the deleted nodes should not be considered in the index size value
-        DoubleLongRegister indexSizeRegister = fetchIndexSizeValues();
-        assertEquals( 0, indexSizeRegister.readFirst() );
-        assertEquals( nodes - deletedNodes, indexSizeRegister.readSecond() );
+        assertEquals( 0, indexSample.updates() );
+        assertEquals( nodes - deletedNodes, indexSample.indexSize() );
     }
 
     @Test
@@ -186,13 +180,11 @@ class IndexSamplingIntegrationTest
         triggerIndexResamplingOnNextStartup();
 
         // Then
-        DoubleLongRegister indexSampleRegister = fetchIndexSamplingValues();
-        assertEquals( nodes - deletedNodes, indexSampleRegister.readFirst() );
-        assertEquals( nodes - deletedNodes, indexSampleRegister.readSecond() );
-
-        DoubleLongRegister indexSizeRegister = fetchIndexSizeValues();
-        assertEquals( 0, indexSizeRegister.readFirst() );
-        assertEquals( nodes - deletedNodes, indexSizeRegister.readSecond() );
+        var indexSample = fetchIndexSamplingValues();
+        assertEquals( nodes - deletedNodes, indexSample.uniqueValues() );
+        assertEquals( nodes - deletedNodes, indexSample.sampleSize() );
+        assertEquals( 0, indexSample.updates() );
+        assertEquals( nodes - deletedNodes, indexSample.indexSize() );
     }
 
     private IndexDescriptor indexId( KernelTransaction tx )
@@ -200,7 +192,7 @@ class IndexSamplingIntegrationTest
         return tx.schemaRead().indexGetForName( schemaName );
     }
 
-    private DoubleLongRegister fetchIndexSamplingValues() throws IndexNotFoundKernelException, TransactionFailureException
+    private IndexSample fetchIndexSamplingValues() throws IndexNotFoundKernelException, TransactionFailureException
     {
         DatabaseManagementService managementService = null;
         try
@@ -210,33 +202,9 @@ class IndexSamplingIntegrationTest
             GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
             GraphDatabaseAPI api = (GraphDatabaseAPI) db;
             Kernel kernel = api.getDependencyResolver().resolveDependency( Kernel.class );
-            try ( KernelTransaction tx = kernel.beginTransaction( explicit, AUTH_DISABLED ) )
+            try ( KernelTransaction tx = kernel.beginTransaction( EXPLICIT, AUTH_DISABLED ) )
             {
-                return tx.schemaRead().indexSample( indexId( tx ), Registers.newDoubleLongRegister() );
-            }
-        }
-        finally
-        {
-            if ( managementService != null )
-            {
-                managementService.shutdown();
-            }
-        }
-    }
-
-    private DoubleLongRegister fetchIndexSizeValues() throws IndexNotFoundKernelException, TransactionFailureException
-    {
-        DatabaseManagementService managementService = null;
-        try
-        {
-            // Then
-            managementService = new TestDatabaseManagementServiceBuilder( databaseLayout ).build();
-            GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
-            GraphDatabaseAPI api = (GraphDatabaseAPI) db;
-            Kernel kernel = api.getDependencyResolver().resolveDependency( Kernel.class );
-            try ( KernelTransaction tx = kernel.beginTransaction( explicit, AUTH_DISABLED ) )
-            {
-                return tx.schemaRead().indexUpdatesAndSize( indexId( tx ), Registers.newDoubleLongRegister() );
+                return tx.schemaRead().indexSample( indexId( tx ) );
             }
         }
         finally

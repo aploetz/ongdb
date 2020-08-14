@@ -16,7 +16,11 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-native</artifactId>
+=======
+    <artifactId>neo4j-native</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Native</name>
@@ -63,8 +67,8 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -13,8 +13,13 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-acceptance-spec-suite</artifactId>
     <packaging>jar</packaging>
+<<<<<<< HEAD
     <name>ONgDB - Cypher Acceptance</name>
     <description>ONgDB - Cypher Acceptance Specification Suite</description>
+=======
+    <name>Neo4j - Cypher Acceptance</name>
+    <description>Neo4j - Cypher Acceptance Specification Suite</description>
+>>>>>>> neo4j/4.1
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
     <scm>
@@ -163,16 +168,26 @@
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-ast-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-ast</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-util-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-util</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -198,11 +213,6 @@
             <artifactId>commons-codec</artifactId>
         </dependency>
         <!-- other -->
-
-        <dependency>
-            <groupId>com.github.salat</groupId>
-            <artifactId>salat-core_${scala.binary.version}</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>

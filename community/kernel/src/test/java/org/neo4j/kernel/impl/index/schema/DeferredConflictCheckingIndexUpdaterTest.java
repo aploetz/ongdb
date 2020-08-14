@@ -35,16 +35,15 @@ import org.neo4j.storageengine.api.UpdateMode;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.change;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.remove;
@@ -61,7 +60,7 @@ class DeferredConflictCheckingIndexUpdaterTest
         // given
         IndexUpdater actual = mock( IndexUpdater.class );
         IndexReader reader = mock( IndexReader.class );
-        doAnswer( new NodeIdsIndexReaderQueryAnswer( descriptor, 0 ) ).when( reader ).query( any(), any(), any(), anyBoolean(), any() );
+        doAnswer( new NodeIdsIndexReaderQueryAnswer( descriptor, 0 ) ).when( reader ).query( any(), any(), any(), any(), any() );
         long nodeId = 0;
         List<IndexEntryUpdate<IndexDescriptor>> updates = new ArrayList<>();
         updates.add( add( nodeId++, descriptor, tuple( 10, 11 ) ) );
@@ -69,7 +68,7 @@ class DeferredConflictCheckingIndexUpdaterTest
         updates.add( remove( nodeId++, descriptor, tuple( 1001L, 1002L ) ) );
         updates.add( change( nodeId++, descriptor, tuple( (byte) 2, (byte) 3 ), tuple( (byte) 4, (byte) 5 ) ) );
         updates.add( add( nodeId, descriptor, tuple( 5, "5" ) ) );
-        try ( DeferredConflictCheckingIndexUpdater updater = new DeferredConflictCheckingIndexUpdater( actual, () -> reader, descriptor ) )
+        try ( DeferredConflictCheckingIndexUpdater updater = new DeferredConflictCheckingIndexUpdater( actual, () -> reader, descriptor, NULL ) )
         {
             // when
             for ( IndexEntryUpdate<IndexDescriptor> update : updates )
@@ -90,7 +89,7 @@ class DeferredConflictCheckingIndexUpdaterTest
                 {
                     query[i] = IndexQuery.exact( propertyKeyIds[i], tuple[i] );
                 }
-                verify( reader ).query( any(), any(), any(), anyBoolean(), eq( query[0] ), eq( query[1] ) );
+                verify( reader ).query( any(), any(), any(), eq( query[0] ), eq( query[1] ) );
             }
         }
         verify( reader ).close();
@@ -103,14 +102,14 @@ class DeferredConflictCheckingIndexUpdaterTest
         // given
         IndexUpdater actual = mock( IndexUpdater.class );
         IndexReader reader = mock( IndexReader.class );
-        doAnswer( new NodeIdsIndexReaderQueryAnswer( descriptor, 101, 202 ) ).when( reader ).query( any(), any(), any(), anyBoolean(), any() );
-        DeferredConflictCheckingIndexUpdater updater = new DeferredConflictCheckingIndexUpdater( actual, () -> reader, descriptor );
+        doAnswer( new NodeIdsIndexReaderQueryAnswer( descriptor, 101, 202 ) ).when( reader ).query( any(), any(), any(), any() );
+        DeferredConflictCheckingIndexUpdater updater = new DeferredConflictCheckingIndexUpdater( actual, () -> reader, descriptor, NULL );
 
         // when
         updater.process( add( 0, descriptor, tuple( 10, 11 ) ) );
         var e = assertThrows( IndexEntryConflictException.class, updater::close );
-        assertThat( e.getMessage(), containsString( "101" ) );
-        assertThat( e.getMessage(), containsString( "202" ) );
+        assertThat( e.getMessage() ).contains( "101" );
+        assertThat( e.getMessage() ).contains( "202" );
     }
 
     private static Value[] tuple( Object... values )

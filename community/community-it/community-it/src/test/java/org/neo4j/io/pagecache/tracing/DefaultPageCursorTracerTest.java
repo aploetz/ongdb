@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DefaultPageCursorTracerTest
 {
+    private static final String TEST_TRACER = "testTracer";
     private PageSwapper swapper;
     private PageCursorTracer pageCursorTracer;
     private DefaultPageCacheTracer cacheTracer;
@@ -153,6 +154,7 @@ class DefaultPageCursorTracerTest
                         flushEvent.done();
                         FlushEvent flushEvent1 = flushEventOpportunity.beginFlush( 0, 1, swapper );
                         flushEvent1.addBytesWritten( 13 );
+                        flushEvent1.addPagesFlushed( 2 );
                         flushEvent1.done();
                     }
                 }
@@ -200,6 +202,35 @@ class DefaultPageCursorTracerTest
     }
 
     @Test
+    void closingTraceCursorReportEvents()
+    {
+        generateEventSet();
+        pageCursorTracer.close();
+
+        assertEquals( 1, cacheTracer.pins() );
+        assertEquals( 1, cacheTracer.unpins() );
+        assertEquals( 1, cacheTracer.faults() );
+        assertEquals( 1, cacheTracer.evictions() );
+        assertEquals( 1, cacheTracer.evictionExceptions() );
+        assertEquals( 1, cacheTracer.flushes() );
+        assertEquals( 10, cacheTracer.bytesWritten() );
+        assertEquals( 150, cacheTracer.bytesRead() );
+
+        generateEventSet();
+        generateEventSet();
+        pageCursorTracer.close();
+
+        assertEquals( 3, cacheTracer.pins() );
+        assertEquals( 3, cacheTracer.unpins() );
+        assertEquals( 3, cacheTracer.faults() );
+        assertEquals( 3, cacheTracer.evictions() );
+        assertEquals( 3, cacheTracer.evictionExceptions() );
+        assertEquals( 3, cacheTracer.flushes() );
+        assertEquals( 30, cacheTracer.bytesWritten() );
+        assertEquals( 450, cacheTracer.bytesRead() );
+    }
+
+    @Test
     void shouldCalculateHitRatio()
     {
         assertEquals( 0d, pageCursorTracer.hitRatio(), 0.0001 );
@@ -225,6 +256,12 @@ class DefaultPageCursorTracerTest
         assertEquals( 3.0 / 7, cacheTracer.hitRatio(), 0.0001 );
     }
 
+    @Test
+    void pageCursorTracerHasDefinedTag()
+    {
+        assertEquals( TEST_TRACER, pageCursorTracer.getTag() );
+    }
+
     private void generateEventSet()
     {
         PinEvent pinEvent = pageCursorTracer.beginPin( false, 0, swapper );
@@ -237,6 +274,7 @@ class DefaultPageCursorTracerTest
                     FlushEventOpportunity flushEventOpportunity = evictionEvent.flushEventOpportunity();
                     FlushEvent flushEvent = flushEventOpportunity.beginFlush( 0, 0, swapper );
                     flushEvent.addBytesWritten( 10 );
+                    flushEvent.addPagesFlushed( 1 );
                     flushEvent.done();
                 }
                 evictionEvent.threwException( new IOException( "eviction exception" ) );
@@ -249,9 +287,7 @@ class DefaultPageCursorTracerTest
 
     private PageCursorTracer createTracer()
     {
-        DefaultPageCursorTracer pageCursorTracer = new DefaultPageCursorTracer();
-        pageCursorTracer.init( cacheTracer );
-        return pageCursorTracer;
+        return new DefaultPageCursorTracer( cacheTracer, TEST_TRACER );
     }
 
     private void pinAndHit()

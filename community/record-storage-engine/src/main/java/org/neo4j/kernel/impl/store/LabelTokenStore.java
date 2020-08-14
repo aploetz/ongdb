@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.file.OpenOption;
 
@@ -26,6 +28,7 @@ import org.neo4j.configuration.Config;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
 import org.neo4j.logging.LogProvider;
@@ -46,7 +49,7 @@ public class LabelTokenStore extends TokenStore<LabelTokenRecord>
             LogProvider logProvider,
             DynamicStringStore nameStore,
             RecordFormats recordFormats,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, config, IdType.LABEL_TOKEN, idGeneratorFactory, pageCache,
                 logProvider, nameStore, TYPE_DESCRIPTOR, recordFormats.labelToken(),
@@ -54,9 +57,8 @@ public class LabelTokenStore extends TokenStore<LabelTokenRecord>
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, LabelTokenRecord record )
-            throws FAILURE
+    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, LabelTokenRecord record, PageCursorTracer cursorTracer ) throws FAILURE
     {
-        processor.processLabelToken( this, record );
+        processor.processLabelToken( this, record, cursorTracer );
     }
 }

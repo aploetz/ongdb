@@ -19,19 +19,26 @@
  */
 package org.neo4j.cypher.internal.runtime
 
-import org.neo4j.internal.kernel.api._
+import org.neo4j.internal.kernel.api.AutoCloseablePlus
+import org.neo4j.internal.kernel.api.CursorFactory
+import org.neo4j.internal.kernel.api.DefaultCloseListenable
+import org.neo4j.internal.kernel.api.NodeCursor
+import org.neo4j.internal.kernel.api.PropertyCursor
+import org.neo4j.internal.kernel.api.RelationshipScanCursor
 import org.neo4j.io.IOUtils
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer
+import org.neo4j.memory.MemoryTracker
 
 /**
-  * Cursors which are used during expression evaluation. These are expected to be used within one
-  * method call, as opposed to being returned inside an iterator or stream.
-  *
-  * @param cursorFactory cursor factor to allocate cursors with.
-  */
-class ExpressionCursors(cursorFactory: CursorFactory) extends DefaultCloseListenable with AutoCloseablePlus {
-  val nodeCursor: NodeCursor = cursorFactory.allocateNodeCursor()
-  val relationshipScanCursor: RelationshipScanCursor = cursorFactory.allocateRelationshipScanCursor()
-  val propertyCursor: PropertyCursor = cursorFactory.allocatePropertyCursor()
+ * Cursors which are used during expression evaluation. These are expected to be used within one
+ * method call, as opposed to being returned inside an iterator or stream.
+ *
+ * @param cursorFactory cursor factor to allocate cursors with.
+ */
+class ExpressionCursors(cursorFactory: CursorFactory, cursorTracer: PageCursorTracer, memoryTracker: MemoryTracker) extends DefaultCloseListenable with AutoCloseablePlus {
+  val nodeCursor: NodeCursor = cursorFactory.allocateNodeCursor(cursorTracer)
+  val relationshipScanCursor: RelationshipScanCursor = cursorFactory.allocateRelationshipScanCursor(cursorTracer)
+  val propertyCursor: PropertyCursor = cursorFactory.allocatePropertyCursor(cursorTracer, memoryTracker)
 
   override def isClosed: Boolean = {
     nodeCursor.isClosed && relationshipScanCursor.isClosed && propertyCursor.isClosed

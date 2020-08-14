@@ -34,6 +34,11 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+<<<<<<< HEAD
+=======
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.internal.Version;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
@@ -71,10 +76,11 @@ import static org.neo4j.util.Preconditions.checkState;
  */
 public class StoreUpgrader
 {
-    private final Pattern MIGRATION_LEFTOVERS_PATTERN = Pattern.compile( MIGRATION_LEFT_OVERS_DIRECTORY + "(_\\d*)?" );
+    private static final String STORE_UPGRADE_TAG = "storeUpgrade";
     public static final String MIGRATION_DIRECTORY = "upgrade";
     public static final String MIGRATION_LEFT_OVERS_DIRECTORY = "upgrade_backup";
     private static final String MIGRATION_STATUS_FILE = "_status";
+    private static final Pattern MIGRATION_LEFTOVERS_PATTERN = Pattern.compile( MIGRATION_LEFT_OVERS_DIRECTORY + "(_\\d*)?" );
 
     private final StoreVersionCheck storeVersionCheck;
     private final MigrationProgressMonitor progressMonitor;
@@ -83,11 +89,21 @@ public class StoreUpgrader
     private final FileSystemAbstraction fileSystem;
     private final Log log;
     private final LogsUpgrader logsUpgrader;
+<<<<<<< HEAD
 
+=======
+>>>>>>> neo4j/4.1
     private final String configuredFormat;
+    private final PageCacheTracer pageCacheTracer;
 
+<<<<<<< HEAD
     public StoreUpgrader( StoreVersionCheck storeVersionCheck, MigrationProgressMonitor progressMonitor,
                           Config config, FileSystemAbstraction fileSystem, LogProvider logProvider, LogsUpgrader logsUpgrader )
+=======
+    public StoreUpgrader( StoreVersionCheck storeVersionCheck, MigrationProgressMonitor progressMonitor, Config config,
+                          FileSystemAbstraction fileSystem, LogProvider logProvider, LogsUpgrader logsUpgrader,
+                          PageCacheTracer pageCacheTracer )
+>>>>>>> neo4j/4.1
     {
         this.storeVersionCheck = storeVersionCheck;
         this.progressMonitor = progressMonitor;
@@ -96,6 +112,7 @@ public class StoreUpgrader
         this.logsUpgrader = logsUpgrader;
         this.log = logProvider.getLog( getClass() );
         this.configuredFormat = storeVersionCheck.configuredVersion();
+        this.pageCacheTracer = pageCacheTracer;
     }
 
     /**
@@ -117,54 +134,63 @@ public class StoreUpgrader
 
     public void migrateIfNeeded( DatabaseLayout layout )
     {
+        // nothing to migrate
+        if ( !layout.databaseDirectory().exists() )
+        {
+            return;
+        }
+        logsUpgrader.assertLogVersionIsCurrent( layout );
         if ( layout.getDatabaseName().equals( GraphDatabaseSettings.SYSTEM_DATABASE_NAME ) )
         {
             // TODO: System database does not (yet) support migration, remove this when it does!
             return;
         }
 
-        DatabaseLayout migrationStructure = DatabaseLayout.ofFlat( layout.file( MIGRATION_DIRECTORY ) );
-
-        cleanupLegacyLeftOverDirsIn( layout.databaseDirectory() );
-
-        File migrationStateFile = migrationStructure.file( MIGRATION_STATUS_FILE );
-        // if migration directory exists than we might have failed to move files into the store dir so do it again
-        if ( hasCurrentVersion( storeVersionCheck ) && !fileSystem.fileExists( migrationStateFile ) )
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( STORE_UPGRADE_TAG ) )
         {
-            // No migration needed
-            return;
-        }
+            DatabaseLayout migrationStructure = DatabaseLayout.ofFlat( layout.file( MIGRATION_DIRECTORY ) );
 
-        if ( isUpgradeAllowed() )
-        {
-            migrate( layout, migrationStructure, migrationStateFile );
-        }
-        else
-        {
-            Optional<String> storeVersion = storeVersionCheck.storeVersion();
-            if ( storeVersion.isPresent() )
+            cleanupLegacyLeftOverDirsIn( layout.databaseDirectory() );
+
+            File migrationStateFile = migrationStructure.file( MIGRATION_STATUS_FILE );
+            // if migration directory exists than we might have failed to move files into the store dir so do it again
+            if ( hasCurrentVersion( storeVersionCheck, cursorTracer ) && !fileSystem.fileExists( migrationStateFile ) )
             {
-                StoreVersion version = storeVersionCheck.versionInformation( storeVersion.get() );
-                if ( version.hasCapability( IndexCapabilities.LuceneCapability.LUCENE_5 ) )
+                // No migration needed
+                return;
+            }
+
+            if ( isUpgradeAllowed() )
+            {
+                migrate( layout, migrationStructure, migrationStateFile, cursorTracer );
+            }
+            else
+            {
+                Optional<String> storeVersion = storeVersionCheck.storeVersion( cursorTracer );
+                if ( storeVersion.isPresent() )
                 {
-                    throw new UpgradeNotAllowedException( "Upgrade is required to migrate store to new major version." );
-                }
-                else
-                {
-                    String configuredVersion = storeVersionCheck.configuredVersion();
-                    if ( configuredVersion != null && !version.isCompatibleWith( storeVersionCheck.versionInformation( configuredVersion ) ) )
+                    StoreVersion version = storeVersionCheck.versionInformation( storeVersion.get() );
+                    if ( version.hasCapability( IndexCapabilities.LuceneCapability.LUCENE_5 ) )
                     {
-                        throw new UpgradeNotAllowedException();
+                        throw new UpgradeNotAllowedException( "Upgrade is required to migrate store to new major version." );
+                    }
+                    else
+                    {
+                        String configuredVersion = storeVersionCheck.configuredVersion();
+                        if ( configuredVersion != null && !version.isCompatibleWith( storeVersionCheck.versionInformation( configuredVersion ) ) )
+                        {
+                            throw new UpgradeNotAllowedException();
+                        }
                     }
                 }
             }
         }
     }
 
-    private boolean hasCurrentVersion( StoreVersionCheck storeVersionCheck )
+    private boolean hasCurrentVersion( StoreVersionCheck storeVersionCheck, PageCursorTracer cursorTracer )
     {
         String configuredVersion = storeVersionCheck.configuredVersion();
-        StoreVersionCheck.Result versionResult = storeVersionCheck.checkUpgrade( configuredVersion );
+        StoreVersionCheck.Result versionResult = storeVersionCheck.checkUpgrade( configuredVersion, cursorTracer );
         if ( versionResult.outcome == StoreVersionCheck.Outcome.missingStoreFile )
         {
             // New store so will be of the current version
@@ -173,7 +199,11 @@ public class StoreUpgrader
         return versionResult.outcome.isSuccessful() && versionResult.actualVersion.equals( configuredVersion );
     }
 
+<<<<<<< HEAD
     private void migrate( DatabaseLayout dbDirectoryLayout, DatabaseLayout migrationLayout, File migrationStateFile )
+=======
+    private void migrate( DatabaseLayout dbDirectoryLayout, DatabaseLayout migrationLayout, File migrationStateFile, PageCursorTracer cursorTracer )
+>>>>>>> neo4j/4.1
     {
         // One or more participants would like to do migration
         progressMonitor.started( participants.size() );
@@ -184,9 +214,13 @@ public class StoreUpgrader
         // and it's just a matter of moving over the files to the storeDir.
         if ( MigrationStatus.migrating.isNeededFor( migrationStatus ) )
         {
-            StoreVersionCheck.Result upgradeCheck = storeVersionCheck.checkUpgrade( storeVersionCheck.configuredVersion() );
+            StoreVersionCheck.Result upgradeCheck = storeVersionCheck.checkUpgrade( storeVersionCheck.configuredVersion(), cursorTracer );
             versionToMigrateFrom = getVersionFromResult( upgradeCheck );
+<<<<<<< HEAD
             logsUpgrader.assertCleanlyShutDownByCheckPoint( dbDirectoryLayout );
+=======
+            logsUpgrader.assertCleanlyShutDown( dbDirectoryLayout );
+>>>>>>> neo4j/4.1
             cleanMigrationDirectory( migrationLayout.databaseDirectory() );
             MigrationStatus.migrating.setMigrationStatus( fileSystem, migrationStateFile, versionToMigrateFrom );
             migrateToIsolatedDirectory( dbDirectoryLayout, migrationLayout, versionToMigrateFrom );

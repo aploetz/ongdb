@@ -25,8 +25,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.codegen.ByteCodeUtils.assertMethodExists;
@@ -70,6 +69,25 @@ class ByteCodeUtilsTest
 
         //reference array type
         assertTypeName( String[].class, "[Ljava/lang/String;" );
+
+        //nested arrays
+        assertTypeName( int[][].class, "[[I" );
+        assertTypeName( byte[][].class, "[[B" );
+        assertTypeName( short[][].class, "[[S" );
+        assertTypeName( char[][].class, "[[C" );
+        assertTypeName( float[][].class, "[[F" );
+        assertTypeName( double[][].class, "[[D" );
+        assertTypeName( boolean[][].class, "[[Z" );
+
+        assertTypeName( String[][].class, "[[Ljava/lang/String;" );
+    }
+
+    @Test
+    void shouldSupportArrayNestingInClassName()
+    {
+        assertThat( ByteCodeUtils.className( typeReference( String.class ) ) ).isEqualTo( "java.lang.String" );
+        assertThat( ByteCodeUtils.className( typeReference( String[].class ) ) ).isEqualTo( "[Ljava.lang.String;" );
+        assertThat( ByteCodeUtils.className( typeReference( String[][].class ) ) ).isEqualTo( "[[Ljava.lang.String;" );
     }
 
     @Test
@@ -83,7 +101,7 @@ class ByteCodeUtilsTest
         String description = desc( declaration );
 
         // THEN
-        assertThat( description, equalTo( "()Z" ) );
+        assertThat( description ).isEqualTo( "()Z" );
     }
 
     @Test
@@ -99,7 +117,7 @@ class ByteCodeUtilsTest
         String description = desc( declaration );
 
         // THEN
-        assertThat( description, equalTo( "(Ljava/lang/String;[C)Ljava/util/List;" ) );
+        assertThat( description ).isEqualTo( "(Ljava/lang/String;[C)Ljava/util/List;" );
     }
 
     @Test
@@ -125,7 +143,7 @@ class ByteCodeUtilsTest
         String signature = signature( reference );
 
         // THEN
-        assertThat( signature, equalTo( "Ljava/util/List<Ljava/lang/String;>;" ) );
+        assertThat( signature ).isEqualTo( "Ljava/util/List<Ljava/lang/String;>;" );
     }
 
     @Test
@@ -157,7 +175,7 @@ class ByteCodeUtilsTest
         String signature = signature( declaration );
 
         // THEN
-        assertThat( signature, equalTo( "(Ljava/lang/String;)Ljava/util/List<Ljava/lang/String;>;" ) );
+        assertThat( signature ).isEqualTo( "(Ljava/lang/String;)Ljava/util/List<Ljava/lang/String;>;" );
     }
 
     @Test
@@ -174,9 +192,8 @@ class ByteCodeUtilsTest
         String signature = signature( declaration );
 
         // THEN
-        assertThat(desc, equalTo("()Ljava/lang/Object;"));
-        assertThat(signature,
-                equalTo( "<T:Ljava/lang/Object;>()TT;" ));
+        assertThat( desc ).isEqualTo( "()Ljava/lang/Object;" );
+        assertThat( signature ).isEqualTo( "<T:Ljava/lang/Object;>()TT;" );
     }
 
     @Test
@@ -193,9 +210,8 @@ class ByteCodeUtilsTest
         String signature = signature( declaration );
         String[] exceptions = exceptions( declaration );
         // THEN
-        assertThat(signature,
-                equalTo( "<E:Ljava/lang/Exception;>(Lorg/neo4j/codegen/CodeGenerationTest$Thrower<TE;>;)V^TE;" ));
-        assertThat( exceptions, equalTo(new String[]{"java/lang/Exception"} ));
+        assertThat( signature ).isEqualTo( "<E:Ljava/lang/Exception;>(Lorg/neo4j/codegen/CodeGenerationTest$Thrower<TE;>;)V^TE;" );
+        assertThat( exceptions ).isEqualTo( new String[]{"java/lang/Exception"} );
     }
 
     @Test
@@ -208,7 +224,7 @@ class ByteCodeUtilsTest
         String byteCodeName = ByteCodeUtils.byteCodeName( innerInner );
 
         // Then
-        assertThat( byteCodeName, equalTo( "org/neo4j/codegen/ByteCodeUtilsTest$Inner$InnerInner" ));
+        assertThat( byteCodeName ).isEqualTo( "org/neo4j/codegen/ByteCodeUtilsTest$Inner$InnerInner" );
     }
 
     @Test
@@ -283,7 +299,7 @@ class ByteCodeUtilsTest
         String byteCodeName = typeName( reference );
 
         // THEN
-        assertThat( byteCodeName, equalTo( expected ) );
+        assertThat( byteCodeName ).isEqualTo( expected );
     }
 
     @SuppressWarnings( "unused" )

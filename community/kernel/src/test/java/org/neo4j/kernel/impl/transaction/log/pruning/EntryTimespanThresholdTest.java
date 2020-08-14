@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class EntryTimespanThresholdTest
 {
@@ -81,12 +82,12 @@ class EntryTimespanThresholdTest
         // given
         final EntryTimespanThreshold threshold = new EntryTimespanThreshold( logProvider, clock, MILLISECONDS, 100 );
 
-        final IOException ex = new IOException(  );
+        final IOException ex = new IOException();
         when( source.getFirstStartRecordTimestamp( version ) ).thenThrow( ex );
 
         // when
         threshold.init();
         assertFalse( threshold.reached( file, version, source ) );
-        logProvider.rawMessageMatcher().assertContains( "Fail to get timestamp info from transaction log file" );
+        assertThat( logProvider ).containsMessages( "Fail to get timestamp info from transaction log file" );
     }
 }

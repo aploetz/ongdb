@@ -19,14 +19,24 @@
  */
 package org.neo4j.cypher.internal.procs
 
+import org.neo4j.cypher.internal.ExecutionEngine
+import org.neo4j.cypher.internal.ExecutionPlan
+import org.neo4j.cypher.internal.RuntimeName
+import org.neo4j.cypher.internal.SystemCommandRuntimeName
 import org.neo4j.cypher.internal.plandescription.Argument
 import org.neo4j.cypher.internal.result.InternalExecutionResult
-import org.neo4j.cypher.internal.runtime.{ExecutionMode, InputDataStream, ProfileMode}
-import org.neo4j.cypher.internal.v4_0.util.InternalNotification
-import org.neo4j.cypher.internal.{ExecutionEngine, ExecutionPlan, RuntimeName, SystemCommandRuntimeName}
+import org.neo4j.cypher.internal.runtime.ExecutionMode
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.ProfileMode
+import org.neo4j.cypher.internal.util.InternalNotification
 import org.neo4j.cypher.result.RuntimeResult
+<<<<<<< HEAD
+=======
+import org.neo4j.graphdb.Transaction
+>>>>>>> neo4j/4.1
 import org.neo4j.graphdb.TransientFailureException
 import org.neo4j.internal.kernel.api.security.AccessMode
+import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.kernel.api.KernelTransaction
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.AnyValue
@@ -41,7 +51,16 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
                                               systemParams: MapValue,
                                               queryHandler: QueryHandler,
                                               source: Option[ExecutionPlan] = None,
+<<<<<<< HEAD
                                               checkCredentialsExpired: Boolean = true)
+=======
+                                              checkCredentialsExpired: Boolean = true,
+                                              initFunction: (MapValue, KernelTransaction) => Boolean = (_, _) => true,
+                                              finallyFunction: MapValue => Unit = _ => {},
+                                              parameterGenerator: (Transaction, SecurityContext) => MapValue = (_, _) => MapValue.EMPTY,
+                                              parameterConverter: (Transaction, MapValue) => MapValue = (_, p) => p,
+                                              assertPrivilegeAction: Transaction => Unit = _ => {})
+>>>>>>> neo4j/4.1
   extends ChainedExecutionPlan(source) {
 
   override def runSpecific(ctx: SystemUpdateCountingQueryContext,
@@ -55,11 +74,20 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
 
     var revertAccessModeChange: KernelTransaction.Revertable = null
     try {
+<<<<<<< HEAD
       if (checkCredentialsExpired) tc.securityContext().assertCredentialsNotExpired()
       val fullAccess = tc.securityContext().withMode(AccessMode.Static.FULL)
+=======
+      val securityContext = tc.securityContext()
+      if (checkCredentialsExpired) securityContext.assertCredentialsNotExpired()
+      val fullAccess = securityContext.withMode(AccessMode.Static.FULL)
+>>>>>>> neo4j/4.1
       revertAccessModeChange = tc.kernelTransaction().overrideWith(fullAccess)
+      val tx = tc.transaction()
+      assertPrivilegeAction(tx)
 
-      val systemSubscriber = new SystemCommandQuerySubscriber(ctx, new RowDroppingQuerySubscriber(subscriber), queryHandler)
+      val updatedParams = parameterConverter(tx, safeMergeParameters(systemParams, params, parameterGenerator.apply(tx, securityContext)))
+      val systemSubscriber = new SystemCommandQuerySubscriber(ctx, new RowDroppingQuerySubscriber(subscriber), queryHandler, updatedParams)
       try {
         tc.kernelTransaction().dataWrite() // assert that we are allowed to write
       } catch {
@@ -67,20 +95,32 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
           systemSubscriber.onError(e)
       }
       systemSubscriber.assertNotFailed()
+<<<<<<< HEAD
 
       val execution = normalExecutionEngine.executeSubQuery(query, systemParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
+=======
+>>>>>>> neo4j/4.1
       try {
-        execution.consumeAll()
-      } catch {
-        case _: Throwable =>
-        // do nothing, exceptions are handled by SystemCommandQuerySubscriber
-      }
-      systemSubscriber.assertNotFailed()
+        if (initFunction(updatedParams, tc.kernelTransaction())) {
+          val execution = normalExecutionEngine.executeSubQuery(query, updatedParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
+          try {
+            execution.consumeAll()
+          } catch {
+            case _: Throwable =>
+            // do nothing, exceptions are handled by SystemCommandQuerySubscriber
+          }
+          systemSubscriber.assertNotFailed()
 
-      if (systemSubscriber.shouldIgnoreResult()) {
-        IgnoredRuntimeResult
-      } else {
-        UpdatingSystemCommandRuntimeResult(ctx)
+          if (systemSubscriber.shouldIgnoreResult()) {
+            IgnoredRuntimeResult
+          } else {
+            UpdatingSystemCommandRuntimeResult(ctx)
+          }
+        } else {
+          UpdatingSystemCommandRuntimeResult(ctx)
+        }
+      } finally {
+        finallyFunction(updatedParams)
       }
     } finally {
       if (revertAccessModeChange != null) revertAccessModeChange
@@ -102,52 +142,59 @@ class UpdatingSystemCommandExecutionResult(inner: InternalExecutionResult) exten
 case class IgnoreResults()
 
 class QueryHandler {
-  def onError(t: Throwable): Throwable = t
+  def onError(t: Throwable, p: MapValue): Throwable = t
 
-  def onResult(offset: Int, value: AnyValue): Option[Either[Throwable, IgnoreResults]] = None
+  def onResult(offset: Int, value: AnyValue, p: MapValue): Option[Either[Throwable, IgnoreResults]] = None
 
-  def onNoResults(): Option[Either[Throwable, IgnoreResults]] = None
+  def onNoResults(p: MapValue): Option[Either[Throwable, IgnoreResults]] = None
 }
 
 class QueryHandlerBuilder(parent: QueryHandler) extends QueryHandler {
-  override def onError(t: Throwable): Throwable = parent.onError(t)
+  override def onError(t: Throwable, p: MapValue): Throwable = parent.onError(t, p)
 
-  override def onResult(offset: Int, value: AnyValue): Option[Either[Throwable, IgnoreResults]] = parent.onResult(offset, value)
+  override def onResult(offset: Int, value: AnyValue, params: MapValue): Option[Either[Throwable, IgnoreResults]] = parent.onResult(offset, value, params)
 
-  override def onNoResults(): Option[Either[Throwable, IgnoreResults]] = parent.onNoResults()
+  override def onNoResults(params: MapValue): Option[Either[Throwable, IgnoreResults]] = parent.onNoResults(params)
 
+<<<<<<< HEAD
   def handleError(f: Throwable => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
     override def onError(t: Throwable): Throwable = t match {
       case t: TransientFailureException => t
       case _ => f(t)
+=======
+  def handleError(f: (Throwable, MapValue) => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
+    override def onError(t: Throwable, p: MapValue): Throwable = t match {
+      case t: TransientFailureException => t
+      case _ => f(t, p)
+>>>>>>> neo4j/4.1
     }
   }
 
-  def handleNoResult(f: () => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
-    override def onNoResults(): Option[Either[Throwable, IgnoreResults]] = f().map(t => Left(t))
+  def handleNoResult(f: MapValue => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
+    override def onNoResults(params: MapValue): Option[Either[Throwable, IgnoreResults]] = f(params).map(t => Left(t))
   }
 
   def ignoreNoResult(): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
-    override def onNoResults(): Option[Either[Throwable, IgnoreResults]] = Some(Right(IgnoreResults()))
+    override def onNoResults(params: MapValue): Option[Either[Throwable, IgnoreResults]] = Some(Right(IgnoreResults()))
   }
 
-  def handleResult(handler: (Int, AnyValue) => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
-    override def onResult(offset: Int, value: AnyValue): Option[Either[Throwable, IgnoreResults]] = handler(offset, value).map(t => Left(t))
+  def handleResult(handler: (Int, AnyValue, MapValue) => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
+    override def onResult(offset: Int, value: AnyValue, p: MapValue): Option[Either[Throwable, IgnoreResults]] = handler(offset, value, p).map(t => Left(t))
   }
 
   def ignoreOnResult(): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
-    override def onResult(offset: Int, value: AnyValue): Option[Either[Throwable, IgnoreResults]] = Some(Right(IgnoreResults()))
+    override def onResult(offset: Int, value: AnyValue, p: MapValue): Option[Either[Throwable, IgnoreResults]] = Some(Right(IgnoreResults()))
   }
 }
 
 object QueryHandler {
-  def handleError(f: Throwable => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleError(f)
+  def handleError(f: (Throwable, MapValue) => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleError(f)
 
-  def handleNoResult(f: () => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleNoResult(f)
+  def handleNoResult(f: MapValue => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleNoResult(f)
 
   def ignoreNoResult(): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).ignoreNoResult()
 
-  def handleResult(handler: (Int, AnyValue) => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleResult(handler)
+  def handleResult(handler: (Int, AnyValue, MapValue) => Option[Throwable]): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).handleResult(handler)
 
   def ignoreOnResult(): QueryHandlerBuilder = new QueryHandlerBuilder(new QueryHandler).ignoreOnResult()
 }

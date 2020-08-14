@@ -19,14 +19,16 @@
  */
 package org.neo4j.internal.recordstorage;
 
+<<<<<<< HEAD
+=======
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.store.NeoStores;
-import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
-import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.SchemaStore;
 import org.neo4j.kernel.impl.store.StandardDynamicRecordAllocator;
 import org.neo4j.kernel.impl.store.StoreType;
 import org.neo4j.lock.ResourceLocker;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.CommandCreationContext;
 
 import static java.lang.Math.toIntExact;
@@ -38,36 +40,38 @@ class RecordStorageCommandCreationContext implements CommandCreationContext
 {
     private final NeoStores neoStores;
     private final Loaders loaders;
+    private final MemoryTracker memoryTracker;
     private final RelationshipCreator relationshipCreator;
     private final RelationshipDeleter relationshipDeleter;
     private final PropertyCreator propertyCreator;
     private final PropertyDeleter propertyDeleter;
-    private final NodeStore nodeStore;
-    private final RelationshipStore relationshipStore;
-    private final SchemaStore schemaStore;
+    private final PageCursorTracer cursorTracer;
 
-    RecordStorageCommandCreationContext( NeoStores neoStores, int denseNodeThreshold )
+    RecordStorageCommandCreationContext( NeoStores neoStores, int denseNodeThreshold, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
+        this.cursorTracer = cursorTracer;
         this.neoStores = neoStores;
+        this.memoryTracker = memoryTracker;
         this.loaders = new Loaders( neoStores );
-        RelationshipGroupGetter relationshipGroupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore() );
-        this.relationshipCreator = new RelationshipCreator( relationshipGroupGetter, denseNodeThreshold );
-        PropertyTraverser propertyTraverser = new PropertyTraverser();
-        this.propertyDeleter = new PropertyDeleter( propertyTraverser );
-        this.relationshipDeleter = new RelationshipDeleter( relationshipGroupGetter, propertyDeleter );
+        RelationshipGroupGetter relationshipGroupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore(), cursorTracer );
+        this.relationshipCreator = new RelationshipCreator( relationshipGroupGetter, denseNodeThreshold, cursorTracer );
+        PropertyTraverser propertyTraverser = new PropertyTraverser( cursorTracer );
+        this.propertyDeleter = new PropertyDeleter( propertyTraverser, cursorTracer );
+        this.relationshipDeleter = new RelationshipDeleter( relationshipGroupGetter, propertyDeleter, cursorTracer );
         PropertyStore propertyStore = neoStores.getPropertyStore();
         this.propertyCreator = new PropertyCreator(
                 new StandardDynamicRecordAllocator( propertyStore.getStringStore(), propertyStore.getStringStore().getRecordDataSize() ),
                 new StandardDynamicRecordAllocator( propertyStore.getArrayStore(), propertyStore.getArrayStore().getRecordDataSize() ), propertyStore,
-                propertyTraverser, propertyStore.allowStorePointsAndTemporal() );
-        this.nodeStore = neoStores.getNodeStore();
-        this.relationshipStore = neoStores.getRelationshipStore();
-        this.schemaStore = neoStores.getSchemaStore();
+                propertyTraverser, propertyStore.allowStorePointsAndTemporal(), cursorTracer, memoryTracker );
     }
 
     private long nextId( StoreType storeType )
     {
+<<<<<<< HEAD
         return neoStores.getRecordStore( storeType ).nextId();
+=======
+        return neoStores.getRecordStore( storeType ).nextId( cursorTracer );
+>>>>>>> neo4j/4.1
     }
 
     @Override
@@ -91,19 +95,19 @@ class RecordStorageCommandCreationContext implements CommandCreationContext
     @Override
     public int reserveRelationshipTypeTokenId()
     {
-        return toIntExact( neoStores.getRelationshipTypeTokenStore().nextId() );
+        return toIntExact( neoStores.getRelationshipTypeTokenStore().nextId( cursorTracer ) );
     }
 
     @Override
     public int reservePropertyKeyTokenId()
     {
-        return toIntExact( neoStores.getPropertyKeyTokenStore().nextId() );
+        return toIntExact( neoStores.getPropertyKeyTokenStore().nextId( cursorTracer ) );
     }
 
     @Override
     public int reserveLabelTokenId()
     {
-        return toIntExact( neoStores.getLabelTokenStore().nextId() );
+        return toIntExact( neoStores.getLabelTokenStore().nextId( cursorTracer ) );
     }
 
     @Override
@@ -114,9 +118,9 @@ class RecordStorageCommandCreationContext implements CommandCreationContext
     TransactionRecordState createTransactionRecordState( IntegrityValidator integrityValidator, long lastTransactionIdWhenStarted,
             ResourceLocker locks )
     {
-        RecordChangeSet recordChangeSet = new RecordChangeSet( loaders );
+        RecordChangeSet recordChangeSet = new RecordChangeSet( loaders, memoryTracker );
         return new TransactionRecordState( neoStores, integrityValidator,
                 recordChangeSet, lastTransactionIdWhenStarted, locks,
-                relationshipCreator, relationshipDeleter, propertyCreator, propertyDeleter );
+                relationshipCreator, relationshipDeleter, propertyCreator, propertyDeleter, cursorTracer, memoryTracker );
     }
 }

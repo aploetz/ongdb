@@ -21,6 +21,7 @@ package org.neo4j.values.virtual;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.storable.ArrayValue;
@@ -28,14 +29,15 @@ import org.neo4j.values.storable.TextArray;
 import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.virtual.PathValue.DirectPathValue;
 
+import static org.neo4j.memory.HeapEstimator.sizeOf;
+
 /**
  * Entry point to the virtual values library.
  */
-@SuppressWarnings( "WeakerAccess" )
 public final class VirtualValues
 {
     public static final MapValue EMPTY_MAP = MapValue.EMPTY;
-    public static final ListValue EMPTY_LIST = new ListValue.ArrayListValue( new AnyValue[0] );
+    public static final ListValue EMPTY_LIST = new ListValue.ArrayListValue( new AnyValue[0], 0 );
 
     private VirtualValues()
     {
@@ -45,12 +47,27 @@ public final class VirtualValues
 
     public static ListValue list( AnyValue... values )
     {
-        return new ListValue.ArrayListValue( values );
+        long payloadSize = 0;
+        for ( AnyValue value : values )
+        {
+            payloadSize += value.estimatedHeapUsage();
+        }
+        return new ListValue.ArrayListValue( values, payloadSize );
     }
 
     public static ListValue fromList( List<AnyValue> values )
     {
-        return new ListValue.JavaListListValue( values );
+        long payloadSize = 0;
+        for ( AnyValue value : values )
+        {
+            payloadSize += value.estimatedHeapUsage();
+        }
+        return new ListValue.JavaListListValue( values, payloadSize );
+    }
+
+    public static ListValue fromList( List<AnyValue> values, long payloadSize )
+    {
+        return new ListValue.JavaListListValue( values, payloadSize );
     }
 
     public static ListValue range( long start, long end, long step )
@@ -83,12 +100,16 @@ public final class VirtualValues
     public static MapValue map( String[] keys, AnyValue[] values )
     {
         assert keys.length == values.length;
-        HashMap<String,AnyValue> map = new HashMap<>( keys.length );
+        long payloadSize = 0;
+        Map<String,AnyValue> map = new HashMap<>( (int) ((float) keys.length / 0.75f + 1.0f) );
         for ( int i = 0; i < keys.length; i++ )
         {
-            map.put( keys[i], values[i] );
+            String key = keys[i];
+            AnyValue value = values[i];
+            map.put( key, value );
+            payloadSize += sizeOf( key ) + value.estimatedHeapUsage();
         }
-        return new MapValue.MapWrappingMapValue( map );
+        return new MapValue.MapWrappingMapValue( map, payloadSize );
     }
 
     public static ErrorValue error( Exception e )
@@ -112,10 +133,18 @@ public final class VirtualValues
         assert relationships != null;
         if ( (nodes.length + relationships.length) % 2 == 0 )
         {
-            throw new IllegalArgumentException(
-                    "Tried to construct a path that is not built like a path: even number of elements" );
+            throw new IllegalArgumentException( "Tried to construct a path that is not built like a path: even number of elements" );
         }
-        return new DirectPathValue( nodes, relationships );
+        long payloadSize = 0;
+        for ( NodeValue node : nodes )
+        {
+            payloadSize += node.estimatedHeapUsage();
+        }
+        for ( RelationshipValue relationship : relationships )
+        {
+            payloadSize += relationship.estimatedHeapUsage();
+        }
+        return new DirectPathValue( nodes, relationships, payloadSize );
     }
 
     public static NodeValue nodeValue( long id, TextArray labels, MapValue properties )

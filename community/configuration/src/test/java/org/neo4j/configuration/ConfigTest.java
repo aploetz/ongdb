@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,9 +36,11 @@ import java.util.Set;
 import org.neo4j.configuration.connectors.BoltConnector;
 import org.neo4j.configuration.connectors.HttpConnector;
 import org.neo4j.configuration.connectors.HttpsConnector;
+import org.neo4j.graphdb.config.Configuration;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.logging.Log;
+import org.neo4j.test.extension.DisabledForRoot;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
@@ -52,6 +53,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.configuration.SettingConstraints.dependency;
+import static org.neo4j.configuration.SettingConstraints.is;
+import static org.neo4j.configuration.SettingConstraints.max;
+import static org.neo4j.configuration.SettingConstraints.unconstrained;
 import static org.neo4j.configuration.SettingImpl.newBuilder;
 import static org.neo4j.configuration.SettingValueParsers.BOOL;
 import static org.neo4j.configuration.SettingValueParsers.FALSE;
@@ -59,7 +64,11 @@ import static org.neo4j.configuration.SettingValueParsers.INT;
 import static org.neo4j.configuration.SettingValueParsers.PATH;
 import static org.neo4j.configuration.SettingValueParsers.STRING;
 import static org.neo4j.configuration.SettingValueParsers.listOf;
+<<<<<<< HEAD
 import static org.neo4j.test.AssumptionHelper.withoutReadPermissions;
+=======
+import static org.neo4j.logging.LogAssertions.assertThat;
+>>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 class ConfigTest
@@ -236,31 +245,6 @@ class ConfigTest
     }
 
     @Test
-    void testValidator()
-    {
-        Config.Builder builder = Config.newBuilder()
-                .addSettingsClass( TestSettings.class )
-                .addGroupSettingClass( TestConnectionGroupSetting.class )
-                .addValidator( TestConnectionGroupSetting.class )
-                .set( TestConnectionGroupSetting.group( "1" ).port, 1111 )
-                .set( TestConnectionGroupSetting.group( "2" ).port, 1111 );
-
-        Exception e = assertThrows( IllegalArgumentException.class, builder::build );
-        assertEquals( "Need unique ports", e.getMessage() );
-    }
-
-    @Test
-    void testInvalidValidator()
-    {
-
-        Config.Builder builder = Config.newBuilder()
-                .addValidator( InvalidValidator.class );
-
-        Exception e = assertThrows( IllegalArgumentException.class, builder::build );
-        assertTrue( e.getMessage().contains( "Failed to create instance of" ) );
-    }
-
-    @Test
     void testMalformedGroupSetting()
     {
         Map<String,String> settings = Map.of( "test.connection.http.1.foo.bar", "1111");
@@ -342,7 +326,7 @@ class ConfigTest
                 .set( TestConnectionGroupSetting.group( "default" ).port, 7474 )
                 .set( TestConnectionGroupSetting.group( "1" ).port, 1111 )
                 .set( TestConnectionGroupSetting.group( "1" ).hostname, "0.0.0.0" )
-                .set( TestConnectionGroupSetting.group( "1" ).secure, false  )
+                .set( TestConnectionGroupSetting.group( "1" ).secure, false )
                 .build();
 
         Config config1 = Config.newBuilder()
@@ -477,12 +461,14 @@ class ConfigTest
     }
 
     @Test
+    @DisabledForRoot
     void shouldLogIfConfigFileCouldNotBeRead() throws IOException
     {
         AssertableLogProvider logProvider = new AssertableLogProvider( true );
         Log log = logProvider.getLog( Config.class );
         File confFile = testDirectory.file( "test.conf" );
         assertTrue( confFile.createNewFile() );
+<<<<<<< HEAD
         try ( Closeable ignored = withoutReadPermissions( confFile ) )
         {
             Config config = Config.emptyBuilder().fromFileNoThrow( confFile ).build();
@@ -491,6 +477,14 @@ class ConfigTest
 
             logProvider.rawMessageMatcher().assertContains( "Unable to load config file [%s]" );
         }
+=======
+        assumeTrue( confFile.setReadable( false ) );
+
+        Config config = Config.emptyBuilder().fromFileNoThrow( confFile ).build();
+        config.setLogger( log );
+
+        assertThat( logProvider ).containsMessages( "Unable to load config file [%s]" );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -516,6 +510,7 @@ class ConfigTest
     }
 
     @Test
+    @DisabledForRoot
     void mustThrowIfConfigFileCoutNotBeRead() throws IOException
     {
         File confFile = testDirectory.file( "test.conf" );
@@ -532,27 +527,27 @@ class ConfigTest
         Log log = mock( Log.class );
         File confFile = testDirectory.createFile( "test.conf" );
         Files.write( confFile.toPath(), Arrays.asList(
-                ExternalSettings.initialHeapSize.name() + "=5g",
-                ExternalSettings.initialHeapSize.name() + "=4g",
-                ExternalSettings.initialHeapSize.name() + "=3g",
-                ExternalSettings.maxHeapSize.name() + "=10g",
-                ExternalSettings.maxHeapSize.name() + "=11g" ) );
+                ExternalSettings.initial_heap_size.name() + "=5g",
+                ExternalSettings.initial_heap_size.name() + "=4g",
+                ExternalSettings.initial_heap_size.name() + "=3g",
+                ExternalSettings.max_heap_size.name() + "=10g",
+                ExternalSettings.max_heap_size.name() + "=11g" ) );
 
         Config config = Config.newBuilder()
                 .fromFile( confFile )
-                .setDefault( ExternalSettings.initialHeapSize, "1g" )
-                .setDefault( ExternalSettings.initialHeapSize, "2g" )
+                .setDefault( ExternalSettings.initial_heap_size, "1g" )
+                .setDefault( ExternalSettings.initial_heap_size, "2g" )
                 .build();
 
         config.setLogger( log );
 
         // We should only log the warning once for each.
         verify( log ).warn( "The '%s' setting is overridden. Setting value changed from '%s' to '%s'.",
-                ExternalSettings.initialHeapSize.name(), "5g", "4g" );
+                ExternalSettings.initial_heap_size.name(), "5g", "4g" );
         verify( log ).warn( "The '%s' setting is overridden. Setting value changed from '%s' to '%s'.",
-                ExternalSettings.initialHeapSize.name(), "4g", "3g" );
+                ExternalSettings.initial_heap_size.name(), "4g", "3g" );
         verify( log ).warn( "The '%s' setting is overridden. Setting value changed from '%s' to '%s'.",
-                ExternalSettings.maxHeapSize.name(), "10g", "11g" );
+                ExternalSettings.max_heap_size.name(), "10g", "11g" );
     }
 
     @Test
@@ -633,7 +628,50 @@ class ConfigTest
         var logProvider = new AssertableLogProvider();
         config.setLogger( logProvider.getLog( Config.class ) );
 
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
+    }
+
+    @Test
+    void shouldCorrectlyValidateDependenciesInConstraints()
+    {
+        //Given
+        Config.Builder builder = Config.emptyBuilder().addSettingsClass( ConstraintDependency.class );
+
+        //Then
+        assertDoesNotThrow( builder::build );
+
+        builder.set( ConstraintDependency.setting1, 5 );
+        builder.set( ConstraintDependency.setting2, 3 );
+        assertDoesNotThrow( builder::build );
+
+        builder.set( ConstraintDependency.setting2, 4 );
+        String msg = assertThrows( IllegalArgumentException.class, builder::build ).getMessage();
+        assertThat( msg ).contains( "maximum allowed value is 3" );
+
+        builder.set( ConstraintDependency.setting1, 2 );
+        assertDoesNotThrow( builder::build );
+    }
+
+    @Test
+    void shouldFindCircularDependenciesInConstraints()
+    {
+        //Given
+        Config.Builder builder = Config.emptyBuilder().addSettingsClass( CircularConstraints.class );
+
+        //Then
+        String msg = assertThrows( IllegalArgumentException.class, builder::build ).getMessage();
+        assertThat( msg ).contains( "circular dependency" );
+    }
+
+    @Test
+    void shouldNotAllowDependenciesOnDynamicSettings()
+    {
+        //Given
+        Config.Builder builder = Config.emptyBuilder().addSettingsClass( DynamicConstraintDependency.class );
+
+        //Then
+        String msg = assertThrows( IllegalArgumentException.class, builder::build ).getMessage();
+        assertThat( msg ).contains( "Can not depend on dynamic setting" );
     }
 
     private static final class TestSettings implements SettingsDeclaration
@@ -641,12 +679,56 @@ class ConfigTest
         static final Setting<String> stringSetting = newBuilder( "test.setting.string", STRING, "hello" ).build();
         static final Setting<Integer> intSetting = newBuilder( "test.setting.integer", INT, 1 ).dynamic().build();
         static final Setting<Integer> constrainedIntSetting = newBuilder( "test.setting.constrained-integer", INT, 1 )
+<<<<<<< HEAD
                 .addConstraint( SettingConstraints.max( 3 ) ).dynamic().build();
+=======
+                .addConstraint( max( 3 ) ).dynamic().build();
+>>>>>>> neo4j/4.1
         static final Setting<List<Integer>> intListSetting = newBuilder( "test.setting.integerlist", listOf( INT ), List.of( 1 ) ).build();
         static final Setting<Boolean> boolSetting = newBuilder( "test.setting.bool", BOOL, null ).immutable().build();
     }
 
-    public static class TestConnectionGroupSetting extends GroupSetting implements GroupSettingValidator
+    private static final class CircularConstraints implements SettingsDeclaration
+    {
+        private static SettingConstraint<String> circular = new SettingConstraint<>()
+        {
+            @Override
+            public void validate( String value, Configuration config )
+            {
+                config.get( CircularConstraints.setting2 );
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return "circular test dependency";
+            }
+        };
+
+        static final Setting<String> setting1 = newBuilder( "test.setting.1", STRING, "aloha" )
+                .addConstraint( circular ).build();
+        static final Setting<Integer> setting2 = newBuilder( "test.setting.2", INT, 1 )
+                .addConstraint( dependency( max( 3 ), max( 5 ), setting1, is( "aloha" ) ) )
+                .build();
+    }
+
+    private static final class DynamicConstraintDependency implements SettingsDeclaration
+    {
+        static final Setting<Integer> setting1 = newBuilder( "test.setting.1", INT, 1 ).dynamic().build();
+        static final Setting<Integer> setting2 = newBuilder( "test.setting.2", INT, 1 )
+                .addConstraint( dependency( max( 3 ), unconstrained(), setting1, is( 5 )  ) )
+                .build();
+    }
+
+    private static final class ConstraintDependency implements SettingsDeclaration
+    {
+        static final Setting<Integer> setting1 = newBuilder( "test.setting.1", INT, 1 ).build();
+        static final Setting<Integer> setting2 = newBuilder( "test.setting.2", INT, 1 )
+                .addConstraint( dependency( max( 3 ), unconstrained(), setting1, is( 5 )  ) )
+                .build();
+    }
+
+    public static class TestConnectionGroupSetting extends GroupSetting
     {
 
         public static TestConnectionGroupSetting group( String name )
@@ -666,54 +748,6 @@ class ConfigTest
         TestConnectionGroupSetting( String id )
         {
             super( id );
-        }
-
-        @Override
-        public void validate( Map<Setting<?>,Object> values, Config config )
-        {
-            Set<Integer> ports = new HashSet<>();
-            values.forEach( ( S, V ) ->
-            {
-                if ( ((SettingImpl<Object>) S).suffix().equals( "port" ) )
-                {
-                    if ( !ports.add( (Integer) V ) )
-                    {
-                        throw new IllegalArgumentException( "Need unique ports" );
-                    }
-                }
-            } );
-        }
-
-        @Override
-        public String getDescription()
-        {
-            return "With unique ports";
-        }
-
-    }
-
-    static class InvalidValidator implements GroupSettingValidator
-    {
-        InvalidValidator( Object invalidConstructor )
-        {
-        }
-
-        @Override
-        public String getPrefix()
-        {
-            return "test.validator";
-        }
-
-        @Override
-        public String getDescription()
-        {
-            return null;
-        }
-
-        @Override
-        public void validate( Map<Setting<?>,Object> values, Config config )
-        {
-
         }
     }
 

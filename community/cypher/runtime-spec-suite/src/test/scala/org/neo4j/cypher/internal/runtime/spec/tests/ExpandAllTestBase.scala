@@ -19,12 +19,19 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.plans.Ascending
-import org.neo4j.cypher.internal.runtime.spec._
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RowCount
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.cypher.internal.runtime.spec.tests.ExpandAllTestBase.smallTestGraph
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
 import org.neo4j.exceptions.ParameterWrongTypeException
-import org.neo4j.graphdb.{Label, Node, RelationshipType}
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.RelationshipType
 import org.neo4j.kernel.impl.coreapi.InternalTransaction
 
 object ExpandAllTestBase {
@@ -268,7 +275,7 @@ abstract class ExpandAllTestBase[CONTEXT <: RuntimeContext](
       Array(r1.getStartNode, r1.getEndNode),
       Array(r2.getStartNode, r2.getEndNode),
       Array(r3.getStartNode, r3.getEndNode)
-      )
+    )
 
     runtimeResult should beColumns("x", "y").withRows(expected)
   }
@@ -345,7 +352,7 @@ abstract class ExpandAllTestBase[CONTEXT <: RuntimeContext](
       .|.expandAll("(b)-[:R]->(c)")
       .|.expandAll("(a)-[:R]->(b)")
       .|.argument("a")
-      .nodeByLabelScan("a", "A")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -394,7 +401,7 @@ trait ExpandAllWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
       .|.expandAll("(b)-[:R]->(c)")
       .|.expandAll("(a)-[:R]->(b)")
       .|.argument("a")
-      .nodeByLabelScan("a", "A")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -405,7 +412,12 @@ trait ExpandAllWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
     } yield Array(a, b, c)
 
     // then
-    runtimeResult should beColumns("a", "b", "c").withRows(inOrder(expected))
+    /*
+     There is no defined order coming from the Label Scan, so the test can not assert on a total ordering,
+     however there is a defined grouping by argument 'a', and a per-argument ordering on 'b'.
+     */
+    runtimeResult should beColumns("a", "b", "c").withRows(groupedBy("a").asc("b"))
+    runtimeResult should beColumns("a", "b", "c").withRows(expected)
   }
 
   test("should handle node reference as input") {
@@ -415,7 +427,7 @@ trait ExpandAllWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
       Seq(
         (i, (2 * i) % n, "OTHER"),
         (i, (i + 1) % n, "NEXT")
-        )
+      )
     }).reduce(_ ++ _)
     val (nodes, rels) = given {
       val nodes = nodeGraph(n, "Honey")
@@ -480,5 +492,88 @@ trait ExpandAllWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
         row <- List(Array(r.getStartNode, r.getEndNode))
       } yield row
     runtimeResult should beColumns("x", "y").withRows(expected)
+  }
+
+  test("should handle expand + filter on cached property") {
+    // given
+    val size = 100
+
+    val (aNodes, bNodes) = given {
+      bipartiteGraph(
+        size,
+        "A",
+        "B",
+        "R",
+        aProperties = {
+          case i: Int => Map("prop" -> i)
+        })
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a", "b")
+      .filter("cache[a.prop] < 10")
+      .expandAll("(a)-[:R]->(b)")
+      .cacheProperties("cache[a.prop]")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected: Seq[Array[Node]] =
+      for {
+        a <- aNodes
+        if a.getProperty("prop").asInstanceOf[Int] < 10
+        b <- bNodes
+        row <- List(Array(a, b))
+      } yield row
+
+    runtimeResult should beColumns("a", "b").withRows(expected)
+  }
+
+  test("should handle chained expands + filters on cached properties") {
+    // given
+    val size = 100
+
+    val (aNodes, bNodes) = given {
+      bipartiteGraph(
+        size,
+        "A",
+        "B",
+        "R",
+        aProperties = {
+          case i: Int => Map("prop" -> i)
+        },
+        bProperties = {
+          case i: Int => Map("prop" -> i)
+        })
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a2", "b")
+      .filter("cache[b.prop] < 10 AND cache[a2.prop] < 10")
+      .expandAll("(b)<-[:R]-(a2)")
+      .filter("cache[a1.prop] < 10 AND cache[b.prop] >= 0")
+      .expandAll("(a1)-[:R]->(b)")
+      .cacheProperties("cache[a1.prop]")
+      .nodeByLabelScan("a1", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected: Seq[Array[Node]] =
+      for {
+        a1 <- aNodes
+        if a1.getProperty("prop").asInstanceOf[Int] < 10
+        b <- bNodes
+        a2 <- aNodes
+        if a2.getProperty("prop").asInstanceOf[Int] < 10 && b.getProperty("prop").asInstanceOf[Int] < 10
+        row <- List(Array(a2, b))
+      } yield row
+
+    runtimeResult should beColumns("a2", "b").withRows(expected)
   }
 }

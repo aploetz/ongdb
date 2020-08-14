@@ -34,12 +34,15 @@ import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
+import org.neo4j.kernel.api.procedure.Sensitive;
 
 import static java.util.Collections.emptyList;
 import static org.neo4j.kernel.api.exceptions.Status.Procedure.ProcedureCallFailed;
 import static org.neo4j.kernel.api.exceptions.Status.Statement.FeatureDeprecationWarning;
 import static org.neo4j.kernel.impl.security.User.PASSWORD_CHANGE_REQUIRED;
 import static org.neo4j.procedure.Mode.DBMS;
+import static org.neo4j.procedure.Mode.READ;
+import static org.neo4j.procedure.Mode.WRITE;
 
 @SuppressWarnings( {"unused", "WeakerAccess"} )
 public class AuthProcedures
@@ -56,10 +59,10 @@ public class AuthProcedures
     @SystemProcedure
     @Deprecated
     @Description( "Create a new user." )
-    @Procedure( name = "dbms.security.createUser", mode = DBMS, deprecatedBy = "Administration command: CREATE USER" )
+    @Procedure( name = "dbms.security.createUser", mode = WRITE, deprecatedBy = "Administration command: CREATE USER" )
     public void createUser(
             @Name( "username" ) String username,
-            @Name( "password" ) String password,
+            @Name( "password" ) @Sensitive String password,
             @Name( value = "requirePasswordChange", defaultValue = "true" ) boolean requirePasswordChange )
             throws ProcedureException
     {
@@ -71,7 +74,7 @@ public class AuthProcedures
     @SystemProcedure
     @Deprecated
     @Description( "Delete the specified user." )
-    @Procedure( name = "dbms.security.deleteUser", mode = DBMS, deprecatedBy = "Administration command: DROP USER" )
+    @Procedure( name = "dbms.security.deleteUser", mode = WRITE, deprecatedBy = "Administration command: DROP USER" )
     public void deleteUser( @Name( "username" ) String username ) throws ProcedureException
     {
         var query = String.format( "DROP USER %s", escapeParameter( username ) );
@@ -81,8 +84,8 @@ public class AuthProcedures
     @SystemProcedure
     @Deprecated
     @Description( "Change the current user's password." )
-    @Procedure( name = "dbms.security.changePassword", mode = DBMS, deprecatedBy = "Administration command: ALTER CURRENT USER SET PASSWORD" )
-    public void changePassword( @Name( "password" ) String password ) throws ProcedureException
+    @Procedure( name = "dbms.security.changePassword", mode = WRITE, deprecatedBy = "Administration command: ALTER CURRENT USER SET PASSWORD" )
+    public void changePassword( @Name( "password" ) @Sensitive String password ) throws ProcedureException
     {
         throw new ProcedureException( FeatureDeprecationWarning, "This procedure is no longer available, use: 'ALTER CURRENT USER SET PASSWORD'" );
     }
@@ -100,7 +103,7 @@ public class AuthProcedures
     @SystemProcedure
     @Deprecated
     @Description( "List all native users." )
-    @Procedure( name = "dbms.security.listUsers", mode = DBMS, deprecatedBy = "Administration command: SHOW USERS" )
+    @Procedure( name = "dbms.security.listUsers", mode = READ, deprecatedBy = "Administration command: SHOW USERS" )
     public Stream<UserResult> listUsers() throws ProcedureException
     {
         var query = "SHOW USERS";

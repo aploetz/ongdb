@@ -29,7 +29,7 @@ import static java.util.Arrays.copyOf;
  * Methods "missing" from {@link Arrays} are provided here.
  *
  */
-public abstract class ArrayUtil
+public final class ArrayUtil
 {
     public static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 
@@ -318,7 +318,7 @@ public abstract class ArrayUtil
     @SafeVarargs
     public static <T> T[] without( T[] source, T... toRemove )
     {
-        T[] result = source.clone();
+        T[] result = Arrays.copyOf( source, source.length );
         int length = result.length;
         for ( T candidate : toRemove )
         {

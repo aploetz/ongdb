@@ -7,7 +7,11 @@
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
+<<<<<<< HEAD
     <artifactId>ongdb-consistency-check</artifactId>
+=======
+    <artifactId>neo4j-consistency-check</artifactId>
+>>>>>>> neo4j/4.1
 
     <name>ONgDB - Consistency Checker</name>
     <description>Tool for checking consistency of a Neo4j data store.</description>
@@ -68,16 +72,12 @@
             <artifactId>annotations</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.junit.vintage</groupId>
-            <artifactId>junit-vintage-engine</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.hamcrest</groupId>
@@ -101,6 +101,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-kernel</artifactId>
             <version>${project.version}</version>
@@ -115,6 +116,9 @@
         </dependency>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
+=======
+            <groupId>org.neo4j</groupId>
+>>>>>>> neo4j/4.1
             <artifactId>log-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
@@ -135,6 +139,7 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+<<<<<<< HEAD
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-record-storage-engine</artifactId>
@@ -142,5 +147,7 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+=======
+>>>>>>> neo4j/4.1
     </dependencies>
 </project>

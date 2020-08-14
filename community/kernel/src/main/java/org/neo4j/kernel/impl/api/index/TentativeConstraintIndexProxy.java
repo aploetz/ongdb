@@ -25,11 +25,13 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidationException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.schema.UniquePropertyValueValidationException;
 import org.neo4j.kernel.api.index.IndexReader;
@@ -63,21 +65,23 @@ public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
     private final FlippableIndexProxy flipper;
     private final OnlineIndexProxy target;
     private final Collection<IndexEntryConflictException> failures = new CopyOnWriteArrayList<>();
+    private TokenNameLookup tokenNameLookup;
 
-    TentativeConstraintIndexProxy( FlippableIndexProxy flipper, OnlineIndexProxy target )
+    TentativeConstraintIndexProxy( FlippableIndexProxy flipper, OnlineIndexProxy target, TokenNameLookup tokenNameLookup )
     {
         this.flipper = flipper;
         this.target = target;
+        this.tokenNameLookup = tokenNameLookup;
     }
 
     @Override
-    public IndexUpdater newUpdater( IndexUpdateMode mode )
+    public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
     {
         switch ( mode )
         {
             case ONLINE:
                 return new DelegatingIndexUpdater( new DeferredConflictCheckingIndexUpdater(
-                        target.accessor.newUpdater( mode ), target::newReader, target.getDescriptor() ) )
+                        target.accessor.newUpdater( mode, cursorTracer ), target::newReader, target.getDescriptor(), cursorTracer ) )
                 {
                     @Override
                     public void process( IndexEntryUpdate<?> update )
@@ -107,7 +111,7 @@ public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
                 };
 
             case RECOVERY:
-                return super.newUpdater( mode );
+                return super.newUpdater( mode, cursorTracer );
 
             default:
                 throw new IllegalArgumentException( "Unsupported update mode: " + mode );
@@ -164,8 +168,7 @@ public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
             throw new UniquePropertyValueValidationException(
                     ConstraintDescriptorFactory.uniqueForSchema( descriptor ),
                     ConstraintValidationException.Phase.VERIFICATION,
-                    new HashSet<>( failures )
-                );
+                    new HashSet<>( failures ), tokenNameLookup );
         }
     }
 

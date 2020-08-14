@@ -26,16 +26,37 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.PropertyType;
 import org.neo4j.storageengine.api.PropertyKeyValue;
 import org.neo4j.values.storable.Value;
 
-public class PropertyBlock implements Cloneable
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOf;
+
+/**
+ * First value block in have the following layout:
+ * <pre>
+ * d = data
+ * x = maybe data
+ * i = inlined
+ * t = type
+ * k = key
+ * [dddd][dddd][dddd][dddd][xxxi,tttt][kkkk,kkkk][kkkk,kkkk][kkkk,kkkk]
+ * </pre>
+ * The rest of the blocks are pure data. In case of a long string or big array that does not fit in the blocks, we will
+ * have a single value block with a pointer to dynamic record chain. The dynamic records are loaded into valueRecords, in
+ * order, to provide access in a single point.
+ */
+public class PropertyBlock
 {
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance( PropertyBlock.class );
+    public static final long HEAP_SIZE = SHALLOW_SIZE + sizeOf( new long[1] );
+
     /**
      * Size of one property block in a property record. One property may be composed by one or more property blocks
      * and one property record contains several property blocks.
@@ -47,6 +68,26 @@ public class PropertyBlock implements Cloneable
     private static final int MAX_ARRAY_TOSTRING_SIZE = 4;
     private List<DynamicRecord> valueRecords;
     private long[] valueBlocks;
+
+    public PropertyBlock()
+    {
+    }
+
+    public PropertyBlock( PropertyBlock other )
+    {
+        if ( other.valueBlocks != null )
+        {
+            this.valueBlocks = Arrays.copyOf( other.valueBlocks, other.valueBlocks.length );
+        }
+        if ( other.valueRecords != null )
+        {
+            this.valueRecords = new ArrayList<>( other.valueRecords.size() );
+            for ( DynamicRecord valueRecord : other.valueRecords )
+            {
+                this.valueRecords.add( new DynamicRecord( valueRecord ) );
+            }
+        }
+    }
 
     public PropertyType getType()
     {
@@ -89,7 +130,7 @@ public class PropertyBlock implements Cloneable
     {
         if ( valueRecords == null )
         {
-            valueRecords = new LinkedList<>();
+            valueRecords = new ArrayList<>( 1 );
         }
         valueRecords.add( record );
     }
@@ -188,11 +229,11 @@ public class PropertyBlock implements Cloneable
                 result.append( ",firstDynamic=" ).append( getSingleValueLong() );
                 break;
             default:
-                Object value = type.value( this, null ).asObject();
+                Object value = type.value( this, null, PageCursorTracer.NULL ).asObject();
                 if ( value != null && value.getClass().isArray() )
                 {
                     int length = Array.getLength( value );
-                    StringBuilder buf = new StringBuilder( value.getClass().getComponentType().getSimpleName() ).append( "[" );
+                    StringBuilder buf = new StringBuilder( value.getClass().getComponentType().getSimpleName() ).append( '[' );
                     for ( int i = 0; i < length && i <= MAX_ARRAY_TOSTRING_SIZE; i++ )
                     {
                         if ( i != 0 )
@@ -229,6 +270,7 @@ public class PropertyBlock implements Cloneable
         return result.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public PropertyBlock clone()
     {
@@ -255,6 +297,8 @@ public class PropertyBlock implements Cloneable
         }
     }
 
+=======
+>>>>>>> neo4j/4.1
     public boolean hasSameContentsAs( PropertyBlock other )
     {
         // Assumption (which happens to be true) that if a heavy (long string/array) property
@@ -262,15 +306,15 @@ public class PropertyBlock implements Cloneable
         return Arrays.equals( valueBlocks, other.valueBlocks );
     }
 
-    public Value newPropertyValue( PropertyStore propertyStore )
+    public Value newPropertyValue( PropertyStore propertyStore, PageCursorTracer cursorTracer )
     {
-        return getType().value( this, propertyStore );
+        return getType().value( this, propertyStore, cursorTracer );
     }
 
-    public PropertyKeyValue newPropertyKeyValue( PropertyStore propertyStore )
+    public PropertyKeyValue newPropertyKeyValue( PropertyStore propertyStore, PageCursorTracer cursorTracer )
     {
         int propertyKeyId = getKeyIndexId();
-        return new PropertyKeyValue( propertyKeyId, getType().value( this, propertyStore ) );
+        return new PropertyKeyValue( propertyKeyId, getType().value( this, propertyStore, cursorTracer ) );
     }
 
     public static int keyIndexId( long valueBlock )
@@ -303,5 +347,29 @@ public class PropertyBlock implements Cloneable
     {
         // [][][][][   i,tttt][kkkk,kkkk][kkkk,kkkk][kkkk,kkkk]
         return (valueBlock & 0x10000000L) > 0;
+    }
+
+    @Override
+    public boolean equals( Object o )
+    {
+        if ( this == o )
+        {
+            return true;
+        }
+        if ( o == null || getClass() != o.getClass() )
+        {
+            return false;
+        }
+        PropertyBlock that = (PropertyBlock) o;
+        return Objects.equals( valueRecords, that.valueRecords ) &&
+                Arrays.equals( valueBlocks, that.valueBlocks );
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int result = Objects.hash( valueRecords );
+        result = 31 * result + Arrays.hashCode( valueBlocks );
+        return result;
     }
 }

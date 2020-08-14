@@ -67,7 +67,7 @@ Feature: SkipLimitAcceptance
       RETURN p.name AS name
       LIMIT $limit
       """
-    Then a SyntaxError should be raised at runtime: InvalidArgumentType
+    Then a SyntaxError should be raised at compile time: InvalidArgumentType
 
   Scenario: Floating point parameter for LIMIT with ORDER BY and an empty graph should fail
     And parameters are:
@@ -78,7 +78,7 @@ Feature: SkipLimitAcceptance
       RETURN p.name AS name
       ORDER BY name LIMIT $limit
       """
-    Then a SyntaxError should be raised at runtime: InvalidArgumentType
+    Then a SyntaxError should be raised at compile time: InvalidArgumentType
 
   Scenario: Floating point parameter for SKIP and an empty graph should fail
     And parameters are:
@@ -89,7 +89,7 @@ Feature: SkipLimitAcceptance
       RETURN p.name AS name
       SKIP $limit
       """
-    Then a SyntaxError should be raised at runtime: InvalidArgumentType
+    Then a SyntaxError should be raised at compile time: InvalidArgumentType
 
   Scenario: Graph touching LIMIT should fail with a syntax exception
     And having executed:
@@ -243,6 +243,17 @@ Feature: SkipLimitAcceptance
       """
     Then the result should be, in any order:
       | name     |
+    And no side effects
+
+  Scenario: Skipping more than Integer.Max rows should be allowed
+    When executing query:
+      """
+      MATCH (p:Person)
+      RETURN p
+      SKIP 9223372036854775807 // Long.Max
+      """
+    Then the result should be, in any order:
+      | p |
     And no side effects
 
   Scenario: Combining LIMIT and aggregation

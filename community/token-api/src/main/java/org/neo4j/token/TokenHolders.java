@@ -19,14 +19,18 @@
  */
 package org.neo4j.token;
 
+import org.neo4j.common.TokenNameLookup;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.token.api.TokenHolder;
+import org.neo4j.token.api.TokenNotFoundException;
 import org.neo4j.token.api.TokensLoader;
 
 /**
  * Holds onto all available {@link TokenHolder} for easily passing all those around
  * and for easily extending available instances in one place.
+ * Resolves token names without going through transaction and locking layers.
  */
-public class TokenHolders
+public class TokenHolders implements TokenNameLookup
 {
     private final TokenHolder propertyKeyTokens;
     private final TokenHolder labelTokens;
@@ -54,10 +58,76 @@ public class TokenHolders
         return relationshipTypeTokens;
     }
 
-    public void setInitialTokens( TokensLoader loader )
+    public void setInitialTokens( TokensLoader loader, PageCursorTracer cursorTracer )
     {
-        propertyKeyTokens().setInitialTokens( loader.getPropertyKeyTokens() );
-        labelTokens().setInitialTokens( loader.getLabelTokens() );
-        relationshipTypeTokens().setInitialTokens( loader.getRelationshipTypeTokens() );
+        propertyKeyTokens().setInitialTokens( loader.getPropertyKeyTokens( cursorTracer ) );
+        labelTokens().setInitialTokens( loader.getLabelTokens( cursorTracer ) );
+        relationshipTypeTokens().setInitialTokens( loader.getRelationshipTypeTokens( cursorTracer ) );
+    }
+
+    @Override
+    public String labelGetName( int labelId )
+    {
+        try
+        {
+            return labelTokens().getTokenById( labelId ).name();
+        }
+        catch ( TokenNotFoundException e )
+        {
+            return "[no such label: " + labelId + "]";
+        }
+    }
+
+    @Override
+    public String relationshipTypeGetName( int relationshipTypeId )
+    {
+        try
+        {
+            return relationshipTypeTokens().getTokenById( relationshipTypeId ).name();
+        }
+        catch ( TokenNotFoundException e )
+        {
+            return "[no such relationship type: " + relationshipTypeId + "]";
+        }
+    }
+
+    @Override
+    public String propertyKeyGetName( int propertyKeyId )
+    {
+        try
+        {
+            return propertyKeyTokens().getTokenById( propertyKeyId ).name();
+        }
+        catch ( TokenNotFoundException e )
+        {
+            return "[no such property key: " + propertyKeyId + "]";
+        }
+    }
+
+    /**
+     * Produce a {@link TokenNameLookup} that appends the token ids to all the token names.
+     */
+    public TokenNameLookup lookupWithIds()
+    {
+        return new TokenNameLookup()
+        {
+            @Override
+            public String labelGetName( int labelId )
+            {
+                return TokenHolders.this.labelGetName( labelId ) + "[" + labelId + "]";
+            }
+
+            @Override
+            public String relationshipTypeGetName( int relationshipTypeId )
+            {
+                return TokenHolders.this.relationshipTypeGetName( relationshipTypeId ) + "[" + relationshipTypeId + "]";
+            }
+
+            @Override
+            public String propertyKeyGetName( int propertyKeyId )
+            {
+                return TokenHolders.this.propertyKeyGetName( propertyKeyId ) + "[" + propertyKeyId + "]";
+            }
+        };
     }
 }

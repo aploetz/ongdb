@@ -21,12 +21,42 @@ package org.neo4j.cypher.internal.spi
 
 import java.util.Optional
 
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.util.symbols.{CTAny, CTBoolean, CTDate, CTDateTime, CTDuration, CTFloat, CTGeometry, CTInteger, CTList, CTLocalDateTime, CTLocalTime, CTMap, CTNode, CTNumber, CTPath, CTPoint, CTRelationship, CTString, CTTime, CypherType}
+import org.neo4j.cypher.internal.logical.plans.CypherValue
+import org.neo4j.cypher.internal.logical.plans.FieldSignature
+import org.neo4j.cypher.internal.logical.plans.ProcedureAccessMode
+import org.neo4j.cypher.internal.logical.plans.ProcedureDbmsAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureReadOnlyAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureReadWriteAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureSchemaWriteAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.util.symbols.CTAny
+import org.neo4j.cypher.internal.util.symbols.CTBoolean
+import org.neo4j.cypher.internal.util.symbols.CTDate
+import org.neo4j.cypher.internal.util.symbols.CTDateTime
+import org.neo4j.cypher.internal.util.symbols.CTDuration
+import org.neo4j.cypher.internal.util.symbols.CTFloat
+import org.neo4j.cypher.internal.util.symbols.CTGeometry
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.symbols.CTList
+import org.neo4j.cypher.internal.util.symbols.CTLocalDateTime
+import org.neo4j.cypher.internal.util.symbols.CTLocalTime
+import org.neo4j.cypher.internal.util.symbols.CTMap
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.symbols.CTNumber
+import org.neo4j.cypher.internal.util.symbols.CTPath
+import org.neo4j.cypher.internal.util.symbols.CTPoint
+import org.neo4j.cypher.internal.util.symbols.CTRelationship
+import org.neo4j.cypher.internal.util.symbols.CTString
+import org.neo4j.cypher.internal.util.symbols.CTTime
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.exceptions.CypherExecutionException
+import org.neo4j.internal.kernel.api.procs.DefaultParameterValue
+import org.neo4j.internal.kernel.api.procs.Neo4jTypes
 import org.neo4j.internal.kernel.api.procs.Neo4jTypes.AnyType
-import org.neo4j.internal.kernel.api.procs.{DefaultParameterValue, Neo4jTypes}
 import org.neo4j.procedure.Mode
+
+import scala.collection.JavaConverters.asScalaBufferConverter
 
 object procsHelpers {
 
@@ -43,8 +73,7 @@ object procsHelpers {
       "Unable to execute procedure, because it requires an unrecognized execution mode: " + mode.name(), null)
   }
 
-  def asCypherValue(neo4jValue: DefaultParameterValue) = CypherValue(neo4jValue.value,
-                                                                     asCypherType(neo4jValue.neo4jType()))
+  def asCypherValue(neo4jValue: DefaultParameterValue): CypherValue = CypherValue(neo4jValue.value, asCypherType(neo4jValue.neo4jType()))
 
   def asCypherType(neoType: AnyType): CypherType = neoType match {
     case Neo4jTypes.NTString => CTString
@@ -67,5 +96,19 @@ object procsHelpers {
     case Neo4jTypes.NTGeometry => CTGeometry
     case Neo4jTypes.NTMap => CTMap
     case Neo4jTypes.NTAny => CTAny
+  }
+
+  def asCypherProcedureSignature(name: QualifiedName, id: Int, signature: org.neo4j.internal.kernel.api.procs.ProcedureSignature): ProcedureSignature = {
+    val input = signature.inputSignature().asScala
+      .map(s => FieldSignature(s.name(), asCypherType(s.neo4jType()), asOption(s.defaultValue()).map(asCypherValue), sensitive = s.isSensitive))
+      .toIndexedSeq
+    val output = if (signature.isVoid) None else Some(
+      signature.outputSignature().asScala.map(s => FieldSignature(s.name(), asCypherType(s.neo4jType()), deprecated = s.isDeprecated)).toIndexedSeq)
+    val deprecationInfo = asOption(signature.deprecated())
+    val mode = asCypherProcMode(signature.mode(), signature.allowed())
+    val description = asOption(signature.description())
+    val warning = asOption(signature.warning())
+
+    ProcedureSignature(name, input, output, deprecationInfo, mode, description, warning, signature.eager(), id, signature.systemProcedure())
   }
 }

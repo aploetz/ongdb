@@ -25,8 +25,8 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.RAMDirectory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,7 +63,9 @@ import static org.mockito.Mockito.mock;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesByProvider;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestDirectoryExtension
 class LuceneSchemaIndexPopulatorTest
@@ -85,7 +87,7 @@ class LuceneSchemaIndexPopulatorTest
     @BeforeEach
     void before()
     {
-        directory = new RAMDirectory();
+        directory = new ByteBuffersDirectory();
         DirectoryFactory directoryFactory = new DirectoryFactory.Single(
                 new DirectoryFactory.UncloseableDirectory( directory ) );
         provider = new LuceneIndexProvider( fs, directoryFactory, directoriesByProvider( testDir.directory( "folder" ) ),
@@ -93,7 +95,7 @@ class LuceneSchemaIndexPopulatorTest
         propertyAccessor = mock( NodePropertyAccessor.class );
         IndexSamplingConfig samplingConfig = new IndexSamplingConfig( Config.defaults() );
         index = IndexPrototype.forSchema( forLabel( 42, propertyKeyId ), provider.getProviderDescriptor() ).withName( "index" ).materialise( 0 );
-        indexPopulator = provider.getPopulator( index, samplingConfig, heapBufferFactory( 1024 ) );
+        indexPopulator = provider.getPopulator( index, samplingConfig, heapBufferFactory( 1024 ), INSTANCE );
         indexPopulator.create();
     }
 
@@ -295,15 +297,15 @@ class LuceneSchemaIndexPopulatorTest
 
     private void switchToVerification() throws IOException
     {
-        indexPopulator.close( true );
-        assertEquals( InternalIndexState.ONLINE, provider.getInitialState( index ) );
+        indexPopulator.close( true, NULL );
+        assertEquals( InternalIndexState.ONLINE, provider.getInitialState( index, NULL ) );
         reader = DirectoryReader.open( directory );
         searcher = new IndexSearcher( reader );
     }
 
     private void addUpdate( IndexPopulator populator, long nodeId, Object value ) throws IndexEntryConflictException
     {
-        populator.add( singletonList( IndexQueryHelper.add( nodeId, index.schema(), value ) ) );
+        populator.add( singletonList( IndexQueryHelper.add( nodeId, index.schema(), value ) ), NULL );
     }
 
     private static void updatePopulator(
@@ -311,7 +313,7 @@ class LuceneSchemaIndexPopulatorTest
             Iterable<IndexEntryUpdate<?>> updates,
             NodePropertyAccessor accessor ) throws IndexEntryConflictException
     {
-        try ( IndexUpdater updater = populator.newPopulatingUpdater( accessor ) )
+        try ( IndexUpdater updater = populator.newPopulatingUpdater( accessor, NULL ) )
         {
             for ( IndexEntryUpdate<?> update :  updates )
             {

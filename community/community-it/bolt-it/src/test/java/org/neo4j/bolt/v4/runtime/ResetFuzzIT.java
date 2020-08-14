@@ -38,6 +38,10 @@ import org.neo4j.bolt.testing.client.TransportConnection;
 import org.neo4j.bolt.transport.Neo4jWithSocket;
 import org.neo4j.bolt.v4.messaging.BoltV4Messages;
 import org.neo4j.configuration.connectors.BoltConnector;
+<<<<<<< HEAD
+=======
+import org.neo4j.configuration.connectors.BoltConnectorInternalSettings;
+>>>>>>> neo4j/4.1
 import org.neo4j.configuration.helpers.SocketAddress;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.internal.helpers.HostnamePort;
@@ -50,9 +54,16 @@ import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
+<<<<<<< HEAD
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.neo4j.bolt.testing.MessageMatchers.msgSuccess;
 import static org.neo4j.configuration.connectors.BoltConnector.EncryptionLevel.OPTIONAL;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.bolt.testing.MessageConditions.msgSuccess;
+import static org.neo4j.configuration.connectors.BoltConnector.EncryptionLevel.OPTIONAL;
+import static org.neo4j.test.rule.TestDirectory.testDirectory;
+>>>>>>> neo4j/4.1
 
 public class ResetFuzzIT
 {
@@ -64,7 +75,12 @@ public class ResetFuzzIT
     private final AssertableLogProvider internalLogProvider = new SpiedAssertableLogProvider( ExecutorBoltScheduler.class );
     private final AssertableLogProvider userLogProvider = new AssertableLogProvider();
     private final EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
+<<<<<<< HEAD
     private final Neo4jWithSocket server = new Neo4jWithSocket( getClass(), getTestGraphDatabaseFactory(), fsRule, getSettingsFunction() );
+=======
+    private final Neo4jWithSocket server =
+            new Neo4jWithSocket( getTestGraphDatabaseFactory(), () -> testDirectory( getClass(), fsRule.get() ), getSettingsFunction() );
+>>>>>>> neo4j/4.1
     private final TransportTestUtil util = new TransportTestUtil();
     private HostnamePort address;
 
@@ -146,7 +162,11 @@ public class ResetFuzzIT
     private void assertResetWorks( TransportConnection connection, int sent ) throws IOException
     {
         connection.send( util.defaultReset() );
+<<<<<<< HEAD
         assertThat( connection, util.eventuallyReceives( sent, msgSuccess() ) );
+=======
+        assertThat( connection ).satisfies( util.eventuallyReceives( sent, msgSuccess() ) );
+>>>>>>> neo4j/4.1
     }
 
     private int dispatchRandomSequenceOfMessages( TransportConnection connection, List<Pair<byte[],Integer>> sequences ) throws IOException
@@ -161,10 +181,17 @@ public class ResetFuzzIT
         var connection = new SocketConnection();
 
         connection.connect( address ).send( util.defaultAcceptedVersions() );
+<<<<<<< HEAD
         assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
 
         connection.send( util.defaultAuth() );
         assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+=======
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+
+        connection.send( util.defaultAuth() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
+>>>>>>> neo4j/4.1
 
         return connection;
     }
@@ -182,7 +209,11 @@ public class ResetFuzzIT
         return settings -> {
             settings.put( BoltConnector.encryption_level, OPTIONAL );
             settings.put( BoltConnector.listen_address, new SocketAddress( "localhost", 0 ) );
+<<<<<<< HEAD
             settings.put( BoltConnector.unsupported_thread_pool_queue_size, -1 );
+=======
+            settings.put( BoltConnectorInternalSettings.unsupported_thread_pool_queue_size, -1 );
+>>>>>>> neo4j/4.1
             settings.put( BoltConnector.thread_pool_min_size, 1 );
             settings.put( BoltConnector.thread_pool_max_size, 1 );
         };

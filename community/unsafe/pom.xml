@@ -16,7 +16,11 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-unsafe</artifactId>
+=======
+    <artifactId>neo4j-unsafe</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Unsafe Access</name>
@@ -56,8 +60,12 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
         </dependency>
     </dependencies>
 </project>

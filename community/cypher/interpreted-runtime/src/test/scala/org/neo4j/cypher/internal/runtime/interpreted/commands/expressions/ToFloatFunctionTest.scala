@@ -19,11 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.exceptions.ParameterWrongTypeException
-import org.neo4j.values.storable.Values.{NO_VALUE, doubleValue}
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.doubleValue
 
 class ToFloatFunctionTest extends CypherFunSuite {
 
@@ -69,6 +70,6 @@ class ToFloatFunctionTest extends CypherFunSuite {
   }
 
   private def toFloat(orig: Any) = {
-    ToFloatFunction(Literal(orig))(ExecutionContext.empty, QueryStateHelper.empty)
+    ToFloatFunction(Literal(orig))(CypherRow.empty, QueryStateHelper.empty)
   }
 }

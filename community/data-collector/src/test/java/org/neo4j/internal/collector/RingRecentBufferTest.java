@@ -24,6 +24,8 @@ import org.eclipse.collections.impl.factory.primitive.LongSets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -43,7 +45,7 @@ class RingRecentBufferTest
     void shouldJustWork()
     {
         int bufferSize = 4;
-        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize );
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize, q -> {} );
 
         buffer.foreach( l -> fail( "boom" ) );
 
@@ -53,7 +55,7 @@ class RingRecentBufferTest
             buffer.foreach( Assertions::assertNotNull );
         }
 
-        buffer.clear();
+        buffer.clearIf( l -> true );
         buffer.foreach( l -> fail( "boom" ) );
 
         for ( long i = 0; i < 10; i++ )
@@ -68,16 +70,36 @@ class RingRecentBufferTest
     @Test
     void shouldHandleSize0()
     {
-        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( 0 );
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( 0, q -> {} );
 
         buffer.foreach( l -> fail( "boom" ) );
-        buffer.clear();
+        buffer.clearIf( l -> true );
 
         buffer.produce( 0L );
         buffer.foreach( l -> fail( "boom" ) );
-        buffer.clear();
+        buffer.clearIf( l -> true );
 
         assertEquals( 0, buffer.numSilentQueryDrops() );
+    }
+
+    @Test
+    void shouldClearIf()
+    {
+        int bufferSize = 4;
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize, q -> {} );
+
+        for ( long i = 0; i < 4; i++ )
+        {
+            buffer.produce( i );
+        }
+
+        buffer.clearIf( i -> i % 2 == 0 );
+
+        List<Long> retained = new ArrayList<>();
+        buffer.foreach( retained::add );
+        assertEquals( 2, retained.size() );
+        assertEquals( 1, retained.get( 0 ) );
+        assertEquals( 3, retained.get( 1 ) );
     }
 
     @Test
@@ -86,7 +108,7 @@ class RingRecentBufferTest
         // given
         int n = 1000;
         int bufferSize = 16;
-        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize );
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize, q -> {} );
         ExecutorService executor = Executors.newFixedThreadPool( 2 );
 
         try
@@ -123,7 +145,7 @@ class RingRecentBufferTest
         // given
         int n = 1000000;
         int bufferSize = 16;
-        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize );
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize, q -> {} );
         ExecutorService executor = Executors.newFixedThreadPool( 2 );
 
         try
@@ -134,7 +156,7 @@ class RingRecentBufferTest
             Future<?> produce = executor.submit( stressUntil( latch, buffer::produce ) );
             // consumer thread
             Future<?> consume = executor.submit( stress( n, i -> {
-                buffer.clear();
+                buffer.clearIf( l -> true );
                 buffer.foreach( Assertions::assertNotNull );
             } ) );
 
@@ -156,7 +178,7 @@ class RingRecentBufferTest
         // given
         int n = 1000000;
         int bufferSize = 16;
-        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize );
+        RingRecentBuffer<Long> buffer = new RingRecentBuffer<>( bufferSize, q -> {} );
         ExecutorService executor = Executors.newFixedThreadPool( 4 );
 
         try
@@ -169,7 +191,7 @@ class RingRecentBufferTest
             Future<?> produce3 = executor.submit( stressUntil( latch, buffer::produce ) );
             // consumer thread
             Future<?> consume = executor.submit( stress( n, i -> {
-                buffer.clear();
+                buffer.clearIf( l -> true );
                 buffer.foreach( Assertions::assertNotNull );
             } ) );
 

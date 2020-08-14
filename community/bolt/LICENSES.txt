@@ -18,14 +18,22 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
+<<<<<<< HEAD
   Java Concurrency Tools Core Library
   Lucene codecs
+=======
+  Java Agent for Memory Measurements
+  Java Concurrency Tools Core Library
+  Jettison
+>>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
   Netty/All-in-One
   parboiled-core
   parboiled-scala
+  Scala Compiler
 ------------------------------------------------------------------------------
 
                                  Apache License
@@ -281,7 +289,6 @@ BSD License
   asm-analysis
   asm-tree
   asm-util
-  Scala Compiler
 ------------------------------------------------------------------------------
 
 Copyright (c) <year>, <copyright holder>

@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.logging.FormattedLogFormat;
 import org.neo4j.logging.FormattedLogProvider;
 import org.neo4j.logging.Level;
 import org.neo4j.logging.LogProvider;
@@ -42,9 +43,9 @@ import org.neo4j.scheduler.JobScheduler;
 
 import static org.neo4j.io.fs.FileSystemUtils.createOrOpenAsOutputStream;
 
-public class StoreLogService extends AbstractLogService implements Lifecycle
+public final class StoreLogService extends AbstractLogService implements Lifecycle
 {
-    public static class Builder
+    public static final class Builder
     {
         private LogProvider userLogProvider = NullLogProvider.getInstance();
         private Executor rotationExecutor;
@@ -58,6 +59,7 @@ public class StoreLogService extends AbstractLogService implements Lifecycle
         private Level defaultLevel = Level.INFO;
         private ZoneId timeZoneId = ZoneOffset.UTC;
         private File debugLog;
+        private FormattedLogFormat format = FormattedLogFormat.STANDARD_FORMAT;
 
         private Builder()
         {
@@ -122,6 +124,12 @@ public class StoreLogService extends AbstractLogService implements Lifecycle
             return this;
         }
 
+        public Builder withFormat( FormattedLogFormat format )
+        {
+            this.format = format;
+            return this;
+        }
+
         public StoreLogService build( FileSystemAbstraction fileSystem ) throws IOException
         {
             if ( debugLog == null )
@@ -130,7 +138,7 @@ public class StoreLogService extends AbstractLogService implements Lifecycle
             }
             return new StoreLogService( userLogProvider, fileSystem, debugLog, logLevels, defaultLevel, timeZoneId,
                     internalLogRotationThreshold, internalLogRotationDelay, maxInternalLogArchives, rotationExecutor,
-                    rotationListener );
+                    rotationListener, format );
         }
     }
 
@@ -168,7 +176,8 @@ public class StoreLogService extends AbstractLogService implements Lifecycle
             long internalLogRotationDelay,
             int maxInternalLogArchives,
             Executor rotationExecutor,
-            final Consumer<LogProvider> rotationListener ) throws IOException
+            final Consumer<LogProvider> rotationListener,
+            FormattedLogFormat format ) throws IOException
     {
         if ( !internalLog.getParentFile().exists() )
         {
@@ -176,7 +185,7 @@ public class StoreLogService extends AbstractLogService implements Lifecycle
         }
 
         final FormattedLogProvider.Builder internalLogBuilder = FormattedLogProvider.withZoneId( logTimeZone )
-                .withDefaultLogLevel( defaultLevel ).withLogLevels( logLevels );
+                .withDefaultLogLevel( defaultLevel ).withLogLevels( logLevels ).withFormat( format );
 
         FormattedLogProvider internalLogProvider;
         if ( internalLogRotationThreshold == 0 )

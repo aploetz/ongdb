@@ -10,7 +10,11 @@
         <relativePath>../..</relativePath>
     </parent>
 
+<<<<<<< HEAD
     <artifactId>ongdb-fulltext-index</artifactId>
+=======
+    <artifactId>neo4j-fulltext-index</artifactId>
+>>>>>>> neo4j/4.1
 
     <name>ONgDB - Fulltext index</name>
     <description>Fulltext index for neo4j</description>
@@ -67,13 +71,8 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <scope>test</scope>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
     </dependencies>
 

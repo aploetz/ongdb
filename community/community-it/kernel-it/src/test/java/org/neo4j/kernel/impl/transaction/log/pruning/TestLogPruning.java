@@ -43,14 +43,15 @@ import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.rotation.LogRotation;
 import org.neo4j.kernel.impl.transaction.tracing.LogAppendEvent;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.keep_logical_logs;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class TestLogPruning
 {
@@ -170,7 +171,7 @@ class TestLogPruning
 
         // Then
         // the database must have kept at least one tx (in our case exactly one, because we rotated the log)
-        assertThat( transactionCount(), greaterThanOrEqualTo( 1 ) );
+        assertThat( transactionCount() ).isGreaterThanOrEqualTo( 1 );
     }
 
     private GraphDatabaseAPI newDb( String logPruning, int rotateEveryNTransactions )
@@ -252,9 +253,15 @@ class TestLogPruning
             int counter = 0;
             LogVersionBridge bridge = channel -> channel;
             LogVersionedStoreChannel versionedStoreChannel = files.openForVersion( version );
+<<<<<<< HEAD
             try ( ReadableLogChannel channel = new ReadAheadLogChannel( versionedStoreChannel, bridge ) )
+=======
+            try ( ReadableLogChannel channel = new ReadAheadLogChannel( versionedStoreChannel, bridge, INSTANCE ) )
+>>>>>>> neo4j/4.1
             {
-                try ( PhysicalTransactionCursor physicalTransactionCursor = new PhysicalTransactionCursor( channel, new VersionAwareLogEntryReader() ) )
+                try ( PhysicalTransactionCursor physicalTransactionCursor =
+                        new PhysicalTransactionCursor( channel, new VersionAwareLogEntryReader( db.getDependencyResolver().resolveDependency(
+                                StorageEngineFactory.class ).commandReaderFactory() ) ) )
                 {
                     while ( physicalTransactionCursor.next() )
                     {

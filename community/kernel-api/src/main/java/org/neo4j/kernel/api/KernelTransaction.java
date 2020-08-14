@@ -51,6 +51,7 @@ import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.impl.api.ClockContext;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
+import org.neo4j.memory.MemoryTracker;
 
 /**
  * A transaction with the graph database.
@@ -95,11 +96,11 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
     /**
      * The store id of a rolled back transaction.
      */
-    long ROLLBACK = -1;
+    long ROLLBACK_ID = -1;
     /**
      * The store id of a read-only transaction.
      */
-    long READ_ONLY = 0;
+    long READ_ONLY_ID = 0;
 
     /**
      * Commit and any changes introduced as part of this transaction.
@@ -107,8 +108,8 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
      *
      * When {@code commit()} is completed, all resources are released and no more changes are possible in this transaction.
      *
-     * @return id of the committed transaction or {@link #ROLLBACK} if transaction was rolled back or
-     * {@link #READ_ONLY} if transaction was read-only.
+     * @return id of the committed transaction or {@link #ROLLBACK_ID} if transaction was rolled back or
+     * {@link #READ_ONLY_ID} if transaction was read-only.
      */
     long commit() throws TransactionFailureException;
 
@@ -197,8 +198,8 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
     /**
      * Closes this transaction, roll back any changes if {@link #commit()} was not called.
      *
-     * @return id of the committed transaction or {@link #ROLLBACK} if transaction was rolled back or
-     * {@link #READ_ONLY} if transaction was read-only.
+     * @return id of the committed transaction or {@link #ROLLBACK_ID} if transaction was rolled back or
+     * {@link #READ_ONLY_ID} if transaction was read-only.
      */
     long closeTransaction() throws TransactionFailureException;
 
@@ -256,8 +257,8 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
 
     enum Type
     {
-        implicit,
-        explicit
+        IMPLICIT,
+        EXPLICIT
     }
 
     /**
@@ -401,6 +402,12 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
      * @return page cursor tracer
      */
     PageCursorTracer pageCursorTracer();
+
+    /**
+     * Get the memory tracker for this transaction.
+     * @return underlying transaction memory tracker
+     */
+    MemoryTracker memoryTracker();
 
     @FunctionalInterface
     interface Revertable extends AutoCloseable

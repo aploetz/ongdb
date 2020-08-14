@@ -11,7 +11,11 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-expression-evaluator</artifactId>
     <packaging>jar</packaging>
+<<<<<<< HEAD
     <name>ONgDB - Cypher Expression Evaluator</name>
+=======
+    <name>Neo4j - Cypher Expression Evaluator</name>
+>>>>>>> neo4j/4.1
 
     <description>Cypher Expression Evaluator</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -59,20 +63,35 @@
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-parser-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-parser</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-ast-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-ast</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-expressions-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-expressions</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
@@ -111,6 +130,7 @@
             <artifactId>scalacheck_${scala.binary.version}</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- other -->
 
 
@@ -135,6 +155,8 @@
         <!--</dependency>-->
 
 
+=======
+>>>>>>> neo4j/4.1
     </dependencies>
 
 </project>

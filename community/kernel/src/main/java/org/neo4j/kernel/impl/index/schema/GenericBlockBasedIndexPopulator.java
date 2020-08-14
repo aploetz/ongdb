@@ -24,11 +24,10 @@ import java.util.Map;
 
 import org.neo4j.gis.spatial.index.curves.SpaceFillingCurveConfiguration;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.ByteBufferFactory;
-import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.IndexValueValidator;
 import org.neo4j.kernel.impl.index.schema.config.IndexSpecificSpaceFillingCurveSettings;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Value;
 
 class GenericBlockBasedIndexPopulator extends BlockBasedIndexPopulator<GenericKey,NativeIndexValue>
@@ -36,11 +35,11 @@ class GenericBlockBasedIndexPopulator extends BlockBasedIndexPopulator<GenericKe
     private final IndexSpecificSpaceFillingCurveSettings spatialSettings;
     private final SpaceFillingCurveConfiguration configuration;
 
-    GenericBlockBasedIndexPopulator( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<GenericKey,NativeIndexValue> layout,
-            IndexProvider.Monitor monitor, IndexDescriptor descriptor, IndexSpecificSpaceFillingCurveSettings spatialSettings,
-            SpaceFillingCurveConfiguration configuration, boolean archiveFailedIndex, ByteBufferFactory bufferFactory )
+    GenericBlockBasedIndexPopulator( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles, IndexLayout<GenericKey,NativeIndexValue> layout,
+            IndexDescriptor descriptor, IndexSpecificSpaceFillingCurveSettings spatialSettings, SpaceFillingCurveConfiguration configuration,
+            boolean archiveFailedIndex, ByteBufferFactory bufferFactory, MemoryTracker memoryTracker )
     {
-        super( pageCache, fs, indexFiles, layout, monitor, descriptor, archiveFailedIndex, bufferFactory );
+        super( databaseIndexContext, indexFiles, layout, descriptor, archiveFailedIndex, bufferFactory, memoryTracker );
         this.spatialSettings = spatialSettings;
         this.configuration = configuration;
     }
@@ -57,5 +56,11 @@ class GenericBlockBasedIndexPopulator extends BlockBasedIndexPopulator<GenericKe
         Map<String,Value> map = new HashMap<>();
         spatialSettings.visitIndexSpecificSettings( new SpatialConfigVisitor( map ) );
         return map;
+    }
+
+    @Override
+    protected IndexValueValidator instantiateValueValidator()
+    {
+        return new GenericIndexKeyValidator( tree.keyValueSizeCap(), descriptor, layout );
     }
 }

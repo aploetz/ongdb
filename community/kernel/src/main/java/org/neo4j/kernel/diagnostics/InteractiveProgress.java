@@ -20,7 +20,6 @@
 package org.neo4j.kernel.diagnostics;
 
 import java.io.PrintStream;
-import java.util.Collections;
 
 /**
  * Tracks progress in an interactive way, relies on the fact that the {@code PrintStream} echoes to a terminal that can
@@ -75,7 +74,7 @@ public class InteractiveProgress implements DiagnosticsReporterProgress
     public void finished()
     {
         // Pad string to erase info string
-        info = String.join( "", Collections.nCopies( longestInfo, " " ) );
+        info = " ".repeat( longestInfo );
 
         percentChanged( 100 );
         out.println();

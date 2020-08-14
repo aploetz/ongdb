@@ -41,6 +41,10 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
 import org.neo4j.test.rule.RandomRule;
 
+<<<<<<< HEAD
+=======
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+>>>>>>> neo4j/4.1
 import static org.neo4j.kernel.impl.store.NoStoreHeader.NO_STORE_HEADER;
 
 @ExtendWith( RandomExtension.class )
@@ -83,7 +87,11 @@ public abstract class AbstractRecordCloningTest
     protected abstract int propertyBits();
 
     @BeforeEach
+<<<<<<< HEAD
     private void setUp()
+=======
+    void setUp()
+>>>>>>> neo4j/4.1
     {
         RecordFormats formats = formats();
         RecordGenerators generators = new LimitedRecordGenerators( random.randomValues(), entityBits(), propertyBits(), 40, 16, -1 );
@@ -121,45 +129,72 @@ public abstract class AbstractRecordCloningTest
     void plainDynamicClone()
     {
         DynamicRecord dynamicRecord = getDynamicRecord();
+<<<<<<< HEAD
         keys.dynamic().assertRecordsEquals( dynamicRecord, dynamicRecord.clone() );
+=======
+        keys.dynamic().assertRecordsEquals( dynamicRecord, dynamicRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedDynamicClone()
     {
         DynamicRecord dynamicRecord = getDynamicRecord();
+<<<<<<< HEAD
         dynamicFormat.prepare( dynamicRecord, dynamicRecordSize, idSequence );
         keys.dynamic().assertRecordsEquals( dynamicRecord, dynamicRecord.clone() );
+=======
+        dynamicFormat.prepare( dynamicRecord, dynamicRecordSize, idSequence, NULL );
+        keys.dynamic().assertRecordsEquals( dynamicRecord, dynamicRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainLabelTokenClone()
     {
         LabelTokenRecord labelTokenRecord = getLabelTokenRecord();
+<<<<<<< HEAD
         keys.labelToken().assertRecordsEquals( labelTokenRecord, labelTokenRecord.clone() );
+=======
+        keys.labelToken().assertRecordsEquals( labelTokenRecord, labelTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedLabelTokenClone()
     {
         LabelTokenRecord labelTokenRecord = getLabelTokenRecord();
+<<<<<<< HEAD
         labelTokenFormat.prepare( labelTokenRecord, labelTokenRecordSize, idSequence );
         keys.labelToken().assertRecordsEquals( labelTokenRecord, labelTokenRecord.clone() );
+=======
+        labelTokenFormat.prepare( labelTokenRecord, labelTokenRecordSize, idSequence, NULL );
+        keys.labelToken().assertRecordsEquals( labelTokenRecord, labelTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainNodeClone()
     {
         NodeRecord nodeRecord = getNodeRecord();
+<<<<<<< HEAD
         keys.node().assertRecordsEquals( nodeRecord, nodeRecord.clone() );
+=======
+        keys.node().assertRecordsEquals( nodeRecord, nodeRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedNodeClone()
     {
         NodeRecord nodeRecord = getNodeRecord();
+<<<<<<< HEAD
         nodeFormat.prepare( nodeRecord, nodeRecordSize, idSequence );
         keys.node().assertRecordsEquals( nodeRecord, nodeRecord.clone() );
+=======
+        nodeFormat.prepare( nodeRecord, nodeRecordSize, idSequence, NULL );
+        keys.node().assertRecordsEquals( nodeRecord, nodeRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
@@ -167,7 +202,11 @@ public abstract class AbstractRecordCloningTest
     {
         NodeRecord nodeRecord = getNodeRecord();
         nodeRecord.setLabelField( 12, Arrays.asList( getDynamicRecord(), getDynamicRecord() ) );
+<<<<<<< HEAD
         keys.node().assertRecordsEquals( nodeRecord, nodeRecord.clone() );
+=======
+        keys.node().assertRecordsEquals( nodeRecord, nodeRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
@@ -175,83 +214,133 @@ public abstract class AbstractRecordCloningTest
     {
         NodeRecord nodeRecord = getNodeRecord();
         nodeRecord.setLabelField( 12, Arrays.asList( getDynamicRecord(), getDynamicRecord() ) );
+<<<<<<< HEAD
         nodeFormat.prepare( nodeRecord, nodeRecordSize, idSequence );
         keys.node().assertRecordsEquals( nodeRecord, nodeRecord.clone() );
+=======
+        nodeFormat.prepare( nodeRecord, nodeRecordSize, idSequence, NULL );
+        keys.node().assertRecordsEquals( nodeRecord, nodeRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainPropertyClone()
     {
         PropertyRecord propertyRecord = getPropertyRecord();
+<<<<<<< HEAD
         keys.property().assertRecordsEquals( propertyRecord, propertyRecord.clone() );
+=======
+        keys.property().assertRecordsEquals( propertyRecord, propertyRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedPropertyClone()
     {
         PropertyRecord propertyRecord = getPropertyRecord();
+<<<<<<< HEAD
         propertyFormat.prepare( propertyRecord, propertyRecordSize, idSequence );
         keys.property().assertRecordsEquals( propertyRecord, propertyRecord.clone() );
+=======
+        propertyFormat.prepare( propertyRecord, propertyRecordSize, idSequence, NULL );
+        keys.property().assertRecordsEquals( propertyRecord, propertyRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainPropertyKeyTokenClone()
     {
         PropertyKeyTokenRecord propertyKeyTokenRecord = getPropertyKeyTokenRecord();
+<<<<<<< HEAD
         keys.propertyKeyToken().assertRecordsEquals( propertyKeyTokenRecord, propertyKeyTokenRecord.clone() );
+=======
+        keys.propertyKeyToken().assertRecordsEquals( propertyKeyTokenRecord, propertyKeyTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedPropertyKeyTokenClone()
     {
         PropertyKeyTokenRecord propertyKeyTokenRecord = getPropertyKeyTokenRecord();
+<<<<<<< HEAD
         propertyKeyTokenFormat.prepare( propertyKeyTokenRecord, propertyKeyTokenRecordSize, idSequence );
         keys.propertyKeyToken().assertRecordsEquals( propertyKeyTokenRecord, propertyKeyTokenRecord.clone() );
+=======
+        propertyKeyTokenFormat.prepare( propertyKeyTokenRecord, propertyKeyTokenRecordSize, idSequence, NULL );
+        keys.propertyKeyToken().assertRecordsEquals( propertyKeyTokenRecord, propertyKeyTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainRelationshipClone()
     {
         RelationshipRecord relationshipRecord = getRelationshipRecord();
+<<<<<<< HEAD
         keys.relationship().assertRecordsEquals( relationshipRecord, relationshipRecord.clone() );
+=======
+        keys.relationship().assertRecordsEquals( relationshipRecord, relationshipRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedRelationshipClone()
     {
         RelationshipRecord relationshipRecord = getRelationshipRecord();
+<<<<<<< HEAD
         relationshipFormat.prepare( relationshipRecord, relationshipRecordSize, idSequence );
         keys.relationship().assertRecordsEquals( relationshipRecord, relationshipRecord.clone() );
+=======
+        relationshipFormat.prepare( relationshipRecord, relationshipRecordSize, idSequence, NULL );
+        keys.relationship().assertRecordsEquals( relationshipRecord, relationshipRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainRelationshipGroupClone()
     {
         RelationshipGroupRecord relationshipGroupRecord = getRelationshipGroupRecord();
+<<<<<<< HEAD
         keys.relationshipGroup().assertRecordsEquals( relationshipGroupRecord, relationshipGroupRecord.clone() );
+=======
+        keys.relationshipGroup().assertRecordsEquals( relationshipGroupRecord, relationshipGroupRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedRelationshipGroupClone()
     {
         RelationshipGroupRecord relationshipGroupRecord = getRelationshipGroupRecord();
+<<<<<<< HEAD
         relationshipGroupFormat.prepare( relationshipGroupRecord, relationshipGroupRecordSize, idSequence );
         keys.relationshipGroup().assertRecordsEquals( relationshipGroupRecord, relationshipGroupRecord.clone() );
+=======
+        relationshipGroupFormat.prepare( relationshipGroupRecord, relationshipGroupRecordSize, idSequence, NULL );
+        keys.relationshipGroup().assertRecordsEquals( relationshipGroupRecord, relationshipGroupRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void plainRelationshipTypeTokenClone()
     {
         RelationshipTypeTokenRecord relationshipTypeTokenRecord = getRelationshipTypeTokenRecord();
+<<<<<<< HEAD
         keys.relationshipTypeToken().assertRecordsEquals( relationshipTypeTokenRecord, relationshipTypeTokenRecord.clone() );
+=======
+        keys.relationshipTypeToken().assertRecordsEquals( relationshipTypeTokenRecord, relationshipTypeTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     @RepeatedTest( 1000 )
     void preparedRelationshipTypeTokenClone()
     {
         RelationshipTypeTokenRecord relationshipTypeTokenRecord = getRelationshipTypeTokenRecord();
+<<<<<<< HEAD
         relationshipTypeTokenFormat.prepare( relationshipTypeTokenRecord, relationshipTypeTokenRecordSize, idSequence );
         keys.relationshipTypeToken().assertRecordsEquals( relationshipTypeTokenRecord, relationshipTypeTokenRecord.clone() );
+=======
+        relationshipTypeTokenFormat.prepare( relationshipTypeTokenRecord, relationshipTypeTokenRecordSize, idSequence, NULL );
+        keys.relationshipTypeToken().assertRecordsEquals( relationshipTypeTokenRecord, relationshipTypeTokenRecord.copy() );
+>>>>>>> neo4j/4.1
     }
 
     private DynamicRecord getDynamicRecord()

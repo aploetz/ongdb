@@ -23,28 +23,31 @@ import java.io.FileNotFoundException
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.concurrent.atomic.AtomicInteger
 
+import cypher.features.Neo4jAdapter.defaultTestConfig
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.function.Executable
+import org.neo4j.graphdb.config.Setting
 import org.neo4j.test.TestDatabaseManagementServiceBuilder
-import org.opencypher.tools.tck.api.{ExpectError, Scenario}
+import org.opencypher.tools.tck.api.ExpectError
+import org.opencypher.tools.tck.api.Scenario
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asJavaCollectionConverter
 import scala.collection.mutable
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 object ScenarioTestHelper {
-  var unexpectedSuccessCount = new AtomicInteger(0)
-
   def createTests(scenarios: Seq[Scenario],
                   config: TestConfig,
                   graphDatabaseFactory: () => TestDatabaseManagementServiceBuilder,
+                  dbConfig: collection.Map[Setting[_], Object],
                   debugOutput: Boolean = false): util.Collection[DynamicTest] = {
     val blacklist = config.blacklist.map(parseBlacklist).getOrElse(Set.empty[BlacklistEntry])
     checkForDuplicates(scenarios, blacklist.toList)
-    val (expectFail, expectPass) = scenarios.partition { s => blacklist.exists(_.isBlacklisted(s)) }
+    val (expectFail, expectPass) = scenarios.partition(s => blacklist.exists(_.isBlacklisted(s)))
     if (debugOutput) {
       val unusedBlacklistEntries = blacklist.filterNot(b => expectFail.exists(s => b.isBlacklisted(s)))
       if (unusedBlacklistEntries.nonEmpty) {
@@ -59,12 +62,10 @@ object ScenarioTestHelper {
       val executable = new Executable {
         override def execute(): Unit = {
           Try {
-            scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory())).execute()
+            scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory(), dbConfig)).execute()
           } match {
             case Success(_) =>
-              if (config.experimental) {
-                unexpectedSuccessCount.getAndAdd(1)
-              } else {
+              if (!config.experimental) {
                 if (!blacklist.exists(_.isFlaky(scenario)))
                   throw new IllegalStateException("Unexpectedly succeeded in the following blacklisted scenario:\n" + name)
               }
@@ -96,7 +97,7 @@ object ScenarioTestHelper {
 
     val expectPassTests: Seq[DynamicTest] = expectPass.map { scenario =>
       val name = scenario.toString()
-      val executable = scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory()))
+      val executable = scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory(), dbConfig))
       DynamicTest.dynamicTest(name, executable)
     }
     (expectPassTests ++ expectFailTests).asJavaCollection
@@ -104,7 +105,7 @@ object ScenarioTestHelper {
 
   def checkForDuplicates(scenarios: Seq[Scenario], blacklist: Seq[BlacklistEntry]): Unit = {
     // test scenarios
-    var testScenarios = new mutable.HashSet[Scenario]()
+    val testScenarios = new mutable.HashSet[Scenario]()
     for (s <- scenarios) {
       if (testScenarios.contains(s)) {
         throw new IllegalStateException("Multiple scenarios exists for the following name: " + s)
@@ -113,7 +114,7 @@ object ScenarioTestHelper {
       }
     }
     // test blacklist
-    var testBlacklist = new mutable.HashSet[BlacklistEntry]()
+    val testBlacklist = new mutable.HashSet[BlacklistEntry]()
     for (b <- blacklist) {
       if (testBlacklist.contains(b)) {
         throw new IllegalStateException("Multiple blacklists entrys exists for the following scenario: " + b)
@@ -150,7 +151,7 @@ object ScenarioTestHelper {
     println("Evaluating scenarios")
     val numberOfScenarios = scenarios.size
     val blacklist = scenarios.zipWithIndex.flatMap { case (scenario, index) =>
-      val isFailure = Try(scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory())).execute()).isFailure
+      val isFailure = Try(scenario(Neo4jAdapter(config.executionPrefix, graphDatabaseFactory(), defaultTestConfig)).execute()).isFailure
       print(s"Processing scenario ${index + 1}/$numberOfScenarios\n")
       Console.out.flush() // to make sure we see progress
       if (isFailure) Some(scenario.toString) else None

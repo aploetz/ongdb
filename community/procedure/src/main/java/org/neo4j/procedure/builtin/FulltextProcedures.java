@@ -46,12 +46,12 @@ import org.neo4j.graphdb.schema.IndexSetting;
 import org.neo4j.graphdb.schema.IndexSettingImpl;
 import org.neo4j.graphdb.schema.Schema;
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.procs.ProcedureCallContext;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexType;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.impl.fulltext.FulltextAdapter;
@@ -68,6 +68,7 @@ import static java.lang.String.format;
 import static org.neo4j.common.EntityType.NODE;
 import static org.neo4j.common.EntityType.RELATIONSHIP;
 import static org.neo4j.graphdb.schema.IndexType.FULLTEXT;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.kernel.api.impl.fulltext.FulltextIndexSettingsKeys.FULLTEXT_PREFIX;
 import static org.neo4j.kernel.api.impl.fulltext.FulltextIndexSettingsKeys.PROCEDURE_ANALYZER;
 import static org.neo4j.kernel.api.impl.fulltext.FulltextIndexSettingsKeys.PROCEDURE_EVENTUALLY_CONSISTENT;
@@ -204,9 +205,13 @@ public class FulltextProcedures
     }
 
     @SystemProcedure
-    @Description( "Query the given full-text index. Returns the matching nodes and their Lucene query score, ordered by score." )
+    @Description( "Query the given full-text index. Returns the matching nodes, and their Lucene query score, ordered by score. " +
+            "Valid keys for the options map are: 'skip' to skip the top N results; 'limit' to limit the number of results returned." )
     @Procedure( name = "db.index.fulltext.queryNodes", mode = READ )
-    public Stream<NodeOutput> queryFulltextForNodes( @Name( "indexName" ) String name, @Name( "queryString" ) String query ) throws Exception
+    public Stream<NodeOutput> queryFulltextForNodes(
+            @Name( "indexName" ) String name,
+            @Name( "queryString" ) String query,
+            @Name( value = "options", defaultValue = "{}" ) Map<String, Object> options ) throws Exception
     {
         if ( callContext.isSystemDatabase() )
         {
@@ -221,9 +226,10 @@ public class FulltextProcedures
             throw new IllegalArgumentException( "The '" + name + "' index (" + indexReference + ") is an index on " + entityType +
                     ", so it cannot be queried for nodes." );
         }
-        NodeValueIndexCursor cursor = tx.cursors().allocateNodeValueIndexCursor();
+        NodeValueIndexCursor cursor = tx.cursors().allocateNodeValueIndexCursor( tx.pageCursorTracer() );
         IndexReadSession indexSession = tx.dataRead().indexReadSession( indexReference );
-        tx.dataRead().nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, IndexQuery.fulltextSearch( query ) );
+        IndexQueryConstraints constraints = queryConstraints( options );
+        tx.dataRead().nodeIndexSeek( indexSession, cursor, constraints, IndexQuery.fulltextSearch( query ) );
 
         Spliterator<NodeOutput> spliterator = new SpliteratorAdaptor<>()
         {
@@ -249,10 +255,30 @@ public class FulltextProcedures
         return stream.onClose( cursor::close );
     }
 
+    protected IndexQueryConstraints queryConstraints( Map<String,Object> options )
+    {
+        IndexQueryConstraints constraints = unconstrained();
+        Object skip;
+        if ( ( skip = options.get( "skip" ) ) != null && skip instanceof Number )
+        {
+            constraints = constraints.skip( ((Number) skip).longValue() );
+        }
+        Object limit;
+        if ( ( limit = options.get( "limit" ) ) != null && limit instanceof Number )
+        {
+            constraints = constraints.limit( ((Number) limit).longValue() );
+        }
+        return constraints;
+    }
+
     @SystemProcedure
-    @Description( "Query the given full-text index. Returns the matching relationships and their Lucene query score, ordered by score." )
+    @Description( "Query the given full-text index. Returns the matching relationships, and their Lucene query score, ordered by score. " +
+            "Valid keys for the options map are: 'skip' to skip the top N results; 'limit' to limit the number of results returned." )
     @Procedure( name = "db.index.fulltext.queryRelationships", mode = READ )
-    public Stream<RelationshipOutput> queryFulltextForRelationships( @Name( "indexName" ) String name, @Name( "queryString" ) String query ) throws Exception
+    public Stream<RelationshipOutput> queryFulltextForRelationships(
+            @Name( "indexName" ) String name,
+            @Name( "queryString" ) String query,
+            @Name( value = "options", defaultValue = "{}" ) Map<String, Object> options ) throws Exception
     {
         if ( callContext.isSystemDatabase() )
         {
@@ -267,8 +293,9 @@ public class FulltextProcedures
             throw new IllegalArgumentException( "The '" + name + "' index (" + indexReference + ") is an index on " + entityType +
                     ", so it cannot be queried for relationships." );
         }
-        RelationshipIndexCursor cursor = tx.cursors().allocateRelationshipIndexCursor();
-        tx.dataRead().relationshipIndexSeek( indexReference, cursor, IndexQuery.fulltextSearch( query ) );
+        RelationshipIndexCursor cursor = tx.cursors().allocateRelationshipIndexCursor( tx.pageCursorTracer() );
+        IndexQueryConstraints constraints = queryConstraints( options );
+        tx.dataRead().relationshipIndexSeek( indexReference, cursor, constraints, IndexQuery.fulltextSearch( query ) );
 
         Spliterator<RelationshipOutput> spliterator = new SpliteratorAdaptor<>()
         {
@@ -328,7 +355,7 @@ public class FulltextProcedures
             String key = entry.getKey();
             if ( key.startsWith( FULLTEXT_PREFIX ) )
             {
-                key = key.substring( FULLTEXT_PREFIX.length(), key.length() );
+                key = key.substring( FULLTEXT_PREFIX.length() );
             }
             String value = entry.getValue();
             String duplicate = cleanMap.put( key, value );

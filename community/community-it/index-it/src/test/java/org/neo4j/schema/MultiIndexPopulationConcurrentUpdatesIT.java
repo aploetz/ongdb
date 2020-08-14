@@ -39,7 +39,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.neo4j.common.EntityType;
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.KernelException;
@@ -48,6 +47,7 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.helpers.collection.Visitor;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.TokenRead;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
@@ -59,8 +59,9 @@ import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.index.IndexActivationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.index.IndexProvider;
@@ -75,14 +76,15 @@ import org.neo4j.kernel.impl.constraints.StandardConstraintSemantics;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.transaction.state.storeview.DynamicIndexStoreView;
 import org.neo4j.kernel.impl.transaction.state.storeview.EntityIdIterator;
-import org.neo4j.kernel.impl.transaction.state.storeview.LabelScanViewNodeStoreScan;
+import org.neo4j.kernel.impl.transaction.state.storeview.LabelViewNodeStoreScan;
 import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
 import org.neo4j.lock.LockService;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.test.rule.EmbeddedDbmsRule;
@@ -95,7 +97,9 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.neo4j.internal.helpers.collection.Iterables.iterable;
 import static org.neo4j.internal.helpers.collection.Iterators.single;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.database.Database.initialSchemaRulesLoader;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 //[NodePropertyUpdate[0, prop:0 add:Sweden, labelsBefore:[], labelsAfter:[0]]]
 //[NodePropertyUpdate[1, prop:0 add:USA, labelsBefore:[], labelsAfter:[0]]]
@@ -180,13 +184,13 @@ public class MultiIndexPopulationConcurrentUpdatesIT
             try ( IndexReader indexReader = getIndexReader( propertyId, countryLabelId ) )
             {
                 assertEquals("Should be removed by concurrent remove.",
-                        0, indexReader.countIndexedNodes( 0, new int[] {propertyId}, Values.of( "Sweden"  )) );
+                        0, indexReader.countIndexedNodes( 0, NULL, new int[] {propertyId}, Values.of( "Sweden"  )) );
             }
 
             try ( IndexReader indexReader = getIndexReader( propertyId, colorLabelId ) )
             {
                 assertEquals("Should be removed by concurrent remove.",
-                        0, indexReader.countIndexedNodes( 3, new int[] {propertyId}, Values.of( "green"  )) );
+                        0, indexReader.countIndexedNodes( 3, NULL, new int[] {propertyId}, Values.of( "green"  )) );
             }
         }
     }
@@ -210,13 +214,13 @@ public class MultiIndexPopulationConcurrentUpdatesIT
             try ( IndexReader indexReader = getIndexReader( propertyId, countryLabelId ) )
             {
                 assertEquals("Should be added by concurrent add.", 1,
-                        indexReader.countIndexedNodes( otherNodes[0].getId(), new int[] {propertyId}, Values.of( "Denmark" ) ) );
+                        indexReader.countIndexedNodes( otherNodes[0].getId(), NULL, new int[] {propertyId}, Values.of( "Denmark" ) ) );
             }
 
             try ( IndexReader indexReader = getIndexReader( propertyId, carLabelId ) )
             {
                 assertEquals("Should be added by concurrent add.", 1,
-                        indexReader.countIndexedNodes( otherNodes[1].getId(), new int[] {propertyId}, Values.of( "BMW" ) ) );
+                        indexReader.countIndexedNodes( otherNodes[1].getId(), NULL, new int[] {propertyId}, Values.of( "BMW" ) ) );
             }
         }
     }
@@ -240,18 +244,18 @@ public class MultiIndexPopulationConcurrentUpdatesIT
             try ( IndexReader indexReader = getIndexReader( propertyId, colorLabelId ) )
             {
                 assertEquals( format( "Should be deleted by concurrent change. Reader is: %s, ", indexReader ), 0,
-                        indexReader.countIndexedNodes( color2.getId(), new int[] {propertyId}, Values.of( "green" ) ) );
+                        indexReader.countIndexedNodes( color2.getId(), NULL, new int[] {propertyId}, Values.of( "green" ) ) );
             }
             try ( IndexReader indexReader = getIndexReader( propertyId, colorLabelId ) )
             {
                 assertEquals("Should be updated by concurrent change.", 1,
-                        indexReader.countIndexedNodes( color2.getId(), new int[] {propertyId}, Values.of( "pink"  ) ) );
+                        indexReader.countIndexedNodes( color2.getId(), NULL, new int[] {propertyId}, Values.of( "pink"  ) ) );
             }
 
             try ( IndexReader indexReader = getIndexReader( propertyId, carLabelId ) )
             {
                 assertEquals("Should be added by concurrent change.", 1,
-                        indexReader.countIndexedNodes( car2.getId(), new int[] {propertyId}, Values.of( "SAAB"  ) ) );
+                        indexReader.countIndexedNodes( car2.getId(), NULL, new int[] {propertyId}, Values.of( "SAAB"  ) ) );
             }
         }
     }
@@ -296,7 +300,7 @@ public class MultiIndexPopulationConcurrentUpdatesIT
         LabelSchemaDescriptor schema = SchemaDescriptor.forLabel( labelId, propertyId );
         IndexDescriptor index = single( schemaCache.indexesForSchema( schema ) );
         IndexProxy indexProxy = indexService.getIndexProxy( index );
-        assertSame( indexProxy.getState(), InternalIndexState.ONLINE );
+        assertSame( InternalIndexState.ONLINE, indexProxy.getState() );
     }
 
     private long[] id( String label )
@@ -315,21 +319,23 @@ public class MultiIndexPopulationConcurrentUpdatesIT
     {
         RecordStorageEngine storageEngine = getStorageEngine();
         LabelScanStore labelScanStore = getLabelScanStore();
+        RelationshipTypeScanStore relationshipTypeScanStore = getRelationshipTypeScanStore();
 
         try ( Transaction transaction = embeddedDatabase.beginTx() )
         {
+            Config config = Config.defaults();
             KernelTransaction ktx = ((InternalTransaction) transaction).kernelTransaction();
-            DynamicIndexStoreView storeView = dynamicIndexStoreViewWrapper( customAction, storageEngine::newReader, labelScanStore );
+            DynamicIndexStoreView storeView =
+                    dynamicIndexStoreViewWrapper( customAction, storageEngine::newReader, labelScanStore, relationshipTypeScanStore, config );
 
             IndexProviderMap providerMap = getIndexProviderMap();
             JobScheduler scheduler = getJobScheduler();
-            TokenNameLookup tokenNameLookup = new SilentTokenNameLookup( ktx.tokenRead() );
 
             NullLogProvider nullLogProvider = NullLogProvider.getInstance();
-            indexService = IndexingServiceFactory.createIndexingService( Config.defaults(), scheduler,
-                    providerMap, storeView, tokenNameLookup, initialSchemaRulesLoader( storageEngine ),
+            indexService = IndexingServiceFactory.createIndexingService( config, scheduler,
+                    providerMap, storeView, ktx.tokenRead(), initialSchemaRulesLoader( storageEngine ),
                     nullLogProvider, nullLogProvider, IndexingService.NO_MONITOR, getSchemaState(),
-                    mock( IndexStatisticsStore.class ), false );
+                    mock( IndexStatisticsStore.class ), PageCacheTracer.NULL, INSTANCE, false );
             indexService.start();
 
             rules = createIndexRules( labelNameIdMap, propertyId );
@@ -342,11 +348,13 @@ public class MultiIndexPopulationConcurrentUpdatesIT
     }
 
     private DynamicIndexStoreView dynamicIndexStoreViewWrapper( Runnable customAction,
-            Supplier<StorageReader> readerSupplier, LabelScanStore labelScanStore )
+            Supplier<StorageReader> readerSupplier, LabelScanStore labelScanStore,
+            RelationshipTypeScanStore relationshipTypeScanStore, Config config )
     {
         LockService locks = LockService.NO_LOCK_SERVICE;
         NeoStoreIndexStoreView neoStoreIndexStoreView = new NeoStoreIndexStoreView( locks, readerSupplier );
-        return new DynamicIndexStoreViewWrapper( neoStoreIndexStoreView, labelScanStore, locks, readerSupplier, customAction );
+        return new DynamicIndexStoreViewWrapper( neoStoreIndexStoreView, labelScanStore, relationshipTypeScanStore, locks, readerSupplier, customAction,
+                config );
     }
 
     private void waitAndActivateIndexes( Map<String,Integer> labelsIds, int propertyId )
@@ -466,6 +474,11 @@ public class MultiIndexPopulationConcurrentUpdatesIT
         return embeddedDatabase.resolveDependency( LabelScanStore.class );
     }
 
+    private RelationshipTypeScanStore getRelationshipTypeScanStore()
+    {
+        return embeddedDatabase.resolveDependency( RelationshipTypeScanStore.class );
+    }
+
     private RecordStorageEngine getStorageEngine()
     {
         return embeddedDatabase.resolveDependency( RecordStorageEngine.class );
@@ -490,10 +503,11 @@ public class MultiIndexPopulationConcurrentUpdatesIT
     {
         private final Runnable customAction;
 
-        DynamicIndexStoreViewWrapper( NeoStoreIndexStoreView neoStoreIndexStoreView, LabelScanStore labelScanStore, LockService locks,
-                Supplier<StorageReader> storageEngine, Runnable customAction )
+        DynamicIndexStoreViewWrapper( NeoStoreIndexStoreView neoStoreIndexStoreView, LabelScanStore labelScanStore,
+                RelationshipTypeScanStore relationshipTypeScanStore, LockService locks,
+                Supplier<StorageReader> storageEngine, Runnable customAction, Config config )
         {
-            super( neoStoreIndexStoreView, labelScanStore, locks, storageEngine, NullLogProvider.getInstance() );
+            super( neoStoreIndexStoreView, labelScanStore, relationshipTypeScanStore, locks, storageEngine, NullLogProvider.getInstance(), config );
             this.customAction = customAction;
         }
 
@@ -501,30 +515,29 @@ public class MultiIndexPopulationConcurrentUpdatesIT
         public <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( int[] labelIds,
                 IntPredicate propertyKeyIdFilter,
                 Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor,
-                Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor,
-                boolean forceStoreScan )
+                Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor,
+                boolean forceStoreScan, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
         {
             StoreScan<FAILURE> storeScan = super.visitNodes( labelIds, propertyKeyIdFilter, propertyUpdatesVisitor,
-                    labelUpdateVisitor, forceStoreScan );
-            return new LabelScanViewNodeStoreWrapper<>( storageEngine.get(), locks, getLabelScanStore(),
+                    labelUpdateVisitor, forceStoreScan, cursorTracer, memoryTracker );
+            return new LabelViewNodeStoreWrapper<>( storageEngine.get(), locks, getLabelScanStore(),
                     element -> false, propertyUpdatesVisitor, labelIds, propertyKeyIdFilter,
-                    (LabelScanViewNodeStoreScan<FAILURE>) storeScan, customAction );
+                    (LabelViewNodeStoreScan<FAILURE>) storeScan, customAction );
         }
     }
 
-    private static class LabelScanViewNodeStoreWrapper<FAILURE extends Exception> extends LabelScanViewNodeStoreScan<FAILURE>
+    private static class LabelViewNodeStoreWrapper<FAILURE extends Exception> extends LabelViewNodeStoreScan<FAILURE>
     {
-        private final LabelScanViewNodeStoreScan<FAILURE> delegate;
+        private final LabelViewNodeStoreScan<FAILURE> delegate;
         private final Runnable customAction;
 
-        LabelScanViewNodeStoreWrapper( StorageReader storageReader, LockService locks,
-                LabelScanStore labelScanStore, Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor,
+        LabelViewNodeStoreWrapper( StorageReader storageReader, LockService locks,
+                LabelScanStore labelScanStore, Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor,
                 Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor, int[] labelIds, IntPredicate propertyKeyIdFilter,
-                LabelScanViewNodeStoreScan<FAILURE> delegate,
+                LabelViewNodeStoreScan<FAILURE> delegate,
                 Runnable customAction )
         {
-            super( storageReader, locks, labelScanStore, labelUpdateVisitor,
-                    propertyUpdatesVisitor, labelIds, propertyKeyIdFilter );
+            super( storageReader, locks, labelScanStore, labelUpdateVisitor, propertyUpdatesVisitor, labelIds, propertyKeyIdFilter, NULL, INSTANCE );
             this.delegate = delegate;
             this.customAction = customAction;
         }
@@ -582,7 +595,7 @@ public class MultiIndexPopulationConcurrentUpdatesIT
 
     private class UpdateGenerator implements Runnable
     {
-        private Iterable<EntityUpdates> updates;
+        private final Iterable<EntityUpdates> updates;
 
         UpdateGenerator( Iterable<EntityUpdates> updates )
         {
@@ -632,8 +645,9 @@ public class MultiIndexPopulationConcurrentUpdatesIT
                                 update.entityTokensChanged(),
                                 update.entityTokensUnchanged(),
                                 update.propertiesChanged(), false, EntityType.NODE );
-                        Iterable<IndexEntryUpdate<IndexDescriptor>> entryUpdates = update.forIndexKeys( relatedIndexes, reader, EntityType.NODE );
-                        indexService.applyUpdates( entryUpdates );
+                        Iterable<IndexEntryUpdate<IndexDescriptor>> entryUpdates = update.forIndexKeys( relatedIndexes, reader, EntityType.NODE, NULL,
+                                INSTANCE );
+                        indexService.applyUpdates( entryUpdates, NULL );
                     }
                 }
                 catch ( UncheckedIOException | KernelException e )
@@ -645,7 +659,7 @@ public class MultiIndexPopulationConcurrentUpdatesIT
 
     private class IndexDropAction implements Runnable
     {
-        private int labelIdToDropIndexFor;
+        private final int labelIdToDropIndexFor;
 
         private IndexDropAction( int labelIdToDropIndexFor )
         {

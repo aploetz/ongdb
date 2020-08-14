@@ -46,16 +46,15 @@ import org.neo4j.kernel.impl.newapi.TxStateIndexChanges.AddedAndRemoved;
 import org.neo4j.kernel.impl.newapi.TxStateIndexChanges.AddedWithValuesAndRemoved;
 import org.neo4j.kernel.impl.util.ValueUtils;
 import org.neo4j.kernel.impl.util.collection.OnHeapCollectionsFactory;
-import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSetsImpl;
+import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSets;
+import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.ValueTuple;
 import org.neo4j.values.storable.Values;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.eclipse.collections.impl.set.mutable.primitive.LongHashSet.newSetWith;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.emptyIterable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,6 +69,7 @@ import static org.neo4j.kernel.impl.newapi.TxStateIndexChanges.indexUpdatesWithV
 import static org.neo4j.kernel.impl.newapi.TxStateIndexChanges.indexUpdatesWithValuesForRangeSeekByPrefix;
 import static org.neo4j.kernel.impl.newapi.TxStateIndexChanges.indexUpdatesWithValuesForScan;
 import static org.neo4j.kernel.impl.newapi.TxStateIndexChanges.indexUpdatesWithValuesForSuffixOrContains;
+import static org.neo4j.kernel.impl.util.diffsets.TrackableDiffSets.newMutableLongDiffSets;
 import static org.neo4j.values.storable.Values.NO_VALUE;
 import static org.neo4j.values.storable.Values.doubleValue;
 import static org.neo4j.values.storable.Values.intArray;
@@ -869,39 +869,39 @@ class TxStateIndexChangesTest
 
     private static void assertContainsInOrder( LongIterable iterable, long... nodeIds )
     {
-        assertTrue( iterable.containsAll( nodeIds ), "Expected: " + iterable.toString() + " to contains: " + Arrays.toString( nodeIds ) );
+        assertTrue( iterable.containsAll( nodeIds ), "Expected: " + iterable + " to contains: " + Arrays.toString( nodeIds ) );
     }
 
     private static void assertContainsInOrder( Iterable<NodeWithPropertyValues> iterable, NodeWithPropertyValues... expected )
     {
         if ( expected.length == 0 )
         {
-            assertThat( iterable, emptyIterable() );
+            assertThat( iterable ).isEmpty();
         }
         else
         {
-            assertThat( iterable, contains( expected ) );
+            assertThat( iterable ).containsExactly( expected );
         }
     }
 
     private static class TxStateBuilder
     {
-        Map<ValueTuple, MutableLongDiffSetsImpl> updates = new HashMap<>();
+        Map<ValueTuple, MutableLongDiffSets> updates = new HashMap<>();
 
         TxStateBuilder withAdded( long id, Object... value )
         {
-            final ValueTuple valueTuple = ValueTuple.of( (Object[]) value );
-            final MutableLongDiffSetsImpl changes = updates.computeIfAbsent( valueTuple,
-                    ignore -> new MutableLongDiffSetsImpl( OnHeapCollectionsFactory.INSTANCE ) );
+            final ValueTuple valueTuple = ValueTuple.of( value );
+            final MutableLongDiffSets changes = updates.computeIfAbsent( valueTuple,
+                    ignore -> newMutableLongDiffSets( OnHeapCollectionsFactory.INSTANCE, EmptyMemoryTracker.INSTANCE ) );
             changes.add( id );
             return this;
         }
 
         TxStateBuilder withRemoved( long id, Object... value )
         {
-            final ValueTuple valueTuple = ValueTuple.of( (Object[]) value );
-            final MutableLongDiffSetsImpl changes = updates.computeIfAbsent( valueTuple,
-                    ignore -> new MutableLongDiffSetsImpl( OnHeapCollectionsFactory.INSTANCE ) );
+            final ValueTuple valueTuple = ValueTuple.of( value );
+            final MutableLongDiffSets changes = updates.computeIfAbsent( valueTuple,
+                    ignore -> newMutableLongDiffSets( OnHeapCollectionsFactory.INSTANCE, EmptyMemoryTracker.INSTANCE ) );
             changes.remove( id );
             return this;
         }
@@ -910,7 +910,7 @@ class TxStateIndexChangesTest
         {
             final ReadableTransactionState mock = Mockito.mock( ReadableTransactionState.class );
             doReturn( new UnmodifiableMap<>( updates ) ).when( mock ).getIndexUpdates( any( SchemaDescriptor.class ) );
-            final TreeMap<ValueTuple, MutableLongDiffSetsImpl> sortedMap = new TreeMap<>( ValueTuple.COMPARATOR );
+            final TreeMap<ValueTuple, MutableLongDiffSets> sortedMap = new TreeMap<>( ValueTuple.COMPARATOR );
             sortedMap.putAll( updates );
             doReturn( sortedMap ).when( mock ).getSortedIndexUpdates( any( SchemaDescriptor.class ) );
             return mock;

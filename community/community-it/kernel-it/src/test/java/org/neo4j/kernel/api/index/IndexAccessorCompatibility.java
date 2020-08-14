@@ -48,17 +48,20 @@ import org.neo4j.values.storable.ValueGroup;
 import org.neo4j.values.storable.ValueType;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.constrained;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 public abstract class IndexAccessorCompatibility extends IndexProviderCompatibilityTestSuite.Compatibility
 {
     IndexAccessor accessor;
     // This map is for spatial values, so that the #query method can lookup the values for the results and filter properly
-    private Map<Long,Value[]> committedValues = new HashMap<>();
+    private final Map<Long,Value[]> committedValues = new HashMap<>();
 
     IndexAccessorCompatibility( IndexProviderCompatibilityTestSuite testSuite, IndexPrototype prototype )
     {
@@ -69,9 +72,9 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
     public void before() throws Exception
     {
         IndexSamplingConfig indexSamplingConfig = new IndexSamplingConfig( Config.defaults() );
-        IndexPopulator populator = indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ) );
+        IndexPopulator populator = indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ), INSTANCE );
         populator.create();
-        populator.close( true );
+        populator.close( true, NULL );
         accessor = indexProvider.getOnlineAccessor( descriptor, indexSamplingConfig );
     }
 
@@ -80,7 +83,7 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
     {
         try
         {
-            accessor.consistencyCheck( ReporterFactories.throwingReporterFactory() );
+            accessor.consistencyCheck( ReporterFactories.throwingReporterFactory(), NULL );
         }
         finally
         {
@@ -116,7 +119,7 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
         try ( IndexReader reader = accessor.newReader() )
         {
             SimpleNodeValueClient nodeValueClient = new SimpleNodeValueClient();
-            reader.query( NULL_CONTEXT, nodeValueClient, IndexOrder.NONE, false, predicates );
+            reader.query( NULL_CONTEXT, nodeValueClient, unconstrained(), predicates );
             List<Long> list = new LinkedList<>();
             while ( nodeValueClient.next() )
             {
@@ -134,7 +137,7 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
     protected AutoCloseable query( SimpleNodeValueClient client, IndexOrder order, IndexQuery... predicates ) throws Exception
     {
         IndexReader reader = accessor.newReader();
-        reader.query( NULL_CONTEXT, client, order, false, predicates );
+        reader.query( NULL_CONTEXT, client, constrained( order, false ), predicates );
         return reader;
     }
 
@@ -204,8 +207,9 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
         for ( int i = 0; i < length; i++ )
         {
             int compare = Values.COMPARATOR.compare( o1[i], o2[i] );
-            assertThat( "expected less than or equal to but was " + Arrays.toString( o1 ) + " and " + Arrays.toString( o2 ),
-                    compare, lessThanOrEqualTo( 0 ) );
+            assertThat( compare )
+                    .as( "expected less than or equal to but was " + Arrays.toString( o1 ) + " and " + Arrays.toString( o2 ) )
+                    .isLessThanOrEqualTo( 0 );
             if ( compare != 0 )
             {
                 return;
@@ -247,7 +251,7 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
      */
     void updateAndCommit( Collection<IndexEntryUpdate<?>> updates ) throws IndexEntryConflictException
     {
-        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
         {
             for ( IndexEntryUpdate<?> update : updates )
             {
@@ -262,7 +266,7 @@ public abstract class IndexAccessorCompatibility extends IndexProviderCompatibil
                     committedValues.remove( update.getEntityId() );
                     break;
                 default:
-                    throw new IllegalArgumentException( "Unknown update mode of " + update );
+                    throw new IllegalArgumentException( "Unknown update mode " + update.updateMode() );
                 }
             }
         }

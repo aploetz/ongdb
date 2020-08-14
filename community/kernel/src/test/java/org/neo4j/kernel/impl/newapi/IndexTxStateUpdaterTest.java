@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
@@ -38,6 +39,7 @@ import org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory;
 import org.neo4j.kernel.api.txstate.TransactionState;
 import org.neo4j.kernel.impl.api.index.IndexProxy;
 import org.neo4j.kernel.impl.api.index.IndexingService;
+import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.ValueTuple;
@@ -89,6 +91,7 @@ class IndexTxStateUpdaterTest
     void setup() throws IndexNotFoundKernelException
     {
         txState = mock( TransactionState.class );
+        when( txState.memoryTracker() ).thenReturn( EmptyMemoryTracker.INSTANCE );
 
         StorageReader storageReader = mock( StorageReader.class );
         when( storageReader.indexesGetAll() ).thenAnswer( x -> indexes.iterator() );
@@ -139,7 +142,7 @@ class IndexTxStateUpdaterTest
             return descriptors;
         } );
 
-        HashMap<Integer,Value> map = new HashMap<>();
+        Map<Integer,Value> map = new HashMap<>();
         map.put( propId1, Values.of( "hi1" ) );
         map.put( propId2, Values.of( "hi2" ) );
         map.put( propId3, Values.of( "hi3" ) );

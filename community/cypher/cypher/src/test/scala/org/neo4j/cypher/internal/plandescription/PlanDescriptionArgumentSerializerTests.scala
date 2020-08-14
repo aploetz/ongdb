@@ -19,25 +19,19 @@
  */
 package org.neo4j.cypher.internal.plandescription
 
-import org.neo4j.cypher.internal.ir.ProvidedOrder
-import org.neo4j.cypher.internal.plandescription.Arguments.{Expression => argExpression, _}
+import org.neo4j.cypher.internal.plandescription.Arguments.DbHits
+import org.neo4j.cypher.internal.plandescription.Arguments.EstimatedRows
+import org.neo4j.cypher.internal.plandescription.Arguments.Rows
 import org.neo4j.cypher.internal.plandescription.PlanDescriptionArgumentSerializer.serialize
-import org.neo4j.cypher.internal.v4_0.util.{DummyPosition, InputPosition}
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.logical.plans
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, NestedPlanExpression}
-import org.neo4j.cypher.internal.v4_0.util.attribution.SequentialIdGen
-import org.neo4j.cypher.internal.v4_0.util.symbols.{CTBoolean, CTList, CTNode, CTString}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class PlanDescriptionArgumentSerializerTests extends CypherFunSuite {
-  implicit val idGen = new SequentialIdGen()
-
   test("serialization should leave numeric arguments as numbers") {
     serialize(DbHits(12)) shouldBe a [java.lang.Number]
     serialize(Rows(12)) shouldBe a [java.lang.Number]
     serialize(EstimatedRows(12)) shouldBe a [java.lang.Number]
   }
+<<<<<<< HEAD
 
   test("ExpandExpression should look like Cypher syntax") {
     serialize(ExpandExpression("a", "r", Seq("LIKES", "LOVES"), "b", SemanticDirection.OUTGOING, 1, Some(1))) should
@@ -96,4 +90,6 @@ class PlanDescriptionArgumentSerializerTests extends CypherFunSuite {
   private val pos: InputPosition = DummyPosition(0)
   private def varFor(name: String): Variable = Variable(name)(pos)
   private def prop(varName: String, propName: String): Property = Property(varFor(varName), PropertyKeyName(propName)(pos))(pos)
+=======
+>>>>>>> neo4j/4.1
 }

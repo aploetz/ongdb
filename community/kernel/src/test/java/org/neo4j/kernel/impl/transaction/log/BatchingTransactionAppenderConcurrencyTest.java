@@ -71,7 +71,7 @@ import org.neo4j.kernel.impl.transaction.tracing.LogForceWaitEvent;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.NullLog;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
+import org.neo4j.kernel.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Health;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.storageengine.api.TransactionIdStore;
@@ -81,12 +81,13 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.LifeExtension;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.DoubleLatch.awaitLatch;
 import static org.neo4j.test.ThreadTestUtils.awaitThreadState;
 import static org.neo4j.test.ThreadTestUtils.fork;
@@ -145,8 +146,8 @@ public class BatchingTransactionAppenderConcurrencyTest
 
         appender.forceAfterAppend( logAppendEvent );
 
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.emptyBufferIntoChannelAndClearIt ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.force ) );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.emptyBufferIntoChannelAndClearIt );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.force );
         assertTrue( channelCommandQueue.isEmpty() );
     }
 
@@ -169,11 +170,11 @@ public class BatchingTransactionAppenderConcurrencyTest
         Thread otherThread = fork( runnable );
         awaitThreadState( otherThread, MILLISECONDS_TO_WAIT, Thread.State.TIMED_WAITING );
 
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.dummy ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.emptyBufferIntoChannelAndClearIt ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.force ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.emptyBufferIntoChannelAndClearIt ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.force ) );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.dummy );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.emptyBufferIntoChannelAndClearIt );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.force );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.emptyBufferIntoChannelAndClearIt );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.force );
         future.get();
         otherThread.join();
         assertTrue( channelCommandQueue.isEmpty() );
@@ -205,11 +206,11 @@ public class BatchingTransactionAppenderConcurrencyTest
             awaitThreadState( otherThread, MILLISECONDS_TO_WAIT, IN_CORRECT_FORCE_AFTER_APPEND_METHOD, Thread.State.TIMED_WAITING );
         }
 
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.dummy ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.emptyBufferIntoChannelAndClearIt ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.force ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.emptyBufferIntoChannelAndClearIt ) );
-        assertThat( channelCommandQueue.take(), is( ChannelCommand.force ) );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.dummy );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.emptyBufferIntoChannelAndClearIt );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.force );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.emptyBufferIntoChannelAndClearIt );
+        assertThat( channelCommandQueue.take() ).isEqualTo( ChannelCommand.force );
         future.get();
         for ( Thread otherThread : otherThreads )
         {
@@ -347,11 +348,11 @@ public class BatchingTransactionAppenderConcurrencyTest
         // Check number of transactions, should only have one
         LogEntryReader logEntryReader = new VersionAwareLogEntryReader( new TestCommandReaderFactory() );
 
-        assertThat( logFiles.getLowestLogVersion(), is( logFiles.getHighestLogVersion() ) );
+        assertThat( logFiles.getLowestLogVersion() ).isEqualTo( logFiles.getHighestLogVersion() );
         long version = logFiles.getHighestLogVersion();
 
         try ( LogVersionedStoreChannel channel = logFiles.openForVersion( version );
-                ReadAheadLogChannel readAheadLogChannel = new ReadAheadLogChannel( channel );
+                ReadAheadLogChannel readAheadLogChannel = new ReadAheadLogChannel( channel, INSTANCE );
                 LogEntryCursor cursor = new LogEntryCursor( logEntryReader, readAheadLogChannel ) )
         {
             LogEntry entry;
@@ -364,7 +365,7 @@ public class BatchingTransactionAppenderConcurrencyTest
                     numberOfTransactions++;
                 }
             }
-            assertThat( numberOfTransactions, is( 1L ) );
+            assertThat( numberOfTransactions ).isEqualTo( 1L );
         }
     }
 
@@ -424,7 +425,7 @@ public class BatchingTransactionAppenderConcurrencyTest
     {
         PhysicalTransactionRepresentation tx = new PhysicalTransactionRepresentation( singletonList( new TestCommand() ) );
         tx.setHeader( new byte[0], 0, 0, 0, 0 );
-        return new TransactionToApply( tx );
+        return new TransactionToApply( tx, NULL );
     }
 
     private Runnable createForceAfterAppendRunnable( final BatchingTransactionAppender appender )

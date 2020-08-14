@@ -20,17 +20,23 @@
 package org.neo4j.bolt.runtime.statemachine.impl;
 
 import org.neo4j.bolt.BoltChannel;
+<<<<<<< HEAD
 import org.neo4j.bolt.BoltServer;
+=======
+import org.neo4j.bolt.BoltProtocolVersion;
+>>>>>>> neo4j/4.1
 import org.neo4j.bolt.dbapi.BoltGraphDatabaseManagementServiceSPI;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachine;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachineFactory;
-import org.neo4j.bolt.v3.runtime.TransactionStateMachineSPIProviderV3;
-import org.neo4j.bolt.v4.runtime.TransactionStateMachineSPIProviderV4;
 import org.neo4j.bolt.security.auth.Authentication;
 import org.neo4j.bolt.v3.BoltProtocolV3;
 import org.neo4j.bolt.v3.BoltStateMachineV3;
+import org.neo4j.bolt.v3.runtime.TransactionStateMachineSPIProviderV3;
 import org.neo4j.bolt.v4.BoltProtocolV4;
 import org.neo4j.bolt.v4.BoltStateMachineV4;
+import org.neo4j.bolt.v4.runtime.TransactionStateMachineSPIProviderV4;
+import org.neo4j.bolt.v41.BoltProtocolV41;
+import org.neo4j.bolt.v41.BoltStateMachineV41;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.logging.internal.LogService;
@@ -41,7 +47,6 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
     private final BoltGraphDatabaseManagementServiceSPI boltGraphDatabaseManagementServiceSPI;
     private final LogService logging;
     private final Authentication authentication;
-    private final Config config;
     private final SystemNanoClock clock;
     private final String defaultDatabaseName;
     private final boolean renameThreads;
@@ -52,22 +57,25 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
         this.boltGraphDatabaseManagementServiceSPI = boltGraphDatabaseManagementServiceSPI;
         this.logging = logging;
         this.authentication = authentication;
-        this.config = config;
         this.clock = clock;
         this.defaultDatabaseName = config.get( GraphDatabaseSettings.default_database );
         this.renameThreads = config.get( GraphDatabaseSettings.bolt_worker_threads_contain_database_name );
     }
 
     @Override
-    public BoltStateMachine newStateMachine( long protocolVersion, BoltChannel boltChannel )
+    public BoltStateMachine newStateMachine( BoltProtocolVersion protocolVersion, BoltChannel boltChannel )
     {
-        if ( protocolVersion == BoltProtocolV3.VERSION )
+        if ( protocolVersion.equals( BoltProtocolV3.VERSION ) )
         {
             return newStateMachineV3( boltChannel );
         }
-        else if ( protocolVersion == BoltProtocolV4.VERSION )
+        else if ( protocolVersion.equals( BoltProtocolV4.VERSION ) )
         {
             return newStateMachineV4( boltChannel );
+        }
+        else if ( protocolVersion.equals( BoltProtocolV41.VERSION ) )
+        {
+            return newStateMachineV41( boltChannel );
         }
         else
         {
@@ -87,5 +95,12 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
         var transactionSpiProvider = new TransactionStateMachineSPIProviderV4( boltGraphDatabaseManagementServiceSPI, defaultDatabaseName, boltChannel, clock );
         var boltSPI = new BoltStateMachineSPIImpl( logging, authentication, transactionSpiProvider );
         return new BoltStateMachineV4( boltSPI, boltChannel, clock , renameThreads, defaultDatabaseName );
+    }
+
+    private BoltStateMachine newStateMachineV41( BoltChannel boltChannel )
+    {
+        var transactionSpiProvider = new TransactionStateMachineSPIProviderV4( boltGraphDatabaseManagementServiceSPI, defaultDatabaseName, boltChannel, clock );
+        var boltSPI = new BoltStateMachineSPIImpl( logging, authentication, transactionSpiProvider );
+        return new BoltStateMachineV41( boltSPI, boltChannel, clock );
     }
 }

@@ -19,15 +19,22 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted
 
-import org.mockito.ArgumentMatchers._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.neo4j.cypher.internal.runtime.{QueryContext, QueryStatistics, _}
-import org.neo4j.graphdb.{Node, Relationship}
+import org.neo4j.cypher.internal.runtime.NodeOperations
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryStatistics
+import org.neo4j.cypher.internal.runtime.RelationshipOperations
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Relationship
+import org.neo4j.internal.schema.IndexPrototype
+import org.neo4j.internal.schema.SchemaDescriptor
 import org.neo4j.values.storable.Values
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.internal.schema.{IndexPrototype, SchemaDescriptor}
 
 class UpdateCountingQueryContextTest extends CypherFunSuite {
 
@@ -98,9 +105,27 @@ class UpdateCountingQueryContextTest extends CypherFunSuite {
   }
 
   test("remove_property") {
-    context.nodeOps.removeProperty(nodeAId, context.getPropertyKeyId("key"))
+    // given
+    val propertyKey = context.getPropertyKeyId("key")
+    when(nodeOps.removeProperty(nodeAId, propertyKey)).thenReturn(true)
 
+    // when
+    context.nodeOps.removeProperty(nodeAId, propertyKey)
+
+    // then
     context.getStatistics should equal(QueryStatistics(propertiesSet = 1))
+  }
+
+  test("remove_property does nothing") {
+    // given
+    val propertyKey = context.getPropertyKeyId("key")
+    when(nodeOps.removeProperty(nodeAId, propertyKey)).thenReturn(false)
+
+    // when
+    context.nodeOps.removeProperty(nodeAId, propertyKey)
+
+    // then
+    context.getStatistics should equal(QueryStatistics())
   }
 
   test("set_property_relationship") {
@@ -110,9 +135,27 @@ class UpdateCountingQueryContextTest extends CypherFunSuite {
   }
 
   test("remove_property_relationship") {
-    context.relationshipOps.removeProperty(relId, context.getPropertyKeyId("key"))
+    // given
+    val propertyKey = context.getPropertyKeyId("key")
+    when(relOps.removeProperty(relId, propertyKey)).thenReturn(true)
 
+    // when
+    context.relationshipOps.removeProperty(relId, propertyKey)
+
+    // then
     context.getStatistics should equal(QueryStatistics(propertiesSet = 1))
+  }
+
+  test("remove_property_relationship does nothing") {
+    // given
+    val propertyKey = context.getPropertyKeyId("key")
+    when(relOps.removeProperty(relId, propertyKey)).thenReturn(false)
+
+    // when
+    context.relationshipOps.removeProperty(relId, propertyKey)
+
+    // then
+    context.getStatistics should equal(QueryStatistics())
   }
 
   test("add_label") {

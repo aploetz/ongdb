@@ -19,7 +19,6 @@
  */
 package org.neo4j.bolt.transport;
 
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
 import org.junit.jupiter.api.AfterEach;
@@ -30,7 +29,9 @@ import java.util.Map;
 
 import org.neo4j.bolt.BoltChannel;
 import org.neo4j.bolt.BoltProtocol;
+import org.neo4j.bolt.BoltProtocolVersion;
 import org.neo4j.bolt.messaging.BoltRequestMessageReader;
+import org.neo4j.bolt.messaging.BoltResponseMessageWriter;
 import org.neo4j.bolt.packstream.Neo4jPack;
 import org.neo4j.bolt.runtime.BoltConnection;
 import org.neo4j.bolt.runtime.BoltConnectionFactory;
@@ -43,13 +44,13 @@ import org.neo4j.bolt.transport.pipeline.MessageDecoder;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.NullLogService;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.bolt.testing.BoltTestUtil.newTestBoltChannel;
 
 class AbstractBoltProtocolTest
 {
@@ -65,35 +66,33 @@ class AbstractBoltProtocolTest
     void shouldInstallChannelHandlersInCorrectOrder() throws Throwable
     {
         // Given
-        BoltChannel boltChannel = newBoltChannel( channel );
+        BoltChannel boltChannel = newTestBoltChannel( channel );
         BoltConnectionFactory connectionFactory = mock( BoltConnectionFactory.class );
-        when( connectionFactory.newConnection( eq( boltChannel ), any() ) ).thenReturn( mock( BoltConnection.class ) );
+        when( connectionFactory.newConnection( eq( boltChannel ), any(), any() ) ).thenReturn( mock( BoltConnection.class ) );
         BoltProtocol boltProtocol =
-                new TestAbstractBoltProtocol( boltChannel, connectionFactory, mock( BoltStateMachineFactory.class ), NullLogService.getInstance() );
+                new TestAbstractBoltProtocol( boltChannel, connectionFactory, mock( BoltStateMachineFactory.class ),
+                        NullLogService.getInstance(), mock( TransportThrottleGroup.class ) );
 
         // When
         boltProtocol.install();
 
         Iterator<Map.Entry<String,ChannelHandler>> handlers = channel.pipeline().iterator();
-        assertThat( handlers.next().getValue(), instanceOf( ChunkDecoder.class ) );
-        assertThat( handlers.next().getValue(), instanceOf( MessageAccumulator.class ) );
-        assertThat( handlers.next().getValue(), instanceOf( MessageDecoder.class ) );
-        assertThat( handlers.next().getValue(), instanceOf( HouseKeeper.class ) );
+        assertThat( handlers.next().getValue() ).isInstanceOf( ChunkDecoder.class );
+        assertThat( handlers.next().getValue() ).isInstanceOf( MessageAccumulator.class );
+        assertThat( handlers.next().getValue() ).isInstanceOf( MessageDecoder.class );
+        assertThat( handlers.next().getValue() ).isInstanceOf( HouseKeeper.class );
 
         assertFalse( handlers.hasNext() );
     }
 
-    private static BoltChannel newBoltChannel( Channel rawChannel )
-    {
-        return new BoltChannel( "bolt-1", "bolt", rawChannel );
-    }
-
     private static class TestAbstractBoltProtocol extends AbstractBoltProtocol
     {
+        private static final BoltProtocolVersion DUMMY_VERSION = new BoltProtocolVersion( 0, 0 );
+
         TestAbstractBoltProtocol( BoltChannel channel, BoltConnectionFactory connectionFactory, BoltStateMachineFactory stateMachineFactory,
-                LogService logging )
+                                  LogService logging, TransportThrottleGroup throttleGroup )
         {
-            super( channel, connectionFactory, stateMachineFactory, logging );
+            super( channel, connectionFactory, stateMachineFactory, logging, throttleGroup );
         }
 
         @Override
@@ -103,16 +102,22 @@ class AbstractBoltProtocolTest
         }
 
         @Override
-        protected BoltRequestMessageReader createMessageReader( BoltChannel channel, Neo4jPack neo4jPack, BoltConnection connection,
-                BookmarksParser bookmarksParser, LogService logging )
+        protected BoltRequestMessageReader createMessageReader( BoltConnection connection,
+                BoltResponseMessageWriter messageWriter, BookmarksParser bookmarksParser, LogService logging )
         {
             return mock( BoltRequestMessageReader.class );
         }
 
         @Override
-        public long version()
+        protected BoltResponseMessageWriter createMessageWriter( Neo4jPack neo4jPack, LogService logging )
         {
-            return -1;
+            return mock( BoltResponseMessageWriter.class );
+        }
+
+        @Override
+        public BoltProtocolVersion version()
+        {
+            return DUMMY_VERSION;
         }
     }
 }

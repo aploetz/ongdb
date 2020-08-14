@@ -21,15 +21,21 @@ package org.neo4j.cypher.internal.logical.plans
 
 import java.lang.reflect.Method
 
-import org.neo4j.cypher.internal.ir.{SinglePlannerQuery, Strictness}
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.Foldable._
-import org.neo4j.cypher.internal.v4_0.util.Rewritable._
-import org.neo4j.cypher.internal.v4_0.util.attribution.{Id, IdGen, Identifiable, SameId}
-import org.neo4j.cypher.internal.v4_0.util.{Foldable, Rewritable}
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.Strictness
+import org.neo4j.cypher.internal.util.Foldable
+import org.neo4j.cypher.internal.util.Rewritable
+import org.neo4j.cypher.internal.util.Rewritable.IteratorEq
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.Identifiable
+import org.neo4j.cypher.internal.util.attribution.SameId
 import org.neo4j.exceptions.InternalException
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayStack
 import scala.util.hashing.MurmurHash3
 
 object LogicalPlan {
@@ -64,17 +70,22 @@ abstract class LogicalPlan(idGen: IdGen)
     else {
       val otherPlan = obj.asInstanceOf[LogicalPlan]
       if (this.eq(otherPlan)) return true
-      val stack = new mutable.Stack[(Iterator[Any], Iterator[Any])]()
+      if (this.getClass != otherPlan.getClass) return false
+      val stack = new ArrayStack[(Iterator[Any], Iterator[Any])]()
       var p1 = this.productIterator
       var p2 = otherPlan.productIterator
       while (p1.hasNext && p2.hasNext) {
         val continue =
           (p1.next, p2.next) match {
             case (lp1:LogicalPlan, lp2:LogicalPlan) =>
-              stack.push((p1, p2))
-              p1 = lp1.productIterator
-              p2 = lp2.productIterator
-              true
+              if (lp1.getClass != lp2.getClass) {
+                false
+              } else {
+                stack.push((p1, p2))
+                p1 = lp1.productIterator
+                p2 = lp2.productIterator
+                true
+              }
             case (_:LogicalPlan, _) => false
             case (_, _:LogicalPlan) => false
             case (a1, a2) => a1 == a2
@@ -95,6 +106,8 @@ abstract class LogicalPlan(idGen: IdGen)
     case plan: LogicalPlan
       if plan.lhs.isEmpty && plan.rhs.isEmpty => acc => (acc :+ plan, Some(identity))
   }
+
+  def leftmostLeaf: LogicalPlan = lhs.map(_.leftmostLeaf).getOrElse(this)
 
   def copyPlanWithIdGen(idGen: IdGen): LogicalPlan = {
     try {
@@ -136,7 +149,7 @@ abstract class LogicalPlan(idGen: IdGen)
       case _ => System.lineSeparator() + "  " * level + in
     }
 
-    val childrenHeap = new scala.collection.mutable.Stack[(String, Int, Option[LogicalPlan])]
+    val childrenHeap = new ArrayStack[(String, Int, Option[LogicalPlan])]
     childrenHeap.push(("", 0, Some(this)))
     val sb = new StringBuilder()
 
@@ -174,7 +187,6 @@ abstract class LogicalPlan(idGen: IdGen)
   def flatten: Seq[LogicalPlan] = Flattener.create(this)
 
   def indexUsage: Seq[IndexUsage] = {
-    import org.neo4j.cypher.internal.v4_0.util.Foldable._
     this.fold(Seq.empty[IndexUsage]) {
       case NodeIndexSeek(idName, label, properties, _, _, _) =>
         acc => acc :+ SchemaIndexSeekUsage(idName, label.nameId.id, label.name, properties.map(_.propertyKeyToken.name))
@@ -182,6 +194,8 @@ abstract class LogicalPlan(idGen: IdGen)
         acc => acc :+ SchemaIndexSeekUsage(idName, label.nameId.id, label.name, properties.map(_.propertyKeyToken.name))
       case NodeIndexScan(idName, label, properties, _, _) =>
         acc => acc :+ SchemaIndexScanUsage(idName, label.nameId.id, label.name, properties.map(_.propertyKeyToken.name))
+      case MultiNodeIndexSeek(indexPlans) =>
+        acc => acc ++ indexPlans.flatMap(_.indexUsage)
       }
   }
 }
@@ -196,38 +210,65 @@ abstract class LogicalLeafPlan(idGen: IdGen) extends LogicalPlan(idGen) with Laz
   final val lhs = None
   final val rhs = None
   def argumentIds: Set[String]
+
+  def usedVariables: Set[String]
+
+  def withoutArgumentIds(argsToExclude: Set[String]): LogicalLeafPlan
 }
 
 abstract class NodeLogicalLeafPlan(idGen: IdGen) extends LogicalLeafPlan(idGen) {
   def idName: String
 }
 
-abstract class IndexLeafPlan(idGen: IdGen) extends NodeLogicalLeafPlan(idGen) {
-  /**
-    * Indexed properties that will be retrieved from the index and cached in the row.
-    */
-  def cachedProperties: Seq[CachedProperty] = properties.flatMap(_.maybeCachedProperty(idName))
+abstract class MultiNodeLogicalLeafPlan(idGen: IdGen) extends LogicalLeafPlan(idGen) {
+  def idNames: Set[String]
+}
 
+trait IndexedPropertyProvidingPlan {
   /**
-    * All properties
-    */
+   * All properties
+   */
   def properties: Seq[IndexedProperty]
 
   /**
-    * Create a copy of this plan, swapping out the properties
-    * @return
-    */
-  def withProperties(properties: Seq[IndexedProperty]): IndexLeafPlan
+   * Indexed properties that will be retrieved from the index and cached in the row.
+   */
+  def cachedProperties: Seq[CachedProperty]
 
   /**
-    * Get a copy of this index plan where getting values is disabled
-    */
-  def copyWithoutGettingValues: IndexLeafPlan
+   * Create a copy of this plan, swapping out the properties
+   */
+  def withMappedProperties(f: IndexedProperty => IndexedProperty): IndexedPropertyProvidingPlan
+
+  /**
+   * Get a copy of this index plan where getting values is disabled
+   */
+  def copyWithoutGettingValues: IndexedPropertyProvidingPlan
+}
+
+abstract class IndexLeafPlan(idGen: IdGen) extends NodeLogicalLeafPlan(idGen) with IndexedPropertyProvidingPlan {
+  override def cachedProperties: Seq[CachedProperty] = properties.flatMap(_.maybeCachedProperty(idName))
+
+  override def withMappedProperties(f: IndexedProperty => IndexedProperty): IndexLeafPlan
+
+  override def copyWithoutGettingValues: IndexLeafPlan
+}
+
+abstract class MultiNodeIndexLeafPlan(idGen: IdGen) extends MultiNodeLogicalLeafPlan(idGen) with IndexedPropertyProvidingPlan {
+
 }
 
 abstract class IndexSeekLeafPlan(idGen: IdGen) extends IndexLeafPlan(idGen) {
 
   def valueExpr: QueryExpression[Expression]
+
+  def label: LabelToken
+
+  def properties: Seq[IndexedProperty]
+
+  def indexOrder: IndexOrder
+
+  override def withMappedProperties(f: IndexedProperty => IndexedProperty): IndexSeekLeafPlan
 }
 
 case object Flattener extends LogicalPlans.Mapper[Seq[LogicalPlan]] {

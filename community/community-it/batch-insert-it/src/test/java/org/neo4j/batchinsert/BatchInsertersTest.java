@@ -27,6 +27,7 @@ import org.neo4j.batchinsert.internal.FileSystemClosingBatchInserter;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.internal.helpers.collection.Iterables;
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.extension.ExtensionFactory;
@@ -34,12 +35,12 @@ import org.neo4j.kernel.impl.index.schema.GenericNativeIndexProviderFactory;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.neo4j.batchinsert.BatchInserters.inserter;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_schema_provider;
+import static org.neo4j.configuration.GraphDatabaseSettings.logical_log_rotation_threshold;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 
 @Neo4jLayoutExtension
 class BatchInsertersTest
@@ -73,7 +74,11 @@ class BatchInsertersTest
 
     private static Config getConfig()
     {
-        return Config.defaults( default_schema_provider, GraphDatabaseSettings.SchemaIndex.NATIVE_BTREE10.providerName() );
+        return Config.newBuilder()
+                .set( logical_log_rotation_threshold, ByteUnit.mebiBytes( 10 ) )
+                .set( preallocate_logical_logs, false )
+                .set( default_schema_provider, GraphDatabaseSettings.SchemaIndex.NATIVE_BTREE10.providerName() )
+                .build();
     }
 
     private static void verifyProvidedFileSystemOpenAfterShutdown( BatchInserter inserter, EphemeralFileSystemAbstraction fileSystemAbstraction )
@@ -84,8 +89,7 @@ class BatchInsertersTest
 
     private static void verifyInserterFileSystemClose( BatchInserter inserter )
     {
-        assertThat( "Expect specific implementation that will do required cleanups.", inserter,
-                is( instanceOf( FileSystemClosingBatchInserter.class ) ) );
+        assertThat( inserter ).as( "Expect specific implementation that will do required cleanups." ).isInstanceOf( FileSystemClosingBatchInserter.class );
         inserter.shutdown();
     }
 }

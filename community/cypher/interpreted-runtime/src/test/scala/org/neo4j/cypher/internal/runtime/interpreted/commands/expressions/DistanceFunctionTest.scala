@@ -19,14 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.internal.helpers.collection.Pair
 import org.neo4j.values.storable.CRSCalculator.GeographicCalculator.EARTH_RADIUS_METERS
-import org.neo4j.values.storable.{CoordinateReferenceSystem, PointValue, Values}
-import org.scalactic.{Equality, TolerantNumerics}
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.neo4j.values.storable.CoordinateReferenceSystem
+import org.neo4j.values.storable.PointValue
+import org.neo4j.values.storable.Values
+import org.scalactic.Equality
+import org.scalactic.TolerantNumerics
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.language.implicitConversions
 
 class DistanceFunctionTest extends CypherFunSuite {
@@ -237,8 +241,8 @@ class DistanceFunctionTest extends CypherFunSuite {
     val northPole = makePoint(0, 90)
 
     val points =
-      for (x <- -180.0 to 180.0 by 36.0; y <- -75.0 to 75.0 by 30.0) yield {
-        makePoint(x, y)
+      for (x <- -180 to 180 by 36; y <- -75 to 75 by 30) yield {
+        makePoint(x.toDouble, y.toDouble)
       }
     val distances = Seq(1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0)
 
@@ -252,8 +256,8 @@ class DistanceFunctionTest extends CypherFunSuite {
         var maxLong = -90.0
 
         // Test that points on the circle lie inside the bounding box
-        for (brng <- 0.0 to 2.0 * Math.PI by 0.01) {
-          val dest = destinationPoint(point, distance, brng)
+        for (brng <- BigDecimal(0) to 2.0 * Math.PI by 0.01) {
+          val dest = destinationPoint(point, distance, brng.doubleValue)
           dest should beInsideOneBoundingBox(boxes, tolerant = true)
           val destLat = dest.coordinate()(1)
           val destLong = dest.coordinate()(0)

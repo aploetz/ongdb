@@ -30,21 +30,33 @@ object NameValidator {
   // Allow only letters, numbers and underscore
   private val roleNamePattern = Pattern.compile("^[a-zA-Z0-9_]+$")
 
-  def assertValidUsername(name: String): Unit = {
+  // Do not allow create/drop/revoke on PUBLIC role
+  private val reservedRoleName = "PUBLIC"
+
+  def assertValidUsername(name: String): Boolean = {
     if (name == null || name.isEmpty)
       throw new InvalidArgumentException("The provided username is empty.")
     if (!usernamePattern.matcher(name).matches)
       throw new InvalidArgumentException(
         s"""Username '$name' contains illegal characters.
            |Use ascii characters that are not ',', ':' or whitespaces.""".stripMargin)
+    true
   }
 
-  def assertValidRoleName(name: String): Unit = {
+  def assertValidRoleName(name: String): Boolean = {
     if (name == null || name.isEmpty)
       throw new InvalidArgumentException("The provided role name is empty.")
     if (!roleNamePattern.matcher(name).matches)
       throw new InvalidArgumentException(
         s"""Role name '$name' contains illegal characters.
            |Use simple ascii characters, numbers and underscores.""".stripMargin)
+    true
   }
+
+  def assertUnreservedRoleName(verb: String, name: String): Boolean =
+    if (reservedRoleName.equals(name)) {
+      throw new InvalidArgumentException(s"Failed to $verb the specified role '$name': '$name' is a reserved role.")
+    } else {
+      true
+    }
 }

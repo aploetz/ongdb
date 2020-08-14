@@ -20,8 +20,8 @@
 package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.kernel.impl.util.dbstructure.QMULDbStructure
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
 
 class BenchmarkCardinalityEstimationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -33,7 +33,8 @@ class BenchmarkCardinalityEstimationTest extends CypherFunSuite with LogicalPlan
 
   implicit class RichLogicalPlanningEnvironment(val env: LogicalPlanningEnvironment[_]) {
     def assertNoRegression(query: String, actual: Double, expectedDifference: Double, allowedSlack: Double = 0.05): Unit = {
-      val (_, plan, _, solveds, _) = env.getLogicalPlanFor(query)
+      val (_, plan, _, attributes) = env.getLogicalPlanFor(query)
+      val solveds = attributes.solveds
       val qg = solveds.get(plan.id).asSinglePlannerQuery.queryGraph
       val estimate = env.estimate(qg).amount
       val currentDifference = Math.abs(estimate - actual)

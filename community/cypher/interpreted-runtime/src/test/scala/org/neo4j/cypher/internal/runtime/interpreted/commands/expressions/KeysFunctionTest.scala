@@ -19,16 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.ImplicitValueConversion._
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ImplicitValueConversion.toNodeValue
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.graphdb.Node
 import org.neo4j.values.AnyValues
 import org.neo4j.values.storable.Values.stringValue
 import org.neo4j.values.virtual.ListValue
-import org.neo4j.values.virtual.VirtualValues.{EMPTY_LIST, list}
+import org.neo4j.values.virtual.VirtualValues.EMPTY_LIST
+import org.neo4j.values.virtual.VirtualValues.list
 
 import scala.collection.mutable
 
@@ -48,7 +50,7 @@ class KeysFunctionTest extends CypherFunSuite {
     when(queryContext.getPropertyKeyName(13)).thenReturn("MoreProp")
 
     val state = QueryStateHelper.emptyWith(query = queryContext)
-    val ctx = ExecutionContext(mutable.Map("n" -> node))
+    val ctx = CypherRow(mutable.Map("n" -> node))
 
     // WHEN
     val result = KeysFunction(Variable("n"))(ctx, state)
@@ -63,9 +65,8 @@ class KeysFunctionTest extends CypherFunSuite {
     val queryContext = mock[QueryContext]
     when(queryContext.nodePropertyIds(node.getId, null, null)).thenReturn(Array.empty[Int])
 
-
     val state = QueryStateHelper.emptyWith(query = queryContext)
-    val ctx = ExecutionContext(mutable.Map("n" -> node))
+    val ctx = CypherRow(mutable.Map("n" -> node))
 
     // WHEN
     val result = KeysFunction(Variable("n"))(ctx, state)
@@ -78,11 +79,11 @@ class KeysFunctionTest extends CypherFunSuite {
     // GIVEN
     val queryContext = mock[QueryContext]
     val state = QueryStateHelper.emptyWith(query = queryContext)
-    val ctx = ExecutionContext.empty
+    val ctx = CypherRow.empty
 
     val function = KeysFunction(LiteralMap(Map("foo" -> Literal(1), "bar" -> Literal(2), "baz" -> Literal(3))))
     // WHEN
-    val result = function(ctx, state).asInstanceOf[ListValue].asArray().sortWith( (a,b) => AnyValues.COMPARATOR.compare(a,b) >= 0)
+    val result = function(ctx, state).asInstanceOf[ListValue].asArray().sortWith((a, b) => AnyValues.COMPARATOR.compare(a, b) >= 0)
 
     result should equal(Array(stringValue("foo"), stringValue("baz"), stringValue("bar")))
   }

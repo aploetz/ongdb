@@ -76,15 +76,13 @@ import org.neo4j.kernel.impl.query.statistic.StatisticProvider;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.lock.ResourceType;
 import org.neo4j.lock.ResourceTypes;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.test.extension.ImpermanentDbmsExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.values.ValueMapper;
 
 import static java.util.Arrays.asList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -95,13 +93,17 @@ class QueryExecutionLocksIT
 {
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private GraphDatabaseQueryService queryService;
+    @Inject
+    private QueryExecutionEngine executionEngine;
 
     @Test
     void noLocksTakenForQueryWithoutAnyIndexesUsage() throws Exception
     {
         String query = "MATCH (n) return count(n)";
         List<LockOperationRecord> lockOperationRecords = traceQueryLocks( query );
-        assertThat( "Observed list of lock operations is: " + lockOperationRecords, lockOperationRecords, is( empty() ) );
+        assertThat( lockOperationRecords ).as( "Observed list of lock operations is: " + lockOperationRecords ).isEmpty();
     }
 
     @Test
@@ -122,7 +124,7 @@ class QueryExecutionLocksIT
         String query = "MATCH (n:" + labelName + ") where n." + propertyKey + " = \"Fry\" RETURN n ";
 
         List<LockOperationRecord> lockOperationRecords = traceQueryLocks( query );
-        assertThat( "Observed list of lock operations is: " + lockOperationRecords, lockOperationRecords, hasSize( 1 ) );
+        assertThat( lockOperationRecords ).as( "Observed list of lock operations is: " + lockOperationRecords ).hasSize( 1 );
 
         LockOperationRecord operationRecord = lockOperationRecords.get( 0 );
         assertTrue( operationRecord.acquisition );
@@ -149,7 +151,7 @@ class QueryExecutionLocksIT
 
         LockOperationListener lockOperationListener = new OnceSchemaFlushListener();
         List<LockOperationRecord> lockOperationRecords = traceQueryLocks( query, lockOperationListener );
-        assertThat( "Observed list of lock operations is: " + lockOperationRecords, lockOperationRecords, hasSize( 3 ) );
+        assertThat( lockOperationRecords ).as( "Observed list of lock operations is: " + lockOperationRecords ).hasSize( 3 );
 
         LockOperationRecord operationRecord = lockOperationRecords.get( 0 );
         assertTrue( operationRecord.acquisition );
@@ -182,11 +184,9 @@ class QueryExecutionLocksIT
 
     private List<LockOperationRecord> traceQueryLocks( String query, LockOperationListener... listeners ) throws QueryExecutionKernelException
     {
-        GraphDatabaseQueryService graph = db.getDependencyResolver().resolveDependency( GraphDatabaseQueryService.class );
-        QueryExecutionEngine executionEngine = db.getDependencyResolver().resolveDependency( QueryExecutionEngine.class );
-        try ( InternalTransaction tx = graph.beginTransaction( KernelTransaction.Type.implicit, LoginContext.AUTH_DISABLED ) )
+        try ( InternalTransaction tx = queryService.beginTransaction( KernelTransaction.Type.IMPLICIT, LoginContext.AUTH_DISABLED ) )
         {
-            TransactionalContextWrapper context = new TransactionalContextWrapper( createTransactionContext( graph, tx, query ), listeners );
+            TransactionalContextWrapper context = new TransactionalContextWrapper( createTransactionContext( queryService, tx, query ), listeners );
             executionEngine.executeQuery( query, EMPTY_MAP, context, false );
             return new ArrayList<>( context.recordingLocks.getLockOperationRecords() );
         }
@@ -803,6 +803,12 @@ class QueryExecutionLocksIT
 
         @Override
         public PageCursorTracer pageCursorTracer()
+        {
+            return null;
+        }
+
+        @Override
+        public MemoryTracker memoryTracker()
         {
             return null;
         }

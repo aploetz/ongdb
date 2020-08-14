@@ -20,11 +20,15 @@
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.{PercentileContFunction, PercentileDiscFunction}
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.AggregationFunction
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.PercentileContFunction
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.PercentileDiscFunction
+import org.neo4j.cypher.internal.util.symbols.CTNumber
+import org.neo4j.cypher.internal.util.symbols.CypherType
+import org.neo4j.memory.MemoryTracker
 
 case class PercentileCont(anInner: Expression, percentile: Expression) extends AggregationWithInnerExpression(anInner) {
-  override def createAggregationFunction = new PercentileContFunction(anInner, percentile)
+  override def createAggregationFunction(memoryTracker: MemoryTracker): AggregationFunction = new PercentileContFunction(anInner, percentile, memoryTracker)
 
   def expectedInnerType: CypherType = CTNumber
 
@@ -34,7 +38,7 @@ case class PercentileCont(anInner: Expression, percentile: Expression) extends A
 }
 
 case class PercentileDisc(anInner: Expression, percentile: Expression) extends AggregationWithInnerExpression(anInner) {
-  override def createAggregationFunction = new PercentileDiscFunction(anInner, percentile)
+  override def createAggregationFunction(memoryTracker: MemoryTracker): AggregationFunction = new PercentileDiscFunction(anInner, percentile, memoryTracker)
 
   def expectedInnerType: CypherType  = CTNumber
 

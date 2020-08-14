@@ -33,7 +33,6 @@ import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.impl.coreapi.schema.IndexDefinitionImpl;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.extension.DbmsExtension;
@@ -43,7 +42,8 @@ import org.neo4j.test.rule.RandomRule;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.neo4j.kernel.api.KernelTransaction.Type.explicit;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unorderedValues;
+import static org.neo4j.kernel.api.KernelTransaction.Type.EXPLICIT;
 
 @DbmsExtension
 @ExtendWith( RandomExtension.class )
@@ -54,6 +54,8 @@ class KernelAPIParallelIndexScanStressIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private Kernel kernel;
     @Inject
     private RandomRule random;
 
@@ -87,9 +89,8 @@ class KernelAPIParallelIndexScanStressIT
         }
 
         // when & then
-        Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
         IndexReadSession[] indexes = new IndexReadSession[3];
-        try ( KernelTransaction tx = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED ) )
         {
             indexes[0] = indexReadSession( tx, index1 );
             indexes[1] = indexReadSession( tx, index2 );
@@ -99,7 +100,7 @@ class KernelAPIParallelIndexScanStressIT
 
         KernelAPIParallelStress.parallelStressInTx( kernel,
                                                     N_THREADS,
-                                                    tx -> tx.cursors().allocateNodeValueIndexCursor(),
+                                                    tx -> tx.cursors().allocateNodeValueIndexCursor( tx.pageCursorTracer() ),
                                                     ( read, cursor ) -> indexSeek( read,
                                                                                    cursor,
                                                                                    indexes[random.nextInt( indexes.length )] ));
@@ -133,7 +134,7 @@ class KernelAPIParallelIndexScanStressIT
             try
             {
                 IndexQuery.ExistsPredicate query = IndexQuery.exists( index.reference().schema().getPropertyIds()[0] );
-                read.nodeIndexSeek( index, cursor, IndexOrder.NONE, true, query );
+                read.nodeIndexSeek( index, cursor, unorderedValues(), query );
                 int n = 0;
                 while ( cursor.next() )
                 {

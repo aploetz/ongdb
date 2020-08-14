@@ -41,7 +41,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 import org.neo4j.common.EntityType;
@@ -59,6 +59,8 @@ import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.internal.schema.SchemaState;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexActivationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
@@ -72,8 +74,7 @@ import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.register.Registers;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.IndexUpdateListener;
@@ -90,8 +91,7 @@ import static org.neo4j.internal.kernel.api.InternalIndexState.POPULATING;
 import static org.neo4j.kernel.impl.api.index.IndexPopulationFailure.failure;
 
 /**
- * Manages the indexes that were introduced in 2.0. These indexes depend on the normal neo4j logical log for
- * transactionality. Each index has an {@link IndexDescriptor}, which it uses to filter
+ * Manages neo4j indexes. Each index has an {@link IndexDescriptor}, which it uses to filter
  * changes that come into the database. Changes that apply to the the rule are indexed. This way, "normal" changes to
  * the database can be replayed to perform recovery after a crash.
  * <p>
@@ -106,6 +106,7 @@ import static org.neo4j.kernel.impl.api.index.IndexPopulationFailure.failure;
  */
 public class IndexingService extends LifecycleAdapter implements IndexUpdateListener, IndexingProvidersService
 {
+    private static final String INDEX_SERVICE_INDEX_CLOSING_TAG = "indexServiceIndexClosing";
     private final IndexSamplingController samplingController;
     private final IndexProxyCreator indexProxyCreator;
     private final IndexStoreView storeView;
@@ -115,14 +116,17 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
     private final Log internalLog;
     private final Log userLog;
     private final IndexStatisticsStore indexStatisticsStore;
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
     private final boolean readOnly;
     private final TokenNameLookup tokenNameLookup;
-    private final MultiPopulatorFactory multiPopulatorFactory;
+    private final JobScheduler jobScheduler;
     private final LogProvider internalLogProvider;
     private final Monitor monitor;
     private final SchemaState schemaState;
     private final IndexPopulationJobController populationJobController;
     private final Map<Long,IndexProxy> indexesToDropAfterCompletedRecovery = new HashMap<>();
+    private static final String INIT_TAG = "Initialize IndexingService";
 
     enum State
     {
@@ -183,10 +187,12 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         {   // Do nothing
         }
 
+        @Override
         public void populationCancelled()
         {   // Do nothing
         }
 
+        @Override
         public void populationJobCompleted( long peakDirectMemoryUsage )
         {   // Do nothing
         }
@@ -205,11 +211,12 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
             TokenNameLookup tokenNameLookup,
             JobScheduler scheduler,
             SchemaState schemaState,
-            MultiPopulatorFactory multiPopulatorFactory,
             LogProvider internalLogProvider,
             LogProvider userLogProvider,
             Monitor monitor,
             IndexStatisticsStore indexStatisticsStore,
+            PageCacheTracer pageCacheTracer,
+            MemoryTracker memoryTracker,
             boolean readOnly )
     {
         this.indexProxyCreator = indexProxyCreator;
@@ -219,14 +226,16 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         this.indexDescriptors = indexDescriptors;
         this.samplingController = samplingController;
         this.tokenNameLookup = tokenNameLookup;
+        this.jobScheduler = scheduler;
         this.schemaState = schemaState;
-        this.multiPopulatorFactory = multiPopulatorFactory;
         this.internalLogProvider = internalLogProvider;
         this.monitor = monitor;
         this.populationJobController = new IndexPopulationJobController( scheduler );
         this.internalLog = internalLogProvider.getLog( getClass() );
         this.userLog = userLogProvider.getLog( getClass() );
         this.indexStatisticsStore = indexStatisticsStore;
+        this.pageCacheTracer = pageCacheTracer;
+        this.memoryTracker = memoryTracker;
         this.readOnly = readOnly;
     }
 
@@ -238,44 +247,47 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
     {
         validateDefaultProviderExisting();
 
-        indexMapRef.modify( indexMap ->
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INIT_TAG ) )
         {
-            Map<InternalIndexState, List<IndexLogRecord>> indexStates = new EnumMap<>( InternalIndexState.class );
-            for ( IndexDescriptor descriptor : indexDescriptors )
+            indexMapRef.modify( indexMap ->
             {
-                IndexProxy indexProxy;
-
-                IndexProviderDescriptor providerDescriptor = descriptor.getIndexProvider();
-                IndexProvider provider = providerMap.lookup( providerDescriptor );
-                InternalIndexState initialState = provider.getInitialState( descriptor );
-
-                indexStates.computeIfAbsent( initialState, internalIndexState -> new ArrayList<>() ).add( new IndexLogRecord( descriptor ) );
-
-                internalLog.debug( indexStateInfo( "init", initialState, descriptor ) );
-                switch ( initialState )
+                Map<InternalIndexState,List<IndexLogRecord>> indexStates = new EnumMap<>( InternalIndexState.class );
+                for ( IndexDescriptor descriptor : indexDescriptors )
                 {
-                case ONLINE:
-                    monitor.initialState( descriptor, ONLINE );
-                    indexProxy = indexProxyCreator.createOnlineIndexProxy( descriptor );
-                    break;
-                case POPULATING:
-                    // The database was shut down during population, or a crash has occurred, or some other sad thing.
-                    monitor.initialState( descriptor, POPULATING );
-                    indexProxy = indexProxyCreator.createRecoveringIndexProxy( descriptor );
-                    break;
-                case FAILED:
-                    monitor.initialState( descriptor, FAILED );
-                    IndexPopulationFailure failure = failure( provider.getPopulationFailure( descriptor ) );
-                    indexProxy = indexProxyCreator.createFailedIndexProxy( descriptor, failure );
-                    break;
-                default:
-                    throw new IllegalArgumentException( "" + initialState );
+                    IndexProxy indexProxy;
+
+                    IndexProviderDescriptor providerDescriptor = descriptor.getIndexProvider();
+                    IndexProvider provider = providerMap.lookup( providerDescriptor );
+                    InternalIndexState initialState = provider.getInitialState( descriptor, cursorTracer );
+
+                    indexStates.computeIfAbsent( initialState, internalIndexState -> new ArrayList<>() ).add( new IndexLogRecord( descriptor ) );
+
+                    internalLog.debug( indexStateInfo( "init", initialState, descriptor ) );
+                    switch ( initialState )
+                    {
+                    case ONLINE:
+                        monitor.initialState( descriptor, ONLINE );
+                        indexProxy = indexProxyCreator.createOnlineIndexProxy( descriptor );
+                        break;
+                    case POPULATING:
+                        // The database was shut down during population, or a crash has occurred, or some other sad thing.
+                        monitor.initialState( descriptor, POPULATING );
+                        indexProxy = indexProxyCreator.createRecoveringIndexProxy( descriptor );
+                        break;
+                    case FAILED:
+                        monitor.initialState( descriptor, FAILED );
+                        IndexPopulationFailure failure = failure( provider.getPopulationFailure( descriptor, cursorTracer ) );
+                        indexProxy = indexProxyCreator.createFailedIndexProxy( descriptor, failure );
+                        break;
+                    default:
+                        throw new IllegalArgumentException( "" + initialState );
+                    }
+                    indexMap.putIndexProxy( indexProxy );
                 }
-                indexMap.putIndexProxy( indexProxy );
-            }
-            logIndexStateSummary( "init", indexStates );
-            return indexMap;
-        } );
+                logIndexStateSummary( "init", indexStates );
+                return indexMap;
+            } );
+        }
 
         indexStatisticsStore.init();
     }
@@ -325,14 +337,15 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
                 switch ( state )
                 {
                 case ONLINE:
+<<<<<<< HEAD
+=======
+                case FAILED:
+>>>>>>> neo4j/4.1
                     proxy.start();
                     break;
                 case POPULATING:
                     // Remember for rebuilding right below in this method
                     rebuildingDescriptors.put( indexId, descriptor );
-                    break;
-                case FAILED:
-                    // Don't do anything, the user needs to drop the index and re-create
                     break;
                 default:
                     throw new IllegalStateException( "Unknown state: " + state );
@@ -431,9 +444,9 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
             {
                 // This is OK to get during recovery because the underlying index can be in any unknown state
                 // while we're recovering. Let's just move on to closing it instead.
-                try
+                try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INDEX_SERVICE_INDEX_CLOSING_TAG ) )
                 {
-                    index.close();
+                    index.close( cursorTracer );
                 }
                 catch ( IOException closeException )
                 {
@@ -518,14 +531,6 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         indexStatisticsStore.shutdown();
     }
 
-    DoubleLongRegister indexUpdatesAndSize( IndexDescriptor index ) throws IndexNotFoundKernelException
-    {
-        final long indexId = indexMapRef.getOnlineIndexId( index );
-        final DoubleLongRegister output = Registers.newDoubleLongRegister();
-        indexStatisticsStore.indexUpdatesAndSize( indexId, output );
-        return output;
-    }
-
     @Override
     public void validateBeforeCommit( IndexDescriptor index, Value[] tuple )
     {
@@ -571,17 +576,17 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
      * @throws KernelException potentially thrown from index updating.
      */
     @Override
-    public void applyUpdates( Iterable<IndexEntryUpdate<IndexDescriptor>> updates ) throws KernelException
+    public void applyUpdates( Iterable<IndexEntryUpdate<IndexDescriptor>> updates, PageCursorTracer cursorTracer ) throws KernelException
     {
         if ( state == State.NOT_STARTED )
         {
             // We're in recovery, which means we'll be telling indexes to apply with additional care for making
             // idempotent changes.
-            apply( updates, IndexUpdateMode.RECOVERY );
+            apply( updates, IndexUpdateMode.RECOVERY, cursorTracer );
         }
         else if ( state == State.RUNNING || state == State.STARTING )
         {
-            apply( updates, IndexUpdateMode.ONLINE );
+            apply( updates, IndexUpdateMode.ONLINE, cursorTracer );
         }
         else
         {
@@ -590,13 +595,13 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         }
     }
 
-    private void apply( Iterable<IndexEntryUpdate<IndexDescriptor>> updates, IndexUpdateMode updateMode ) throws KernelException
+    private void apply( Iterable<IndexEntryUpdate<IndexDescriptor>> updates, IndexUpdateMode updateMode, PageCursorTracer cursorTracer ) throws KernelException
     {
         try ( IndexUpdaterMap updaterMap = indexMapRef.createIndexUpdaterMap( updateMode ) )
         {
             for ( IndexEntryUpdate<IndexDescriptor> indexUpdate : updates )
             {
-                processUpdate( updaterMap, indexUpdate );
+                processUpdate( updaterMap, indexUpdate, cursorTracer );
             }
         }
     }
@@ -634,9 +639,10 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         populationStarter.startPopulation();
     }
 
-    private void processUpdate( IndexUpdaterMap updaterMap, IndexEntryUpdate<IndexDescriptor> indexUpdate ) throws IndexEntryConflictException
+    private void processUpdate( IndexUpdaterMap updaterMap, IndexEntryUpdate<IndexDescriptor> indexUpdate,
+            PageCursorTracer cursorTracer ) throws IndexEntryConflictException
     {
-        IndexUpdater updater = updaterMap.getUpdater( indexUpdate.indexKey() );
+        IndexUpdater updater = updaterMap.getUpdater( indexUpdate.indexKey(), cursorTracer );
         if ( updater != null )
         {
             updater.process( indexUpdate );
@@ -680,7 +686,7 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         samplingController.sampleIndex( index.getId(), mode );
     }
 
-    private void dropRecoveringIndexes( IndexMap indexMap, LongIterable indexesToRebuild )
+    private static void dropRecoveringIndexes( IndexMap indexMap, LongIterable indexesToRebuild )
     {
         indexesToRebuild.forEach( idx ->
         {
@@ -730,10 +736,10 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         indexMapRef.getIndexProxy( indexId ).validate();
     }
 
-    public void forceAll( IOLimiter limiter ) throws IOException
+    public void forceAll( IOLimiter limiter, PageCursorTracer cursorTracer ) throws IOException
     {
-        indexStatisticsStore.checkpoint( limiter );
-        indexMapRef.indexMapSnapshot().forEachIndexProxy( indexProxyOperation( "force", proxy -> proxy.force( limiter ) ) );
+        indexStatisticsStore.checkpoint( limiter, cursorTracer );
+        indexMapRef.indexMapSnapshot().forEachIndexProxy( indexProxyOperation( "force", proxy -> proxy.force( limiter, cursorTracer ) ) );
     }
 
     private LongObjectProcedure<IndexProxy> indexProxyOperation( String name, ThrowingConsumer<IndexProxy, Exception> operation )
@@ -761,23 +767,26 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
 
     private void closeAllIndexes()
     {
-        indexMapRef.modify( indexMap ->
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INDEX_SERVICE_INDEX_CLOSING_TAG ) )
         {
-            Iterable<IndexProxy> indexesToStop = indexMap.getAllIndexProxies();
-            for ( IndexProxy index : indexesToStop )
+            indexMapRef.modify( indexMap ->
             {
-                try
+                Iterable<IndexProxy> indexesToStop = indexMap.getAllIndexProxies();
+                for ( IndexProxy index : indexesToStop )
                 {
-                    index.close();
+                    try
+                    {
+                        index.close( cursorTracer );
+                    }
+                    catch ( Exception e )
+                    {
+                        internalLog.error( "Unable to close index", e );
+                    }
                 }
-                catch ( Exception e )
-                {
-                    internalLog.error( "Unable to close index", e );
-                }
-            }
-            // Effectively clearing it
-            return new IndexMap();
-        } );
+                // Effectively clearing it
+                return new IndexMap();
+            } );
+        }
     }
 
     public LongSet getIndexIds()
@@ -804,8 +813,9 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
 
     private IndexPopulationJob newIndexPopulationJob( EntityType type, boolean verifyBeforeFlipping )
     {
-        MultipleIndexPopulator multiPopulator = multiPopulatorFactory.create( storeView, internalLogProvider, type, schemaState, indexStatisticsStore );
-        return new IndexPopulationJob( multiPopulator, monitor, verifyBeforeFlipping );
+        MultipleIndexPopulator multiPopulator = new MultipleIndexPopulator( storeView, internalLogProvider, type, schemaState, indexStatisticsStore,
+                jobScheduler, tokenNameLookup, pageCacheTracer, memoryTracker );
+        return new IndexPopulationJob( multiPopulator, monitor, verifyBeforeFlipping, pageCacheTracer, memoryTracker );
     }
 
     private void startIndexPopulation( IndexPopulationJob job )
@@ -872,7 +882,7 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
         }
     }
 
-    private final class IndexPopulationStarter implements Function<IndexMap,IndexMap>
+    private final class IndexPopulationStarter implements UnaryOperator<IndexMap>
     {
         private final boolean verifyBeforeFlipping;
         private final IndexDescriptor[] descriptors;

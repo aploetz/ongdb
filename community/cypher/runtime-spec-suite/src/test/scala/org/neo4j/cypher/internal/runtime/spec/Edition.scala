@@ -22,23 +22,32 @@ package org.neo4j.cypher.internal.runtime.spec
 import java.lang.Boolean.TRUE
 
 import org.neo4j.common.DependencyResolver
-import org.neo4j.configuration.{Config, GraphDatabaseSettings}
-import org.neo4j.cypher.internal._
+import org.neo4j.configuration.Config
+import org.neo4j.configuration.GraphDatabaseSettings
+import org.neo4j.cypher.internal.CommunityRuntimeContextManager
+import org.neo4j.cypher.internal.CypherConfiguration
+import org.neo4j.cypher.internal.CypherRuntimeConfiguration
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.RuntimeContextManager
 import org.neo4j.dbms.api.DatabaseManagementService
 import org.neo4j.graphdb.config.Setting
 import org.neo4j.kernel.lifecycle.LifeSupport
 import org.neo4j.logging.LogProvider
 import org.neo4j.test.TestDatabaseManagementServiceBuilder
 
+import scala.collection.JavaConverters.mapAsJavaMapConverter
+
 class Edition[CONTEXT <: RuntimeContext](graphBuilderFactory: () => TestDatabaseManagementServiceBuilder,
                                          newRuntimeContextManager: (CypherRuntimeConfiguration, DependencyResolver, LifeSupport, LogProvider) => RuntimeContextManager[CONTEXT],
                                          configs: (Setting[_], Object)*) {
 
-  import scala.collection.JavaConverters._
 
-  def newGraphManagementService(): DatabaseManagementService = {
+  def newGraphManagementService(additionalConfigs: (Setting[_], Object)*): DatabaseManagementService = {
     val graphBuilder = graphBuilderFactory().impermanent
     configs.foreach {
+      case (setting, value) => graphBuilder.setConfig(setting.asInstanceOf[Setting[Object]], value.asInstanceOf[Object])
+    }
+    additionalConfigs.foreach {
       case (setting, value) => graphBuilder.setConfig(setting.asInstanceOf[Setting[Object]], value.asInstanceOf[Object])
     }
     graphBuilder.build()
@@ -56,8 +65,8 @@ class Edition[CONTEXT <: RuntimeContext](graphBuilderFactory: () => TestDatabase
   def newRuntimeContextManager(resolver: DependencyResolver, lifeSupport: LifeSupport, logProvider: LogProvider): RuntimeContextManager[CONTEXT] =
     newRuntimeContextManager(runtimeConfig(), resolver, lifeSupport, logProvider)
 
-  private def runtimeConfig(): CypherRuntimeConfiguration = {
-    cypherConfig.toCypherRuntimeConfiguration
+  def runtimeConfig(): CypherRuntimeConfiguration = {
+    cypherConfig().toCypherRuntimeConfiguration
   }
 
   def cypherConfig(): CypherConfiguration = {

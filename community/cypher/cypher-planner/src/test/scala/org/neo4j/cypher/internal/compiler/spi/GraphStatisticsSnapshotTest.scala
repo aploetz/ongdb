@@ -19,11 +19,20 @@
  */
 package org.neo4j.cypher.internal.compiler.spi
 
-import org.neo4j.cypher.internal.planner.spi._
-import org.neo4j.cypher.internal.v4_0.util._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-
-import scala.language.reflectiveCalls
+import org.neo4j.cypher.internal.planner.spi.CardinalityByLabelsAndRelationshipType
+import org.neo4j.cypher.internal.planner.spi.GraphStatistics
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor
+import org.neo4j.cypher.internal.planner.spi.IndexSelectivity
+import org.neo4j.cypher.internal.planner.spi.InstrumentedGraphStatistics
+import org.neo4j.cypher.internal.planner.spi.MutableGraphStatisticsSnapshot
+import org.neo4j.cypher.internal.planner.spi.NodesAllCardinality
+import org.neo4j.cypher.internal.planner.spi.NodesWithLabelCardinality
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.RelTypeId
+import org.neo4j.cypher.internal.util.Selectivity
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class GraphStatisticsSnapshotTest extends CypherFunSuite {
 
@@ -77,7 +86,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val frozen1 = snapshot.freeze
     val reallySensitiveDivergence: Double = 0.9
 
-    frozen1.diverges(snapshot2.freeze, reallySensitiveDivergence) should equal(false)
+    frozen1.diverges(snapshot2.freeze).divergence should be < reallySensitiveDivergence
   }
 
   test("a snapshot shouldn't diverge from small differences") {
@@ -90,8 +99,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     instrumentedStatistics2.nodesAllCardinality()
 
     val frozen1 = snapshot.freeze
-    frozen1.diverges(snapshot2.freeze, minThreshold = 0.01) should equal(false)
-    frozen1.diverges(snapshot2.freeze, minThreshold = 0.001) should equal(true)
+    frozen1.diverges(snapshot2.freeze).divergence should (be > 0.001 and be < 0.01)
   }
 
   test("a snapshot should pick up divergences") {
@@ -115,8 +123,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val smallNumber = 0.1
     val bigNumber = 0.6
 
-    frozen1.diverges(frozen2, smallNumber) should equal(true)
-    frozen1.diverges(frozen2, bigNumber) should equal(false)
+    frozen1.diverges(frozen2).divergence should (be > smallNumber and be < bigNumber)
   }
 
   test("0 selectivity values should not lead to wrong divergences") {
@@ -138,7 +145,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val frozen2 = snapshot2.freeze
     val smallNumber = 0.1
 
-    frozen1.diverges(frozen2, smallNumber) should equal(true)
+    frozen1.diverges(frozen2).divergence should be > smallNumber
   }
 
   test("0 label cardinality values should not lead to wrong divergences") {
@@ -160,7 +167,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val frozen2 = snapshot2.freeze
     val smallNumber = 0.1
 
-    frozen1.diverges(frozen2, smallNumber) should equal(true)
+    frozen1.diverges(frozen2).divergence should be > smallNumber
   }
 
   test("0 all nodes cardinality values should not lead to wrong divergences") {
@@ -182,7 +189,7 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val frozen2 = snapshot2.freeze
     val smallNumber = 0.1
 
-    frozen1.diverges(frozen2, smallNumber) should equal(true)
+    frozen1.diverges(frozen2).divergence should be > smallNumber
   }
 
   test("if threshold is 1.0 nothing diverges") {
@@ -204,14 +211,25 @@ class GraphStatisticsSnapshotTest extends CypherFunSuite {
     val frozen1 = snapshot1.freeze
     val frozen2 = snapshot2.freeze
 
-    frozen1.diverges(frozen2, 1.0) should equal(false)
+    frozen1.diverges(frozen2).divergence should not (be < 1.0)
   }
 
   private def graphStatistics(allNodes: Long = 500,
                               labeledNodes: Long = 500,
                               relCardinality: Long = 5000,
                               idxSelectivity: Double = 1,
-                              idxPropertyExistsSelectivity: Double = 1) = new GraphStatistics {
+                              idxPropertyExistsSelectivity: Double = 1): TestGraphStatistics =
+    new TestGraphStatistics(allNodes,
+      labeledNodes,
+      relCardinality,
+      idxSelectivity,
+      idxPropertyExistsSelectivity)
+
+  class TestGraphStatistics(allNodes: Long,
+                            labeledNodes: Long,
+                            relCardinality: Long ,
+                            idxSelectivity: Double ,
+                            idxPropertyExistsSelectivity: Double) extends GraphStatistics {
     private var _factor: Double = 1L
 
     def nodesWithLabelCardinality(labelId: Option[LabelId]): Cardinality = labelId match {

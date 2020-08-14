@@ -23,8 +23,9 @@ import org.junit.jupiter.api.Test;
 
 import org.neo4j.counts.CountsAccessor;
 import org.neo4j.counts.CountsStore;
-import org.neo4j.storageengine.api.TransactionApplicationMode;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -39,12 +40,11 @@ class CountsStoreTransactionApplierTest
         // GIVEN
         final CountsStore counts = mock( CountsStore.class );
         final CountsAccessor.Updater updater = mock( CountsAccessor.Updater.class );
-        when( counts.apply( anyLong() ) ).thenReturn( updater );
-        final CountsStoreBatchTransactionApplier applier = new CountsStoreBatchTransactionApplier( counts,
-                TransactionApplicationMode.INTERNAL );
+        when( counts.apply( anyLong(), any( PageCursorTracer.class ) ) ).thenReturn( updater );
+        final CountsStoreTransactionApplierFactory applier = new CountsStoreTransactionApplierFactory( counts );
 
         // WHEN
-        try ( TransactionApplier txApplier = applier.startTx( new GroupOfCommands( 2L ) ) )
+        try ( TransactionApplier txApplier = applier.startTx( new GroupOfCommands( 2L ), mock( BatchContext.class ) ) )
         {
             txApplier.visitNodeCountsCommand( new Command.NodeCountsCommand( ANY_LABEL, 1 ) );
         }

@@ -31,6 +31,8 @@ import org.neo4j.configuration.Config;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.impl.muninn.StandalonePageCacheFactory;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.util.Validators;
 import org.neo4j.kernel.internal.locker.FileLockException;
 import org.neo4j.logging.internal.NullLogService;
@@ -64,14 +66,15 @@ public class StoreInfoCommand extends AbstractCommand
         Validators.CONTAINS_EXISTING_DATABASE.validate( storePath );
 
         DatabaseLayout databaseLayout = DatabaseLayout.ofFlat( storePath );
+        var cacheTracer = PageCacheTracer.NULL;
         try ( Closeable ignored = LockChecker.checkDatabaseLock( databaseLayout );
               JobScheduler jobScheduler = createInitialisedScheduler();
-              PageCache pageCache = StandalonePageCacheFactory.createPageCache( ctx.fs(), jobScheduler ) )
+              PageCache pageCache = StandalonePageCacheFactory.createPageCache( ctx.fs(), jobScheduler, cacheTracer ) )
         {
             StorageEngineFactory storageEngineFactory = StorageEngineFactory.selectStorageEngine();
             StoreVersionCheck storeVersionCheck = storageEngineFactory.versionCheck( ctx.fs(), databaseLayout, Config.defaults(), pageCache,
-                    NullLogService.getInstance() );
-            String storeVersion = storeVersionCheck.storeVersion()
+                    NullLogService.getInstance(), cacheTracer );
+            String storeVersion = storeVersionCheck.storeVersion( PageCursorTracer.NULL )
                     .orElseThrow( () -> new CommandFailedException( format( "Could not find version metadata in store '%s'", storePath ) ) );
 
             final String fmt = "%-30s%s";

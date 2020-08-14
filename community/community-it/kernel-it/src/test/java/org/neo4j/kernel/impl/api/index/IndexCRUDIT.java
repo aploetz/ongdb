@@ -42,6 +42,7 @@ import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexPopulator;
@@ -59,8 +60,8 @@ import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.EphemeralFileSystemExtension;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -68,9 +69,9 @@ import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAM
 import static org.neo4j.configuration.GraphDatabaseSettings.default_schema_provider;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceIndexProviderFactory;
 import static org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor.PROVIDER_DESCRIPTOR;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.createIndex;
 
 @ExtendWith( EphemeralFileSystemExtension.class )
 class IndexCRUDIT
@@ -106,8 +107,7 @@ class IndexCRUDIT
             int propertyKey1 = tokenRead.propertyKey( indexProperty );
             int label = tokenRead.nodeLabel( myLabel.name() );
             LabelSchemaDescriptor descriptor = SchemaDescriptor.forLabel( label, propertyKey1 );
-            assertThat( writer.updatesCommitted, equalTo( asSet(
-                    IndexEntryUpdate.add( node.getId(), descriptor, Values.of( value1 ) ) ) ) );
+            assertThat( writer.updatesCommitted ).isEqualTo( asSet( IndexEntryUpdate.add( node.getId(), descriptor, Values.of( value1 ) ) ) );
             tx.commit();
         }
         // We get two updates because we both add a label and a property to be indexed
@@ -130,7 +130,7 @@ class IndexCRUDIT
         Node node = createNode( map( indexProperty, value, otherProperty, otherValue ) );
 
         // THEN
-        assertThat( writer.updatesCommitted.size(), equalTo( 0 ) );
+        assertThat( writer.updatesCommitted.size() ).isEqualTo( 0 );
 
         // AND WHEN
         try ( Transaction tx = db.beginTx() )
@@ -148,8 +148,7 @@ class IndexCRUDIT
             int propertyKey1 = tokenRead.propertyKey( indexProperty );
             int label = tokenRead.nodeLabel( myLabel.name() );
             LabelSchemaDescriptor descriptor = SchemaDescriptor.forLabel( label, propertyKey1 );
-            assertThat( writer.updatesCommitted, equalTo( asSet(
-                    IndexEntryUpdate.add( node.getId(), descriptor, Values.of( value ) ) ) ) );
+            assertThat( writer.updatesCommitted ).isEqualTo( asSet( IndexEntryUpdate.add( node.getId(), descriptor, Values.of( value ) ) ) );
             tx.commit();
         }
     }
@@ -190,7 +189,7 @@ class IndexCRUDIT
     private GatheringIndexWriter newWriter() throws IOException
     {
         GatheringIndexWriter writer = new GatheringIndexWriter();
-        when( mockedIndexProvider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() ) ).thenReturn( writer );
+        when( mockedIndexProvider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( writer );
         when( mockedIndexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( writer );
         return writer;
     }
@@ -212,7 +211,7 @@ class IndexCRUDIT
         }
 
         @Override
-        public void add( Collection<? extends IndexEntryUpdate<?>> updates )
+        public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer )
         {
             updatesCommitted.addAll( updates );
         }
@@ -223,19 +222,19 @@ class IndexCRUDIT
         }
 
         @Override
-        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor )
+        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor, PageCursorTracer cursorTracer )
         {
-            return newUpdater( IndexUpdateMode.ONLINE );
+            return newUpdater( IndexUpdateMode.ONLINE, NULL );
         }
 
         @Override
-        public IndexUpdater newUpdater( final IndexUpdateMode mode )
+        public IndexUpdater newUpdater( final IndexUpdateMode mode, PageCursorTracer cursorTracer )
         {
             return new CollectingIndexUpdater( updatesCommitted::addAll );
         }
 
         @Override
-        public void close( boolean populationCompletedSuccessfully )
+        public void close( boolean populationCompletedSuccessfully, PageCursorTracer cursorTracer )
         {
         }
 
@@ -251,7 +250,7 @@ class IndexCRUDIT
         }
 
         @Override
-        public IndexSample sampleResult()
+        public IndexSample sample( PageCursorTracer cursorTracer )
         {
             long indexSize = 0;
             for ( Set<Long> nodeIds : indexSamples.values() )
@@ -265,6 +264,20 @@ class IndexCRUDIT
         {
             Set<Long> nodeIds = indexSamples.computeIfAbsent( propertyValue, k -> new HashSet<>() );
             nodeIds.add( nodeId );
+        }
+    }
+
+    private static void createIndex( GraphDatabaseAPI db, Label label, String property )
+    {
+        try ( Transaction tx = db.beginTx() )
+        {
+            tx.schema().indexFor( label ).on( property ).create();
+            tx.commit();
+        }
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            tx.schema().awaitIndexesOnline( 30, SECONDS );
         }
     }
 }

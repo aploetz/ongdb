@@ -32,7 +32,6 @@ import java.util.function.Consumer;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
-import org.neo4j.consistency.checking.ByteArrayBitsManipulator;
 import org.neo4j.consistency.checking.cache.CacheAccess;
 import org.neo4j.consistency.checking.cache.CacheSlots;
 import org.neo4j.consistency.checking.cache.DefaultCacheAccess;
@@ -52,6 +51,7 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.batchimport.cache.NumberArrayFactory;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
@@ -63,6 +63,8 @@ import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.index.IndexAccessor;
@@ -104,9 +106,11 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
+import static org.neo4j.consistency.checking.ByteArrayBitsManipulator.MAX_BYTES;
 import static org.neo4j.consistency.newchecker.ParallelExecution.NOOP_EXCEPTION_HANDLER;
 import static org.neo4j.consistency.newchecker.RecordStorageConsistencyChecker.DEFAULT_SLOT_SIZES;
 import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.values.storable.Values.intArray;
 import static org.neo4j.values.storable.Values.stringValue;
 
@@ -115,6 +119,7 @@ class CheckerTestBase
 {
     static final int NUMBER_OF_THREADS = 4;
     static final long NULL = NULL_REFERENCE.longValue();
+    static final int IDS_PER_CHUNK = 100;
 
     @Inject
     PageCache pageCache;
@@ -131,6 +136,7 @@ class CheckerTestBase
     RelationshipStore relationshipStore;
     SchemaStore schemaStore;
     LabelScanStore labelIndex;
+    RelationshipTypeScanStore relationshipTypeIndex;
     ConsistencyReporter reporter;
     ConsistencyReporter.Monitor monitor;
     SchemaStorage schemaStorage;
@@ -144,12 +150,14 @@ class CheckerTestBase
     @BeforeEach
     void setUpDb() throws Exception
     {
-        dbms = new TestDatabaseManagementServiceBuilder( directory.homeDir() ).build();
+        TestDatabaseManagementServiceBuilder builder = new TestDatabaseManagementServiceBuilder( directory.homeDir() );
+        configure( builder );
+        dbms = builder.build();
         db = (GraphDatabaseAPI) dbms.database( GraphDatabaseSettings.DEFAULT_DATABASE_NAME );
 
         // Create our tokens
         Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
-        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.explicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.EXPLICIT, LoginContext.AUTH_DISABLED ) )
         {
             initialData( tx );
             tx.commit();
@@ -165,7 +173,8 @@ class CheckerTestBase
         tokenHolders = dependencies.resolveDependency( TokenHolders.class );
         schemaStorage = new SchemaStorage( schemaStore, tokenHolders );
         labelIndex = dependencies.resolveDependency( LabelScanStore.class );
-        cacheAccess = new DefaultCacheAccess( NumberArrayFactory.HEAP.newDynamicByteArray( 10_000, new byte[ByteArrayBitsManipulator.MAX_BYTES] ),
+        relationshipTypeIndex = dependencies.resolveDependency( RelationshipTypeScanStore.class );
+        cacheAccess = new DefaultCacheAccess( NumberArrayFactory.HEAP.newDynamicByteArray( 10_000, new byte[MAX_BYTES], INSTANCE ),
                 Counts.NONE, NUMBER_OF_THREADS );
         cacheAccess.setCacheSlotSizes( DEFAULT_SLOT_SIZES );
     }
@@ -177,17 +186,38 @@ class CheckerTestBase
         dbms.shutdown();
     }
 
+    void configure( TestDatabaseManagementServiceBuilder builder )
+    {   // no-op
+    }
+
     void initialData( KernelTransaction tx ) throws KernelException
     {
     }
 
     CheckerContext context() throws Exception
     {
+<<<<<<< HEAD
         return context( NUMBER_OF_THREADS );
+=======
+        return context( NUMBER_OF_THREADS, ConsistencyFlags.DEFAULT );
+    }
+
+    CheckerContext context( ConsistencyFlags consistencyFlags ) throws Exception
+    {
+        return context( NUMBER_OF_THREADS, consistencyFlags );
+>>>>>>> neo4j/4.1
     }
 
     CheckerContext context( int numberOfThreads ) throws Exception
     {
+<<<<<<< HEAD
+=======
+        return context( numberOfThreads, ConsistencyFlags.DEFAULT );
+    }
+
+    CheckerContext context( int numberOfThreads, ConsistencyFlags consistencyFlags ) throws Exception
+    {
+>>>>>>> neo4j/4.1
         if ( context != null )
         {
             return context;
@@ -200,18 +230,24 @@ class CheckerTestBase
         IndexProviderMap indexProviders = dependencies.resolveDependency( IndexProviderMap.class );
         IndexingService indexingService = dependencies.resolveDependency( IndexingService.class );
         IndexAccessors indexAccessors = new IndexAccessors( indexProviders, neoStores, new IndexSamplingConfig( config ),
-                new LookupAccessorsFromRunningDb( indexingService ) );
+                new LookupAccessorsFromRunningDb( indexingService ), PageCacheTracer.NULL );
         ConsistencySummaryStatistics inconsistenciesSummary = new ConsistencySummaryStatistics();
         InconsistencyReport report = new InconsistencyReport( new InconsistencyMessageLogger( NullLog.getInstance() ), inconsistenciesSummary );
         monitor = mock( ConsistencyReporter.Monitor.class );
-        reporter = new ConsistencyReporter( new DirectRecordAccess( new StoreAccess( neoStores ), cacheAccess ), report, monitor );
-        countsState = new CountsState( neoStores, cacheAccess );
+        reporter = new ConsistencyReporter( new DirectRecordAccess( new StoreAccess( neoStores ), cacheAccess ), report, monitor, PageCacheTracer.NULL );
+        countsState = new CountsState( neoStores, cacheAccess, INSTANCE );
         NodeBasedMemoryLimiter limiter = new NodeBasedMemoryLimiter( pageCache.pageSize() * pageCache.maxCachedPages(),
                 Runtime.getRuntime().maxMemory(), Long.MAX_VALUE, CacheSlots.CACHE_LINE_SIZE_BYTES, nodeStore.getHighId() );
         ProgressMonitorFactory.MultiPartBuilder progress = ProgressMonitorFactory.NONE.multipleParts( "Test" );
+<<<<<<< HEAD
         ParallelExecution execution = new ParallelExecution( numberOfThreads, NOOP_EXCEPTION_HANDLER, 100 );
         context = new CheckerContext( neoStores, indexAccessors, labelIndex, execution, reporter, cacheAccess, tokenHolders, new RecordLoading( neoStores ),
                 countsState, limiter, progress, pageCache, false, ConsistencyFlags.DEFAULT );
+=======
+        ParallelExecution execution = new ParallelExecution( numberOfThreads, NOOP_EXCEPTION_HANDLER, IDS_PER_CHUNK );
+        context = new CheckerContext( neoStores, indexAccessors, labelIndex, relationshipTypeIndex, execution, reporter, cacheAccess, tokenHolders,
+                new RecordLoading( neoStores ), countsState, limiter, progress, pageCache, PageCacheTracer.NULL, INSTANCE, false, consistencyFlags );
+>>>>>>> neo4j/4.1
         context.initialize();
         return context;
     }
@@ -307,7 +343,7 @@ class CheckerTestBase
     KernelTransaction ktx() throws TransactionFailureException
     {
         Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
-        return kernel.beginTransaction( KernelTransaction.Type.explicit, LoginContext.AUTH_DISABLED );
+        return kernel.beginTransaction( KernelTransaction.Type.EXPLICIT, LoginContext.AUTH_DISABLED );
     }
 
     /**
@@ -316,7 +352,7 @@ class CheckerTestBase
     AutoCloseable tx() throws TransactionFailureException
     {
         Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
-        KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.explicit, LoginContext.AUTH_DISABLED );
+        KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.EXPLICIT, LoginContext.AUTH_DISABLED );
         return () ->
         {
             tx.commit();
@@ -327,26 +363,26 @@ class CheckerTestBase
     PropertyBlock propertyValue( int propertyKey, Value value )
     {
         PropertyBlock propertyBlock = new PropertyBlock();
-        neoStores.getPropertyStore().encodeValue( propertyBlock, propertyKey, value );
+        neoStores.getPropertyStore().encodeValue( propertyBlock, propertyKey, value, PageCursorTracer.NULL, INSTANCE );
         return propertyBlock;
     }
 
     long[] nodeLabels( NodeRecord node )
     {
-        return NodeLabelsField.get( node, neoStores.getNodeStore() );
+        return NodeLabelsField.get( node, neoStores.getNodeStore(), PageCursorTracer.NULL );
     }
 
     NodeRecord loadNode( long id )
     {
-        return neoStores.getNodeStore().getRecord( id, neoStores.getNodeStore().newRecord(), RecordLoad.NORMAL );
+        return neoStores.getNodeStore().getRecord( id, neoStores.getNodeStore().newRecord(), RecordLoad.NORMAL, PageCursorTracer.NULL );
     }
 
     long node( long id, long nextProp, long nextRel, int... labels )
     {
         NodeRecord node = new NodeRecord( id ).initialize( true, nextProp, false, NULL, 0 );
         long[] labelIds = toLongs( labels );
-        InlineNodeLabels.putSorted( node, labelIds, nodeStore, null /*<-- intentionally prevent dynamic labels here*/ );
-        nodeStore.updateRecord( node );
+        InlineNodeLabels.putSorted( node, labelIds, nodeStore, null /*<-- intentionally prevent dynamic labels here*/, PageCursorTracer.NULL, INSTANCE );
+        nodeStore.updateRecord( node, PageCursorTracer.NULL );
         return id;
     }
 
@@ -355,14 +391,14 @@ class CheckerTestBase
     {
         RelationshipRecord relationship = new RelationshipRecord( id ).initialize( true, NULL, startNode, endNode, type, startPrev, startNext, endPrev,
                 endNext, firstInStart, firstInEnd );
-        relationshipStore.updateRecord( relationship );
+        relationshipStore.updateRecord( relationship, PageCursorTracer.NULL );
         return id;
     }
 
     long relationshipGroup( long id, long next, long owningNode, int type, long firstOut, long firstIn, long firstLoop )
     {
         RelationshipGroupRecord group = new RelationshipGroupRecord( id ).initialize( true, type, firstOut, firstIn, firstLoop, owningNode, next );
-        relationshipGroupStore.updateRecord( group );
+        relationshipGroupStore.updateRecord( group, PageCursorTracer.NULL );
         return id;
     }
 
@@ -392,7 +428,7 @@ class CheckerTestBase
         {
             prop.addPropertyBlock( property );
         }
-        propertyStore.updateRecord( prop );
+        propertyStore.updateRecord( prop, PageCursorTracer.NULL );
     }
 
     private static class LookupAccessorsFromRunningDb implements ThrowingFunction<IndexDescriptor,IndexAccessor,IOException>
@@ -409,7 +445,7 @@ class CheckerTestBase
         {
             try
             {
-                IndexProxy proxy = indexingService.getIndexProxy( indexDescriptor.getId() );
+                IndexProxy proxy = indexingService.getIndexProxy( indexDescriptor );
                 while ( proxy instanceof AbstractDelegatingIndexProxy )
                 {
                     proxy = ((AbstractDelegatingIndexProxy) proxy).getDelegate();

@@ -34,14 +34,14 @@ import org.neo4j.kernel.api.index.UniqueIndexSampler;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.values.storable.Value;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.neo4j.kernel.api.impl.LuceneTestUtil.documentRepresentingProperties;
 import static org.neo4j.kernel.api.impl.LuceneTestUtil.valueTupleList;
 import static org.neo4j.kernel.api.impl.schema.LuceneDocumentStructure.newTermForChangeOrRemove;
@@ -63,7 +63,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         updater.process( add( 1, descriptor, "bar" ) );
         updater.process( add( 1, descriptor, "baz" ) );
 
-        verifyZeroInteractions( index );
+        verifyNoInteractions( index );
 
         updater.close();
         verifyVerifyUniqueness( index, descriptor, "foo", "bar", "baz" );
@@ -79,7 +79,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         updater.process( change( 1, descriptor, "bar1", "bar2" ) );
         updater.process( change( 1, descriptor, "baz1", "baz2" ) );
 
-        verifyZeroInteractions( index );
+        verifyNoMoreInteractions( index );
 
         updater.close();
 
@@ -98,7 +98,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         updater.process( change( 4, descriptor, "before2", "after2" ) );
         updater.process( remove( 5, descriptor, "removed1" ) );
 
-        verifyZeroInteractions( index );
+        verifyNoInteractions( index );
 
         updater.close();
 
@@ -106,7 +106,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
     }
 
     @Test
-    void addedNodePropertiesIncludedInSample() throws Exception
+    void addedNodePropertiesIncludedInSample()
     {
         UniqueIndexSampler sampler = new UniqueIndexSampler();
         UniqueLuceneIndexPopulatingUpdater updater = newUpdater( sampler );
@@ -120,7 +120,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
     }
 
     @Test
-    void changedNodePropertiesDoNotInfluenceSample() throws Exception
+    void changedNodePropertiesDoNotInfluenceSample()
     {
         UniqueIndexSampler sampler = new UniqueIndexSampler();
         UniqueLuceneIndexPopulatingUpdater updater = newUpdater( sampler );
@@ -132,7 +132,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
     }
 
     @Test
-    void removedNodePropertyIncludedInSample() throws Exception
+    void removedNodePropertyIncludedInSample()
     {
         long initialValue = 10;
         UniqueIndexSampler sampler = new UniqueIndexSampler();
@@ -147,7 +147,7 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
     }
 
     @Test
-    void nodePropertyUpdatesIncludedInSample() throws Exception
+    void nodePropertyUpdatesIncludedInSample()
     {
         UniqueIndexSampler sampler = new UniqueIndexSampler();
         UniqueLuceneIndexPopulatingUpdater updater = newUpdater( sampler );
@@ -172,11 +172,11 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         updater.process( add( 3, descriptor, "qux" ) );
 
         verify( writer ).updateDocument( newTermForChangeOrRemove( 1 ),
-                documentRepresentingProperties( (long) 1, "foo" ) );
+                documentRepresentingProperties( 1, "foo" ) );
         verify( writer ).updateDocument( newTermForChangeOrRemove( 2 ),
-                documentRepresentingProperties( (long) 2, "bar" ) );
+                documentRepresentingProperties( 2, "bar" ) );
         verify( writer ).updateDocument( newTermForChangeOrRemove( 3 ),
-                documentRepresentingProperties( (long) 3, "qux" ) );
+                documentRepresentingProperties( 3, "qux" ) );
     }
 
     @Test
@@ -189,9 +189,9 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         updater.process( change( 2, descriptor, "before2", "after2" ) );
 
         verify( writer ).updateDocument( newTermForChangeOrRemove( 1 ),
-                documentRepresentingProperties( (long) 1, "after1" ) );
+                documentRepresentingProperties( 1, "after1" ) );
         verify( writer ).updateDocument( newTermForChangeOrRemove( 2 ),
-                documentRepresentingProperties( (long) 2, "after2" ) );
+                documentRepresentingProperties( 2, "after2" ) );
     }
 
     @Test
@@ -248,6 +248,6 @@ class UniqueDatabaseIndexPopulatingUpdaterTest
         verify( index ).verifyUniqueness(
                 any(), eq( descriptor.getPropertyIds() ), captor.capture() );
 
-        assertThat( captor.getValue(), containsInAnyOrder( valueTupleList( values ).toArray() ) );
+        assertThat( captor.getValue() ).containsAll( valueTupleList( values ) );
     }
 }

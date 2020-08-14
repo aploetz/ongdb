@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.query;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.neo4j.graphdb.QueryStatistics;
@@ -27,11 +28,10 @@ import org.neo4j.values.AnyValue;
 
 public class RecordingQuerySubscriber implements QuerySubscriber
 {
-    private List<AnyValue[]> all = new ArrayList<>(  );
+    private List<AnyValue[]> all = new ArrayList<>();
     private AnyValue[] current;
     private Throwable throwable;
     private QueryStatistics statistics;
-    private int currentOffset = -1;
 
     @Override
     public void onResult( int numberOfFields )
@@ -42,20 +42,18 @@ public class RecordingQuerySubscriber implements QuerySubscriber
     @Override
     public void onRecord()
     {
-        currentOffset = 0;
     }
 
     @Override
-    public void onField( AnyValue value )
+    public void onField( int offset, AnyValue value )
     {
-        current[currentOffset++] = value;
+        current[offset] = value;
     }
 
     @Override
     public void onRecordCompleted()
     {
-        currentOffset = -1;
-        all.add( current.clone() );
+        all.add( Arrays.copyOf( current, current.length ) );
     }
 
     @Override

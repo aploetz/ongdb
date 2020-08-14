@@ -216,12 +216,17 @@ public interface Status
                 "This is an administration command and it should be executed against the system database." ),
         NotSystemDatabaseOnLeaderError( ClientError,
                 "This is an administration command and it should be executed against the LEADER server of the system database." ),
+<<<<<<< HEAD
+=======
+        AccessMode( ClientError, "The request could not be completed due to access mode violation" ),
+>>>>>>> neo4j/4.1
 
         // database errors
         ExecutionFailed( DatabaseError,
                 "The database was unable to execute the statement." ),
         CodeGenerationFailed( DatabaseError,
                               "The database was unable to generate code for the query. A stacktrace can be found in the debug.log." ),
+        RemoteExecutionFailed( DatabaseError, "The database was unable to execute a remote part of the statement." ),
 
         // transient errors
         ExternalResourceFailed( ClientError,
@@ -416,6 +421,10 @@ public interface Status
         InvalidArguments( ClientError, "The request contained fields that were empty or are not allowed." ),
         ForbiddenOnReadOnlyDatabase( ClientError,
                 "This is a read only database, writing or modifying the database is not allowed." ),
+        TransactionOutOfMemoryError( ClientError,
+                "The transaction used more memory than was allowed. The maximum allowed size for a " +
+                "transaction can be configured with 'dbms.memory.transaction.max_size' in the neo4j configuration " +
+                "(normally in 'conf/neo4j.conf' or, if you are using Neo4j Desktop, found through the user interface)." ),
 
         // database errors
         IndexCorruptionDetected( DatabaseError,
@@ -429,13 +438,15 @@ public interface Status
                 "An unknown error occurred." ),
 
         // transient errors
+
+        // Off heap allocation limit exceeded
         TransactionMemoryLimit( TransientError,
                 "There is not enough memory to perform the current task. Please try increasing " +
-                        "'dbms.tx_state.max_off_heap_memory' in the neo4j configuration (normally in 'conf/neo4j.conf' or, if you " +
+                        "'dbms.memory.off_heap.max_size' in the neo4j configuration (normally in 'conf/neo4j.conf' or, if " +
                         "you are using Neo4j Desktop, found through the user interface), and then restart the database." ),
         OutOfMemoryError( TransientError,
                 "There is not enough memory to perform the current task. Please try increasing " +
-                "'dbms.memory.heap.max_size' in the neo4j configuration (normally in 'conf/neo4j.conf' or, if you " +
+                "'dbms.memory.heap.max_size' in the neo4j configuration (normally in 'conf/neo4j.conf' or, if " +
                 "you are using Neo4j Desktop, found through the user interface) or if you are running an embedded " +
                 "installation increase the heap by using '-Xmx' command line flag, and then restart the database." ),
         StackOverFlowError( TransientError,
@@ -445,12 +456,8 @@ public interface Status
                 "in the neo4j configuration (normally in 'conf/neo4j.conf' or, if you are using " +
                 "Neo4j Desktop, found through the user interface) or if you are running an embedded installation " +
                 "just add -Xss2M as command line flag." ),
-        TransactionOutOfMemoryError( TransientError,
-                                     "There transaction used more memory than was allowed. The maximum allowed size for a " +
-                                             "transaction can be configured with 'unsupported.dbms.transaction.memory.max' in the neo4j configuration " +
-                                             "(normally in 'conf/neo4j.conf' or, if you " +
-                                             "you are using Neo4j Desktop, found through the user interface)." ),
-
+        MemoryPoolOutOfMemoryError( TransientError,
+                "The memory pool limit was exceeded. The corresponding setting can be found in the error message" )
         ;
 
         private final Code code;
@@ -501,9 +508,17 @@ public interface Status
         NotALeader( ClientError, "The request cannot be processed by this server. Write requests can only be processed by the leader." ),
         TransactionSizeExceedsLimit( ClientError, "Transaction size exceeds supported limit." ),
 
+<<<<<<< HEAD
         // database errors
         SerializationFailure( DatabaseError, "Failed to serialise the transaction." )
         ;
+=======
+        NotALeader( ClientError,
+                "The request cannot be processed by this server. Write requests can only be processed by the leader." ),
+
+        Routing( TransientError, "Unable to route the request to the appropriate server" )
+                ;
+>>>>>>> neo4j/4.1
 
         private final Code code;
 
@@ -521,7 +536,9 @@ public interface Status
 
     enum Fabric implements Status
     {
+        @Deprecated
         RemoteExecutionFailed( DatabaseError, "The database was unable to execute a remote part of the statement." ),
+        @Deprecated
         AccessMode( ClientError, "The request could not be completed due to access mode violation" );
 
         private final Code code;

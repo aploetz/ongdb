@@ -19,15 +19,15 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.values.storable.Values
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.values.storable.Values.NO_VALUE
 
 case class ConditionalApplyPipe(source: Pipe, inner: Pipe, items: Seq[String], negated: Boolean)
                                (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] =
     input.flatMap {
       outerContext =>
         if (condition(outerContext)) {
@@ -37,8 +37,8 @@ case class ConditionalApplyPipe(source: Pipe, inner: Pipe, items: Seq[String], n
           Iterator.single(outerContext)
     }
 
-  private def condition(context: ExecutionContext) = {
-    val cond = items.exists {x => !(context.getByName(x) eq Values.NO_VALUE) }
-      if (negated) !cond else cond
+  private def condition(context: CypherRow): Boolean = {
+    val hasNull = items.map(context.getByName).exists(_ eq NO_VALUE)
+    if (negated) hasNull else !hasNull
   }
 }

@@ -22,13 +22,14 @@ package org.neo4j.kernel.impl.api.index;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.neo4j.kernel.impl.api.index.MultipleIndexPopulator.IndexPopulation;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
+import org.neo4j.kernel.impl.api.index.MultipleIndexPopulator.IndexPopulation;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 class PopulatingIndexProxyTest
 {
@@ -44,11 +45,11 @@ class PopulatingIndexProxyTest
     }
 
     @Test
-    void cancelPopulationJobOnClose()
+    void stopPopulationJobOnClose()
     {
-        populatingIndexProxy.close();
+        populatingIndexProxy.close( NULL );
 
-        verify( indexPopulationJob ).cancelPopulation( indexPopulation );
+        verify( indexPopulationJob ).stop( indexPopulation, NULL );
     }
 
     @Test

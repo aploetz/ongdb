@@ -19,14 +19,20 @@
  */
 package org.neo4j.internal.collector
 
+import org.neo4j.cypher.CypherExpressionEngineOption
+import org.neo4j.cypher.CypherInterpretedPipesFallbackOption
+import org.neo4j.cypher.CypherOperatorEngineOption
+import org.neo4j.cypher.CypherPlannerOption
+import org.neo4j.cypher.CypherRuntimeOption
+import org.neo4j.cypher.CypherVersion
 import org.neo4j.cypher.internal.PreParser
+import org.neo4j.cypher.internal.ast.Statement
+import org.neo4j.cypher.internal.ast.prettifier.ExpressionStringifier
+import org.neo4j.cypher.internal.ast.prettifier.Prettifier
 import org.neo4j.cypher.internal.compiler.Neo4jCypherExceptionFactory
-import org.neo4j.cypher.internal.v4_0.ast.Statement
-import org.neo4j.cypher.internal.v4_0.ast.prettifier.{ExpressionStringifier, Prettifier}
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.parser.CypherParser
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.anonymizeQuery
-import org.neo4j.cypher.{CypherExpressionEngineOption, CypherInterpretedPipesFallbackOption, CypherOperatorEngineOption, CypherPlannerOption, CypherRuntimeOption, CypherVersion}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.parser.CypherParser
+import org.neo4j.cypher.internal.rewriting.rewriters.anonymizeQuery
 import org.neo4j.internal.kernel.api.TokenRead
 import org.neo4j.values.ValueMapper
 import org.neo4j.values.virtual.MapValue
@@ -71,7 +77,7 @@ case class IdAnonymizer(tokens: TokenRead) extends QueryAnonymizer {
   }
 }
 
-class IdAnonymizerState(tokens: TokenRead, prettifier: Prettifier) extends org.neo4j.cypher.internal.v4_0.rewriting.rewriters.Anonymizer {
+class IdAnonymizerState(tokens: TokenRead, prettifier: Prettifier) extends org.neo4j.cypher.internal.rewriting.rewriters.Anonymizer {
 
   private val variables = mutable.Map[String, String]()
   private val parameters = mutable.Map[String, String]()
@@ -104,4 +110,3 @@ class IdAnonymizerState(tokens: TokenRead, prettifier: Prettifier) extends org.n
       case x => prefix + x
     }
 }
-

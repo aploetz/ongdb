@@ -22,7 +22,7 @@ package org.neo4j.kernel.impl.api.security;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.security.AccessMode;
 import org.neo4j.internal.kernel.api.security.PrivilegeAction;
 
@@ -110,7 +110,7 @@ public class OverriddenAccessMode extends WrappedAccessMode
     }
 
     @Override
-    public boolean allowsReadNodeProperty( Supplier<LabelSet> labels, int propertyKey )
+    public boolean allowsReadNodeProperty( Supplier<TokenSet> labels, int propertyKey )
     {
         return wrapping.allowsReadNodeProperty( labels, propertyKey );
     }
@@ -137,6 +137,54 @@ public class OverriddenAccessMode extends WrappedAccessMode
     public boolean allowsProcedureWith( String[] allowed )
     {
         return false;
+    }
+
+    @Override
+    public boolean allowsSetLabel( long labelId )
+    {
+        return wrapping.allowsSetLabel( labelId );
+    }
+
+    @Override
+    public boolean allowsRemoveLabel( long labelId )
+    {
+        return wrapping.allowsRemoveLabel( labelId );
+    }
+
+    @Override
+    public boolean allowsCreateNode( int[] labelIds )
+    {
+        return wrapping.allowsCreateNode( labelIds );
+    }
+
+    @Override
+    public boolean allowsDeleteNode( Supplier<TokenSet> labelSupplier )
+    {
+        return wrapping.allowsDeleteNode( labelSupplier );
+    }
+
+    @Override
+    public boolean allowsCreateRelationship( int relType )
+    {
+        return wrapping.allowsCreateRelationship( relType );
+    }
+
+    @Override
+    public boolean allowsDeleteRelationship( int relType )
+    {
+        return wrapping.allowsDeleteRelationship( relType );
+    }
+
+    @Override
+    public boolean allowsSetProperty( Supplier<TokenSet> labels, int propertyKey )
+    {
+        return wrapping.allowsSetProperty( labels, propertyKey );
+    }
+
+    @Override
+    public boolean allowsSetProperty( IntSupplier relType, int propertyKey )
+    {
+        return wrapping.allowsSetProperty( relType, propertyKey);
     }
 
     @Override

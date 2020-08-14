@@ -19,14 +19,34 @@
  */
 package org.neo4j.cypher.internal.compiler
 
+import org.neo4j.cypher.internal.ast.AliasedReturnItem
+import org.neo4j.cypher.internal.ast.AstConstructionTestSupport
+import org.neo4j.cypher.internal.ast.Query
+import org.neo4j.cypher.internal.ast.Return
+import org.neo4j.cypher.internal.ast.ReturnItems
+import org.neo4j.cypher.internal.ast.SingleQuery
+import org.neo4j.cypher.internal.ast.UnresolvedCall
+import org.neo4j.cypher.internal.ast.Unwind
 import org.neo4j.cypher.internal.compiler.phases.RewriteProcedureCalls
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.ast._
-import org.neo4j.cypher.internal.v4_0.expressions.{Namespace, ProcedureName}
-import org.neo4j.cypher.internal.v4_0.util.symbols._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.compiler.phases.TryRewriteProcedureCalls
+import org.neo4j.cypher.internal.expressions.Namespace
+import org.neo4j.cypher.internal.expressions.ProcedureName
+import org.neo4j.cypher.internal.logical.plans.FieldSignature
+import org.neo4j.cypher.internal.logical.plans.ProcedureReadOnlyAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.logical.plans.ResolvedCall
+import org.neo4j.cypher.internal.logical.plans.UserFunctionSignature
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.symbols.CTList
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.scalatest.Inside
 
-class RewriteProcedureCallsTest extends CypherFunSuite with AstConstructionTestSupport {
+import scala.util.Success
+import scala.util.Try
+
+class RewriteProcedureCallsTest extends CypherFunSuite with AstConstructionTestSupport with Inside {
 
   private val ns = Namespace(List("my", "proc"))(pos)
   private val name = ProcedureName("foo")(pos)
@@ -38,21 +58,27 @@ class RewriteProcedureCallsTest extends CypherFunSuite with AstConstructionTestS
   private val procLookup: QualifiedName => ProcedureSignature = _ => signature
   private val fcnLookup: QualifiedName => Option[UserFunctionSignature] = _ => None
 
+  private val failingProcLookup: QualifiedName => ProcedureSignature = _ => throw new Exception("not found")
+  private val failingFcnLookup: QualifiedName => Option[UserFunctionSignature] = _ => None
+
   test("should resolve standalone procedure calls") {
     val unresolved = UnresolvedCall(ns, name, None, None)(pos)
     val original = Query(None, SingleQuery(Seq(unresolved))_)(pos)
 
     val rewritten = rewriteProcedureCalls(procLookup, fcnLookup, original)
+    val rewrittenTry = tryRewriteProcedureCalls(procLookup, fcnLookup, original)
 
-    rewritten should equal(
-      Query(None, SingleQuery(
-        Seq(ResolvedCall(procLookup)(unresolved).coerceArguments.withFakedFullDeclarations,
-            Return(distinct = false,
-                   ReturnItems(includeExisting = false,
-                               Seq(
-                                 AliasedReturnItem(varFor("x"), varFor("x"))(pos),
-                                 AliasedReturnItem(varFor("y"), varFor("y"))(pos)))(pos),
-                   None, None, None)(pos)))(pos))(pos))
+    val expected = Query(None, SingleQuery(
+      Seq(ResolvedCall(procLookup)(unresolved).coerceArguments.withFakedFullDeclarations,
+        Return(distinct = false,
+          ReturnItems(includeExisting = false,
+            Seq(
+              AliasedReturnItem(varFor("x"), varFor("x"))(pos),
+              AliasedReturnItem(varFor("y"), varFor("y"))(pos)))(pos),
+          None, None, None)(pos)))(pos))(pos)
+
+    rewritten should equal(expected)
+    rewrittenTry should equal(expected)
   }
 
   test("should resolve in-query procedure calls") {
@@ -61,10 +87,31 @@ class RewriteProcedureCallsTest extends CypherFunSuite with AstConstructionTestS
     val original = Query(None, SingleQuery(Seq(headClause, unresolved))_)(pos)
 
     val rewritten = rewriteProcedureCalls(procLookup, fcnLookup, original)
+    val rewrittenTry = tryRewriteProcedureCalls(procLookup, fcnLookup, original)
 
-    rewritten should equal(
-      Query(None, SingleQuery(Seq(headClause, ResolvedCall(procLookup)(unresolved).coerceArguments))_)(pos)
-    )
+    val expected = Query(None, SingleQuery(Seq(headClause, ResolvedCall(procLookup)(unresolved).coerceArguments))_)(pos)
+
+    rewritten should equal(expected)
+    rewrittenTry should equal(expected)
+  }
+
+  test("TryRewriteProcedureCalls should return original for unresolved procedures") {
+    val unresolved = UnresolvedCall(ns, name, None, None)(pos)
+    val headClause = Unwind(varFor("x"), varFor("y"))(pos)
+    val original = Query(None, SingleQuery(Seq(headClause, unresolved))_)(pos)
+
+    val rewrittenTry = Try(tryRewriteProcedureCalls(failingProcLookup, failingFcnLookup, original))
+
+    rewrittenTry should matchPattern { case Success(`original`) => }
+  }
+
+  test("TryRewriteProcedureCalls should return original for unresolved functions") {
+    val headClause = Unwind(function("missing", varFor("x")), varFor("y"))(pos)
+    val original = Query(None, SingleQuery(Seq(headClause))_)(pos)
+
+    val rewrittenTry = tryRewriteProcedureCalls(failingProcLookup, failingFcnLookup, original)
+
+    rewrittenTry should equal(original)
   }
 
   def rewriteProcedureCalls(procSignatureLookup: QualifiedName => ProcedureSignature,
@@ -72,6 +119,15 @@ class RewriteProcedureCallsTest extends CypherFunSuite with AstConstructionTestS
                             original: Query): Query = {
     original.endoRewrite(
       RewriteProcedureCalls.rewriter(new TestSignatureResolvingPlanContext(procSignatureLookup, funcSignatureLookup))
+    )
+  }
+
+  def tryRewriteProcedureCalls(procSignatureLookup: QualifiedName => ProcedureSignature,
+                            funcSignatureLookup: QualifiedName => Option[UserFunctionSignature],
+                            original: Query): Query = {
+    val context = new TestSignatureResolvingPlanContext(procSignatureLookup, funcSignatureLookup)
+    original.endoRewrite(
+      TryRewriteProcedureCalls(context).rewriter
     )
   }
 }

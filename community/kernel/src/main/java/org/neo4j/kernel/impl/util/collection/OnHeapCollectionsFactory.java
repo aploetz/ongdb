@@ -21,12 +21,14 @@ package org.neo4j.kernel.impl.util.collection;
 
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
-import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
-import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet;
 
-import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSetsImpl;
+import org.neo4j.collection.trackable.HeapTrackingCollections;
+import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSets;
+import org.neo4j.kernel.impl.util.diffsets.TrackableDiffSets;
 import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Value;
+
+import static org.neo4j.kernel.impl.util.collection.HeapTrackingValuesMap.createValuesMap;
 
 public class OnHeapCollectionsFactory implements CollectionsFactory
 {
@@ -38,27 +40,21 @@ public class OnHeapCollectionsFactory implements CollectionsFactory
     }
 
     @Override
-    public MutableLongSet newLongSet()
+    public MutableLongSet newLongSet( MemoryTracker memoryTracker )
     {
-        return new LongHashSet();
+        return HeapTrackingCollections.newLongSet( memoryTracker );
     }
 
     @Override
-    public MutableLongDiffSetsImpl newLongDiffSets()
+    public MutableLongDiffSets newLongDiffSets( MemoryTracker memoryTracker )
     {
-        return new MutableLongDiffSetsImpl( this );
+        return TrackableDiffSets.newMutableLongDiffSets( this, memoryTracker );
     }
 
     @Override
-    public MutableLongObjectMap<Value> newValuesMap()
+    public MutableLongObjectMap<Value> newValuesMap( MemoryTracker memoryTracker )
     {
-        return new LongObjectHashMap<>();
-    }
-
-    @Override
-    public MemoryTracker getMemoryTracker()
-    {
-        return MemoryTracker.NONE;
+        return createValuesMap( memoryTracker );
     }
 
     @Override

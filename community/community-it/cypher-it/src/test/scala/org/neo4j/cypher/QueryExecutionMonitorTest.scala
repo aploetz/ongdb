@@ -19,21 +19,25 @@
  */
 package org.neo4j.cypher
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME
 import org.neo4j.cypher.ExecutionEngineHelper.createEngine
 import org.neo4j.cypher.internal.ExecutionEngine
-import org.neo4j.cypher.internal.javacompat.{GraphDatabaseCypherService, ResultSubscriber}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
+import org.neo4j.cypher.internal.javacompat.ResultSubscriber
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.graphdb.Result.ResultRow
 import org.neo4j.kernel.GraphDatabaseQueryService
 import org.neo4j.kernel.api.query.ExecutingQuery
-import org.neo4j.kernel.impl.query.{QueryExecutionMonitor, TransactionalContext}
+import org.neo4j.kernel.impl.query.QueryExecutionMonitor
+import org.neo4j.kernel.impl.query.TransactionalContext
 import org.neo4j.monitoring.Monitors
 import org.neo4j.test.TestDatabaseManagementServiceBuilder
+import org.neo4j.values.virtual.MapValue
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 import scala.collection.immutable.Map
 import scala.language.implicitConversions
 
@@ -45,10 +49,9 @@ class QueryExecutionMonitorTest extends CypherFunSuite with GraphIcing with Grap
   private def runQuery(query: String, f: ResultSubscriber => Unit = defaultFunction ): ExecutingQuery = {
     db.withTx( tx => {
       val context = db.transactionalContext(tx, query = query -> Map.empty)
-      val executingQuery = context.executingQuery()
       val result = new ResultSubscriber(context)
-      val executionResult = engine.execute(executingQuery.queryText(),
-        executingQuery.queryParameters(),
+      val executionResult = engine.execute(query,
+        MapValue.EMPTY,
         context,
         profile = false,
         prePopulate = false,
@@ -59,7 +62,7 @@ class QueryExecutionMonitorTest extends CypherFunSuite with GraphIcing with Grap
       } finally {
         result.close()
       }
-      executingQuery
+      context.executingQuery()
     } )
   }
 

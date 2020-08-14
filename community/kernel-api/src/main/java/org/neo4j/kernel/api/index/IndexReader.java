@@ -20,11 +20,11 @@
 package org.neo4j.kernel.api.index;
 
 import org.neo4j.graphdb.Resource;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.QueryContext;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
-import org.neo4j.storageengine.api.NodePropertyAccessor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.values.storable.Value;
 
 /**
@@ -35,52 +35,39 @@ public interface IndexReader extends Resource
 {
     /**
      * @param nodeId node id to match.
+     * @param cursorTracer underlying page cursor tracer
      * @param propertyKeyIds the property key ids that correspond to each of the property values.
      * @param propertyValues property values to match.
      * @return number of index entries for the given {@code nodeId} and {@code propertyValues}.
      */
-    long countIndexedNodes( long nodeId, int[] propertyKeyIds, Value... propertyValues );
+    long countIndexedNodes( long nodeId, PageCursorTracer cursorTracer, int[] propertyKeyIds, Value... propertyValues );
 
     IndexSampler createSampler();
 
     /**
      * Queries the index for the given {@link IndexQuery} predicates.
      * @param client the client which will control the progression though query results.
-     * @param needsValues if the index should fetch property values together with node ids for index queries
+     * @param constraints constraints upon the query result, like ordering and whether the index should fetch property values alongside the entity ids.
      * @param query the query so serve.
      */
-    void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
-            throws IndexNotApplicableKernelException;
+    void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexQueryConstraints constraints,
+            IndexQuery... query ) throws IndexNotApplicableKernelException;
 
     /**
-     * @param predicates query to determine whether or not index has full value precision for.
+     * @param predicates query to determine whether index has full value precision for.
      * @return whether or not this reader will only return 100% matching results from
-     * {@link #query(QueryContext, IndexProgressor.EntityValueClient, IndexOrder, boolean, IndexQuery...)}.
+     * {@link #query(QueryContext, IndexProgressor.EntityValueClient, IndexQueryConstraints, IndexQuery...)}.
      * If {@code false} is returned this means that the caller of
-     * {@link #query(QueryContext, IndexProgressor.EntityValueClient, IndexOrder, boolean, IndexQuery...)} will have to
+     * {@link #query(QueryContext, IndexProgressor.EntityValueClient, IndexQueryConstraints, IndexQuery...)} will have to
      * do additional filtering, double-checking of actual property values, externally.
      */
     boolean hasFullValuePrecision( IndexQuery... predicates );
-
-    /**
-     * Initializes {@code client} to be able to progress through all distinct values in this index. {@link IndexProgressor.EntityValueClient}
-     * is used because it has a perfect method signature, even if the {@code reference} argument will instead be used
-     * as number of index entries for the specific indexed value.
-     *
-     * {@code needsValues} decides whether or not values will be materialized and given to the client.
-     * The use-case for setting this to {@code false} is to have a more efficient counting of distinct values in an index,
-     * regardless of the actual values.
-     * @param client {@link IndexProgressor.EntityValueClient} to get initialized with this progression.
-     * @param propertyAccessor used for distinguishing between lossy indexed values.
-     * @param needsValues whether or not values should be loaded.
-     */
-    void distinctValues( IndexProgressor.EntityValueClient client, NodePropertyAccessor propertyAccessor, boolean needsValues );
 
     IndexReader EMPTY = new IndexReader()
     {
         // Used for checking index correctness
         @Override
-        public long countIndexedNodes( long nodeId, int[] propertyKeyIds, Value... propertyValues )
+        public long countIndexedNodes( long nodeId, PageCursorTracer cursorTracer, int[] propertyKeyIds, Value... propertyValues )
         {
             return 0;
         }
@@ -92,7 +79,8 @@ public interface IndexReader extends Resource
         }
 
         @Override
-        public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
+        public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexQueryConstraints constraints,
+                IndexQuery... query )
         {
             // do nothing
         }
@@ -107,18 +95,12 @@ public interface IndexReader extends Resource
         {
             return true;
         }
-
-        @Override
-        public void distinctValues( IndexProgressor.EntityValueClient client, NodePropertyAccessor propertyAccessor, boolean needsValues )
-        {
-            // do nothing
-        }
     };
 
     class Adaptor implements IndexReader
     {
         @Override
-        public long countIndexedNodes( long nodeId, int[] propertyKeyIds, Value... propertyValues )
+        public long countIndexedNodes( long nodeId, PageCursorTracer cursorTracer, int[] propertyKeyIds, Value... propertyValues )
         {
             return 0;
         }
@@ -130,7 +112,8 @@ public interface IndexReader extends Resource
         }
 
         @Override
-        public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
+        public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexQueryConstraints constraints,
+                IndexQuery... query )
         {
         }
 
@@ -138,11 +121,6 @@ public interface IndexReader extends Resource
         public boolean hasFullValuePrecision( IndexQuery... predicates )
         {
             return false;
-        }
-
-        @Override
-        public void distinctValues( IndexProgressor.EntityValueClient client, NodePropertyAccessor propertyAccessor, boolean needsValues )
-        {
         }
 
         @Override

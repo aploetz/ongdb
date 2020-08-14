@@ -201,7 +201,7 @@ class ExecutionResultSerializer
 
     private ResultDataContentWriter configureWriters( List<ResultDataContent> specifiers )
     {
-        if ( specifiers == null || specifiers.size() == 0 )
+        if ( specifiers == null || specifiers.isEmpty() )
         {
             return ResultDataContent.row.writer( baseUri ); // default
         }
@@ -300,7 +300,7 @@ class ExecutionResultSerializer
         }
     }
 
-    private void writeNotifications( Iterable<Notification> notifications ) throws IOException
+    private void writeNotifications( Iterable<Notification> notifications )
     {
         //don't add anything if notifications are empty
         if ( !notifications.iterator().hasNext() )

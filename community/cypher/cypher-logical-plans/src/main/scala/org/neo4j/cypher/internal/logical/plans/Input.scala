@@ -19,7 +19,7 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
  * Produce rows from a query state input stream. Only one input operator can
@@ -30,6 +30,8 @@ import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
 case class Input(nodes: Seq[String], relationships: Seq[String], variables: Seq[String], nullable: Boolean)(implicit idGen: IdGen) extends LogicalLeafPlan(idGen) {
   val availableSymbols: Set[String] = nodes.toSet ++ relationships.toSet ++ variables.toSet
   override def argumentIds: Set[String] = Set.empty
+  override def usedVariables: Set[String] = Set.empty
+  override def withoutArgumentIds(argsToExclude: Set[String]): Input = this
 }
 
 object Input {

@@ -19,14 +19,27 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
+<<<<<<< HEAD
+=======
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+>>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.logical.plans.GetValue
 import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
 import org.neo4j.cypher.internal.logical.plans.IndexOrderDescending
 import org.neo4j.cypher.internal.logical.plans.ManyQueryExpression
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.runtime.spec._
 import org.neo4j.cypher.internal.CypherRuntime
 import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.graphdb.Label
+=======
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.Node
+>>>>>>> neo4j/4.1
 import org.neo4j.graphdb.RelationshipType
 
 // Supported by all runtimes
@@ -170,7 +183,7 @@ abstract class NodeIndexSeekTestBase[CONTEXT <: RuntimeContext](
     val nodes = given {
       index("Honey", "prop")
       nodeGraph(5, "Milk")
-       nodePropertyGraph(sizeHint, {
+      nodePropertyGraph(sizeHint, {
         case i if i % 10 == 0 => Map("prop" -> i)
       }, "Honey")
     }
@@ -563,6 +576,146 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     runtimeResult should beColumns("x").withRows(rowCount(5))
   }
 
+<<<<<<< HEAD
+=======
+  test("should seek nodes with multiple less than bounds") {
+    val nodes = given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(1 > prop < 2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.zipWithIndex.filter{ case (_, i) => i < 1 }.map(_._1)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+  test("should seek nodes with multiple less than bounds with different types") {
+    given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(1 > prop < 'foo')")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("x").withNoRows()
+  }
+
+  test("should seek nodes with multiple less than bounds one inclusive") {
+    val nodes = given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(2 >= prop < 2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.zipWithIndex.filter{ case (_, i) => i < 2 }.map(_._1)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+
+  test("should seek nodes with multiple greater than bounds") {
+    val nodes = given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(1 < prop > 2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.zipWithIndex.filter{ case (_, i) => i > 2 }.map(_._1)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+  test("should seek nodes with multiple greater than bounds with different types") {
+    given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(1 < prop > 'foo')")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("x").withNoRows()
+  }
+
+  test("should seek nodes with multiple greater than bounds one inclusive") {
+    val nodes = given {
+      index("Honey", "prop")
+      nodeGraph(5, "Milk")
+      nodeGraph(5, "Honey")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator(s"x:Honey(2 <= prop > 2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.zipWithIndex.filter{ case (_, i) => i > 2 }.map(_._1)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+>>>>>>> neo4j/4.1
   test("should seek nodes of a unique index with a property") {
     val nodes = given {
       uniqueIndex("Honey", "prop")
@@ -649,6 +802,74 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     // then
     val expected = nodes(10)
     runtimeResult should beColumns("x").withSingleRow(expected)
+  }
+
+  test("should support composite index with equality and existence check") {
+    val nodes = given {
+      index("Honey", "prop", "prop2")
+      nodeGraph(5, "Milk")
+      nodePropertyGraph(sizeHint, {
+        case i if i % 3 == 0  => Map("prop" -> i % 20, "prop2" -> i.toString)
+        case i => Map("prop" -> i % 20)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator("x:Honey(prop = 10, prop2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.filter(n => n.hasProperty("prop2") && n.getProperty("prop").asInstanceOf[Int] == 10)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+  test("should support composite index with equality and range check") {
+    val nodes = given {
+      index("Honey", "prop", "prop2")
+      nodeGraph(5, "Milk")
+      nodePropertyGraph(sizeHint, {
+        case i  => Map("prop" -> i % 20, "prop2" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator("x:Honey(prop = 10, prop2 > 10)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.filter(n => n.getProperty("prop").asInstanceOf[Int] == 10 && n.getProperty("prop2").asInstanceOf[Int] > 10)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+
+  test("should support composite index with range check and existence check") {
+    val nodes = given {
+      index("Honey", "prop", "prop2")
+      nodeGraph(5, "Milk")
+      nodePropertyGraph(sizeHint, {
+        case i if i % 3 == 0  => Map("prop" -> i, "prop2" -> i.toString)
+        case i => Map("prop" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .nodeIndexOperator("x:Honey(prop > 10, prop2)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = nodes.filter(n => n.getProperty("prop").asInstanceOf[Int] > 10 && n.hasProperty("prop2"))
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
   }
 
   test("should cache properties") {
@@ -843,7 +1064,11 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     //when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
+<<<<<<< HEAD
       .optional() // The optional is here to avoid fully fusing
+=======
+      .nonFuseable()
+>>>>>>> neo4j/4.1
       .expandAll("(x)-->(y)")
       .nodeIndexOperator("x:A(prop = 42 OR 1337)")
       .build()
@@ -852,6 +1077,43 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     // then
     runtimeResult should beColumns("x").withRows(rowCount(sizeHint * 5))
   }
+<<<<<<< HEAD
+=======
+}
+
+// Supported by slotted, pipelined, parallel (not compiled though because of composite index)
+trait EnterpriseNodeIndexSeekTestBase[CONTEXT <: RuntimeContext] {
+  self: NodeIndexSeekTestBase[CONTEXT] =>
+
+  test("should support composite index with equality and equality check on the RHS of Apply with Node Key constraint") {
+    val (milk, honey) = given {
+      nodeKey("Honey", "prop", "prop2")
+      val milk = nodeGraph(5, "Milk")
+      val honey = nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i, "prop2" -> i.toString)
+      }, "Honey")
+      (milk, honey)
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .projection("'borked' AS borked")
+      .apply()
+      .|.nodeIndexOperator("x:Honey(prop = 10, prop2 = '10')", unique = true, getValue = GetValue, argumentIds = Set("a"))
+      .distinct("a AS a")
+      .nodeByLabelScan("a", "Milk", IndexOrderAscending)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected: Seq[Node] = for {
+      _ <- milk
+    } yield honey(10)
+    runtimeResult should beColumns("x").withRows(singleColumn(expected))
+  }
+>>>>>>> neo4j/4.1
 }
 
 // Buggy in compiled runtime

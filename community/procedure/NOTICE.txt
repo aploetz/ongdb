@@ -26,16 +26,37 @@ Third-party licenses
 --------------------
 
 Apache Software License, Version 2.0
+  Apache Commons BeanUtils
+  Apache Commons Collections
   Apache Commons Lang
   Apache Commons Text
+<<<<<<< HEAD
   Java Concurrency Tools Core Library
   Lucene codecs
+=======
+  Apache Shiro :: Cache
+  Apache Shiro :: Configuration :: Core
+  Apache Shiro :: Configuration :: OGDL
+  Apache Shiro :: Core
+  Apache Shiro :: Cryptography :: Ciphers
+  Apache Shiro :: Cryptography :: Core
+  Apache Shiro :: Cryptography :: Hashing
+  Apache Shiro :: Event
+  Apache Shiro :: Lang
+  Caffeine cache
+  Java Agent for Memory Measurements
+  Java Concurrency Tools Core Library
+  Jettison
+>>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
   Netty/All-in-One
+  Non-Blocking Reactive Foundation for the JVM
   parboiled-core
   parboiled-scala
+  Scala Compiler
 
 BSD - Scala License
   Scala Library
@@ -45,11 +66,13 @@ BSD License
   asm-analysis
   asm-tree
   asm-util
-  Scala Compiler
 
 Bouncy Castle License
   Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
   Bouncy Castle Provider
+
+Creative Commons 0
+  reactive-streams
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API
@@ -61,6 +84,9 @@ Eclipse Public License - v 1.0
 
 GNU Lesser General Public License, Version 2.1
   Java Native Access
+
+MIT License
+  SLF4J API Module
 
 Dependencies with multiple licenses
 -----------------------------------

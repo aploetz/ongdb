@@ -20,11 +20,14 @@
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.AggregationFunction
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.MaxFunction
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.util.symbols.CTNumber
+import org.neo4j.cypher.internal.util.symbols.CypherType
+import org.neo4j.memory.MemoryTracker
 
 case class Max(anInner: Expression) extends AggregationWithInnerExpression(anInner) {
-  override def createAggregationFunction = new MaxFunction(anInner)
+  override def createAggregationFunction(memoryTracker: MemoryTracker): AggregationFunction = new MaxFunction(anInner)
 
   override val expectedInnerType: CypherType = CTNumber
 

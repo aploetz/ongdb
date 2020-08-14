@@ -84,6 +84,13 @@
         <include>**/*.jar</include>
       </includes>
     </fileSet>
+    <fileSet>
+      <directory>${project.parent.basedir}/src/main/distribution/</directory>
+      <outputDirectory>labs</outputDirectory>
+      <includes>
+        <include>apoc*.jar</include>
+      </includes>
+    </fileSet>
     <!-- TODO: temporary workaround for browser dependency -->
     <fileSet>
       <directory>${project.parent.basedir}/src/main/distribution/neo4j-browser-flat</directory>
@@ -106,33 +113,7 @@
       <unpack>false</unpack>
       <useProjectArtifact>false</useProjectArtifact>
       <useStrictFiltering>true</useStrictFiltering>
-      <includes>
-        <include>org.graphfoundation.ongdb:*</include>
-        <include>org.apache.lucene:lucene-core</include>
-        <include>org.apache.lucene:lucene-analyzers-common</include>
-        <include>org.apache.lucene:lucene-queryparser</include>
-        <include>org.apache.lucene:lucene-codecs</include>
-        <include>org.scala-lang:*</include>
-        <include>org.parboiled:*</include>
-        <include>org.apache.commons:commons-lang3</include>
-      </includes>
       <excludes>
-        <exclude>*:pom:*</exclude>
-      </excludes>
-    </dependencySet>
-    <dependencySet>
-      <outputDirectory>lib</outputDirectory>
-      <directoryMode>0755</directoryMode>
-      <fileMode>0755</fileMode>
-      <unpack>false</unpack>
-      <useProjectArtifact>false</useProjectArtifact>
-      <useStrictFiltering>true</useStrictFiltering>
-      <excludes>
-        <exclude>org.graphfoundation.ongdb:*</exclude>
-        <exclude>org.apache.lucene:*</exclude>
-        <exclude>org.scala-lang:*</exclude>
-        <exclude>org.parboiled:*</exclude>
-        <exclude>org.apache.commons:commons-lang3</exclude>
         <exclude>org.ow2.asm:*</exclude>
       </excludes>
     </dependencySet>

@@ -23,15 +23,23 @@ import java.time.Duration
 import java.time.temporal.ChronoUnit
 import java.util.Collections
 
-import org.neo4j.configuration.GraphDatabaseSettings
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.configuration.GraphDatabaseInternalSettings
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.graphdb.Node
-import org.neo4j.values.storable.{DoubleValue, DurationValue, StringValue, Values}
+import org.neo4j.values.storable.DoubleValue
+import org.neo4j.values.storable.DurationValue
+import org.neo4j.values.storable.IntegralValue
+import org.neo4j.values.storable.StringValue
+import org.neo4j.values.storable.Values
 import org.neo4j.values.virtual.ListValue
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.iterableAsScalaIterableConverter
 import scala.util.Random
 
 abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
@@ -88,7 +96,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .|.limit(limit)
       .|.expandAll("(a)-->(b)")
       .|.argument("a")
-      .nodeByLabelScan("a", "A")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -156,7 +164,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .|.limit(limit)
       .|.expandAll("(a)-->(b)")
       .|.argument("a")
-      .nodeByLabelScan("a", "A")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -441,7 +449,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       consume(execute(logicalQuery, runtime, input))
     }
 
-    val batchSize = edition.getSetting(GraphDatabaseSettings.cypher_pipelined_batch_size_big).getOrElse(10).asInstanceOf[Int]
+    val batchSize = edition.getSetting(GraphDatabaseInternalSettings.cypher_pipelined_batch_size_big).getOrElse(10).asInstanceOf[Int]
     val numberBatches = (0 until batchSize * 10).map(_ => NUMBER)
     val durationBatches = (0 until batchSize * 10).map(_ => DURATION)
 
@@ -644,22 +652,62 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
 
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
-      .produceResults("countStar", "count", "avg", "collect", "max", "min", "sum")
+      .produceResults("countStar", "count", "countD", "avg", "avgD", "collect", "collectD", "max", "maxD", "min", "minD", "sum", "sumD")
       .aggregation(Seq.empty, Seq(
         "count(*) AS countStar",
         "count(x.num) AS count",
+        "count(DISTINCT x.num) AS countD",
         "avg(x.num) AS avg",
+        "avg(DISTINCT x.num) AS avgD",
         "collect(x.num) AS collect",
+        "collect(DISTINCT x.num) AS collectD",
         "max(x.num) AS max",
+        "max(DISTINCT x.num) AS maxD",
         "min(x.num) AS min",
-        "sum(x.num) AS sum"))
+        "min(DISTINCT x.num) AS minD",
+        "sum(x.num) AS sum",
+        "sum(DISTINCT x.num) AS sumD",
+      ))
       .allNodeScan("x")
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
 
     // then
-    runtimeResult should beColumns("countStar", "count", "avg", "collect", "max", "min", "sum").withSingleRow(0, 0, null, Collections.emptyList(),  null, null, 0)
+    runtimeResult should beColumns("countStar", "count", "countD", "avg", "avgD", "collect", "collectD", "max", "maxD", "min", "minD", "sum", "sumD")
+      .withSingleRow(0, 0, 0, null, null, Collections.emptyList(), Collections.emptyList(),  null, null, null, null, 0, 0)
+  }
+
+  test("should return one row for one input row") {
+    // given one row
+    val input = inputValues(Array(1))
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("countStar", "count", "countD", "avg", "avgD", "collect", "collectD", "max", "maxD", "min", "minD", "sum", "sumD")
+      .aggregation(Seq("x AS x"), Seq(
+        "count(*) AS countStar",
+        "count(x) AS count",
+        "count(DISTINCT x) AS countD",
+        "avg(x) AS avg",
+        "avg(DISTINCT x) AS avgD",
+        "collect(x) AS collect",
+        "collect(DISTINCT x) AS collectD",
+        "max(x) AS max",
+        "max(DISTINCT x) AS maxD",
+        "min(x) AS min",
+        "min(DISTINCT x) AS minD",
+        "sum(x) AS sum",
+        "sum(DISTINCT x) AS sumD",
+      ))
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, input)
+
+    // then
+    runtimeResult should beColumns("countStar", "count", "countD", "avg", "avgD", "collect", "collectD", "max", "maxD", "min", "minD", "sum", "sumD")
+      .withSingleRow(1, 1, 1, 1, 1, Collections.singletonList(1), Collections.singletonList(1),  1, 1, 1, 1, 1, 1)
   }
 
   test("should aggregate twice in a row") {
@@ -698,7 +746,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .|.limit(limit)
       .|.expand("(x)-[:R]->(y)")
       .|.argument("x")
-      .nodeByLabelScan("x","A")
+      .nodeByLabelScan("x", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -720,7 +768,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .apply()
       .|.expandAll("(x)-->(y)")
       .|.argument()
-      .nodeByLabelScan("x","A")
+      .nodeByLabelScan("x", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -741,7 +789,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .apply()
       .|.expandAll("(x)-->(y)")
       .|.argument()
-      .nodeByLabelScan("x","A")
+      .nodeByLabelScan("x", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -768,7 +816,7 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
       .|.aggregation(Seq("id(y) % 4 AS outerKey"), Seq("collect(y) AS ys"))
       .|.expandAll("(x)--(y)")
       .|.argument()
-      .nodeByLabelScan("x", "A")
+      .nodeByLabelScan("x", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -791,5 +839,110 @@ abstract class AggregationTestBase[CONTEXT <: RuntimeContext](
 
     // then
     runtimeResult should beColumns("key", "sum").withRows(expected)
+  }
+
+  test("should count(cache[n.prop]) with nulls") {
+    given {
+      nodePropertyGraph(sizeHint, {
+        case i: Int if i % 2 == 0 => Map("num" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("c")
+      .aggregation(Seq.empty, Seq("count(cache[x.num]) AS c"))
+      .cacheProperties("cache[x.num]")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("c").withSingleRow(sizeHint / 2)
+  }
+
+  test("should count(cache[n.prop]) with nulls and limit") {
+    // given
+    given {
+      nodePropertyGraph(sizeHint, {
+        case i: Int if i % 2 == 0 => Map("num" -> i)
+      }, "Honey")
+    }
+    val limit = sizeHint / 10
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("c")
+      .aggregation(Seq.empty, Seq("count(cache[x.num]) AS c"))
+      .limit(limit)
+      .cacheProperties("cache[x.num]")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("c").withRows(matching {
+      // We don't know how many of these rows have null, so the final count produced by the aggregation can be anywhere between 0 and limit
+      case Seq(Array(d:IntegralValue)) if d.longValue() >= 0 && d.longValue() <= limit =>
+    })
+  }
+
+  test("should count(*) on cache[n.prop] grouping column with nulls") {
+    given {
+      nodePropertyGraph(sizeHint, {
+        case i: Int if i % 2 == 0 => Map("num" -> i, "name" -> s"bob${i % 10}")
+        case i: Int if i % 2 == 1 => Map("num" -> i)
+      }, "Honey")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("name", "c")
+      .aggregation(Seq("cache[x.name] AS name"), Seq("count(*) AS c"))
+      .cacheProperties("cache[x.name]")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("name", "c").withRows((for (i <- 0 until 10 by 2) yield {
+      Array(s"bob$i", sizeHint / 10)
+    }) :+ Array(null, sizeHint / 2))
+  }
+
+  test("should count(*) on cache[n.prop] grouping column under apply") {
+    val nodesPerLabel = 100
+    val (aNodes, _) = given {
+      bipartiteGraph(
+        nodesPerLabel,
+        "A",
+        "B",
+        "R",
+        aProperties = {
+          case i: Int => Map("name" -> s"bob$i")
+        })
+    }
+    val limit = nodesPerLabel / 2
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("name", "c")
+      .apply()
+      .|.aggregation(Seq("cache[a.name] AS name"), Seq("count(*) AS c"))
+      .|.limit(limit)
+      .|.expandAll("(a)-->(b)")
+      .|.argument("a")
+      .cacheProperties("cache[a.name]")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    val expected = aNodes.map(a => Array[Any](a.getProperty("name"), limit))
+
+    runtimeResult should beColumns("name", "c").withRows(expected)
   }
 }

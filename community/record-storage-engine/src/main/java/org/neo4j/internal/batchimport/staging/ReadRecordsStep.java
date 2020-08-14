@@ -23,6 +23,8 @@ import org.eclipse.collections.api.iterator.LongIterator;
 
 import org.neo4j.internal.batchimport.Configuration;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 
@@ -37,20 +39,23 @@ public class ReadRecordsStep<RECORD extends AbstractBaseRecord> extends Processo
 {
     private final RecordStore<RECORD> store;
     private final int batchSize;
+    private final boolean prefetch;
     private final RecordDataAssembler<RECORD> assembler;
 
-    public ReadRecordsStep( StageControl control, Configuration config, boolean inRecordWritingStage, RecordStore<RECORD> store )
+    public ReadRecordsStep( StageControl control, Configuration config, boolean inRecordWritingStage, RecordStore<RECORD> store,
+            PageCacheTracer pageCacheTracer )
     {
-        this( control, config, inRecordWritingStage, store, new RecordDataAssembler<>( store::newRecord ) );
+        this( control, config, inRecordWritingStage, store, new RecordDataAssembler<>( store::newRecord ), false, pageCacheTracer );
     }
 
     public ReadRecordsStep( StageControl control, Configuration config, boolean inRecordWritingStage,
-            RecordStore<RECORD> store, RecordDataAssembler<RECORD> converter )
+            RecordStore<RECORD> store, RecordDataAssembler<RECORD> converter, boolean prefetch, PageCacheTracer pageCacheTracer )
     {
-        super( control, ">", config, parallelReading( config, inRecordWritingStage ) ? 0 : 1 );
+        super( control, ">", config, parallelReading( config, inRecordWritingStage ) ? 0 : 1, pageCacheTracer );
         this.store = store;
         this.assembler = converter;
         this.batchSize = config.batchSize();
+        this.prefetch = prefetch;
     }
 
     private static boolean parallelReading( Configuration config, boolean inRecordWritingStage )
@@ -66,7 +71,7 @@ public class ReadRecordsStep<RECORD extends AbstractBaseRecord> extends Processo
     }
 
     @Override
-    protected void process( LongIterator idRange, BatchSender sender )
+    protected void process( LongIterator idRange, BatchSender sender, PageCursorTracer cursorTracer )
     {
         if ( !idRange.hasNext() )
         {
@@ -78,7 +83,8 @@ public class ReadRecordsStep<RECORD extends AbstractBaseRecord> extends Processo
         int i = 0;
         // Just use the first record in the batch here to satisfy the record cursor.
         // The truth is that we'll be using the read method which accepts an external record anyway so it doesn't matter.
-        try ( PageCursor cursor = store.openPageCursorForReading( id ) )
+        try ( PageCursor cursor = prefetch ? store.openPageCursorForReadingWithPrefetching( id, cursorTracer )
+                                           : store.openPageCursorForReading( id, cursorTracer ) )
         {
             boolean hasNext = true;
             while ( hasNext )

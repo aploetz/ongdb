@@ -58,8 +58,7 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.token.TokenHolders;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -69,6 +68,8 @@ import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.IndexPrototype.uniqueForSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @ImpermanentDbmsExtension
 class SchemaStorageIT
@@ -81,6 +82,10 @@ class SchemaStorageIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private RecordStorageEngine storageEngine;
+    @Inject
+    private TokenHolders tokenHolders;
 
     private static SchemaStore schemaStore;
     private static SchemaStorage storage;
@@ -98,8 +103,8 @@ class SchemaStorageIT
             tokenWrite.relationshipTypeGetOrCreateForName( TYPE1 );
             transaction.commit();
         }
-        schemaStore = resolveDependency( RecordStorageEngine.class ).testAccessNeoStores().getSchemaStore();
-        storage = new SchemaStorage( schemaStore, resolveDependency( TokenHolders.class ) );
+        schemaStore = storageEngine.testAccessNeoStores().getSchemaStore();
+        storage = new SchemaStorage( schemaStore, tokenHolders );
     }
 
     @Test
@@ -112,7 +117,7 @@ class SchemaStorageIT
                 index( LABEL2, PROP1 ) );
 
         // When
-        IndexDescriptor rule = single( storage.indexGetForSchema( indexDescriptor( LABEL1, PROP2 ) ) );
+        IndexDescriptor rule = single( storage.indexGetForSchema( indexDescriptor( LABEL1, PROP2 ), NULL ) );
 
         // Then
         assertNotNull( rule );
@@ -132,7 +137,7 @@ class SchemaStorageIT
           .on( a ).on( b ).on( c ).on( d ).on( e ).on( f ).create() );
 
         IndexDescriptor rule = single( storage.indexGetForSchema( TestIndexDescriptorFactory.forLabel(
-                labelId( LABEL1 ), propId( a ), propId( b ), propId( c ), propId( d ), propId( e ), propId( f ) ) ) );
+                labelId( LABEL1 ), propId( a ), propId( b ), propId( c ), propId( d ), propId( e ), propId( f ) ), NULL ) );
 
         assertNotNull( rule );
         assertTrue( SchemaDescriptorPredicates.hasLabel( rule, labelId( LABEL1 ) ) );
@@ -160,7 +165,7 @@ class SchemaStorageIT
         } );
 
         IndexDescriptor rule = single( storage.indexGetForSchema( TestIndexDescriptorFactory.forLabel(
-                labelId( LABEL1 ), Arrays.stream( props ).mapToInt( this::propId ).toArray() ) ) );
+                labelId( LABEL1 ), Arrays.stream( props ).mapToInt( this::propId ).toArray() ), NULL ) );
 
         assertNotNull( rule );
         assertTrue( SchemaDescriptorPredicates.hasLabel( rule, labelId( LABEL1 ) ) );
@@ -179,10 +184,10 @@ class SchemaStorageIT
                 index( LABEL1, PROP1 ) );
 
         // When
-        IndexDescriptor[] rules = storage.indexGetForSchema( indexDescriptor( LABEL1, PROP2 ) );
+        IndexDescriptor[] rules = storage.indexGetForSchema( indexDescriptor( LABEL1, PROP2 ), NULL );
 
         // Then
-        assertThat( rules.length, is( 0 ) );
+        assertThat( rules.length ).isEqualTo( 0 );
     }
 
     @Test
@@ -194,7 +199,7 @@ class SchemaStorageIT
                 index( LABEL1, PROP2 ) );
 
         // When
-        IndexDescriptor rule = single( storage.indexGetForSchema( uniqueIndexDescriptor( LABEL1, PROP1 ) ) );
+        IndexDescriptor rule = single( storage.indexGetForSchema( uniqueIndexDescriptor( LABEL1, PROP1 ), NULL ) );
 
         // Then
         assertNotNull( rule );
@@ -211,7 +216,7 @@ class SchemaStorageIT
                 uniquenessConstraint( LABEL2, PROP1 ) );
 
         // When
-        Set<IndexDescriptor> listedRules = asSet( storage.indexesGetAll() );
+        Set<IndexDescriptor> listedRules = asSet( storage.indexesGetAll( NULL ) );
 
         // Then
         Set<IndexDescriptor> expectedRules = new HashSet<>();
@@ -233,7 +238,7 @@ class SchemaStorageIT
 
         // When
         ConstraintDescriptor rule = storage.constraintsGetSingle(
-                ConstraintDescriptorFactory.uniqueForLabel( labelId( LABEL1 ), propId( PROP1 ) ) );
+                ConstraintDescriptorFactory.uniqueForLabel( labelId( LABEL1 ), propId( PROP1 ) ), NULL );
 
         // Then
         assertNotNull( rule );
@@ -250,14 +255,15 @@ class SchemaStorageIT
                 "value.doubleArray", Values.doubleArray( new double[]{0.4, 0.6, 1.0} ),
                 "value.boolean", Values.booleanValue( true )
         ) );
+        var cursorTracer = NULL;
         SchemaDescriptor schema = forLabel( labelId( LABEL1 ), propId( PROP1 ) );
-        long id = schemaStore.nextId();
+        long id = schemaStore.nextId( cursorTracer );
         IndexDescriptor storeIndexDescriptor = forSchema( schema ).withName( "index_" + id ).materialise( id ).withIndexConfig( expected );
-        storage.writeSchemaRule( storeIndexDescriptor );
+        storage.writeSchemaRule( storeIndexDescriptor, cursorTracer, INSTANCE );
 
         // when
-        IndexDescriptor schemaRule = (IndexDescriptor) storage.loadSingleSchemaRule( id );
-        storage.deleteSchemaRule( schemaRule ); // Clean up after ourselves.
+        IndexDescriptor schemaRule = (IndexDescriptor) storage.loadSingleSchemaRule( id, NULL );
+        storage.deleteSchemaRule( schemaRule, NULL ); // Clean up after ourselves.
 
         // then
         IndexConfig actual = schemaRule.getIndexConfig();
@@ -319,11 +325,6 @@ class SchemaStorageIT
         {
             return ((InternalTransaction) tx).kernelTransaction().tokenRead().propertyKey( propName );
         }
-    }
-
-    private <T> T resolveDependency( Class<T> clazz )
-    {
-        return db.getDependencyResolver().resolveDependency( clazz );
     }
 
     private static Consumer<Transaction> index( String label, String prop )

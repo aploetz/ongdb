@@ -35,15 +35,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.api.impl.index.IndexReaderStub;
 import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.values.storable.Value;
 
 import static java.util.Collections.emptyList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -165,7 +164,7 @@ final class DocValuesCollectorTest
         assertFalse( progressor.next() );
         progressor.close();
         AcceptedEntity entity = ref.get();
-        assertThat( entity.reference, is( 1L ) );
+        assertThat( entity.reference ).isEqualTo( 1L );
         assertTrue( Float.isNaN( entity.score ) );
     }
 
@@ -207,8 +206,8 @@ final class DocValuesCollectorTest
         assertFalse( progressor.next() );
         progressor.close();
         AcceptedEntity entity = ref.get();
-        assertThat( entity.reference, is( 1L ) );
-        assertThat( entity.score, is( score ) );
+        assertThat( entity.reference ).isEqualTo( 1L );
+        assertThat( entity.score ).isEqualTo( score );
     }
 
     @Test
@@ -395,7 +394,7 @@ final class DocValuesCollectorTest
         }
 
         @Override
-        public void initialize( IndexDescriptor descriptor, IndexProgressor progressor, IndexQuery[] query, IndexOrder indexOrder, boolean needsValues,
+        public void initialize( IndexDescriptor descriptor, IndexProgressor progressor, IndexQuery[] query, IndexQueryConstraints constraints,
                 boolean indexIncludesTransactionState )
         {
         }

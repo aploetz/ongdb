@@ -36,8 +36,7 @@ import org.neo4j.bolt.v3.runtime.bookmarking.BookmarkWithPrefix;
 import org.neo4j.time.SystemNanoClock;
 import org.neo4j.values.virtual.MapValue;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,10 +59,10 @@ class TransactionStateMachineV3SPITest
         var bookmarks = List.<Bookmark>of( new BookmarkWithPrefix( 42L ) );
 
         // When
-        spi.beginTransaction( null,  bookmarks, null, null, null );
+        spi.beginTransaction( null,  bookmarks, null, null, null, null );
 
         // Then
-        verify( dbSpi ).beginTransaction( any(), any(),any(), eq(bookmarks), any(), any(), any());
+        verify( dbSpi ).beginTransaction( any(), any(),any(), eq(bookmarks), any(), any(), any(), any());
     }
 
     @Test
@@ -82,8 +81,8 @@ class TransactionStateMachineV3SPITest
 
         // Then
         verify( tx ).getBookmarkMetadata();
-        assertThat( bookmark, instanceOf( BookmarkWithPrefix.class ) );
-        assertEquals( bookmark.txId(), 42L );
+        assertThat( bookmark ).isInstanceOf( BookmarkWithPrefix.class );
+        assertEquals( 42L, bookmark.txId() );
     }
 
     @Test
@@ -95,7 +94,8 @@ class TransactionStateMachineV3SPITest
 
         var bookmarks = List.<Bookmark>of( new BookmarkWithPrefix( 42L ), new BookmarkWithPrefix( 4242L ) );
 
-        assertThrows( IllegalArgumentException.class, () -> spi.beginTransaction( null,  bookmarks, null, null, null ) );
+        assertThrows( IllegalArgumentException.class, () ->
+                spi.beginTransaction( null,  bookmarks, null, null, null, null ) );
     }
 
     private static class TestAbstractTransactionStateMachineSPI extends TransactionStateMachineV3SPI

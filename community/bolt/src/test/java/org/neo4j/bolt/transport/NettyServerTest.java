@@ -27,15 +27,14 @@ import org.junit.jupiter.api.Test;
 import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
 
+import org.neo4j.configuration.connectors.BoltConnector;
 import org.neo4j.configuration.connectors.ConnectorPortRegister;
 import org.neo4j.configuration.helpers.PortBindException;
 import org.neo4j.configuration.helpers.SocketAddress;
 import org.neo4j.internal.helpers.NamedThreadFactory;
-import org.neo4j.logging.NullLog;
 import org.neo4j.logging.internal.NullLogService;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -72,6 +71,21 @@ class NettyServerTest
     }
 
     @Test
+    void shouldGivePortConflictErrorWithInternalPortNumberInIt()
+    {
+        // Given a setup with matching port numbers for internal and external bolt
+        var port = 16000;
+        var address = new SocketAddress( "localhost", port );
+
+        // When
+        server = new NettyServer( newThreadFactory(), protocolOnAddress( address ), protocolOnAddress( address ), new ConnectorPortRegister(),
+                                  NullLogService.getInstance() );
+
+        // Then
+        assertThrows( PortBindException.class, server::start );
+    }
+
+    @Test
     void shouldRegisterPortInPortRegister() throws Exception
     {
         var connector = "bolt";
@@ -86,11 +100,39 @@ class NettyServerTest
         server.start();
         var actualAddress = portRegister.getLocalAddress( connector );
         assertNotNull( actualAddress );
-        assertThat( actualAddress.getPort(), greaterThan( 0 ) );
+        assertThat( actualAddress.getPort() ).isGreaterThan( 0 );
 
         server.stop();
         server.shutdown();
         assertNull( portRegister.getLocalAddress( connector ) );
+    }
+
+    @Test
+    void shouldRegisterInternalAndExternalPortsInPortRegister() throws Exception
+    {
+        var portRegister = new ConnectorPortRegister();
+
+        var external = new SocketAddress( "localhost", 0 );
+        var internal = new SocketAddress( "localhost", 0 );
+        server = new NettyServer( newThreadFactory(), protocolOnAddress( internal ),
+                                  protocolOnAddress( external ), portRegister, NullLogService.getInstance() );
+
+        assertNull( portRegister.getLocalAddress( BoltConnector.NAME ) );
+
+        server.init();
+        server.start();
+        var actualExternalAddress = portRegister.getLocalAddress( BoltConnector.NAME );
+        assertNotNull( actualExternalAddress );
+        assertThat( actualExternalAddress.getPort() ).isGreaterThan( 0 );
+
+        var actualInternalAddress = portRegister.getLocalAddress( BoltConnector.INTERNAL_NAME );
+        assertNotNull( actualInternalAddress );
+        assertThat( actualInternalAddress.getPort() ).isGreaterThan( 0 );
+
+        server.stop();
+        server.shutdown();
+        assertNull( portRegister.getLocalAddress( BoltConnector.NAME ) );
+        assertNull( portRegister.getLocalAddress( BoltConnector.INTERNAL_NAME ) );
     }
 
     private static NettyServer.ProtocolInitializer protocolOnAddress( SocketAddress address )

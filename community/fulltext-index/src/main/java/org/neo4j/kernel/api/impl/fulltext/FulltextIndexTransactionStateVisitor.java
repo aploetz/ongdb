@@ -30,7 +30,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 import org.neo4j.common.EntityType;
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.Read;
@@ -116,6 +116,18 @@ class FulltextIndexTransactionStateVisitor extends TxStateVisitor.Adapter
     }
 
     @Override
+    public void visitDeletedNode( long id )
+    {
+        modifiedEntityIdsInThisTransaction.add( id );
+    }
+
+    @Override
+    public void visitDeletedRelationship( long id )
+    {
+        modifiedEntityIdsInThisTransaction.add( id );
+    }
+
+    @Override
     public void visitNodeLabelChanges( long id, LongSet added, LongSet removed )
     {
         indexNode( id );
@@ -141,7 +153,7 @@ class FulltextIndexTransactionStateVisitor extends TxStateVisitor.Adapter
             read.singleNode( id, nodeCursor );
             if ( nodeCursor.next() )
             {
-                LabelSet labels = nodeCursor.labels();
+                TokenSet labels = nodeCursor.labels();
                 if ( schema.isAffected( labels.all() ) )
                 {
                     nodeCursor.properties( propertyCursor );

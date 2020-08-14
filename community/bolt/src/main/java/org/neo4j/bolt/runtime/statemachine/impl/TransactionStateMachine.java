@@ -37,6 +37,7 @@ import org.neo4j.bolt.runtime.statemachine.StatementMetadata;
 import org.neo4j.bolt.runtime.statemachine.StatementProcessor;
 import org.neo4j.bolt.runtime.statemachine.TransactionStateMachineSPI;
 import org.neo4j.bolt.security.auth.AuthenticationResult;
+import org.neo4j.bolt.v41.messaging.RoutingContext;
 import org.neo4j.exceptions.InvalidSemanticsException;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.exceptions.TransactionFailureException;
@@ -56,10 +57,11 @@ public class TransactionStateMachine implements StatementProcessor
     State state = State.AUTO_COMMIT;
     private final String databaseName;
 
-    public TransactionStateMachine( String databaseName, TransactionStateMachineSPI spi, AuthenticationResult authenticationResult, Clock clock )
+    public TransactionStateMachine( String databaseName, TransactionStateMachineSPI spi, AuthenticationResult authenticationResult, Clock clock,
+                                    RoutingContext routingContext )
     {
         this.spi = spi;
-        ctx = new MutableTransactionState( authenticationResult, clock );
+        ctx = new MutableTransactionState( authenticationResult, clock, routingContext );
         this.databaseName = databaseName;
     }
 
@@ -154,14 +156,11 @@ public class TransactionStateMachine implements StatementProcessor
         {
             Optional<Status> statusOpt = tx.getReasonIfTerminated();
 
-            if ( statusOpt.isPresent() )
+            if ( statusOpt.isPresent() && statusOpt.get().code().classification().rollbackTransaction() )
             {
-                if ( statusOpt.get().code().classification().rollbackTransaction() )
-                {
-                    Status pendingTerminationNotice = statusOpt.get();
-                    reset();
-                    return pendingTerminationNotice;
-                }
+                Status pendingTerminationNotice = statusOpt.get();
+                reset();
+                return pendingTerminationNotice;
             }
         }
         return null;
@@ -193,7 +192,7 @@ public class TransactionStateMachine implements StatementProcessor
 
                     @Override
                     State run( MutableTransactionState ctx, TransactionStateMachineSPI spi, String statement, MapValue params, List<Bookmark> bookmarks,
-                            Duration txTimeout, AccessMode accessMode, Map<String,Object> txMetadata )
+                               Duration txTimeout, AccessMode accessMode, Map<String,Object> txMetadata )
                             throws KernelException
                     {
                         execute( ctx, spi, statement, params, spi.isPeriodicCommit( statement ), bookmarks, txTimeout, accessMode, txMetadata );
@@ -237,8 +236,9 @@ public class TransactionStateMachine implements StatementProcessor
                         try
                         {
                             ctx.currentTransaction = isPeriodicCommit ?
-                                                     spi.beginPeriodicCommitTransaction( ctx.loginContext, bookmarks, txTimeout, accessMode, txMetadata ) :
-                                                     spi.beginTransaction( ctx.loginContext, bookmarks, txTimeout, accessMode, txMetadata );
+                                                     spi.beginPeriodicCommitTransaction( ctx.loginContext, bookmarks,
+                                                                                         txTimeout, accessMode, txMetadata, ctx.routingContext ) :
+                                                     spi.beginTransaction( ctx.loginContext, bookmarks, txTimeout, accessMode, txMetadata, ctx.routingContext);
                         }
                         catch ( Throwable e )
                         {
@@ -423,7 +423,7 @@ public class TransactionStateMachine implements StatementProcessor
             }
         }
 
-        private void terminateActiveStatements( MutableTransactionState ctx )
+        private static void terminateActiveStatements( MutableTransactionState ctx )
         {
             RuntimeException error = null;
 
@@ -463,7 +463,7 @@ public class TransactionStateMachine implements StatementProcessor
             }
         }
 
-        private void closeActiveStatements( MutableTransactionState ctx, boolean success )
+        private static void closeActiveStatements( MutableTransactionState ctx, boolean success )
         {
             RuntimeException error = null;
 
@@ -549,6 +549,9 @@ public class TransactionStateMachine implements StatementProcessor
 
     static class MutableTransactionState
     {
+        /** The current routing context for internal cluster communication */
+        final RoutingContext routingContext;
+
         int statementCounter;
 
         /** The current session security context to be used for starting transactions */
@@ -568,10 +571,11 @@ public class TransactionStateMachine implements StatementProcessor
 
         StatementMetadata lastStatementMetadata;
 
-        MutableTransactionState( AuthenticationResult authenticationResult, Clock clock )
+        MutableTransactionState( AuthenticationResult authenticationResult, Clock clock, RoutingContext routingContext )
         {
             this.clock = clock;
             this.loginContext = authenticationResult.getLoginContext();
+            this.routingContext = routingContext;
         }
 
         int nextStatementId()

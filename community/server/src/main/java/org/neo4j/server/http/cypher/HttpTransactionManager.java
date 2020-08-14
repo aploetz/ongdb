@@ -24,14 +24,13 @@ import java.time.Duration;
 import java.util.Optional;
 
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.dbms.api.DatabaseNotFoundException;
-import org.neo4j.kernel.GraphDatabaseQueryService;
-import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobScheduler;
-import org.neo4j.server.database.DatabaseService;
 import org.neo4j.time.Clocks;
 
 import static java.lang.Math.round;
@@ -43,12 +42,13 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 public class HttpTransactionManager
 {
     private final TransactionHandleRegistry transactionRegistry;
-    private final DatabaseService database;
+    private final DatabaseManagementService managementService;
     private final JobScheduler jobScheduler;
 
-    public HttpTransactionManager( DatabaseService database, JobScheduler jobScheduler, Clock clock, Duration transactionTimeout, LogProvider userLogProvider )
+    public HttpTransactionManager( DatabaseManagementService managementService, JobScheduler jobScheduler, Clock clock, Duration transactionTimeout,
+            LogProvider userLogProvider )
     {
-        this.database = database;
+        this.managementService = managementService;
         this.jobScheduler = jobScheduler;
 
         transactionRegistry = new TransactionHandleRegistry( clock, transactionTimeout, userLogProvider );
@@ -61,18 +61,18 @@ public class HttpTransactionManager
      * @param databaseName database name.
      * @return a transaction facade or {@code null} if a database with the supplied database name does not exist.
      */
-    public Optional<GraphDatabaseFacade> getGraphDatabaseFacade( String databaseName )
+    public Optional<GraphDatabaseAPI> getGraphDatabaseAPI( String databaseName )
     {
-        Optional<GraphDatabaseFacade> graph;
+        Optional<GraphDatabaseAPI> database;
         try
         {
-            graph = Optional.of( database.getDatabase( databaseName ) );
+            database = Optional.of( (GraphDatabaseAPI) managementService.database( databaseName ) );
         }
         catch ( DatabaseNotFoundException e )
         {
-            graph = Optional.empty();
+            database = Optional.empty();
         }
-        return graph;
+        return database;
     }
 
     public TransactionHandleRegistry getTransactionHandleRegistry()
@@ -80,13 +80,12 @@ public class HttpTransactionManager
         return transactionRegistry;
     }
 
-    public TransactionFacade createTransactionFacade( GraphDatabaseFacade graph )
+    public TransactionFacade createTransactionFacade( GraphDatabaseAPI databaseAPI )
     {
-        DependencyResolver dependencyResolver = graph.getDependencyResolver();
+        DependencyResolver dependencyResolver = databaseAPI.getDependencyResolver();
 
-        return new TransactionFacade( new TransitionalPeriodTransactionMessContainer( graph ),
-                dependencyResolver.resolveDependency( QueryExecutionEngine.class ), dependencyResolver.resolveDependency( GraphDatabaseQueryService.class ),
-                transactionRegistry );
+        return new TransactionFacade( databaseAPI,
+                dependencyResolver.resolveDependency( QueryExecutionEngine.class ), transactionRegistry );
     }
 
     private void scheduleTransactionTimeout( Duration timeout )

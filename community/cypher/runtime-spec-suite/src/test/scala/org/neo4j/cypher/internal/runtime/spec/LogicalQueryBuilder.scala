@@ -20,18 +20,21 @@
 package org.neo4j.cypher.internal.runtime.spec
 
 import org.neo4j.cypher.internal.LogicalQuery
-import org.neo4j.cypher.internal.ir.ProvidedOrder
-import org.neo4j.cypher.internal.logical.builder.{AbstractLogicalPlanBuilder, Resolver}
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.ordering.ProvidedOrder
+import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder
+import org.neo4j.cypher.internal.logical.builder.Resolver
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.{Cardinalities, ProvidedOrders}
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.Variable
-import org.neo4j.cypher.internal.v4_0.util.Cardinality
-import org.neo4j.cypher.internal.v4_0.util.attribution.Default
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.LeveragedOrders
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.ProvidedOrders
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.attribution.Default
 
 /**
-  * Test help utility for hand-writing logical queries.
-  */
+ * Test help utility for hand-writing logical queries.
+ */
 class LogicalQueryBuilder(tokenResolver: Resolver)
   extends AbstractLogicalPlanBuilder[LogicalQuery, LogicalQueryBuilder](tokenResolver) {
 
@@ -41,6 +44,12 @@ class LogicalQueryBuilder(tokenResolver: Resolver)
     override val defaultValue: ProvidedOrder = ProvidedOrder.empty
   }
 
+  private val cardinalities: Cardinalities = new Cardinalities with Default[LogicalPlan, Cardinality] {
+    override val defaultValue: Cardinality = Cardinality.SINGLE
+  }
+
+  private val leveragedOrders: LeveragedOrders = new LeveragedOrders
+
   override def newNode(node: Variable): Unit = {
     semanticTable = semanticTable.addNode(node)
   }
@@ -49,15 +58,27 @@ class LogicalQueryBuilder(tokenResolver: Resolver)
     semanticTable = semanticTable.addRelationship(relationship)
   }
 
+  override def newVariable(variable: Variable): Unit = {
+    semanticTable = semanticTable.addVariable(variable)
+  }
+
   def withProvidedOrder(order: ProvidedOrder): this.type = {
     providedOrders.set(idOfLastPlan, order)
     this
   }
 
+  def withCardinalityEstimation(cardinality: Cardinality): this.type = {
+    cardinalities.set(idOfLastPlan, cardinality)
+    this
+  }
+
+  def withLeveragedOrder(): this.type = {
+    leveragedOrders.set(idOfLastPlan, true)
+    this
+  }
+
   def build(readOnly: Boolean = true): LogicalQuery = {
     val logicalPlan = buildLogicalPlan()
-    val cardinalities = new Cardinalities
-    logicalPlan.flatten.foreach(plan => cardinalities.set(plan.id, Cardinality(1)))
     LogicalQuery(logicalPlan,
                  "<<queryText>>",
                  readOnly,
@@ -65,7 +86,9 @@ class LogicalQueryBuilder(tokenResolver: Resolver)
                  semanticTable,
                  cardinalities,
                  providedOrders,
+                 leveragedOrders,
                  hasLoadCSV = false,
-                 None)
+                 None,
+                 idGen)
   }
 }

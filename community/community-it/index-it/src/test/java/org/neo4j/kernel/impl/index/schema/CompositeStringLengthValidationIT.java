@@ -35,7 +35,6 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
@@ -50,12 +49,12 @@ import org.neo4j.test.extension.RandomExtension;
 import org.neo4j.test.rule.RandomRule;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 
 @ExtendWith( RandomExtension.class )
 @DbmsExtension( configurationCallback = "config" )
@@ -113,11 +112,11 @@ class CompositeStringLengthValidationIT
             KernelTransaction ktx = ((InternalTransaction) tx).kernelTransaction();
             int propertyKeyId1 = ktx.tokenRead().propertyKey( KEY );
             int propertyKeyId2 = ktx.tokenRead().propertyKey( KEY2 );
-            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor() )
+            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() ) )
             {
                 IndexReadSession indexReadSession = ktx.dataRead().indexReadSession( index );
                 ktx.dataRead().nodeIndexSeek( indexReadSession,
-                                              cursor, IndexOrder.NONE, false, IndexQuery.exact( propertyKeyId1, firstSlot ),
+                                              cursor, unconstrained(), IndexQuery.exact( propertyKeyId1, firstSlot ),
                                               IndexQuery.exact( propertyKeyId2, secondSlot ) );
                 assertTrue( cursor.next() );
                 assertEquals( node.getId(), cursor.nodeReference() );
@@ -150,8 +149,7 @@ class CompositeStringLengthValidationIT
         catch ( IllegalArgumentException e )
         {
             // then good
-            assertThat( e.getMessage(),
-                    containsString( "Property value is too large to index into this particular index. Please see index documentation for limitations. " ) );
+            assertThat( e.getMessage() ).contains( "Property value is too large to index into" );
         }
     }
 

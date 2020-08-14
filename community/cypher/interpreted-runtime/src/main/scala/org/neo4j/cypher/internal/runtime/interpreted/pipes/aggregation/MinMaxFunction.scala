@@ -19,11 +19,13 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.values.AnyValue
+import org.neo4j.values.AnyValues
 import org.neo4j.values.storable.Values
-import org.neo4j.values.{AnyValue, AnyValues}
 
 trait MinMax extends AggregationFunction {
   def value: Expression
@@ -34,7 +36,7 @@ trait MinMax extends AggregationFunction {
 
   override def result(state: QueryState): AnyValue = biggestSeen
 
-  override def apply(data: ExecutionContext, state: QueryState) {
+  override def apply(data: ReadableRow, state: QueryState) {
     value(data, state) match {
       case IsNoValue() =>
       case x: AnyValue => checkIfLargest(x)
@@ -51,11 +53,11 @@ trait MinMax extends AggregationFunction {
 }
 
 class MaxFunction(val value: Expression) extends AggregationFunction with MinMax {
-  def keep(comparisonResult: Int) = comparisonResult < 0
+  def keep(comparisonResult: Int): Boolean = comparisonResult < 0
   override def name: String = "MAX"
 }
 
 class MinFunction(val value: Expression) extends AggregationFunction with MinMax {
-  def keep(comparisonResult: Int) = comparisonResult > 0
+  def keep(comparisonResult: Int): Boolean = comparisonResult > 0
   override def name: String = "MIN"
 }

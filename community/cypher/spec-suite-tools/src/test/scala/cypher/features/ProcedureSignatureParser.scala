@@ -20,15 +20,32 @@
 package cypher.features
 
 import cypher.features
-import org.neo4j.cypher.internal.v4_0.parser.{Base, Expressions, Literals}
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.parser.Base
+import org.neo4j.cypher.internal.parser.Expressions
+import org.neo4j.cypher.internal.parser.Literals
+import org.neo4j.cypher.internal.util.symbols.CTAny
+import org.neo4j.cypher.internal.util.symbols.CTBoolean
+import org.neo4j.cypher.internal.util.symbols.CTFloat
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.symbols.CTList
+import org.neo4j.cypher.internal.util.symbols.CTMap
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.symbols.CTNumber
+import org.neo4j.cypher.internal.util.symbols.CTPath
+import org.neo4j.cypher.internal.util.symbols.CTPoint
+import org.neo4j.cypher.internal.util.symbols.CTRelationship
+import org.neo4j.cypher.internal.util.symbols.CTString
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.exceptions.SyntaxException
-import org.parboiled.scala._
+import org.parboiled.scala.Parser
+import org.parboiled.scala.ReportingParseRunner
+import org.parboiled.scala.Rule1
+import org.parboiled.scala.group
 
 /**
-  * This parses procedure signatures as specified by the Cypher type system and returned
-  * by dbms.procedures()
-  */
+ * This parses procedure signatures as specified by the Cypher type system and returned
+ * by dbms.procedures()
+ */
 class ProcedureSignatureParser extends Parser with Base with Expressions with Literals {
 
   @throws(classOf[SyntaxException])
@@ -89,8 +106,3 @@ class ProcedureSignatureParser extends Parser with Base with Expressions with Li
     group("FLOAT?" ~ push(CTFloat))
   }
 }
-
-
-
-
-

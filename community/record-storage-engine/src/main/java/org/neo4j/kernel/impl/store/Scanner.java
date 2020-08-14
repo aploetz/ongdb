@@ -27,6 +27,8 @@ import org.neo4j.graphdb.ResourceIterable;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.internal.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
 
@@ -37,22 +39,24 @@ import org.neo4j.kernel.impl.store.record.RecordLoad;
  */
 public class Scanner
 {
+    private static final String RECORD_STORE_SCANNER_TAG = "recordStoreScanner";
+
     private Scanner()
     {
     }
 
     @SafeVarargs
-    public static <R extends AbstractBaseRecord> ResourceIterable<R> scan( final RecordStore<R> store,
+    public static <R extends AbstractBaseRecord> ResourceIterable<R> scan( final RecordStore<R> store, PageCacheTracer pageCacheTracer,
             final Predicate<? super R>... filters )
     {
-        return scan( store, true, filters );
+        return scan( store, true, pageCacheTracer, filters );
     }
 
     @SafeVarargs
     public static <R extends AbstractBaseRecord> ResourceIterable<R> scan( final RecordStore<R> store,
-            final boolean forward, final Predicate<? super R>... filters )
+            final boolean forward, PageCacheTracer pageCacheTracer, final Predicate<? super R>... filters )
     {
-        return () -> new Scan<>( store, forward, filters );
+        return () -> new Scan<>( store, forward, pageCacheTracer, filters );
     }
 
     private static class Scan<R extends AbstractBaseRecord> extends PrefetchingResourceIterator<R>
@@ -62,14 +66,16 @@ public class Scanner
         private final PageCursor cursor;
         private final R record;
         private final Predicate<? super R>[] filters;
+        private final PageCursorTracer cursorTracer;
 
         @SafeVarargs
-        Scan( RecordStore<R> store, boolean forward, final Predicate<? super R>... filters )
+        Scan( RecordStore<R> store, boolean forward, PageCacheTracer pageCacheTracer, final Predicate<? super R>... filters )
         {
             this.filters = filters;
-            this.ids = new StoreIdIterator( store, forward );
+            this.cursorTracer = pageCacheTracer.createPageCursorTracer( RECORD_STORE_SCANNER_TAG );
+            this.ids = new StoreIdIterator( store, forward, cursorTracer );
             this.store = store;
-            this.cursor = store.openPageCursorForReading( 0 );
+            this.cursor = store.openPageCursorForReading( 0, cursorTracer );
             this.record = store.newRecord();
         }
 
@@ -78,7 +84,8 @@ public class Scanner
         {
             while ( ids.hasNext() )
             {
-                store.getRecordByCursor( ids.next(), record, RecordLoad.CHECK, cursor );
+                // Use RecordLoad.FORCE because this code path is only used by the consistency checker.
+                store.getRecordByCursor( ids.next(), record, RecordLoad.FORCE, cursor );
                 if ( record.inUse() )
                 {
                     if ( passesFilters( record ) )
@@ -106,6 +113,7 @@ public class Scanner
         public void close()
         {
             cursor.close();
+            cursorTracer.close();
         }
     }
 }

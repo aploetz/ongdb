@@ -39,11 +39,10 @@ import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.ResourceIterable;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.TransactionFailureException;
-import org.neo4j.internal.kernel.api.LabelSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.TokenRead;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.internal.kernel.api.exceptions.InvalidTransactionTypeKernelException;
 import org.neo4j.internal.kernel.api.exceptions.LabelNotFoundKernelException;
@@ -54,9 +53,8 @@ import org.neo4j.internal.kernel.api.exceptions.schema.TokenCapacityExceededKern
 import org.neo4j.internal.kernel.api.helpers.Nodes;
 import org.neo4j.internal.kernel.api.helpers.RelationshipFactory;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
-import org.neo4j.values.storable.Value;
+import org.neo4j.storageengine.api.Degrees;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.String.format;
@@ -67,9 +65,13 @@ import static org.neo4j.internal.kernel.api.helpers.RelationshipSelections.incom
 import static org.neo4j.internal.kernel.api.helpers.RelationshipSelections.outgoingIterator;
 import static org.neo4j.kernel.api.StatementConstants.NO_SUCH_LABEL;
 import static org.neo4j.kernel.api.StatementConstants.NO_SUCH_RELATIONSHIP_TYPE;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.storageengine.api.RelationshipSelection.ALL_RELATIONSHIPS;
 
 public class NodeEntity implements Node, RelationshipFactory<Relationship>
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( NodeEntity.class );
+
     private final InternalTransaction internalTransaction;
     private final long nodeId;
 
@@ -236,8 +238,7 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         }
         catch ( ConstraintValidationException e )
         {
-            throw new ConstraintViolationException(
-                    e.getUserMessage( new SilentTokenNameLookup( transaction.tokenRead() ) ), e );
+            throw new ConstraintViolationException( e.getUserMessage( transaction.tokenRead() ), e );
         }
         catch ( IllegalArgumentException e )
         {
@@ -311,15 +312,8 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         }
         singleNode( transaction, nodes );
         nodes.properties( properties );
-        while ( properties.next() )
-        {
-            if ( propertyKey == properties.propertyKey() )
-            {
-                Value value = properties.propertyValue();
-                return value == Values.NO_VALUE ? defaultValue : value.asObjectCopy();
-            }
-        }
-        return defaultValue;
+
+        return properties.seekProperty( propertyKey ) ? properties.propertyValue().asObjectCopy() : defaultValue;
     }
 
     @Override
@@ -442,19 +436,11 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         PropertyCursor properties = transaction.ambientPropertyCursor();
         singleNode( transaction, nodes );
         nodes.properties( properties );
-        while ( properties.next() )
+        if ( !properties.seekProperty( propertyKey ) )
         {
-            if ( propertyKey == properties.propertyKey() )
-            {
-                Value value = properties.propertyValue();
-                if ( value == Values.NO_VALUE )
-                {
-                    throw new NotFoundException( format( "No such property, '%s'.", key ) );
-                }
-                return value.asObjectCopy();
-            }
+            throw new NotFoundException( format( "No such property, '%s'.", key ) );
         }
-        throw new NotFoundException( format( "No such property, '%s'.", key ) );
+        return properties.propertyValue().asObjectCopy();
     }
 
     @Override
@@ -476,14 +462,7 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         PropertyCursor properties = transaction.ambientPropertyCursor();
         singleNode( transaction, nodes );
         nodes.properties( properties );
-        while ( properties.next() )
-        {
-            if ( propertyKey == properties.propertyKey() )
-            {
-                return true;
-            }
-        }
-        return false;
+        return properties.seekProperty( propertyKey );
     }
 
     public int compareTo( Object node )
@@ -580,8 +559,7 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         }
         catch ( ConstraintValidationException e )
         {
-            throw new ConstraintViolationException(
-            e.getUserMessage( new SilentTokenNameLookup( transaction.tokenRead() ) ), e );
+            throw new ConstraintViolationException( e.getUserMessage( transaction.tokenRead() ), e );
         }
         catch ( EntityNotFoundException e )
         {
@@ -637,12 +615,12 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         try
         {
             singleNode( transaction, nodes );
-            LabelSet labelSet = nodes.labels();
+            TokenSet tokenSet = nodes.labels();
             TokenRead tokenRead = transaction.tokenRead();
-            ArrayList<Label> list = new ArrayList<>( labelSet.numberOfLabels() );
-            for ( int i = 0; i < labelSet.numberOfLabels(); i++ )
+            List<Label> list = new ArrayList<>( tokenSet.numberOfTokens() );
+            for ( int i = 0; i < tokenSet.numberOfTokens(); i++ )
             {
-                list.add( label( tokenRead.nodeLabelName( labelSet.label( i ) ) ) );
+                list.add( label( tokenRead.nodeLabelName( tokenSet.token( i ) ) ) );
             }
             return list;
         }
@@ -659,7 +637,7 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         NodeCursor nodes = transaction.ambientNodeCursor();
         singleNode( transaction, nodes );
 
-        return Nodes.countAll( nodes, transaction.cursors() );
+        return Nodes.countAll( nodes );
     }
 
     @Override
@@ -674,7 +652,7 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
 
         NodeCursor nodes = transaction.ambientNodeCursor();
         singleNode( transaction, nodes );
-        return Nodes.countAll( nodes, transaction.cursors(), typeId );
+        return Nodes.countAll( nodes, typeId );
     }
 
     @Override
@@ -687,11 +665,11 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         switch ( direction )
         {
         case OUTGOING:
-            return Nodes.countOutgoing( nodes, transaction.cursors() );
+            return Nodes.countOutgoing( nodes );
         case INCOMING:
-            return Nodes.countIncoming( nodes, transaction.cursors() );
+            return Nodes.countIncoming( nodes );
         case BOTH:
-            return Nodes.countAll( nodes, transaction.cursors() );
+            return Nodes.countAll( nodes );
         default:
             throw new IllegalStateException( "Unknown direction " + direction );
         }
@@ -712,11 +690,11 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         switch ( direction )
         {
         case OUTGOING:
-            return Nodes.countOutgoing( nodes, transaction.cursors(), typeId );
+            return Nodes.countOutgoing( nodes, typeId );
         case INCOMING:
-            return Nodes.countIncoming( nodes, transaction.cursors(), typeId );
+            return Nodes.countIncoming( nodes, typeId );
         case BOTH:
-            return Nodes.countAll( nodes, transaction.cursors(), typeId );
+            return Nodes.countAll( nodes, typeId );
         default:
             throw new IllegalStateException( "Unknown direction " + direction );
         }
@@ -726,19 +704,19 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
     public Iterable<RelationshipType> getRelationshipTypes()
     {
         KernelTransaction transaction = internalTransaction.kernelTransaction();
-        try ( RelationshipGroupCursor relationships = transaction.cursors().allocateRelationshipGroupCursor() )
+        try
         {
             NodeCursor nodes = transaction.ambientNodeCursor();
             TokenRead tokenRead = transaction.tokenRead();
             singleNode( transaction, nodes );
-            nodes.relationships( relationships );
+            Degrees degrees = nodes.degrees( ALL_RELATIONSHIPS );
             List<RelationshipType> types = new ArrayList<>();
-            while ( relationships.next() )
+            for ( int type : degrees.types() )
             {
                 // only include this type if there are any relationships with this type
-                if ( relationships.totalCount() > 0 )
+                if ( degrees.totalDegree( type ) > 0 )
                 {
-                    types.add( RelationshipType.withName( tokenRead.relationshipTypeName( relationships.type() ) ) );
+                    types.add( RelationshipType.withName( tokenRead.relationshipTypeName( type ) ) );
                 }
             }
 
@@ -760,14 +738,16 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
             throw new NotFoundException( format( "Node %d not found", nodeId ) );
         }
 
+        var cursorTracer = transaction.pageCursorTracer();
+        var cursors = transaction.cursors();
         switch ( direction )
         {
         case OUTGOING:
-            return outgoingIterator( transaction.cursors(), node, typeIds, this );
+            return outgoingIterator( cursors, node, typeIds, this, cursorTracer );
         case INCOMING:
-            return incomingIterator( transaction.cursors(), node, typeIds, this );
+            return incomingIterator( cursors, node, typeIds, this, cursorTracer );
         case BOTH:
-            return allIterator( transaction.cursors(), node, typeIds, this );
+            return allIterator( cursors, node, typeIds, this, cursorTracer );
         default:
             throw new IllegalStateException( "Unknown direction " + direction );
         }

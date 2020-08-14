@@ -42,14 +42,14 @@ import java.util.Random;
 import org.neo4j.configuration.Config;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.test.extension.DisabledForRoot;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -128,7 +128,7 @@ class LoaderTest
         }
         final InvalidDumpEntryException exception =
                 assertThrows( InvalidDumpEntryException.class, () -> new Loader().load( archive, databaseLayout ) );
-        assertThat( exception.getMessage(), containsString( "points to a location outside of the destination database." ) );
+        assertThat( exception.getMessage() ).contains( "points to a location outside of the destination database." );
     }
 
     @Test
@@ -180,11 +180,12 @@ class LoaderTest
         DatabaseLayout databaseLayout = DatabaseLayout.ofFlat( destination.toFile() );
 
         FileSystemException exception = assertThrows( FileSystemException.class, () -> new Loader().load( archive, databaseLayout ) );
-        assertEquals( destination.getParent().toString() + ": Not a directory", exception.getMessage() );
+        assertEquals( destination.getParent() + ": Not a directory", exception.getMessage() );
     }
 
     @Test
     @DisabledOnOs( OS.WINDOWS )
+    @DisabledForRoot
     void shouldGiveAClearErrorMessageIfTheDestinationsParentDirectoryIsNotWritable()
             throws IOException
     {
@@ -203,6 +204,7 @@ class LoaderTest
 
     @Test
     @DisabledOnOs( OS.WINDOWS )
+    @DisabledForRoot
     void shouldGiveAClearErrorMessageIfTheTxLogsParentDirectoryIsNotWritable()
             throws IOException
     {

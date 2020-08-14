@@ -44,17 +44,15 @@ import org.neo4j.kernel.internal.locker.DatabaseLocker;
 import org.neo4j.kernel.internal.locker.Locker;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
-import org.neo4j.test.mockito.matcher.RootCauseMatcher;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.MetaDataStore.Position.STORE_VERSION;
 
 @PageCacheExtension
@@ -91,7 +89,7 @@ class StoreInfoCommandTest
         {
             CommandLine.usage( command, new PrintStream( out ) );
         }
-        assertThat( baos.toString().trim(), equalTo( String.format(
+        assertThat( baos.toString().trim() ).isEqualTo( String.format(
                         "Print information about a Neo4j database store.%n" +
                         "%n" +
                         "USAGE%n" +
@@ -110,7 +108,7 @@ class StoreInfoCommandTest
                         "OPTIONS%n" +
                         "%n" +
                         "      --verbose     Enable verbose output."
-        ) ) );
+        ) );
     }
 
     @Test
@@ -118,7 +116,7 @@ class StoreInfoCommandTest
     {
         CommandLine.populateCommand( command, Paths.get( "yaba", "daba", "doo" ).toFile().getAbsolutePath() );
         IllegalArgumentException exception = assertThrows( IllegalArgumentException.class, () -> command.execute() );
-        assertThat( exception.getMessage(), containsString( "does not contain a database" ) );
+        assertThat( exception.getMessage() ).contains( "does not contain a database" );
     }
 
     @Test
@@ -153,8 +151,8 @@ class StoreInfoCommandTest
         prepareNeoStoreFile( "v9.9.9" );
         CommandLine.populateCommand( command, databaseDirectory.toFile().getAbsolutePath() );
         Exception exception = assertThrows( Exception.class, () -> command.execute() );
-        assertThat( exception, new RootCauseMatcher( IllegalArgumentException.class ) );
-        assertThat( exception.getMessage(), containsString( "Unknown store version 'v9.9.9'" ) );
+        assertThat( exception ).hasRootCauseInstanceOf( IllegalArgumentException.class );
+        assertThat( exception.getMessage() ).contains( "Unknown store version 'v9.9.9'" );
     }
 
     @Test
@@ -177,7 +175,7 @@ class StoreInfoCommandTest
     {
         File neoStoreFile = createNeoStoreFile();
         long value = MetaDataStore.versionStringToLong( storeVersion );
-        MetaDataStore.setRecord( pageCache, neoStoreFile, STORE_VERSION, value );
+        MetaDataStore.setRecord( pageCache, neoStoreFile, STORE_VERSION, value, NULL );
     }
 
     private File createNeoStoreFile() throws IOException

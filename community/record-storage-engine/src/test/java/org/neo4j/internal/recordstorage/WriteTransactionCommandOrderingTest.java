@@ -50,17 +50,19 @@ import org.neo4j.storageengine.api.StorageCommand;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class WriteTransactionCommandOrderingTest
 {
     private static NodeRecord missingNode()
     {
-        return new NodeRecord( -1, false, -1, -1 );
+        return new NodeRecord( -1 ).initialize( false, -1, false, -1, 0 );
     }
 
     private static NodeRecord createdNode()
     {
-        NodeRecord record = new NodeRecord( 2, false, -1, -1 );
+        NodeRecord record = new NodeRecord( 2 ).initialize( false, -1, false, -1, 0 );
         record.setInUse( true );
         record.setCreated();
         return record;
@@ -68,7 +70,7 @@ class WriteTransactionCommandOrderingTest
 
     private static NodeRecord inUseNode()
     {
-        NodeRecord record = new NodeRecord( 1, false, -1, -1 );
+        NodeRecord record = new NodeRecord( 1 ).initialize( false, -1, false, -1, 0 );
         record.setInUse( true );
         return record;
     }
@@ -91,7 +93,7 @@ class WriteTransactionCommandOrderingTest
             throws TransactionFailureException
     {
         List<StorageCommand> commands = new ArrayList<>();
-        tx.extractCommands( commands );
+        tx.extractCommands( commands, INSTANCE );
         return new GroupOfCommands( commands.toArray( new StorageCommand[0] ) );
     }
 
@@ -155,7 +157,7 @@ class WriteTransactionCommandOrderingTest
         when( neoStores.getRelationshipStore() ).thenReturn( relationshipStore );
 
         return new TransactionRecordState( neoStores, mock( IntegrityValidator.class ), recordChangeSet,
-                0, null, null, null, null, null );
+                0, null, null, null, null, null, NULL, INSTANCE );
     }
 
     private static class OrderVerifyingCommandHandler extends CommandVisitor.Adapter

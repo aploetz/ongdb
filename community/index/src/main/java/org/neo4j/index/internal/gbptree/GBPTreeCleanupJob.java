@@ -21,7 +21,8 @@ package org.neo4j.index.internal.gbptree;
 
 import java.io.File;
 import java.util.StringJoiner;
-import java.util.concurrent.ExecutorService;
+
+import org.neo4j.scheduler.CallableExecutor;
 
 class GBPTreeCleanupJob implements CleanupJob
 {
@@ -74,7 +75,7 @@ class GBPTreeCleanupJob implements CleanupJob
     }
 
     @Override
-    public void run( ExecutorService executor )
+    public void run( CallableExecutor executor )
     {
         try
         {
@@ -94,7 +95,7 @@ class GBPTreeCleanupJob implements CleanupJob
         StringJoiner joiner = new StringJoiner( ", ", "CleanupJob(", ")" );
         joiner.add( "file=" + indexFile.getAbsolutePath() );
         joiner.add( "needed=" + needed );
-        joiner.add( "failure=" + (failure == null ? null : failure.toString()) );
+        joiner.add( "failure=" + failure );
         return joiner.toString();
     }
 }

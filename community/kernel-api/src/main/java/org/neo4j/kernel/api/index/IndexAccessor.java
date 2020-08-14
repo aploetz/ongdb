@@ -30,6 +30,7 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.internal.helpers.collection.BoundedIterable;
 import org.neo4j.io.IOUtils;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
 import org.neo4j.kernel.impl.api.index.SwallowingIndexUpdater;
@@ -43,18 +44,10 @@ import static org.neo4j.internal.helpers.collection.Iterators.emptyResourceItera
 /**
  * Used for online operation of an index.
  */
-public interface IndexAccessor extends Closeable, IndexConfigProvider, ConsistencyCheckable
+public interface IndexAccessor extends Closeable, ConsistencyCheckable, MinimalIndexAccessor
 {
     long UNKNOWN_NUMBER_OF_ENTRIES = -1;
     IndexAccessor EMPTY = new Adapter();
-
-    /**
-     * Deletes this index as well as closes all used external resources.
-     * There will not be any interactions after this call.
-     *
-     * @throws UncheckedIOException if unable to drop index.
-     */
-    void drop();
 
     /**
      * Return an updater for applying a set of changes to this index.
@@ -64,7 +57,7 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
      * a crash or similar. Updates given then may have already been applied to this index, so
      * additional checks must be in place so that data doesn't get duplicated, but is idempotent.
      */
-    IndexUpdater newUpdater( IndexUpdateMode mode );
+    IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer );
 
     /**
      * Forces this index to disk. Called at certain points from within Neo4j for example when
@@ -72,13 +65,14 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
      * hasn't been forced to disk.
      *
      * @param ioLimiter The {@link IOLimiter} to use for implementations living on top of {@link org.neo4j.io.pagecache.PageCache}.
+     * @param cursorTracer underlying page cursor tracer
      * @throws UncheckedIOException if there was a problem forcing the state to persistent storage.
      */
-    void force( IOLimiter ioLimiter );
+    void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer );
 
     /**
      * Refreshes this index, so that {@link #newReader() readers} created after completion of this call
-     * will see the latest updates. This happens automatically on closing {@link #newUpdater(IndexUpdateMode)}
+     * will see the latest updates. This happens automatically on closing {@link #newUpdater(IndexUpdateMode, PageCursorTracer)}
      * w/ {@link IndexUpdateMode#ONLINE}, but not guaranteed for {@link IndexUpdateMode#RECOVERY}.
      * Therefore this call is complementary for updates that has taken place with {@link IndexUpdateMode#RECOVERY}.
      *
@@ -102,17 +96,19 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
     IndexReader newReader();
 
     /**
+     * @param cursorTracer underlying page cursor tracer
      * @return a {@link BoundedIterable} to access all entity ids indexed in this index.
      */
-    default BoundedIterable<Long> newAllEntriesReader()
+    default BoundedIterable<Long> newAllEntriesReader( PageCursorTracer cursorTracer )
     {
-        return newAllEntriesReader( 0, Long.MAX_VALUE );
+        return newAllEntriesReader( 0, Long.MAX_VALUE, cursorTracer );
     }
 
     /**
+     * @param cursorTracer underlying page cursor tracer
      * @return a {@link BoundedIterable} to access all entity ids indexed in the range {@code fromIdInclusive}-{@code toIdExclusive} in this index.
      */
-    BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive );
+    BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive, PageCursorTracer cursorTracer );
 
     /**
      * Returns one or more {@link IndexEntriesReader readers} reading all entries in this index. The supplied {@code partitions} is a hint
@@ -120,12 +116,13 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
      * read individually in parallel and collectively all partitions will read all the index entries in this index.
      *
      * @param partitions a hint for how many partitions will be returned.
+     * @param cursorTracer underlying page cursor tracer
      * @return the partitions that can read the index entries in this index. The implementation should strive to adhere to this number,
      * but the only real contract is that the returned number of readers is between 1 <= numberOfReturnedReaders <= partitions.
      */
-    default IndexEntriesReader[] newAllIndexEntriesReader( int partitions )
+    default IndexEntriesReader[] newAllIndexEntriesReader( int partitions, PageCursorTracer cursorTracer )
     {
-        BoundedIterable<Long> entriesReader = newAllEntriesReader();
+        BoundedIterable<Long> entriesReader = newAllEntriesReader( cursorTracer );
         Iterator<Long> ids = entriesReader.iterator();
         IndexEntriesReader reader = new IndexEntriesReader()
         {
@@ -175,11 +172,6 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
     void verifyDeferredConstraints( NodePropertyAccessor nodePropertyAccessor ) throws IndexEntryConflictException;
 
     /**
-     * @return true if index was not shutdown properly and its internal state is dirty, false otherwise
-     */
-    boolean isDirty();
-
-    /**
      * Validates the {@link Value value tuple} before transaction determines that it can commit.
      */
     default void validateBeforeCommit( Value[] tuple )
@@ -190,8 +182,9 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
     /**
      * @return an estimate of the number of entries, i.e. entityId+values pairs, in this index, or {@link #UNKNOWN_NUMBER_OF_ENTRIES}
      * if number of entries couldn't be determined.
+     * @param cursorTracer underlying page cursor tracer
      */
-    long estimateNumberOfEntries();
+    long estimateNumberOfEntries( PageCursorTracer cursorTracer );
 
     class Adapter implements IndexAccessor
     {
@@ -201,13 +194,13 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public IndexUpdater newUpdater( IndexUpdateMode mode )
+        public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
         {
             return SwallowingIndexUpdater.INSTANCE;
         }
 
         @Override
-        public void force( IOLimiter ioLimiter )
+        public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer )
         {
         }
 
@@ -228,7 +221,7 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive )
+        public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive, PageCursorTracer cursorTracer )
         {
             return new BoundedIterable<>()
             {
@@ -263,19 +256,13 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public boolean isDirty()
-        {
-            return false;
-        }
-
-        @Override
-        public boolean consistencyCheck( ReporterFactory reporterFactory )
+        public boolean consistencyCheck( ReporterFactory reporterFactory, PageCursorTracer cursorTracer )
         {
             return true;
         }
 
         @Override
-        public long estimateNumberOfEntries()
+        public long estimateNumberOfEntries( PageCursorTracer cursorTracer )
         {
             return UNKNOWN_NUMBER_OF_ENTRIES;
         }
@@ -297,15 +284,15 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public IndexUpdater newUpdater( IndexUpdateMode mode )
+        public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
         {
-            return delegate.newUpdater( mode );
+            return delegate.newUpdater( mode, cursorTracer );
         }
 
         @Override
-        public void force( IOLimiter ioLimiter )
+        public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer )
         {
-            delegate.force( ioLimiter );
+            delegate.force( ioLimiter, cursorTracer );
         }
 
         @Override
@@ -327,15 +314,15 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public BoundedIterable<Long> newAllEntriesReader()
+        public BoundedIterable<Long> newAllEntriesReader( PageCursorTracer cursorTracer )
         {
-            return delegate.newAllEntriesReader();
+            return delegate.newAllEntriesReader( cursorTracer );
         }
 
         @Override
-        public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive )
+        public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive, PageCursorTracer cursorTracer )
         {
-            return newAllEntriesReader( fromIdInclusive, toIdExclusive );
+            return delegate.newAllEntriesReader( fromIdInclusive, toIdExclusive, cursorTracer );
         }
 
         @Override
@@ -363,27 +350,21 @@ public interface IndexAccessor extends Closeable, IndexConfigProvider, Consisten
         }
 
         @Override
-        public boolean isDirty()
-        {
-            return delegate.isDirty();
-        }
-
-        @Override
         public void validateBeforeCommit( Value[] tuple )
         {
             delegate.validateBeforeCommit( tuple );
         }
 
         @Override
-        public boolean consistencyCheck( ReporterFactory reporterFactory )
+        public boolean consistencyCheck( ReporterFactory reporterFactory, PageCursorTracer cursorTracer )
         {
-            return delegate.consistencyCheck( reporterFactory );
+            return delegate.consistencyCheck( reporterFactory, cursorTracer );
         }
 
         @Override
-        public long estimateNumberOfEntries()
+        public long estimateNumberOfEntries( PageCursorTracer cursorTracer )
         {
-            return delegate.estimateNumberOfEntries();
+            return delegate.estimateNumberOfEntries( cursorTracer );
         }
     }
 }

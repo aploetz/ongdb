@@ -26,15 +26,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.neo4j.internal.kernel.api.helpers.StubNodeCursor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.values.storable.Value;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.internal.helpers.collection.Iterators.iterator;
 import static org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory.forLabel;
 import static org.neo4j.values.storable.Values.stringValue;
@@ -60,7 +58,7 @@ class NodeSchemaMatcherTest
     @BeforeEach
     void setup()
     {
-        HashMap<Integer,Value> map = new HashMap<>();
+        Map<Integer,Value> map = new HashMap<>();
         map.put( propId1, stringValue( "hello" ) );
         map.put( propId2, stringValue( "world" ) );
         map.put( unIndexedPropId, stringValue( "!" ) );
@@ -77,7 +75,7 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( iterator( index1 ), unIndexedPropId, props, matched::add );
 
         // then
-        assertThat( matched, contains( index1 ) );
+        assertThat( matched ).containsExactly( index1 );
     }
 
     @Test
@@ -88,7 +86,7 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( iterator( index1_2 ), unIndexedPropId, props, matched::add );
 
         // then
-        assertThat( matched, contains( index1_2 ) );
+        assertThat( matched ).containsExactly( index1_2 );
     }
 
     @Test
@@ -99,7 +97,7 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( iterator( indexWithMissingProperty ), unIndexedPropId, props, matched::add );
 
         // then
-        assertThat( matched, empty() );
+        assertThat( matched ).isEmpty();
     }
 
     @Test
@@ -110,7 +108,7 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( iterator( indexWithMissingLabel ), node.labels().all(), unIndexedPropId, props, matched::add );
 
         // then
-        assertThat( matched, empty() );
+        assertThat( matched ).isEmpty();
     }
 
     @Test
@@ -121,7 +119,7 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( iterator( indexOnSpecialProperty ), specialPropId, props, matched::add );
 
         // then
-        assertThat( matched, contains( indexOnSpecialProperty ) );
+        assertThat( matched ).containsExactly( indexOnSpecialProperty );
     }
 
     @Test
@@ -135,6 +133,6 @@ class NodeSchemaMatcherTest
         NodeSchemaMatcher.onMatchingSchema( indexes.iterator(), unIndexedPropId, props, matched::add );
 
         // then
-        assertThat( matched, equalTo( indexes ) );
+        assertThat( matched ).isEqualTo( indexes );
     }
 }

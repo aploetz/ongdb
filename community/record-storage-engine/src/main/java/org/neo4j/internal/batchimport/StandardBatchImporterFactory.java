@@ -26,8 +26,10 @@ import org.neo4j.internal.batchimport.staging.ExecutionMonitor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 
@@ -46,11 +48,13 @@ public class StandardBatchImporterFactory extends BatchImporterFactory
     }
 
     @Override
-    public BatchImporter instantiate( DatabaseLayout directoryStructure, FileSystemAbstraction fileSystem, PageCache externalPageCache, Configuration config,
+    public BatchImporter instantiate( DatabaseLayout directoryStructure, FileSystemAbstraction fileSystem, PageCache externalPageCache,
+            PageCacheTracer pageCacheTracer, Configuration config,
             LogService logService, ExecutionMonitor executionMonitor, AdditionalInitialIds additionalInitialIds, Config dbConfig, RecordFormats recordFormats,
-            ImportLogic.Monitor monitor, JobScheduler scheduler, Collector badCollector, LogFilesInitializer logFilesInitializer )
+            ImportLogic.Monitor monitor, JobScheduler scheduler, Collector badCollector,
+            LogFilesInitializer logFilesInitializer, MemoryTracker memoryTracker )
     {
-        return new ParallelBatchImporter( directoryStructure, fileSystem, externalPageCache, config, logService, executionMonitor,
-                additionalInitialIds, dbConfig, recordFormats, monitor, scheduler, badCollector, logFilesInitializer );
+        return new ParallelBatchImporter( directoryStructure, fileSystem, externalPageCache, pageCacheTracer, config, logService, executionMonitor,
+                additionalInitialIds, dbConfig, recordFormats, monitor, scheduler, badCollector, logFilesInitializer, memoryTracker );
     }
 }

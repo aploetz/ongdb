@@ -21,6 +21,11 @@ package org.neo4j.kernel.impl.storemigration;
 
 import java.io.File;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+import java.util.Map;
+>>>>>>> neo4j/4.1
 
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
@@ -28,6 +33,10 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+<<<<<<< HEAD
+=======
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.transaction.log.LogVersionUpgradeChecker;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
@@ -35,12 +44,22 @@ import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
 import org.neo4j.kernel.impl.transaction.log.files.TransactionLogInitializer;
 import org.neo4j.kernel.recovery.LogTailScanner;
+<<<<<<< HEAD
 import org.neo4j.monitoring.Monitors;
+=======
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.monitoring.Monitors;
+import org.neo4j.storageengine.api.CommandReaderFactory;
+>>>>>>> neo4j/4.1
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.api.TransactionMetaDataStore;
 import org.neo4j.storageengine.migration.UpgradeNotAllowedException;
 
+<<<<<<< HEAD
 import static org.neo4j.configuration.GraphDatabaseSettings.fail_on_corrupted_log_files;
+=======
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.fail_on_corrupted_log_files;
+>>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.fail_on_missing_files;
 import static org.neo4j.io.fs.FileSystemAbstraction.EMPTY_COPY_OPTIONS;
 
@@ -53,9 +72,28 @@ public class LogsUpgrader
     private final LegacyTransactionLogsLocator legacyLogsLocator;
     private final Config config;
     private final DependencyResolver dependencyResolver;
+<<<<<<< HEAD
 
     public LogsUpgrader( FileSystemAbstraction fs, StorageEngineFactory storageEngineFactory, DatabaseLayout databaseLayout, PageCache pageCache,
                          LegacyTransactionLogsLocator legacyLogsLocator, Config config, DependencyResolver dependencyResolver )
+=======
+    private final PageCacheTracer tracer;
+    private final MemoryTracker memoryTracker;
+    private final boolean isUpgradeAllowed;
+    private final Map<DatabaseLayout, LogTailScanner> tailScanners;
+    private final Monitors monitors;
+
+    public LogsUpgrader(
+            FileSystemAbstraction fs,
+            StorageEngineFactory storageEngineFactory,
+            DatabaseLayout databaseLayout,
+            PageCache pageCache,
+            LegacyTransactionLogsLocator legacyLogsLocator,
+            Config config,
+            DependencyResolver dependencyResolver,
+            PageCacheTracer pageCacheTracer,
+            MemoryTracker memoryTracker )
+>>>>>>> neo4j/4.1
     {
         this.fs = fs;
         this.storageEngineFactory = storageEngineFactory;
@@ -64,9 +102,20 @@ public class LogsUpgrader
         this.legacyLogsLocator = legacyLogsLocator;
         this.config = config;
         this.dependencyResolver = dependencyResolver;
+<<<<<<< HEAD
     }
 
     public void assertCleanlyShutDownByCheckPoint( DatabaseLayout layout )
+=======
+        this.tracer = pageCacheTracer;
+        this.memoryTracker = memoryTracker;
+        this.isUpgradeAllowed = config.get( GraphDatabaseSettings.allow_upgrade );
+        tailScanners = new HashMap<>();
+        monitors = dependencyResolver.resolveDependency( Monitors.class );
+    }
+
+    public void assertCleanlyShutDown( DatabaseLayout layout )
+>>>>>>> neo4j/4.1
     {
         Throwable suppressibleException = null;
         try
@@ -74,8 +123,13 @@ public class LogsUpgrader
             // we should not use provided database layout here since transaction log location is different compare to previous versions
             // and that's why we need to use custom transaction logs locator and database layout
             DatabaseLayout oldDatabaseLayout = buildLegacyLogsLayout( layout );
+<<<<<<< HEAD
             LogTailScanner logTailScanner = buildLogTailScanner( oldDatabaseLayout );
             LogVersionUpgradeChecker.check( logTailScanner, config );
+=======
+            LogTailScanner logTailScanner = getLogTailScanner( oldDatabaseLayout );
+            LogVersionUpgradeChecker.check( logTailScanner, isUpgradeAllowed );
+>>>>>>> neo4j/4.1
 
             LogTailScanner.LogTailInformation tail = logTailScanner.getTailInformation();
             if ( !tail.isRecoveryRequired() )
@@ -87,8 +141,13 @@ public class LogsUpgrader
             {
                 // There are no log files in the legacy logs location.
                 // Either log files are missing entirely, or they are already in their correct place.
+<<<<<<< HEAD
                 logTailScanner = buildLogTailScanner( layout );
                 LogVersionUpgradeChecker.check( logTailScanner, config );
+=======
+                logTailScanner = getLogTailScanner( layout );
+                LogVersionUpgradeChecker.check( logTailScanner, isUpgradeAllowed );
+>>>>>>> neo4j/4.1
                 tail = logTailScanner.getTailInformation();
 
                 if ( !tail.isRecoveryRequired() )
@@ -116,14 +175,35 @@ public class LogsUpgrader
         throw exception;
     }
 
+<<<<<<< HEAD
+=======
+    public void assertLogVersionIsCurrent( DatabaseLayout layout )
+    {
+        layout = buildLegacyLogsLayout( layout );
+        LogTailScanner logTailScanner = getLogTailScanner( layout );
+        LogVersionUpgradeChecker.check( logTailScanner, isUpgradeAllowed );
+    }
+
+>>>>>>> neo4j/4.1
     private DatabaseLayout buildLegacyLogsLayout( DatabaseLayout databaseLayout )
     {
         return new LegacyDatabaseLayout( databaseLayout.getNeo4jLayout(), databaseLayout.getDatabaseName(), legacyLogsLocator );
     }
 
+<<<<<<< HEAD
     private LogTailScanner buildLogTailScanner( DatabaseLayout layout )
     {
         final LogEntryReader logEntryReader = new VersionAwareLogEntryReader();
+=======
+    private LogTailScanner getLogTailScanner( DatabaseLayout layout )
+    {
+        return tailScanners.computeIfAbsent( layout, this::buildLogTailScanner );
+    }
+
+    private LogTailScanner buildLogTailScanner( DatabaseLayout layout )
+    {
+        final LogEntryReader logEntryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
+>>>>>>> neo4j/4.1
         final LogFiles logFiles;
         try
         {
@@ -136,21 +216,40 @@ public class LogsUpgrader
         {
             throw new RuntimeException( e );
         }
+<<<<<<< HEAD
         Monitors monitors = dependencyResolver.resolveDependency( Monitors.class );
         return new LogTailScanner( logFiles, logEntryReader, monitors, config.get( fail_on_corrupted_log_files ) );
+=======
+        boolean failOnCorruptedLogFiles = config.get( fail_on_corrupted_log_files );
+        return new LogTailScanner( logFiles, logEntryReader, monitors, failOnCorruptedLogFiles, memoryTracker );
+>>>>>>> neo4j/4.1
     }
 
     public void upgrade( DatabaseLayout layout )
     {
+<<<<<<< HEAD
         try ( TransactionMetaDataStore store = getMetaDataStore() )
         {
             TransactionLogInitializer logInitializer = new TransactionLogInitializer( fs, store );
+=======
+        CommandReaderFactory commandReaderFactory = storageEngineFactory.commandReaderFactory();
+        try ( TransactionMetaDataStore store = getMetaDataStore() )
+        {
+            TransactionLogInitializer logInitializer = new TransactionLogInitializer(
+                    fs, store, commandReaderFactory, tracer );
+>>>>>>> neo4j/4.1
 
             File transactionLogsDirectory = layout.getTransactionLogsDirectory();
             File legacyLogsDirectory = legacyLogsLocator.getTransactionLogsDirectory();
             boolean filesNeedsToMove = !transactionLogsDirectory.equals( legacyLogsDirectory );
 
+<<<<<<< HEAD
             LogFiles logFiles = LogFilesBuilder.logFilesBasedOnlyBuilder( legacyLogsDirectory, fs ).build();
+=======
+            LogFiles logFiles = LogFilesBuilder.logFilesBasedOnlyBuilder( legacyLogsDirectory, fs )
+                    .withCommandReaderFactory( commandReaderFactory )
+                    .build();
+>>>>>>> neo4j/4.1
             // Move log files to their intended directory, if they are not there already.
             File[] legacyFiles = logFiles.logFiles();
             if ( legacyFiles != null && legacyFiles.length > 0 )
@@ -212,6 +311,10 @@ public class LogsUpgrader
         // to avoid relying on the persistent id generators.
         // We can't use those id files because at this point they haven't been migrated yet.
         Config readOnlyConfig = Config.defaults( GraphDatabaseSettings.read_only, true );
+<<<<<<< HEAD
         return storageEngineFactory.transactionMetaDataStore( fs, databaseLayout, readOnlyConfig, pageCache );
+=======
+        return storageEngineFactory.transactionMetaDataStore( fs, databaseLayout, readOnlyConfig, pageCache, tracer );
+>>>>>>> neo4j/4.1
     }
 }

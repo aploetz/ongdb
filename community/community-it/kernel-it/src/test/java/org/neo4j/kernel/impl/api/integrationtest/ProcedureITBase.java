@@ -46,7 +46,8 @@ public interface ProcedureITBase
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS", true ),
                 proc( "dbms.listConfig", "(searchString =  :: STRING?) :: (name :: STRING?, description :: STRING?, value :: STRING?, dynamic :: BOOLEAN?)",
                         "List the currently active config of Neo4j.", stringArray( "admin" ), "DBMS" ),
-                proc( "db.constraints", "() :: (name :: STRING?, description :: STRING?)", "List all constraints in the database.",
+                proc( "db.constraints", "() :: (name :: STRING?, description :: STRING?, details :: STRING?)",
+                        "List all constraints in the database.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
                 proc( "db.indexes",
                         "() :: (id :: INTEGER?, name :: STRING?, state :: STRING?, populationPercent :: FLOAT?, uniqueness :: STRING?, type :: STRING?, " +
@@ -99,7 +100,11 @@ public interface ProcedureITBase
                 proc( "dbms.queryJmx", "(query :: STRING?) :: (name :: STRING?, " + "description :: STRING?, attributes :: MAP?)",
                         "Query JMX management data by domain and name." + " For instance, \"*:*\"",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
+<<<<<<< HEAD
                 proc( "db.createLabel", "(newLabel :: STRING?) :: VOID", "Create a label", stringArray(  "publisher", "architect", "admin" ), "WRITE",
+=======
+                proc( "db.createLabel", "(newLabel :: STRING?) :: VOID", "Create a label", stringArray( "publisher", "architect", "admin" ), "WRITE",
+>>>>>>> neo4j/4.1
                         false ),
                 proc( "db.createProperty", "(newProperty :: STRING?) :: VOID", "Create a Property", stringArray( "publisher", "architect", "admin" ),
                         "WRITE", false ), proc( "db.createRelationshipType", "(newRelationshipType :: STRING?) :: VOID", "Create a RelationshipType",
@@ -134,34 +139,37 @@ public interface ProcedureITBase
                 proc( "db.index.fulltext.listAvailableAnalyzers", "() :: (analyzer :: STRING?, description :: STRING?, stopwords :: LIST? OF STRING?)",
                         "List the available analyzers that the full-text indexes can be configured with.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
-                proc( "db.index.fulltext.queryNodes", "(indexName :: STRING?, queryString :: STRING?) :: (node :: NODE?, score :: FLOAT?)",
-                        "Query the given full-text index. Returns the matching nodes and their Lucene query score, ordered by score.",
+                proc( "db.index.fulltext.queryNodes",
+                        "(indexName :: STRING?, queryString :: STRING?, options = {} :: MAP?) :: (node :: NODE?, score :: FLOAT?)",
+                        "Query the given full-text index. Returns the matching nodes, and their Lucene query score, ordered by score. " +
+                                "Valid keys for the options map are: 'skip' to skip the top N results; 'limit' to limit the number of results returned.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ), proc( "db.index.fulltext.queryRelationships",
-                        "(indexName :: STRING?, queryString :: STRING?) :: (relationship :: RELATIONSHIP?, " + "score :: FLOAT?)",
-                        "Query the given full-text index. Returns the matching relationships and their Lucene query score, ordered by " + "score.",
+                        "(indexName :: STRING?, queryString :: STRING?, options = {} :: MAP?) :: (relationship :: RELATIONSHIP?, " + "score :: FLOAT?)",
+                        "Query the given full-text index. Returns the matching relationships, and their Lucene query score, ordered by score. " +
+                                "Valid keys for the options map are: 'skip' to skip the top N results; 'limit' to limit the number of results returned.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
                 proc( "db.prepareForReplanning", "(timeOutSeconds = 300 :: INTEGER?) :: VOID",
                         "Triggers an index resample and waits for it to complete, and after that clears query caches." +
                                 " After this procedure has finished queries will be planned using the latest database " + "statistics.",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.retrieve", "(section :: STRING?, config = {} :: MAP?) :: (section :: STRING?, data :: MAP?)",
                         "Retrieve statistical data about the current database. Valid sections are 'GRAPH COUNTS', 'TOKENS', 'QUERIES', 'META'",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.retrieveAllAnonymized", "(graphToken :: STRING?, config = {} :: MAP?) :: (section :: STRING?, data :: MAP?)",
                         "Retrieve all available statistical data about the current database, in an anonymized form.",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.status", "() :: (section :: STRING?, status :: STRING?, data :: MAP?)",
                         "Retrieve the status of all available collector daemons, for this database.",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.collect", "(section :: STRING?, config = {} :: MAP?) :: (section :: STRING?, success :: BOOLEAN?, message :: STRING?)",
                         "Start data collection of a given data section. Valid sections are 'QUERIES'",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.stop", "(section :: STRING?) :: (section :: STRING?, success :: BOOLEAN?, message :: STRING?)",
                         "Stop data collection of a given data section. Valid sections are 'QUERIES'",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "db.stats.clear", "(section :: STRING?) :: (section :: STRING?, success :: BOOLEAN?, message :: STRING?)",
                         "Clear collected data of a given data section. Valid sections are 'QUERIES'",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ" ),
+                        stringArray( "admin" ), "READ" ),
                 proc( "dbms.routing.getRoutingTable", "(context :: MAP?, database = null :: STRING?) :: (ttl :: INTEGER?, servers :: LIST? OF MAP?)",
                         "Returns endpoints of this instance.", stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
                 proc( "dbms.cluster.routing.getRoutingTable", "(context :: MAP?, database = null :: STRING?) :: (ttl :: INTEGER?, servers :: LIST? OF MAP?)",
@@ -180,26 +188,45 @@ public interface ProcedureITBase
                       "This procedure can be used by client side tooling to test whether they are correctly connected to a database. " +
                       "The procedure is available in all databases and always returns true. A faulty connection can be detected by not being able to call " +
                       "this procedure.",
+<<<<<<< HEAD
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ", true )
+=======
+                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ", true ),
+                proc( "dbms.upgradeStatus", "() :: (status :: STRING?, description :: STRING?, resolution :: STRING?)",
+                      "Report the current status of the system database sub-graph schema.",
+                      stringArray( "admin" ), "READ" ),
+                proc( "dbms.upgrade", "() :: (status :: STRING?, upgradeResult :: STRING?)",
+                      "Upgrade the system database schema if it is not the current schema.",
+                      stringArray( "admin" ), "WRITE" )
+>>>>>>> neo4j/4.1
         );
     }
 
     default List<Object[]> getExpectedEnterpriseProcs()
     {
-        ArrayList<Object[]> result = new ArrayList<>( getExpectedCommunityProcs() );
+        List<Object[]> result = new ArrayList<>( getExpectedCommunityProcs() );
         result.addAll( List.of(
                 // enterprise only functions
                 proc( "db.listLocks",
                         "() :: (resourceType :: STRING?, resourceId :: INTEGER?, description :: STRING?)",
                         "List all locks at this database.",
                         stringArray( "admin" ), "DBMS"),
+<<<<<<< HEAD
+=======
+                proc( "dbms.listPools",
+                        "() :: (pool :: STRING?, databaseName :: STRING?, heapMemoryUsed :: STRING?, heapMemoryUsedBytes :: STRING?, " +
+                                "nativeMemoryUsed :: STRING?, nativeMemoryUsedBytes :: STRING?, freeMemory :: STRING?, freeMemoryBytes :: STRING?, " +
+                                "totalPoolMemory :: STRING?, totalPoolMemoryBytes :: STRING?)",
+                        "List all memory pools, including sub pools, currently registered at this instance that are visible to the user.",
+                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
+>>>>>>> neo4j/4.1
                 proc( "dbms.listTransactions",
                         "() :: (transactionId :: STRING?, username :: STRING?, metaData :: MAP?, startTime :: STRING?, protocol :: STRING?," +
                                 " clientAddress :: STRING?, requestUri :: STRING?, currentQueryId :: STRING?, currentQuery :: STRING?, " +
                                 "activeLockCount :: INTEGER?, status :: STRING?, resourceInformation :: MAP?, elapsedTimeMillis :: INTEGER?, " +
                                 "cpuTimeMillis :: INTEGER?, waitTimeMillis :: INTEGER?, idleTimeMillis :: INTEGER?, allocatedBytes :: INTEGER?, " +
                                 "allocatedDirectBytes :: INTEGER?, pageHits :: INTEGER?, pageFaults :: INTEGER?, connectionId :: STRING?, " +
-                                "initializationStackTrace :: STRING?, database :: STRING?)",
+                                "initializationStackTrace :: STRING?, database :: STRING?, estimatedUsedHeapMemory :: INTEGER?)",
                         "List all transactions currently executing at this instance that are visible to the user.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
                 proc( "dbms.killQuery", "(id :: STRING?) :: (queryId :: STRING?, username :: STRING?, message :: STRING?)",
@@ -251,7 +278,8 @@ public interface ProcedureITBase
                 proc( "dbms.listConnections", "() :: (connectionId :: STRING?, connectTime :: STRING?, connector :: STRING?, username :: STRING?, " +
                                 "userAgent :: STRING?, serverAddress :: STRING?, clientAddress :: STRING?)",
                         "List all accepted network connections at this instance that are visible to the user.",
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" )));
+                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" )
+        ));
         return result;
     }
 

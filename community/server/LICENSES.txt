@@ -7,7 +7,6 @@ Apache Software License, Version 2.0
   Apache Commons BeanUtils
   Apache Commons Collections
   Apache Commons Compress
-  Apache Commons Configuration
   Apache Commons IO
   Apache Commons Lang
   Apache Commons Logging
@@ -21,9 +20,7 @@ Apache Software License, Version 2.0
   Apache Shiro :: Cryptography :: Hashing
   Apache Shiro :: Event
   Apache Shiro :: Lang
-  Bean Validation API
   Caffeine cache
-  Commons Lang
   fastinfoset
   Jackson module: JAXB Annotations
   Jackson-annotations
@@ -31,6 +28,11 @@ Apache Software License, Version 2.0
   jackson-databind
   Jackson-JAXRS-base
   Jackson-JAXRS-JSON
+<<<<<<< HEAD
+=======
+  Jakarta Bean Validation API
+  Java Agent for Memory Measurements
+>>>>>>> neo4j/4.1
   Java Concurrency Tools Core Library
   Javassist
   jersey-container-servlet
@@ -40,6 +42,7 @@ Apache Software License, Version 2.0
   jersey-core-server
   jersey-inject-hk2
   jersey-media-jaxb
+  Jettison
   Jetty :: Http Utility
   Jetty :: IO Utility
   Jetty :: Security
@@ -50,14 +53,15 @@ Apache Software License, Version 2.0
   Jetty :: XML utilities
   jPowerShell
   jProcesses
-  Lucene codecs
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
   Netty/All-in-One
   parboiled-core
   parboiled-scala
   picocli - a mighty tiny Command Line Interface
+  Scala Compiler
   WMI4Java
 ------------------------------------------------------------------------------
 
@@ -314,7 +318,6 @@ BSD License
   asm-analysis
   asm-tree
   asm-util
-  Scala Compiler
   Zstandard
 ------------------------------------------------------------------------------
 
@@ -1266,7 +1269,8 @@ This Agreement is governed by the laws of the State of New York and the intellec
 Eclipse Public License v2.0
   HK2 API module
   HK2 Implementation Utilities
-  jakarta.annotation API
+  Jakarta Annotations API
+  jakarta.ws.rs-api
   javax.inject:1 as OSGi bundle
   javax.ws.rs-api
   jersey-container-servlet

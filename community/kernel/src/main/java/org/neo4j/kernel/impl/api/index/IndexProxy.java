@@ -29,15 +29,16 @@ import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexActivationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.schema.UniquePropertyValueValidationException;
 import org.neo4j.kernel.api.index.IndexAccessor;
-import org.neo4j.kernel.api.index.IndexConfigProvider;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexReader;
 import org.neo4j.kernel.api.index.IndexUpdater;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.values.storable.Value;
 
@@ -59,22 +60,16 @@ import org.neo4j.values.storable.Value;
  *
  * @see ContractCheckingIndexProxy
  */
-public interface IndexProxy extends IndexConfigProvider
+public interface IndexProxy extends MinimalIndexAccessor
 {
     void start();
 
-    IndexUpdater newUpdater( IndexUpdateMode mode );
-
-    /**
-     * Drop index.
-     * Must close the context as well.
-     */
-    void drop();
+    IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer );
 
     /**
      * Close this index context.
      */
-    void close() throws IOException;
+    void close( PageCursorTracer cursorTracer ) throws IOException;
 
     IndexDescriptor getDescriptor();
 
@@ -87,7 +82,7 @@ public interface IndexProxy extends IndexConfigProvider
 
     PopulationProgress getIndexPopulationProgress();
 
-    void force( IOLimiter ioLimiter ) throws IOException;
+    void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer ) throws IOException;
 
     void refresh() throws IOException;
 

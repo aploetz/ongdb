@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.StreamSupport;
 
@@ -42,6 +43,9 @@ import org.neo4j.values.ValueMapper;
 import org.neo4j.values.VirtualValue;
 import org.neo4j.values.storable.Values;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOf;
+import static org.neo4j.memory.HeapEstimator.sizeOfHashMap;
 import static org.neo4j.values.storable.Values.NO_VALUE;
 
 public abstract class MapValue extends VirtualValue
@@ -79,26 +83,22 @@ public abstract class MapValue extends VirtualValue
         }
 
         @Override
-        protected long estimatedPayloadSize()
-        {
-            return 0L;
-        }
-
-        @Override
         public long estimatedHeapUsage()
         {
-            //EMPTY is a singleton and doesn't add to heap usage
             return 0L;
         }
     };
 
+    private static final long MAP_WRAPPING_MAP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( MapWrappingMapValue.class );
     static final class MapWrappingMapValue extends MapValue
     {
         private final Map<String,AnyValue> map;
+        private final long wrappedHeapSize;
 
-        MapWrappingMapValue( Map<String,AnyValue> map )
+        MapWrappingMapValue( Map<String,AnyValue> map, long payloadSize )
         {
             this.map = map;
+            this.wrappedHeapSize = sizeOfHashMap( map ) + payloadSize;
         }
 
         @Override
@@ -133,16 +133,22 @@ public abstract class MapValue extends VirtualValue
         {
             return map.size();
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return MAP_WRAPPING_MAP_VALUE_SHALLOW_SIZE + wrappedHeapSize;
+        }
     }
 
+    private static final long FILTERING_MAP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( FilteringMapValue.class );
     private static final class FilteringMapValue extends MapValue
     {
         private final MapValue map;
         private final BiFunction<String,AnyValue,Boolean> filter;
         private int size = -1;
 
-        FilteringMapValue( MapValue map,
-                BiFunction<String,AnyValue,Boolean> filter )
+        FilteringMapValue( MapValue map, BiFunction<String,AnyValue,Boolean> filter )
         {
             this.map = map;
             this.filter = filter;
@@ -220,8 +226,15 @@ public abstract class MapValue extends VirtualValue
             }
             return size;
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return FILTERING_MAP_VALUE_SHALLOW_SIZE + map.estimatedHeapUsage();
+        }
     }
 
+    private static final long MAPPED_MAP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( MappedMapValue.class );
     private static final class MappedMapValue extends MapValue
     {
         private final MapValue map;
@@ -269,40 +282,33 @@ public abstract class MapValue extends VirtualValue
         {
             return map.size();
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return MAPPED_MAP_VALUE_SHALLOW_SIZE + map.estimatedHeapUsage();
+        }
     }
 
+    private static final long UPDATED_MAP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( UpdatedMapValue.class );
     private static final class UpdatedMapValue extends MapValue
     {
         private final MapValue map;
-        private final String[] updatedKeys;
-        private final AnyValue[] updatedValues;
+        private final String updatedKey;
+        private final AnyValue updatedValue;
 
-        UpdatedMapValue( MapValue map, String[] updatedKeys, AnyValue[] updatedValues )
+        UpdatedMapValue( MapValue map, String updatedKey, AnyValue updatedValue )
         {
-            assert updatedKeys.length == updatedValues.length;
-            assert !overlaps( map, updatedKeys );
+            assert !map.containsKey( updatedKey );
             this.map = map;
-            this.updatedKeys = updatedKeys;
-            this.updatedValues = updatedValues;
-        }
-
-        private static boolean overlaps( MapValue map, String[] updatedKeys )
-        {
-            for ( String key : updatedKeys )
-            {
-                if ( map.containsKey( key ) )
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            this.updatedKey = updatedKey;
+            this.updatedValue = updatedValue;
         }
 
         @Override
         public ListValue keys()
         {
-            return VirtualValues.concat( map.keys(), VirtualValues.fromArray( Values.stringArray( updatedKeys ) ) );
+            return VirtualValues.concat( map.keys(), VirtualValues.fromArray( Values.stringArray( updatedKey ) ) );
         }
 
         @Override
@@ -311,7 +317,7 @@ public abstract class MapValue extends VirtualValue
             return () -> new Iterator<>()
             {
                 private Iterator<String> internal = map.keySet().iterator();
-                private int index;
+                private boolean hasNext = true;
 
                 @Override
                 public boolean hasNext()
@@ -322,7 +328,7 @@ public abstract class MapValue extends VirtualValue
                     }
                     else
                     {
-                        return index < updatedKeys.length;
+                        return hasNext;
                     }
                 }
 
@@ -333,9 +339,10 @@ public abstract class MapValue extends VirtualValue
                     {
                         return internal.next();
                     }
-                    else if ( index < updatedKeys.length )
+                    else if ( hasNext )
                     {
-                        return updatedKeys[index++];
+                        hasNext = false;
+                        return updatedKey;
                     }
                     else
                     {
@@ -349,21 +356,15 @@ public abstract class MapValue extends VirtualValue
         public <E extends Exception> void foreach( ThrowingBiConsumer<String,AnyValue,E> f ) throws E
         {
             map.foreach( f );
-            for ( int i = 0; i < updatedKeys.length; i++ )
-            {
-                f.accept( updatedKeys[i], updatedValues[i] );
-            }
+            f.accept( updatedKey, updatedValue );
         }
 
         @Override
         public boolean containsKey( String key )
         {
-            for ( String updatedKey : updatedKeys )
+            if ( updatedKey.equals( key ) )
             {
-                if ( updatedKey.equals( key ) )
-                {
-                    return true;
-                }
+                return true;
             }
 
             return map.containsKey( key );
@@ -372,30 +373,37 @@ public abstract class MapValue extends VirtualValue
         @Override
         public AnyValue get( String key )
         {
-            for ( int i = 0; i < updatedKeys.length; i++ )
+            if ( updatedKey.equals( key ) )
             {
-                if ( updatedKeys[i].equals( key ) )
-                {
-                    return updatedValues[i];
-                }
+                return updatedValue;
             }
+
             return map.get( key );
         }
 
         @Override
         public int size()
         {
-            return map.size() + updatedKeys.length;
+            return map.size() + 1;
+        }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return UPDATED_MAP_VALUE_SHALLOW_SIZE + map.estimatedHeapUsage() + sizeOf( updatedKey ) + updatedValue.estimatedHeapUsage();
         }
     }
 
+    private static final long COMBINED_MAP_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( CombinedMapValue.class );
     private static final class CombinedMapValue extends MapValue
     {
-        private final MapValue[] maps;
+        private final MapValue map1;
+        private final MapValue map2;
 
-        CombinedMapValue( MapValue... mapValues )
+        CombinedMapValue( MapValue map1, MapValue map2 )
         {
-            this.maps = mapValues;
+            this.map1 = map1;
+            this.map2 = map2;
         }
 
         @Override
@@ -403,23 +411,24 @@ public abstract class MapValue extends VirtualValue
         {
            return () -> new PrefetchingIterator<>()
            {
-               private int mapIndex;
-               private Iterator<String> internal;
-               private HashSet<String> seen = new HashSet<>();
+               private boolean iteratingMap2;
+               private Iterator<String> iterator = map1.keySet().iterator();
+               private Set<String> seen = new HashSet<>();
 
                @Override
                protected String fetchNextOrNull()
                {
-                   while ( mapIndex < maps.length || internal != null && internal.hasNext() )
+                   while ( !iteratingMap2 || iterator.hasNext() )
                    {
-                       if ( internal == null || !internal.hasNext() )
+                       if ( !iterator.hasNext() )
                        {
-                           internal = maps[mapIndex++].keySet().iterator();
+                           iterator = map2.keySet().iterator();
+                           iteratingMap2 = true;
                        }
 
-                       while ( internal.hasNext() )
+                       while ( iterator.hasNext() )
                        {
-                           String key = internal.next();
+                           String key = iterator.next();
                            if ( seen.add( key ) )
                            {
                                return key;
@@ -434,7 +443,7 @@ public abstract class MapValue extends VirtualValue
         @Override
         public <E extends Exception> void foreach( ThrowingBiConsumer<String,AnyValue,E> f ) throws E
         {
-            HashSet<String> seen = new HashSet<>();
+            Set<String> seen = new HashSet<>();
             ThrowingBiConsumer<String,AnyValue,E> consume = ( key, value ) ->
             {
                 if ( seen.add( key ) )
@@ -442,44 +451,36 @@ public abstract class MapValue extends VirtualValue
                     f.accept( key, value );
                 }
             };
-            for ( int i = maps.length - 1; i >= 0; i-- )
-            {
-                maps[i].foreach( consume );
-            }
+            map2.foreach( consume );
+            map1.foreach( consume );
         }
 
         @Override
         public boolean containsKey( String key )
         {
-            for ( MapValue map : maps )
+            if ( map1.containsKey( key ) )
             {
-                if ( map.containsKey( key ) )
-                {
-                    return true;
-                }
+                return true;
             }
-            return false;
+            return map2.containsKey( key );
         }
 
         @Override
         public AnyValue get( String key )
         {
-            for ( int i = maps.length - 1; i >= 0; i-- )
+            AnyValue value2 = map2.get( key );
+            if ( value2 != NO_VALUE )
             {
-                AnyValue value = maps[i].get( key );
-                if ( value != NO_VALUE )
-                {
-                    return value;
-                }
+                return value2;
             }
-            return NO_VALUE;
+            return map1.get( key );
         }
 
         @Override
         public int size()
         {
             int[] size = {0};
-            HashSet<String> seen = new HashSet<>();
+            Set<String> seen = new HashSet<>();
             ThrowingBiConsumer<String,AnyValue,RuntimeException> consume = ( key, value ) ->
             {
                 if ( seen.add( key ) )
@@ -487,11 +488,15 @@ public abstract class MapValue extends VirtualValue
                     size[0]++;
                 }
             };
-            for ( int i = maps.length - 1; i >= 0; i-- )
-            {
-                maps[i].foreach( consume );
-            }
+            map1.foreach( consume );
+            map2.foreach( consume );
             return size[0];
+        }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return COMBINED_MAP_VALUE_SHALLOW_SIZE + map1.estimatedHeapUsage() + map2.estimatedHeapUsage();
         }
     }
 
@@ -567,9 +572,9 @@ public abstract class MapValue extends VirtualValue
         int compare = Integer.compare( size, otherMap.size() );
         if ( compare == 0 )
         {
-            String[] thisKeys = StreamSupport.stream( keySet().spliterator(), false).toArray( String[]::new  );
+            String[] thisKeys = StreamSupport.stream( keySet().spliterator(), false).toArray( String[]::new );
             Arrays.sort( thisKeys, String::compareTo );
-            String[] thatKeys = StreamSupport.stream( otherMap.keySet().spliterator(), false).toArray( String[]::new  );
+            String[] thatKeys = StreamSupport.stream( otherMap.keySet().spliterator(), false).toArray( String[]::new );
             Arrays.sort( thatKeys, String::compareTo );
             for ( int i = 0; i < size; i++ )
             {
@@ -601,9 +606,9 @@ public abstract class MapValue extends VirtualValue
         int compare = Integer.compare( size, otherMap.size() );
         if ( compare == 0 )
         {
-            String[] thisKeys = StreamSupport.stream( keySet().spliterator(), false).toArray( String[]::new  );
+            String[] thisKeys = StreamSupport.stream( keySet().spliterator(), false).toArray( String[]::new );
             Arrays.sort( thisKeys, String::compareTo );
-            String[] thatKeys = StreamSupport.stream( otherMap.keySet().spliterator(), false).toArray( String[]::new  );
+            String[] thatKeys = StreamSupport.stream( otherMap.keySet().spliterator(), false).toArray( String[]::new );
             Arrays.sort( thatKeys, String::compareTo );
             for ( int i = 0; i < size; i++ )
             {
@@ -688,6 +693,8 @@ public abstract class MapValue extends VirtualValue
 
     public abstract AnyValue get( String key );
 
+    public abstract int size();
+
     public MapValue filter( BiFunction<String,AnyValue,Boolean> filterFunction )
     {
         return new FilteringMapValue( this, filterFunction );
@@ -695,31 +702,34 @@ public abstract class MapValue extends VirtualValue
 
     public MapValue updatedWith( String key, AnyValue value )
     {
-        AnyValue current = get( key );
-        if ( current.equals( value ) )
+       if ( !containsKey( key ) )
         {
-            return this;
-        }
-        else if ( current == NO_VALUE )
-        {
-            return new UpdatedMapValue( this, new String[]{key}, new AnyValue[]{value} );
+            return new UpdatedMapValue( this, key, value );
         }
         else
         {
-            return new MappedMapValue( this, ( k, v ) -> {
-                if ( k.equals( key ) )
-                {
-                    return value;
-                }
-                else
-                {
-                    return v;
-                }
-            } );
+            AnyValue current = get( key );
+            if ( current.equals( value ) )
+            {
+                return this;
+            }
+            else
+            {
+                return new MappedMapValue( this, ( k, v ) -> {
+                    if ( k.equals( key ) )
+                    {
+                        return value;
+                    }
+                    else
+                    {
+                        return v;
+                    }
+                } );
+            }
         }
     }
 
-    public MapValue updatedWith(  MapValue other )
+    public MapValue updatedWith( MapValue other )
     {
         return new CombinedMapValue( this, other );
     }
@@ -733,7 +743,7 @@ public abstract class MapValue extends VirtualValue
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder( getTypeName() + "{" );
+        StringBuilder sb = new StringBuilder( getTypeName() ).append( '{' );
         final String[] sep = new String[]{""};
         foreach( ( key, value ) ->
         {
@@ -746,13 +756,4 @@ public abstract class MapValue extends VirtualValue
         sb.append( '}' );
         return sb.toString();
     }
-
-    @Override
-    protected long estimatedPayloadSize()
-    {
-        //rough estimate
-        return size() * 150;
-    }
-
-    public abstract int size();
 }

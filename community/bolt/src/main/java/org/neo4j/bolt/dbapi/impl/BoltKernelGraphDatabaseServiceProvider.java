@@ -30,6 +30,7 @@ import org.neo4j.bolt.dbapi.BookmarkMetadata;
 import org.neo4j.bolt.runtime.AccessMode;
 import org.neo4j.bolt.runtime.Bookmark;
 import org.neo4j.bolt.txtracking.TransactionIdTracker;
+import org.neo4j.bolt.v41.messaging.RoutingContext;
 import org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.kernel.GraphDatabaseQueryService;
@@ -88,12 +89,12 @@ public class BoltKernelGraphDatabaseServiceProvider implements BoltGraphDatabase
 
     @Override
     public BoltTransaction beginTransaction( KernelTransaction.Type type, LoginContext loginContext, ClientConnectionInfo clientInfo, List<Bookmark> bookmarks,
-            Duration txTimeout, AccessMode accessMode, Map<String,Object> txMetadata )
+            Duration txTimeout, AccessMode accessMode, Map<String,Object> txMetadata, RoutingContext routingContext )
     {
         awaitUpToDate( bookmarks );
         InternalTransaction topLevelInternalTransaction = beginInternalTransaction( type, loginContext, clientInfo, txTimeout, txMetadata );
         KernelTransaction kernelTransaction = topLevelInternalTransaction.kernelTransaction();
-        if ( KernelTransaction.Type.implicit == type )
+        if ( KernelTransaction.Type.IMPLICIT == type )
         {
             return new PeriodicBoltKernelTransaction( queryExecutionEngine, transactionalContextFactory,
                     topLevelInternalTransaction, this::bookmarkWithTxId );

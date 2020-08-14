@@ -19,8 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 
 abstract class InputTestBase[CONTEXT <: RuntimeContext](
                                                          edition: Edition[CONTEXT],
@@ -111,6 +114,10 @@ abstract class InputTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .limit(1)
+<<<<<<< HEAD
+=======
+      .nonFuseable()
+>>>>>>> neo4j/4.1
       .unwind("range(x, x + 10) as y")
       .input(variables = Seq("x"))
       .build()

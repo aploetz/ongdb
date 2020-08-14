@@ -32,6 +32,7 @@ import org.neo4j.internal.schema.SchemaRule;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.StoreType;
@@ -47,6 +48,8 @@ import org.neo4j.token.api.TokenHolder;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestInstance( TestInstance.Lifecycle.PER_CLASS )
 @EphemeralPageCacheExtension
@@ -67,7 +70,7 @@ class SchemaStorageReadAndWriteTest
         @Override
         public int nextRuleId()
         {
-            return (int) storage.newRuleId();
+            return (int) storage.newRuleId( NULL );
         }
     };
 
@@ -79,7 +82,7 @@ class SchemaStorageReadAndWriteTest
     {
         testDirectory.prepareDirectory( getClass(), "test" );
         var storeFactory = new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fs, immediate() ),
-                pageCache, fs, NullLogProvider.getInstance() );
+                pageCache, fs, NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = storeFactory.openNeoStores( true, StoreType.SCHEMA, StoreType.PROPERTY_KEY_TOKEN, StoreType.LABEL_TOKEN,
                 StoreType.RELATIONSHIP_TYPE_TOKEN );
         AtomicInteger tokenIdCounter = new AtomicInteger();
@@ -87,7 +90,7 @@ class SchemaStorageReadAndWriteTest
         TokenHolders tokens = new TokenHolders( new DelegatingTokenHolder( tokenCreator, TokenHolder.TYPE_PROPERTY_KEY ),
                 new DelegatingTokenHolder( tokenCreator, TokenHolder.TYPE_LABEL ),
                 new DelegatingTokenHolder( tokenCreator, TokenHolder.TYPE_RELATIONSHIP_TYPE ) );
-        tokens.setInitialTokens( StoreTokens.allTokens( neoStores ) );
+        tokens.setInitialTokens( StoreTokens.allTokens( neoStores ), NULL );
         tokenIdCounter.set( Math.max( tokenIdCounter.get(), tokens.propertyKeyTokens().size() ) );
         tokenIdCounter.set( Math.max( tokenIdCounter.get(), tokens.labelTokens().size() ) );
         tokenIdCounter.set( Math.max( tokenIdCounter.get(), tokens.relationshipTypeTokens().size() ) );
@@ -104,8 +107,8 @@ class SchemaStorageReadAndWriteTest
     void shouldPerfectlyPreserveSchemaRules() throws Exception
     {
         SchemaRule schemaRule = randomSchema.nextSchemaRule();
-        storage.writeSchemaRule( schemaRule );
-        SchemaRule returnedRule = storage.loadSingleSchemaRule( schemaRule.getId() );
+        storage.writeSchemaRule( schemaRule, NULL, INSTANCE );
+        SchemaRule returnedRule = storage.loadSingleSchemaRule( schemaRule.getId(), NULL );
         assertTrue( RandomSchema.schemaDeepEquals( returnedRule, schemaRule ),
                 () -> "\n" + returnedRule + "\nwas not equal to\n" + schemaRule );
     }

@@ -64,7 +64,7 @@ class GraphDatabaseFacadeTest
 
         kernelTransaction = mock( KernelTransaction.class );
 
-        graphDatabaseFacade = new GraphDatabaseFacade( database, config, DatabaseInfo.COMMUNITY, mock( DatabaseAvailabilityGuard.class ) );
+        graphDatabaseFacade = new GraphDatabaseFacade( database, config, DbmsInfo.COMMUNITY, mock( DatabaseAvailabilityGuard.class ) );
     }
 
     @Test
@@ -72,7 +72,7 @@ class GraphDatabaseFacadeTest
     {
         graphDatabaseFacade.beginTx( 10, TimeUnit.MILLISECONDS );
 
-        verify( kernel ).beginTransaction( KernelTransaction.Type.explicit, AUTH_DISABLED, EMBEDDED_CONNECTION, 10L );
+        verify( kernel ).beginTransaction( KernelTransaction.Type.EXPLICIT, AUTH_DISABLED, EMBEDDED_CONNECTION, 10L );
     }
 
     @Test
@@ -81,6 +81,6 @@ class GraphDatabaseFacadeTest
         graphDatabaseFacade.beginTx();
 
         long timeout = Config.defaults().get( GraphDatabaseSettings.transaction_timeout ).toMillis();
-        verify( kernel ).beginTransaction( KernelTransaction.Type.explicit, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout );
+        verify( kernel ).beginTransaction( KernelTransaction.Type.EXPLICIT, AUTH_DISABLED, EMBEDDED_CONNECTION, timeout );
     }
 }

@@ -19,42 +19,49 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import java.util
-
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{Pipe, QueryState}
-import org.neo4j.values.AnyValue
-import org.neo4j.values.virtual.VirtualValues
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.Pipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.ListValueBuilder
 
 /**
-  * Expression that is really a pipe. An inner expression is run for every row returned by the inner pipe, and
-  * the result of the NestedPipeExpression evaluation is a collection containing the result of these inner expressions
-  */
-case class NestedPipeExpression(pipe: Pipe,
-                                inner: Expression,
-                                availableExpressionVariables: Seq[ExpressionVariable]) extends Expression {
+ * An expression which delegates evaluation to a pipe.
+ */
+abstract class NestedPipeExpression(pipe: Pipe,
+                                    availableExpressionVariables: Array[ExpressionVariable],
+                                    owningPlanId: Id) extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val initialContext = pipe.executionContextFactory.copyWith(ctx)
+  protected def createNestedResults(row: ReadableRow,
+                                    state: QueryState): Iterator[CypherRow] = {
+    val initialContext: CypherRow = createInitialContext(row, state)
+    val innerState =
+      state
+        .withInitialContext(initialContext)
+        .withDecorator(state.decorator.innerDecorator(owningPlanId))
+
+    pipe.createResults(innerState)
+  }
+
+  protected def createInitialContext(row: ReadableRow, state: QueryState): CypherRow = {
+    val initialContext = pipe.executionContextFactory.copyWith(row)
     availableExpressionVariables.foreach { expVar =>
       initialContext.set(expVar.name, state.expressionVariables(expVar.offset))
     }
-    val innerState = state.withInitialContext(initialContext).withDecorator(state.decorator.innerDecorator(owningPipe))
-
-    val results = pipe.createResults(innerState)
-    val all = new util.ArrayList[AnyValue]()
-    while (results.hasNext) {
-      all.add(inner(results.next(), state))
-    }
-    VirtualValues.fromList(all)
+    initialContext
   }
 
-  override def rewrite(f: Expression => Expression): Expression = f(NestedPipeExpression(pipe, inner.rewrite(f), availableExpressionVariables))
+  protected def collectResults(state: QueryState,
+                               results: Iterator[CypherRow],
+                               projection: Expression): ListValue = {
+    val all = ListValueBuilder.newListBuilder()
+    while (results.hasNext) {
+      all.add(projection(results.next(), state))
+    }
+    all.build()
+  }
 
-  override def arguments: Seq[Expression] = Seq(inner)
-
-  override def children: Seq[AstNode[_]] = Seq(inner) ++ availableExpressionVariables
-
-  override def toString: String = s"NestedExpression()"
+  override def toString: String = s"${getClass.getSimpleName}}()"
 }

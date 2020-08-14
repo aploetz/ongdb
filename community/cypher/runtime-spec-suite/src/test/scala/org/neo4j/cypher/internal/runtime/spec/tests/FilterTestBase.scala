@@ -19,8 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 
 abstract class FilterTestBase[CONTEXT <: RuntimeContext](
                                                           edition: Edition[CONTEXT],
@@ -76,5 +79,29 @@ abstract class FilterTestBase[CONTEXT <: RuntimeContext](
 
     // then
     runtimeResult should beColumns("i").withNoRows()
+  }
+
+  test("should filter on cached property predicate") {
+    // given
+    given {
+      nodePropertyGraph(sizeHint, {
+        case i: Int => Map("prop" -> i)
+      })
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("prop")
+      .projection("cache[n.prop] AS prop")
+      .filter(s"cache[n.prop] < ${sizeHint / 2}")
+      .cacheProperties("cache[n.prop]")
+      .allNodeScan("n")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = 0 until sizeHint/2
+    runtimeResult should beColumns("prop").withRows(singleColumn(expected))
   }
 }

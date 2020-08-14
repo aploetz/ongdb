@@ -19,16 +19,20 @@
  */
 package org.neo4j.cypher.internal.compiler.phases
 
-import org.neo4j.cypher.internal.ir.{PeriodicCommit, PlannerQuery}
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.{Cardinalities, ProvidedOrders, Solveds}
-import org.neo4j.cypher.internal.v4_0.ast.semantics.{SemanticState, SemanticTable}
-import org.neo4j.cypher.internal.v4_0.ast.{Query, Statement}
-import org.neo4j.cypher.internal.v4_0.frontend.PlannerName
-import org.neo4j.cypher.internal.v4_0.frontend.phases.{BaseState, Condition}
+import org.neo4j.cypher.internal.ast.Query
+import org.neo4j.cypher.internal.ast.Statement
+import org.neo4j.cypher.internal.ast.semantics.SemanticState
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.frontend.PlannerName
+import org.neo4j.cypher.internal.frontend.phases.BaseState
+import org.neo4j.cypher.internal.frontend.phases.Condition
+import org.neo4j.cypher.internal.ir.PeriodicCommit
+import org.neo4j.cypher.internal.ir.PlannerQuery
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.ObfuscationMetadata
+import org.neo4j.cypher.internal.util.symbols.CypherType
 
 /*
 This is the state that is used during query compilation. It accumulates more and more values as it passes through
@@ -51,7 +55,8 @@ case class LogicalPlanState(queryText: String,
                             accumulatedConditions: Set[Condition] = Set.empty,
                             initialFields: Map[String, CypherType] = Map.empty,
                             hasLoadCSV: Boolean = false,
-                            maybeReturnColumns: Option[Seq[String]] = None) extends BaseState {
+                            maybeReturnColumns: Option[Seq[String]] = None,
+                            maybeObfuscationMetadata: Option[ObfuscationMetadata] = None) extends BaseState {
 
   def query: PlannerQuery = maybeQuery getOrElse fail("The planner query")
   def logicalPlan: LogicalPlan = maybeLogicalPlan getOrElse fail("Logical plan")
@@ -63,6 +68,7 @@ case class LogicalPlanState(queryText: String,
   override def withSemanticTable(s: SemanticTable): LogicalPlanState = copy(maybeSemanticTable = Some(s))
   override def withSemanticState(s: SemanticState): LogicalPlanState = copy(maybeSemantics = Some(s))
   override def withParams(p: Map[String, Any]): LogicalPlanState = copy(maybeExtractedParams = Some(p))
+  override def withObfuscationMetadata(o: ObfuscationMetadata): LogicalPlanState = copy(maybeObfuscationMetadata = Some(o))
 
   def withMaybeLogicalPlan(p: Option[LogicalPlan]): LogicalPlanState = copy(maybeLogicalPlan = p)
 }
@@ -73,13 +79,14 @@ object LogicalPlanState {
                      startPosition = state.startPosition,
                      plannerName = state.plannerName,
                      initialFields = state.initialFields,
-                     planningAttributes = PlanningAttributes(new Solveds, new Cardinalities, new ProvidedOrders),
+                     planningAttributes = PlanningAttributes.newAttributes,
                      maybeStatement = state.maybeStatement,
                      maybeSemantics = state.maybeSemantics,
                      maybeExtractedParams = state.maybeExtractedParams,
                      maybeSemanticTable = state.maybeSemanticTable,
                      accumulatedConditions = state.accumulatedConditions,
-                     maybeReturnColumns =  state.maybeReturnColumns)
+                     maybeReturnColumns =  state.maybeReturnColumns,
+                     maybeObfuscationMetadata = state.maybeObfuscationMetadata)
 }
 
 

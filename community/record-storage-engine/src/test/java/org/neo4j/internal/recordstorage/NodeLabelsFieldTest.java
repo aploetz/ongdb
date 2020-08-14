@@ -35,16 +35,16 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Function;
 
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.DynamicNodeLabels;
 import org.neo4j.kernel.impl.store.IdUpdateListener;
 import org.neo4j.kernel.impl.store.NeoStores;
@@ -70,6 +70,9 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.Numbers.safeCastLongToInt;
 import static org.neo4j.internal.helpers.collection.Iterables.addAll;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.store.DynamicNodeLabels.allocateRecordsForDynamicLabels;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.util.Bits.bits;
 
 @EphemeralPageCacheExtension
@@ -92,10 +95,10 @@ class NodeLabelsFieldTest
     @BeforeEach
     void startUp()
     {
-        Config config = Config.defaults( GraphDatabaseSettings.label_block_size, 60 );
+        Config config = Config.defaults( GraphDatabaseInternalSettings.label_block_size, 60 );
         StoreFactory storeFactory = new StoreFactory( databaseLayout, config,
                 new DefaultIdGeneratorFactory( fs, immediate() ),
-                pageCache, fs, NullLogProvider.getInstance() );
+                pageCache, fs, NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = storeFactory.openAllNeoStores( true );
         nodeStore = neoStores.getNodeStore();
     }
@@ -115,7 +118,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId, null, null );
+        nodeLabels.add( labelId, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId ), node.getLabelField() );
@@ -130,7 +133,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId, null, null );
+        nodeLabels.add( labelId, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId ), node.getLabelField() );
@@ -146,7 +149,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId2, null, null );
+        nodeLabels.add( labelId2, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId1, labelId2 ), node.getLabelField() );
@@ -163,7 +166,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId3, null, null );
+        nodeLabels.add( labelId3, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId1, labelId2, labelId3 ), node.getLabelField() );
@@ -181,7 +184,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId4, null, null );
+        nodeLabels.add( labelId4, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId1, labelId2, labelId3, labelId4 ), node.getLabelField() );
@@ -200,7 +203,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        nodeLabels.add( labelId5, null, null );
+        nodeLabels.add( labelId5, null, null, NULL, INSTANCE );
 
         // THEN
         assertEquals( inlinedLabelsLongRepresentation( labelId1, labelId2, labelId3, labelId4, labelId5 ),
@@ -219,13 +222,13 @@ class NodeLabelsFieldTest
 
         // WHEN
         Collection<DynamicRecord> changedDynamicRecords = nodeLabels.add( labelId3, nodeStore,
-            nodeStore.getDynamicLabelStore() );
+            nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
 
         // THEN
         assertEquals( 1, Iterables.count( changedDynamicRecords ) );
         assertEquals( dynamicLabelsLongRepresentation( changedDynamicRecords ), node.getLabelField() );
         Assertions.assertArrayEquals( new long[]{labelId1, labelId2, labelId3},
-            DynamicNodeLabels.getDynamicLabelsArray( changedDynamicRecords, nodeStore.getDynamicLabelStore() ) );
+            DynamicNodeLabels.getDynamicLabelsArray( changedDynamicRecords, nodeStore.getDynamicLabelStore(), NULL ) );
     }
 
     @Test
@@ -238,7 +241,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        Set<DynamicRecord> changedDynamicRecords = Iterables.asSet( nodeLabels.add( 1, nodeStore, nodeStore.getDynamicLabelStore() ) );
+        Set<DynamicRecord> changedDynamicRecords = Iterables.asSet( nodeLabels.add( 1, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE ) );
 
         // THEN
         assertTrue( changedDynamicRecords.containsAll( initialRecords ) );
@@ -256,7 +259,7 @@ class NodeLabelsFieldTest
 
         // WHEN
         Pair<Long,long[]> pair = DynamicNodeLabels.getDynamicLabelsArrayAndOwner( initialRecords,
-            nodeStore.getDynamicLabelStore() );
+            nodeStore.getDynamicLabelStore(), NULL );
 
         // THEN
         assertEquals( nodeId,  pair.first() );
@@ -274,7 +277,7 @@ class NodeLabelsFieldTest
         // WHEN
         List<DynamicRecord> changedDynamicRecords = addAll(
             new ArrayList<>(),
-            nodeLabels.remove( 255 /*Initial labels go from 255 and down to 255-58*/, nodeStore ) );
+            nodeLabels.remove( 255 /*Initial labels go from 255 and down to 255-58*/, nodeStore, NULL, INSTANCE ) );
 
         // THEN
         assertEquals( initialRecords, changedDynamicRecords );
@@ -292,11 +295,11 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         List<DynamicRecord> changedDynamicRecords = addAll( new ArrayList<>(),
-            nodeLabels.remove( 255 /*Initial labels go from 255 and down to 255-58*/, nodeStore ) );
+            nodeLabels.remove( 255 /*Initial labels go from 255 and down to 255-58*/, nodeStore, NULL, INSTANCE ) );
 
         // WHEN
         Pair<Long,long[]> changedPair = DynamicNodeLabels.getDynamicLabelsArrayAndOwner( changedDynamicRecords,
-            nodeStore.getDynamicLabelStore() );
+            nodeStore.getDynamicLabelStore(), NULL );
 
         // THEN
         assertEquals( nodeId,  changedPair.first() );
@@ -311,7 +314,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        Collection<DynamicRecord> changedDynamicRecords = Iterables.asCollection( nodeLabels.remove( 255, nodeStore ) );
+        Collection<DynamicRecord> changedDynamicRecords = Iterables.asCollection( nodeLabels.remove( 255, nodeStore, NULL, INSTANCE ) );
 
         // THEN
         assertEquals( initialRecords, changedDynamicRecords );
@@ -355,7 +358,7 @@ class NodeLabelsFieldTest
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
         // WHEN
-        Iterable<DynamicRecord> changedDynamicRecords = nodeLabels.add( 23, nodeStore, nodeStore.getDynamicLabelStore() );
+        Iterable<DynamicRecord> changedDynamicRecords = nodeLabels.add( 23, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
 
         // THEN
         assertEquals( dynamicLabelsLongRepresentation( changedDynamicRecords ), node.getLabelField() );
@@ -373,7 +376,7 @@ class NodeLabelsFieldTest
         // WHEN
         try
         {
-            nodeLabels.add( labelId, nodeStore, nodeStore.getDynamicLabelStore() );
+            nodeLabels.add( labelId, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
             fail( "Should have thrown exception" );
         }
         catch ( IllegalStateException e )
@@ -393,7 +396,7 @@ class NodeLabelsFieldTest
         // WHEN
         try
         {
-            nodeLabels.add( safeCastLongToInt( labels[0] ), nodeStore, nodeStore.getDynamicLabelStore() );
+            nodeLabels.add( safeCastLongToInt( labels[0] ), nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
             fail( "Should have thrown exception" );
         }
         catch ( IllegalStateException e )
@@ -411,7 +414,7 @@ class NodeLabelsFieldTest
         NodeRecord node = nodeRecordWithInlinedLabels( labelId1 );
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
-        assertThrows( IllegalStateException.class, () -> nodeLabels.remove( labelId2, nodeStore ) );
+        assertThrows( IllegalStateException.class, () -> nodeLabels.remove( labelId2, nodeStore, NULL, INSTANCE ) );
     }
 
     @Test
@@ -422,7 +425,7 @@ class NodeLabelsFieldTest
         NodeRecord node = nodeRecordWithDynamicLabels( nodeStore, labels );
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
-        assertThrows( IllegalStateException.class, () -> nodeLabels.remove( 123456, nodeStore ) );
+        assertThrows( IllegalStateException.class, () -> nodeLabels.remove( 123456, nodeStore, NULL, INSTANCE ) );
     }
 
     @Test
@@ -435,7 +438,7 @@ class NodeLabelsFieldTest
 
         // WHEN
         Set<DynamicRecord> reallocatedRecords = Iterables.asUniqueSet( nodeLabels.put( fourByteLongs( 100 ), nodeStore,
-            nodeStore.getDynamicLabelStore() ) );
+            nodeStore.getDynamicLabelStore(), NULL, INSTANCE ) );
 
         // THEN
         assertTrue( reallocatedRecords.containsAll( initialRecords ) );
@@ -452,7 +455,7 @@ class NodeLabelsFieldTest
 
         // WHEN
         Set<DynamicRecord> reallocatedRecords = Iterables.asUniqueSet( nodeLabels.put( fourByteLongs( 5 ), nodeStore,
-            nodeStore.getDynamicLabelStore() ) );
+            nodeStore.getDynamicLabelStore(), NULL, INSTANCE ) );
 
         // THEN
         assertTrue( idsOf( initialRecords ).containsAll( idsOf( used( reallocatedRecords ) ) ),
@@ -485,7 +488,7 @@ class NodeLabelsFieldTest
             {
                 if ( !key.contains( labelId ) )
                 {
-                    labels.add( labelId, nodeStore, nodeStore.getDynamicLabelStore() );
+                    labels.add( labelId, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
                     key.add( labelId );
                 }
             }
@@ -493,14 +496,14 @@ class NodeLabelsFieldTest
             {
                 if ( key.remove( labelId ) )
                 {
-                    labels.remove( labelId, nodeStore );
+                    labels.remove( labelId, nodeStore, NULL, INSTANCE );
                 }
             }
         }
 
         // THEN
         NodeLabels labels = NodeLabelsField.parseLabelsField( node );
-        long[] readLabelIds = labels.get( nodeStore );
+        long[] readLabelIds = labels.get( nodeStore, NULL );
         for ( long labelId : readLabelIds )
         {
             assertTrue( key.remove( (int) labelId ), "Found an unexpected label " + labelId );
@@ -527,7 +530,7 @@ class NodeLabelsFieldTest
 
     private NodeRecord nodeRecordWithInlinedLabels( long... labels )
     {
-        NodeRecord node = new NodeRecord( 0, false, 0, 0 );
+        NodeRecord node = new NodeRecord( 0 ).initialize( false, 0, false, 0, 0 );
         if ( labels.length > 0 )
         {
             node.setLabelField( inlinedLabelsLongRepresentation( labels ), Collections.emptyList() );
@@ -542,7 +545,7 @@ class NodeLabelsFieldTest
 
     private NodeRecord nodeRecordWithDynamicLabels( long nodeId, NodeStore nodeStore, long... labels )
     {
-        NodeRecord node = new NodeRecord( nodeId, false, 0, 0 );
+        NodeRecord node = new NodeRecord( nodeId ).initialize( false, 0, false, 0, 0 );
         Collection<DynamicRecord> initialRecords = allocateAndApply( nodeStore, node.getId(), labels );
         node.setLabelField( dynamicLabelsLongRepresentation( initialRecords ), initialRecords );
         return node;
@@ -550,8 +553,8 @@ class NodeLabelsFieldTest
 
     private Collection<DynamicRecord> allocateAndApply( NodeStore nodeStore, long nodeId, long[] longs )
     {
-        Collection<DynamicRecord> records = DynamicNodeLabels.allocateRecordsForDynamicLabels( nodeId, longs, nodeStore.getDynamicLabelStore() );
-        nodeStore.updateDynamicLabelRecords( records, IdUpdateListener.DIRECT );
+        Collection<DynamicRecord> records = allocateRecordsForDynamicLabels( nodeId, longs, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
+        nodeStore.updateDynamicLabelRecords( records, IdUpdateListener.DIRECT, NULL );
         return records;
     }
 
@@ -592,7 +595,11 @@ class NodeLabelsFieldTest
 
     private static <T extends AbstractBaseRecord> Iterable<T> cloned( Iterable<T> items, final Class<T> itemClass )
     {
+<<<<<<< HEAD
         return Iterables.map( obj -> itemClass.cast( obj.clone() ), items );
+=======
+        return Iterables.map( obj -> itemClass.cast( obj.copy() ), items );
+>>>>>>> neo4j/4.1
     }
 
     private static LongSet idsOf( Set<DynamicRecord> records )

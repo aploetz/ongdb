@@ -20,14 +20,20 @@
 package org.neo4j.cypher.internal.runtime.spec.tests
 
 import org.mockito.Mockito.when
-import org.neo4j.cypher.internal.runtime.spec.{Edition, LogicalQueryBuilder, RuntimeTestSuite}
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.exceptions.EntityNotFoundException
-import org.neo4j.graphdb.{Label, Node, Relationship}
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Relationship
 
 abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT],
                                                              runtime: CypherRuntime[CONTEXT]) extends RuntimeTestSuite(edition, runtime) {
-  test("should check if label is set on node") {
+  test("hasLabel on top of allNodeScan") {
     // given
     val size = 100
     given {
@@ -44,6 +50,58 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
       .produceResults("hasLabel")
       .projection("x:Label AS hasLabel")
       .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("hasLabel").withRows(singleColumn((0 until size).map(_ % 2 == 0)))
+  }
+
+  test("hasLabel on top of indexScan") {
+    // given
+    val size = 100
+    given {
+      index("Label", "prop")
+      for (i <- 0 until size) {
+        if (i % 2 == 0) {
+          tx.createNode(Label.label("Label"), Label.label("Other")).setProperty("prop", i)
+        } else {
+          tx.createNode(Label.label("Label")).setProperty("prop", i)
+        }
+      }
+    }
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("hasLabel")
+      .projection("x:Other AS hasLabel")
+      .nodeIndexOperator("x:Label(prop)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("hasLabel").withRows(singleColumn((0 until size).map(_ % 2 == 0)))
+  }
+
+  test("hasLabel on top of labelNodeScan") {
+    // given
+    val size = 100
+    given {
+      index("Label", "prop")
+      for (i <- 0 until size) {
+        if (i % 2 == 0) {
+          tx.createNode(Label.label("Label"), Label.label("Other")).setProperty("prop", i)
+        } else {
+          tx.createNode(Label.label("Label")).setProperty("prop", i)
+        }
+      }
+    }
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("hasLabel")
+      .projection("x:Other AS hasLabel")
+      .nodeByLabelScan("x", "Label", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -71,7 +129,7 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("hasLabel").withRows(singleColumn(Seq(false)))
   }
 
-  test("should handle node property access") {
+  test("should handle node property access on top of allNode") {
     // given
     val size = 100
     given {
@@ -91,6 +149,118 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
 
     // then
     runtimeResult should beColumns("prop").withRows(singleColumn(0 until size))
+  }
+
+  test("should handle node property access on top of labelScan") {
+    // given
+    val size = 100
+    given {
+      nodePropertyGraph(size, {
+        case i: Int => Map("prop" -> i)
+      }, "Label")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("prop")
+      .projection("x.prop AS prop")
+      .nodeByLabelScan("x", "Label", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("prop").withRows(singleColumn(0 until size))
+  }
+
+  test("should handle node property access on top of indexScan") {
+    // given
+    val size = 100
+    given {
+      index("Label", "prop")
+      nodePropertyGraph(size, {
+        case i: Int => Map("prop" -> i)
+      }, "Label")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("prop")
+      .projection("x.prop AS prop")
+      .nodeIndexOperator("x:Label(prop)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("prop").withRows(singleColumn(0 until size))
+  }
+
+  test("should handle hasProperty on top of allNode") {
+    // given
+    val size = 100
+    given {
+      nodePropertyGraph(size, {
+        case i if i % 2 == 0 => Map("prop" -> i)
+      }, "Label")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("hasProp")
+      .projection("EXISTS(x.prop) AS hasProp")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("hasProp").withRows(singleColumn((0 until size).map(_ % 2 == 0)))
+  }
+
+  test("should handle hasProperty on top of labelScan") {
+    // given
+    val size = 100
+    given {
+      nodePropertyGraph(size, {
+        case i if i % 2 == 0 => Map("prop" -> i)
+      }, "Label")
+    }
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("hasProp")
+      .projection("EXISTS(x.prop) AS hasProp")
+      .nodeByLabelScan("x", "Label", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("hasProp").withRows(singleColumn((0 until size).map(_ % 2 == 0)))
+  }
+
+  test("should handle hasProperty on top of indexScan") {
+    // given
+    val size = 100
+    given {
+      index("Label", "other")
+      nodePropertyGraph(size, {
+        case i if i % 2 == 0 => Map("prop" -> i, "other" -> i)
+        case i => Map("other" -> i)
+      }, "Label")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("hasProp")
+      .projection("EXISTS(x.prop) AS hasProp")
+      .nodeIndexOperator("x:Label(other)")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("hasProp").withRows(singleColumn((0 until size).map(_ % 2 == 0)))
   }
 
   test("should return null if node property is not there") {
@@ -197,6 +367,57 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("prop").withRows(singleColumn(Seq(null)))
   }
 
+<<<<<<< HEAD
+=======
+  test("should read property from correct entity (rel/long slot)") {
+    // given
+    val size = 100
+    val halfSize = size / 2
+    val nodes =
+      given {
+        nodePropertyGraph(size, { case i => Map("prop" -> i) })
+      }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("longNodeProp", "refNodeProp")
+      .projection("longNode.prop AS longNodeProp", "refNode.prop AS refNodeProp")
+      .input(nodes = Seq("longNode"), variables = Seq("refNode"))
+      .build()
+
+    val input = inputColumns(1, halfSize, i => nodes(i), i => nodes(halfSize + i))
+    val runtimeResult = execute(logicalQuery, runtime, input)
+
+    // then
+    val expected = (0 until halfSize).map(i => Array[Any](i, halfSize+i))
+    runtimeResult should beColumns("longNodeProp", "refNodeProp").withRows(expected)
+  }
+
+  test("should read cached property from correct entity (rel/long slot)") {
+    // given
+    val size = 100
+    val halfSize = size / 2
+    val nodes =
+      given {
+        nodePropertyGraph(size, { case i => Map("prop" -> i) })
+      }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("longNodeProp", "refNodeProp")
+      .projection("cache[longNode.prop] AS longNodeProp", "cache[refNode.prop] AS refNodeProp")
+      .input(nodes = Seq("longNode"), variables = Seq("refNode"))
+      .build()
+
+    val input = inputColumns(1, halfSize, i => nodes(i), i => nodes(halfSize + i))
+    val runtimeResult = execute(logicalQuery, runtime, input)
+
+    // then
+    val expected = (0 until halfSize).map(i => Array[Any](i, halfSize+i))
+    runtimeResult should beColumns("longNodeProp", "refNodeProp").withRows(expected)
+  }
+
+>>>>>>> neo4j/4.1
   test("result of all function should be a boolean") {
     // given
     val size = 100
@@ -272,6 +493,33 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     val expected = for (i <- 0 until size) yield Array[Any](i, true)
     runtimeResult should beColumns("x", "y").withRows(expected)
   }
+<<<<<<< HEAD
+=======
+}
+
+// Supported by all non-parallel runtimes
+trait ThreadUnsafeExpressionTests[CONTEXT <: RuntimeContext] {
+  self: ExpressionTestBase[CONTEXT] =>
+
+  test("should get type of relationship") {
+    // given
+    val size = 11
+    val paths = given { chainGraphs(size, "TO") }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("t")
+      .projection("type(r) AS t")
+      .expand("(x)-[r]->(y)")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("t").withRows(singleColumn((1 to size).map(_ => "TO")))
+  }
+>>>>>>> neo4j/4.1
 }
 
 // Supported by all runtimes that can deal with changes in the tx-state

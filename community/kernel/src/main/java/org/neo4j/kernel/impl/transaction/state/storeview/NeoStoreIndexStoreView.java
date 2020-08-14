@@ -23,11 +23,13 @@ import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 
 import org.neo4j.internal.helpers.collection.Visitor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.index.IndexStoreView;
 import org.neo4j.kernel.impl.api.index.StoreScan;
 import org.neo4j.lock.LockService;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.storageengine.api.StorageReader;
 
@@ -49,23 +51,26 @@ public class NeoStoreIndexStoreView implements IndexStoreView
     public <FAILURE extends Exception> StoreScan<FAILURE> visitNodes(
             final int[] labelIds, IntPredicate propertyKeyIdFilter,
             final Visitor<EntityUpdates, FAILURE> propertyUpdatesVisitor,
-            final Visitor<NodeLabelUpdate, FAILURE> labelUpdateVisitor,
-            boolean forceStoreScan )
+            final Visitor<EntityTokenUpdate, FAILURE> labelUpdateVisitor,
+            boolean forceStoreScan, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        return new StoreViewNodeStoreScan<>( storageEngine.get(), locks, labelUpdateVisitor,
-                propertyUpdatesVisitor, labelIds, propertyKeyIdFilter );
+        return new NodeStoreScan<>( storageEngine.get(), locks, labelUpdateVisitor,
+                propertyUpdatesVisitor, labelIds, propertyKeyIdFilter, cursorTracer, memoryTracker );
     }
 
     @Override
     public <FAILURE extends Exception> StoreScan<FAILURE> visitRelationships( final int[] relationshipTypeIds, IntPredicate propertyKeyIdFilter,
-            final Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor )
+            final Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor,
+            Visitor<EntityTokenUpdate,FAILURE> relationshipTypeUpdateVisitor,
+            boolean forceStoreScan, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        return new RelationshipStoreScan<>( storageEngine.get(), locks, propertyUpdatesVisitor, relationshipTypeIds, propertyKeyIdFilter );
+        return new RelationshipStoreScan<>( storageEngine.get(), locks, relationshipTypeUpdateVisitor, propertyUpdatesVisitor, relationshipTypeIds,
+                propertyKeyIdFilter, cursorTracer, memoryTracker );
     }
 
     @Override
-    public NodePropertyAccessor newPropertyAccessor()
+    public NodePropertyAccessor newPropertyAccessor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        return new DefaultNodePropertyAccessor( storageEngine.get() );
+        return new DefaultNodePropertyAccessor( storageEngine.get(), cursorTracer, memoryTracker );
     }
 }

@@ -47,14 +47,14 @@ public class NodeIdsIndexReaderQueryAnswer implements Answer
     {
         IndexProgressor.EntityValueClient client = invocation.getArgument( 1 );
         NodeValueIndexProgressor progressor = new NodeValueIndexProgressor( iterator( EMPTY, nodeIds ), client );
-        client.initialize( descriptor, progressor, getIndexQueryArgument( invocation ), invocation.getArgument( 2 ), invocation.getArgument( 3 ), false );
+        client.initialize( descriptor, progressor, getIndexQueryArgument( invocation ), invocation.getArgument( 2 ), false );
         return null;
     }
 
     public static IndexQuery[] getIndexQueryArgument( InvocationOnMock invocation )
     {
-        // Apparently vararg arguments from mockitor can either be non-existent, a single value or an array...
-        Object rawQuery = invocation.getArgument( 4 );
+        // Apparently vararg arguments from mockito can either be non-existent, a single value or an array...
+        Object rawQuery = invocation.getArgument( 3 );
         return rawQuery.getClass().isArray() ? (IndexQuery[]) rawQuery : array( (IndexQuery) rawQuery );
     }
 }

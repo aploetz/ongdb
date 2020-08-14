@@ -25,8 +25,13 @@ import org.neo4j.graphdb.spatial.Geometry;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.ValueMapper;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOfObjectArray;
+
 public final class PointArray extends NonPrimitiveArray<PointValue>
 {
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance( PointArray.class );
+
     private final PointValue[] value;
 
     PointArray( PointValue[] value )
@@ -95,9 +100,9 @@ public final class PointArray extends NonPrimitiveArray<PointValue>
     }
 
     @Override
-    long sizePerItem()
+    public long estimatedHeapUsage()
     {
-        //assume 2D
-        return 60;
+        int length = value.length;
+        return SHALLOW_SIZE + (length == 0 ? 0 : sizeOfObjectArray( value[0].estimatedHeapUsage(), length ));
     }
 }

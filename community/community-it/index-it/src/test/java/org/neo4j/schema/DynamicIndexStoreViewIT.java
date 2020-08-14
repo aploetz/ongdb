@@ -52,7 +52,7 @@ import static org.neo4j.test.DoubleLatch.awaitLatch;
 
 @Neo4jLayoutExtension
 @ExtendWith( SuppressOutputExtension.class )
-public class DynamicIndexStoreViewIT
+class DynamicIndexStoreViewIT
 {
     @Inject
     private SuppressOutput suppressOutput;
@@ -118,7 +118,7 @@ public class DynamicIndexStoreViewIT
         {
             managementService.shutdown();
             ConsistencyCheckService consistencyCheckService = new ConsistencyCheckService();
-            Config config = Config.defaults(  GraphDatabaseSettings.pagecache_memory, "8m" );
+            Config config = Config.defaults( GraphDatabaseSettings.pagecache_memory, "8m" );
             consistencyCheckService.runFullConsistencyCheck( databaseLayout, config,
                     ProgressMonitorFactory.NONE, FormattedLogProvider.toOutputStream( System.out ), false );
         }

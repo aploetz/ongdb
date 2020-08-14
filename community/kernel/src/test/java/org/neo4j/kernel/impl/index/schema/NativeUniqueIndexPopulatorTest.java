@@ -26,6 +26,7 @@ import java.io.IOException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
+import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.IndexUpdater;
@@ -37,6 +38,7 @@ import static org.apache.commons.lang3.exception.ExceptionUtils.hasCause;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.PhaseTracker.nullInstance;
 
 abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, VALUE extends NativeIndexValue> extends NativeIndexPopulatorTests<KEY,VALUE>
@@ -57,9 +59,10 @@ abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, V
     }
 
     @Override
-    NativeIndexPopulator<KEY,VALUE> createPopulator() throws IOException
+    NativeIndexPopulator<KEY,VALUE> createPopulator( PageCache pageCache ) throws IOException
     {
-        return populatorFactory.create( pageCache, fs, indexFiles, layout, monitor, indexDescriptor );
+        DatabaseIndexContext context = DatabaseIndexContext.builder( pageCache, fs ).withMonitor( monitor ).build();
+        return populatorFactory.create( context, indexFiles, layout, indexDescriptor );
     }
 
     @Override
@@ -83,11 +86,11 @@ abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, V
 
         assertThrows( IndexEntryConflictException.class, () ->
         {
-            populator.add( asList( updates ) );
-            populator.scanCompleted( nullInstance );
+            populator.add( asList( updates ), NULL );
+            populator.scanCompleted( nullInstance, jobScheduler, NULL );
         } );
 
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -96,7 +99,7 @@ abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, V
         // given
         populator.create();
         IndexEntryUpdate<IndexDescriptor>[] updates = valueCreatorUtil.someUpdatesWithDuplicateValues( random );
-        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor );
+        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor, NULL );
 
         // when
         for ( IndexEntryUpdate<IndexDescriptor> update : updates )
@@ -106,11 +109,11 @@ abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, V
         var e = assertThrows( Exception.class, () ->
         {
             updater.close();
-            populator.scanCompleted( nullInstance );
+            populator.scanCompleted( nullInstance, jobScheduler, NULL );
         } );
         assertTrue( hasCause( e, IndexEntryConflictException.class ), e.getMessage() );
 
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -121,18 +124,18 @@ abstract class NativeUniqueIndexPopulatorTest<KEY extends NativeIndexKey<KEY>, V
         IndexEntryUpdate<IndexDescriptor>[] updates = valueCreatorUtil.someUpdates( random );
 
         // WHEN
-        populator.add( asList( updates ) );
+        populator.add( asList( updates ), NULL );
         for ( IndexEntryUpdate<IndexDescriptor> update : updates )
         {
             populator.includeSample( update );
         }
-        populator.scanCompleted( nullInstance );
-        IndexSample sample = populator.sampleResult();
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
+        IndexSample sample = populator.sample( NULL );
 
         // THEN
         assertEquals( updates.length, sample.sampleSize() );
         assertEquals( updates.length, sample.uniqueValues() );
         assertEquals( updates.length, sample.indexSize() );
-        populator.close( true );
+        populator.close( true, NULL );
     }
 }

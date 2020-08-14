@@ -21,7 +21,6 @@ package org.neo4j.kernel.impl.api.integrationtest;
 
 import org.junit.jupiter.api.Test;
 
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.SchemaWrite;
@@ -30,14 +29,11 @@ import org.neo4j.internal.kernel.api.TokenWrite;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.schema.UniquePropertyValueValidationException;
 import org.neo4j.kernel.api.security.AnonymousContext;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -67,7 +63,7 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         // then
         catch ( UniquePropertyValueValidationException e )
         {
-            assertThat( e.getUserMessage( tokenLookup( transaction ) ), containsString( "`key1` = 'value1'" ) );
+            assertThat( e.getUserMessage( transaction.tokenRead() ) ).contains( "`key1` = 'value1'" );
         }
         commit();
     }
@@ -120,7 +116,7 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         // then
         catch ( UniquePropertyValueValidationException e )
         {
-            assertThat( e.getUserMessage( tokenLookup( transaction ) ), containsString( "`key1` = 1" ) );
+            assertThat( e.getUserMessage( transaction.tokenRead() ) ).contains( "`key1` = 1" );
         }
         commit();
     }
@@ -145,7 +141,7 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         // then
         catch ( UniquePropertyValueValidationException e )
         {
-            assertThat( e.getUserMessage( tokenLookup( transaction ) ), containsString( "`key1` = 'value1'" ) );
+            assertThat( e.getUserMessage( transaction.tokenRead() ) ).contains( "`key1` = 'value1'" );
         }
         commit();
     }
@@ -228,7 +224,7 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         // then
         catch ( UniquePropertyValueValidationException e )
         {
-            assertThat( e.getUserMessage( tokenLookup( transaction ) ), containsString( "`key1` = 'value2'" ) );
+            assertThat( e.getUserMessage( transaction.tokenRead() ) ).contains( "`key1` = 'value2'" );
         }
         commit();
     }
@@ -310,10 +306,9 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         createLabeledNode( transaction, "Item", "id", 2 );
 
         // then I should find the original node
-        try ( NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor() )
+        try ( NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor( transaction.pageCursorTracer() ) )
         {
-            assertThat( transaction.dataRead().lockingNodeUniqueIndexSeek( idx, cursor, exact( propId, Values.of( 1 ) ) ),
-                    equalTo( ourNode ) );
+            assertThat( transaction.dataRead().lockingNodeUniqueIndexSeek( idx, cursor, exact( propId, Values.of( 1 ) ) ) ).isEqualTo( ourNode );
         }
         commit();
     }
@@ -340,17 +335,11 @@ class UniquenessConstraintValidationIT extends KernelIntegrationTest
         createLabeledNode( transaction, "Person", "id", 2 );
 
         // then I should find the original node
-        try ( NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor() )
+        try ( NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor( transaction.pageCursorTracer() ) )
         {
-            assertThat( transaction.dataRead().lockingNodeUniqueIndexSeek( idx, cursor, exact( propId, Values.of( 1 ) ) ),
-                    equalTo( ourNode ) );
+            assertThat( transaction.dataRead().lockingNodeUniqueIndexSeek( idx, cursor, exact( propId, Values.of( 1 ) ) ) ).isEqualTo( ourNode );
         }
         commit();
-    }
-
-    private static TokenNameLookup tokenLookup( KernelTransaction transaction )
-    {
-        return new SilentTokenNameLookup( transaction.tokenRead() );
     }
 
     private static long createLabeledNode( KernelTransaction transaction, String label ) throws KernelException

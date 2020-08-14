@@ -29,6 +29,7 @@ import java.util.function.Function;
 
 import org.neo4j.consistency.RecordType;
 import org.neo4j.consistency.report.ConsistencyReport;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.PropertyType;
@@ -65,7 +66,7 @@ class SafePropertyChainReader implements AutoCloseable
     private final CheckerContext context;
     private final NeoStores neoStores;
 
-    SafePropertyChainReader( CheckerContext context )
+    SafePropertyChainReader( CheckerContext context, PageCursorTracer cursorTracer )
     {
         this.context = context;
         this.neoStores = context.neoStores;
@@ -73,16 +74,16 @@ class SafePropertyChainReader implements AutoCloseable
         this.stringStoreBlockSize = neoStores.getPropertyStore().getStringStore().getRecordDataSize();
         this.arrayStoreBlockSize = neoStores.getPropertyStore().getArrayStore().getRecordDataSize();
         this.propertyStore = neoStores.getPropertyStore();
-        this.propertyReader = new RecordReader<>( neoStores.getPropertyStore() );
-        this.stringReader = new RecordReader<>( neoStores.getPropertyStore().getStringStore() );
-        this.arrayReader = new RecordReader<>( neoStores.getPropertyStore().getArrayStore() );
+        this.propertyReader = new RecordReader<>( neoStores.getPropertyStore(), cursorTracer );
+        this.stringReader = new RecordReader<>( neoStores.getPropertyStore().getStringStore(), cursorTracer );
+        this.arrayReader = new RecordReader<>( neoStores.getPropertyStore().getArrayStore(), cursorTracer );
         this.seenRecords = new LongHashSet();
         this.seenDynamicRecordIds = new LongHashSet();
         this.dynamicRecords = new ArrayList<>();
     }
 
     <PRIMITIVE extends PrimitiveRecord> boolean read( MutableIntObjectMap<Value> intoValues, PRIMITIVE entity,
-            Function<PRIMITIVE,ConsistencyReport.PrimitiveConsistencyReport> primitiveReporter )
+            Function<PRIMITIVE,ConsistencyReport.PrimitiveConsistencyReport> primitiveReporter, PageCursorTracer cursorTracer )
     {
         lightClear( seenRecords );
         long propertyRecordId = entity.getNextProp();
@@ -101,7 +102,7 @@ class SafePropertyChainReader implements AutoCloseable
             if ( !propertyRecord.inUse() )
             {
                 primitiveReporter.apply( entity ).propertyNotInUse( propertyRecord );
-                reporter.forProperty( context.recordLoader.property( previousRecordId ) ).nextNotInUse( propertyRecord );
+                reporter.forProperty( context.recordLoader.property( previousRecordId, cursorTracer ) ).nextNotInUse( propertyRecord );
                 chainIsOk = false;
             }
             else
@@ -114,7 +115,7 @@ class SafePropertyChainReader implements AutoCloseable
                     }
                     else
                     {
-                        reporter.forProperty( context.recordLoader.property( previousRecordId ) ).nextDoesNotReferenceBack( propertyRecord );
+                        reporter.forProperty( context.recordLoader.property( previousRecordId, cursorTracer ) ).nextDoesNotReferenceBack( propertyRecord );
                         // prevDoesNotReferenceBack is not reported, unnecessary double report (same inconsistency from different directions)
                     }
                     chainIsOk = false;
@@ -125,7 +126,7 @@ class SafePropertyChainReader implements AutoCloseable
                     int propertyKeyId = block.getKeyIndexId();
                     if ( !checkValidToken( propertyRecord, propertyKeyId, context.tokenHolders.propertyKeyTokens(), neoStores.getPropertyKeyTokenStore(),
                             ( property, token ) -> reporter.forProperty( property ).invalidPropertyKey( block ),
-                            ( property, token ) -> reporter.forProperty( property ).keyNotInUse( block, token ) ) )
+                            ( property, token ) -> reporter.forProperty( property ).keyNotInUse( block, token ), cursorTracer ) )
                     {
                         chainIsOk = false;
                     }
@@ -143,7 +144,11 @@ class SafePropertyChainReader implements AutoCloseable
                             {
                             case STRING:
                                 dynamicRecords.clear();
+<<<<<<< HEAD
                                 if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.clone() ), stringReader, seenDynamicRecordIds,
+=======
+                                if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.copy() ), stringReader, seenDynamicRecordIds,
+>>>>>>> neo4j/4.1
                                         block.getSingleValueLong(), stringStoreBlockSize, NO_DYNAMIC_HANDLER,
                                         ( id, record ) -> reporter.forProperty( propertyRecord ).stringNotInUse( block, record ),
                                         ( id, record ) -> reporter.forDynamicBlock( RecordType.STRING_PROPERTY, stringReader.record() ).nextNotInUse( record ),
@@ -151,12 +156,16 @@ class SafePropertyChainReader implements AutoCloseable
                                         record -> reporter.forDynamicBlock( RecordType.STRING_PROPERTY, record ).recordNotFullReferencesNext(),
                                         record -> reporter.forDynamicBlock( RecordType.STRING_PROPERTY, record ).invalidLength() ) )
                                 {
-                                    value = Values.stringValue( propertyStore.getStringFor( dynamicRecords ) );
+                                    value = propertyStore.getTextValueFor( dynamicRecords, cursorTracer );
                                 }
                                 break;
                             case ARRAY:
                                 dynamicRecords.clear();
+<<<<<<< HEAD
                                 if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.clone() ), arrayReader, seenDynamicRecordIds,
+=======
+                                if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.copy() ), arrayReader, seenDynamicRecordIds,
+>>>>>>> neo4j/4.1
                                         block.getSingleValueLong(), arrayStoreBlockSize, NO_DYNAMIC_HANDLER,
                                         ( id, record ) -> reporter.forProperty( propertyRecord ).arrayNotInUse( block, record ),
                                         ( id, record ) -> reporter.forDynamicBlock( RecordType.ARRAY_PROPERTY, arrayReader.record() ).nextNotInUse( record ),
@@ -164,11 +173,11 @@ class SafePropertyChainReader implements AutoCloseable
                                         record -> reporter.forDynamicBlock( RecordType.ARRAY_PROPERTY, record ).recordNotFullReferencesNext(),
                                         record -> reporter.forDynamicBlock( RecordType.ARRAY_PROPERTY, record ).invalidLength() ) )
                                 {
-                                    value = propertyStore.getArrayFor( dynamicRecords );
+                                    value = propertyStore.getArrayFor( dynamicRecords, cursorTracer );
                                 }
                                 break;
                             default:
-                                value = type.value( block, null );
+                                value = type.value( block, null, cursorTracer );
                                 break;
                             }
                         }

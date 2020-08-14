@@ -24,13 +24,13 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.neo4j.configuration.Config;
 import org.neo4j.graphdb.NotInTransactionException;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.api.query.ExecutingQuery;
 import org.neo4j.kernel.database.TestDatabaseIdRepository;
 import org.neo4j.lock.LockTracer;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -71,7 +71,7 @@ class KernelStatementTest
         KernelTransactionImplementation transaction = mock( KernelTransactionImplementation.class );
 
         KernelTransactionImplementation.Statistics statistics = new KernelTransactionImplementation.Statistics( transaction,
-                new AtomicReference<>( CpuClock.NOT_AVAILABLE ), new AtomicReference<>( HeapAllocation.NOT_AVAILABLE ) );
+                new AtomicReference<>( CpuClock.NOT_AVAILABLE ) );
         when( transaction.getStatistics() ).thenReturn( statistics );
         when( transaction.executingQuery() ).thenReturn( Optional.empty() );
 
@@ -92,7 +92,7 @@ class KernelStatementTest
     private static KernelStatement createStatement( KernelTransactionImplementation transaction )
     {
         return new KernelStatement( transaction, LockTracer.NONE, new ClockContext(), EmptyVersionContextSupplier.EMPTY,
-                new AtomicReference<>( CpuClock.NOT_AVAILABLE ), new TestDatabaseIdRepository().defaultDatabase() );
+                                    new AtomicReference<>( CpuClock.NOT_AVAILABLE ), new TestDatabaseIdRepository().defaultDatabase(), Config.defaults() );
     }
 
     private static ExecutingQuery getQueryWithWaitingTime()

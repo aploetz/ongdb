@@ -65,7 +65,7 @@ import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
@@ -94,6 +94,7 @@ import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.logging.NullLog;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.monitoring.DatabaseHealth;
 import org.neo4j.monitoring.Health;
 import org.neo4j.monitoring.Monitors;
@@ -109,6 +110,7 @@ import org.neo4j.test.extension.pagecache.PageCacheSupportExtension;
 import org.neo4j.test.rule.RandomRule;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
+import org.neo4j.time.Clocks;
 
 import static java.lang.Long.max;
 import static java.util.Collections.singletonList;
@@ -125,6 +127,7 @@ import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.collection.Iterables.asList;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @Neo4jLayoutExtension
 @ExtendWith( RandomExtension.class )
@@ -204,8 +207,7 @@ class DatabaseRecoveryIT
         {
             assertEquals( 10, count( tx.getAllNodes() ) );
         }
-        logProvider.rawMessageMatcher().assertContains( "10% completed" );
-        logProvider.rawMessageMatcher().assertContains( "100% completed" );
+        assertThat( logProvider ).containsMessages( "10% completed", "100% completed" );
 
         recoveredService.shutdown();
     }
@@ -467,16 +469,14 @@ class DatabaseRecoveryIT
         VersionContextSupplier contextSupplier = EmptyVersionContextSupplier.EMPTY;
         try (
                 ThreadPoolJobScheduler jobScheduler = new ThreadPoolJobScheduler();
-                PageCache pageCache1 = new ConfiguringPageCacheFactory( fs1, defaults(), PageCacheTracer.NULL,
-                        PageCursorTracerSupplier.NULL, NullLog.getInstance(), contextSupplier, jobScheduler )
-                        .getOrCreatePageCache();
-                PageCache pageCache2 = new ConfiguringPageCacheFactory( fs2, defaults(), PageCacheTracer.NULL,
-                        PageCursorTracerSupplier.NULL, NullLog.getInstance(), contextSupplier, jobScheduler )
-                        .getOrCreatePageCache();
+                PageCache pageCache1 = new ConfiguringPageCacheFactory( fs1, defaults(), PageCacheTracer.NULL, NullLog.getInstance(), contextSupplier,
+                        jobScheduler, Clocks.nanoClock(), new MemoryPools() ).getOrCreatePageCache();
+                PageCache pageCache2 = new ConfiguringPageCacheFactory( fs2, defaults(), PageCacheTracer.NULL, NullLog.getInstance(), contextSupplier,
+                        jobScheduler, Clocks.nanoClock(), new MemoryPools() ).getOrCreatePageCache();
                 NeoStores store1 = new StoreFactory( databaseLayout, defaults(), new DefaultIdGeneratorFactory( fs1, immediate() ),
-                        pageCache1, fs1, logProvider ).openAllNeoStores();
+                        pageCache1, fs1, logProvider, PageCacheTracer.NULL ).openAllNeoStores();
                 NeoStores store2 = new StoreFactory( databaseLayout, defaults(), new DefaultIdGeneratorFactory( fs2, immediate() ),
-                        pageCache2, fs2, logProvider ).openAllNeoStores()
+                        pageCache2, fs2, logProvider, PageCacheTracer.NULL ).openAllNeoStores()
                 )
         {
             for ( StoreType storeType : StoreType.values() )
@@ -499,8 +499,8 @@ class DatabaseRecoveryIT
         RECORD record2 = store2.newRecord();
         for ( long id = store1.getNumberOfReservedLowIds(); id < maxHighId; id++ )
         {
-            store1.getRecord( id, record1, RecordLoad.CHECK );
-            store2.getRecord( id, record2, RecordLoad.CHECK );
+            store1.getRecord( id, record1, RecordLoad.CHECK, PageCursorTracer.NULL );
+            store2.getRecord( id, record2, RecordLoad.CHECK, PageCursorTracer.NULL );
             boolean deletedAndDynamicPropertyRecord = !record1.inUse() && store1 instanceof AbstractDynamicStore;
             if ( !deletedAndDynamicPropertyRecord )
             {
@@ -513,7 +513,8 @@ class DatabaseRecoveryIT
 
     private static void flush( GraphDatabaseService db ) throws IOException
     {
-        ((GraphDatabaseAPI)db).getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class ).flushAndForce( IOLimiter.UNLIMITED );
+        var forceOperation = ((GraphDatabaseAPI) db).getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class );
+        forceOperation.flushAndForce( IOLimiter.UNLIMITED, PageCursorTracer.NULL );
     }
 
     private static void checkPoint( GraphDatabaseService db ) throws IOException
@@ -879,9 +880,9 @@ class DatabaseRecoveryIT
         }
 
         @Override
-        public IndexUpdater newUpdater( IndexUpdateMode mode )
+        public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
         {
-            return wrap( super.newUpdater( mode ) );
+            return wrap( super.newUpdater( mode, cursorTracer ) );
         }
 
         private IndexUpdater wrap( IndexUpdater actual )

@@ -19,9 +19,9 @@
  */
 package org.neo4j.bolt.testing;
 
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
-import org.hamcrest.TypeSafeMatcher;
+import org.apache.commons.lang3.mutable.MutableObject;
+import org.assertj.core.api.Condition;
+import org.eclipse.jetty.websocket.api.WebSocketException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
+import org.neo4j.bolt.BoltProtocolVersion;
 import org.neo4j.bolt.messaging.RequestMessage;
 import org.neo4j.bolt.messaging.ResponseMessage;
 import org.neo4j.bolt.packstream.Neo4jPack;
@@ -39,9 +41,13 @@ import org.neo4j.bolt.packstream.Neo4jPackV2;
 import org.neo4j.bolt.runtime.AccessMode;
 import org.neo4j.bolt.testing.client.TransportConnection;
 import org.neo4j.bolt.v3.messaging.response.RecordMessage;
+<<<<<<< HEAD
 import org.neo4j.bolt.v4.BoltProtocolV4;
+=======
+>>>>>>> neo4j/4.1
 import org.neo4j.bolt.v4.messaging.BoltV4Messages;
 import org.neo4j.bolt.v4.messaging.RunMessage;
+import org.neo4j.bolt.v41.BoltProtocolV41;
 import org.neo4j.function.Predicates;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.io.memory.ByteBuffers;
@@ -50,16 +56,15 @@ import org.neo4j.values.storable.Values;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.VirtualValues;
 
-import static java.nio.ByteOrder.BIG_ENDIAN;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.neo4j.bolt.testing.MessageMatchers.responseMessage;
-import static org.neo4j.bolt.testing.MessageMatchers.serialize;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.bolt.testing.MessageConditions.responseMessage;
+import static org.neo4j.bolt.testing.MessageConditions.serialize;
 import static org.neo4j.bolt.v4.messaging.MessageMetadataParser.DB_NAME_KEY;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 public class TransportTestUtil
 {
-    private static final long DEFAULT_BOLT_VERSION = BoltProtocolV4.VERSION;
+    private static final BoltProtocolVersion DEFAULT_BOLT_VERSION = BoltProtocolV41.VERSION;
     protected final Neo4jPack neo4jPack;
     private final MessageEncoder messageEncoder;
 
@@ -121,7 +126,7 @@ public class TransportTestUtil
 
     public byte[] chunk( int chunkSize, byte[]... messages )
     {
-        ByteBuffer output = ByteBuffers.allocate( 10000, BIG_ENDIAN );
+        ByteBuffer output = ByteBuffers.allocate( 10000, INSTANCE );
 
         for ( byte[] wholeMessage : messages )
         {
@@ -148,7 +153,7 @@ public class TransportTestUtil
 
     public byte[] defaultAcceptedVersions()
     {
-        return acceptedVersions( DEFAULT_BOLT_VERSION, 0, 0, 0 );
+        return acceptedVersions( DEFAULT_BOLT_VERSION.toInt(), 0, 0, 0 );
     }
 
     /**
@@ -207,7 +212,7 @@ public class TransportTestUtil
 
     public byte[] acceptedVersions( long option1, long option2, long option3, long option4 )
     {
-        ByteBuffer bb = ByteBuffers.allocate( 5 * Integer.BYTES, BIG_ENDIAN );
+        ByteBuffer bb = ByteBuffers.allocate( 5 * Integer.BYTES, INSTANCE );
         bb.putInt( 0x6060B017 );
         bb.putInt( (int) option1 );
         bb.putInt( (int) option2 );
@@ -217,36 +222,33 @@ public class TransportTestUtil
     }
 
     @SafeVarargs
-    public final Matcher<TransportConnection> eventuallyReceives( final Matcher<ResponseMessage>... messages )
+    public final <T extends TransportConnection> Consumer<T> eventuallyReceives( Consumer<ResponseMessage>... messagesConsumers )
     {
-        return new TypeSafeMatcher<TransportConnection>()
+        return eventuallyReceives( false, () -> {}, messagesConsumers );
+    }
+
+    @SafeVarargs
+    public final <T extends TransportConnection> Consumer<T> eventuallyReceives( boolean allowNoOp,
+            Runnable noOpCallback, Consumer<ResponseMessage>... messagesConsumers )
+    {
+        return connection ->
         {
-            @Override
-            protected boolean matchesSafely( TransportConnection conn )
+            try
             {
-                try
+                for ( Consumer<ResponseMessage> messageCondition : messagesConsumers )
                 {
-                    for ( Matcher<ResponseMessage> matchesMessage : messages )
-                    {
-                        final ResponseMessage message = receiveOneResponseMessage( conn );
-                        assertThat( message, matchesMessage );
-                    }
-                    return true;
-                }
-                catch ( Exception e )
-                {
-                    throw new RuntimeException( e );
+                    var message = receiveOneResponseMessage( allowNoOp, noOpCallback, connection );
+                    assertThat( message ).satisfies( messageCondition );
                 }
             }
-
-            @Override
-            public void describeTo( Description description )
+            catch ( Exception e )
             {
-                description.appendValueList( "Messages[", ",", "]", messages );
+                throw new RuntimeException( "Messages[" + Arrays.toString( messagesConsumers ) + "]", e );
             }
         };
     }
 
+<<<<<<< HEAD
     @SafeVarargs
     public final Matcher<TransportConnection> eventuallyReceives( int skip, final Matcher<ResponseMessage>... messages )
     {
@@ -293,157 +295,106 @@ public class TransportTestUtil
         OPTIONAL
     }
 
+=======
+>>>>>>> neo4j/4.1
     @SafeVarargs
-    public final Matcher<TransportConnection> eventuallyReceivesWithOptionalPrecedingMessages(
-            final Pair<Matcher<ResponseMessage>,ResponseMatcherOptionality>... messages )
+    public final <T extends TransportConnection> Consumer<T> eventuallyReceives( int skip,
+            Consumer<ResponseMessage>... messagesConsumers )
     {
-        return new TypeSafeMatcher<TransportConnection>()
+        return connection ->
         {
-            @Override
-            protected boolean matchesSafely( TransportConnection conn )
+            try
             {
-                try
+                for ( int i = 0; i < skip; i++ )
                 {
-                    // Sanity check
-                    if ( messages.length > 0 )
+                    var message = receiveOneResponseMessage( connection );
+                    // we skip all record messages as it is not really a reply to a request message
+                    while ( message instanceof RecordMessage )
                     {
-                        assertThat( "The last message matcher must be REQUIRED",
-                                messages[messages.length - 1].other(),
-                                equalTo( ResponseMatcherOptionality.REQUIRED ) );
+                        message = receiveOneResponseMessage( connection );
+                    }
+                }
+                for ( Consumer<ResponseMessage> messageCondition : messagesConsumers )
+                {
+                    var message = receiveOneResponseMessage( connection );
+                    assertThat( message ).satisfies( messageCondition );
+                }
+            }
+            catch ( Exception e )
+            {
+                throw new RuntimeException( "Messages[" + Arrays.toString( messagesConsumers ) + "]", e );
+            }
+        };
+    }
+
+    @SafeVarargs
+    public final <T extends TransportConnection> Consumer<T> eventuallyReceivesWithOptionalPrecedingMessages(
+            final Pair<Consumer<ResponseMessage>,ResponseMatcherOptionality>... messages )
+    {
+        return transportConnection ->
+        {
+            try
+            {
+                // Sanity check
+                if ( messages.length > 0 )
+                {
+                    assertThat( messages[messages.length - 1].other() )
+                            .as("The last message matcher must be REQUIRED" )
+                            .isEqualTo( ResponseMatcherOptionality.REQUIRED );
+                }
+
+                ResponseMessage message = null;
+                for ( Pair<Consumer<ResponseMessage>, ResponseMatcherOptionality> matchesOptionalMessage : messages )
+                {
+                    if ( message == null )
+                    {
+                        message = receiveOneResponseMessage( transportConnection );
                     }
 
-                    ResponseMessage message = null;
-                    for ( Pair<Matcher<ResponseMessage>, ResponseMatcherOptionality> matchesOptionalMessage : messages )
+                    if ( matchesOptionalMessage.other() == ResponseMatcherOptionality.OPTIONAL )
                     {
-                        if ( message == null )
+                        try
                         {
-                            message = receiveOneResponseMessage( conn );
-                        }
-
-                        if ( matchesOptionalMessage.other() == ResponseMatcherOptionality.OPTIONAL )
-                        {
-                            try
-                            {
-                                assertThat( message, matchesOptionalMessage.first() );
-                                message = null;
-                            }
-                            catch ( AssertionError e )
-                            {
-                                // else we will reuse the message to feed into the next matcher
-                            }
-                        }
-                        else // if ( matchesOptionalMessage.other() == ResponseMatcherOptionality.REQUIRED )
-                        {
-                            assertThat( message, matchesOptionalMessage.first() );
+                            assertThat( message ).satisfies( matchesOptionalMessage.first() );
                             message = null;
                         }
+                        catch ( AssertionError e )
+                        {
+                            // else we will reuse the message to feed into the next matcher
+                        }
                     }
-                    return true;
-                }
-                catch ( Exception e )
-                {
-                    throw new RuntimeException( e );
+                    else // if ( matchesOptionalMessage.other() == ResponseMatcherOptionality.REQUIRED )
+                    {
+                        assertThat( message ).satisfies( matchesOptionalMessage.first() );
+                        message = null;
+                    }
                 }
             }
-
-            @Override
-            public void describeTo( Description description )
+            catch ( Exception e )
             {
-                description.appendValueList( "Messages[", ",", "]", messages );
+                throw new RuntimeException( e );
             }
         };
     }
 
-    public ResponseMessage receiveOneResponseMessage( TransportConnection conn ) throws IOException,
-            InterruptedException
+    public static Condition<TransportConnection> eventuallyDisconnects()
     {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        while ( true )
+        return new Condition<>( connection ->
         {
-            int size = receiveChunkHeader( conn );
-
-            if ( size > 0 )
-            {
-                byte[] received = conn.recv( size );
-                bytes.write( received );
-            }
-            else
-            {
-                return responseMessage( neo4jPack, bytes.toByteArray() );
-            }
-        }
-    }
-
-    public int receiveChunkHeader( TransportConnection conn ) throws IOException, InterruptedException
-    {
-        byte[] raw = conn.recv( 2 );
-        return ((raw[0] & 0xff) << 8 | (raw[1] & 0xff)) & 0xffff;
-    }
-
-    public Matcher<TransportConnection> eventuallyReceivesSelectedProtocolVersion()
-    {
-        return eventuallyReceives( new byte[]{0, 0, 0, (byte) DEFAULT_BOLT_VERSION} );
-    }
-
-    public static Matcher<TransportConnection> eventuallyReceives( final byte[] expected )
-    {
-        return new TypeSafeMatcher<TransportConnection>()
-        {
-            byte[] received;
-
-            @Override
-            protected boolean matchesSafely( TransportConnection item )
-            {
-                try
-                {
-                    received = item.recv( expected.length );
-                    return Arrays.equals( received, expected );
-                }
-                catch ( Exception e )
-                {
-                    throw new RuntimeException( e );
-                }
-            }
-
-            @Override
-            public void describeTo( Description description )
-            {
-                description.appendText( "to receive " );
-                appendBytes( description, expected );
-            }
-
-            @Override
-            protected void describeMismatchSafely( TransportConnection item, Description mismatchDescription )
-            {
-                mismatchDescription.appendText( "received " );
-                appendBytes( mismatchDescription, received );
-            }
-
-            void appendBytes( Description description, byte[] bytes )
-            {
-                description.appendValueList( "RawBytes[", ",", "]", bytes );
-            }
-        };
-    }
-
-    public static Matcher<TransportConnection> eventuallyDisconnects()
-    {
-        return new TypeSafeMatcher<TransportConnection>()
-        {
-            @Override
-            protected boolean matchesSafely( TransportConnection connection )
-            {
                 BooleanSupplier condition = () ->
                 {
                     try
                     {
-                        connection.send( new byte[]{0,0});
+                        connection.send( new byte[]{0, 0} );
                         connection.recv( 1 );
+                    }
+                    catch ( IOException | WebSocketException e )
+                    {
+                        return true;
                     }
                     catch ( Exception e )
                     {
-                        // take an IOException on send/receive as evidence of disconnection
-                        return e instanceof IOException;
+                        return false;
                     }
                     return false;
                 };
@@ -456,41 +407,93 @@ public class TransportTestUtil
                 {
                     return false;
                 }
-            }
-
-            @Override
-            public void describeTo( Description description )
-            {
-                description.appendText( "Eventually Disconnects" );
-            }
-        };
+        }, "Eventually Disconnects" );
     }
 
-    public static Matcher<TransportConnection> serverImmediatelyDisconnects()
+    public static Condition<TransportConnection> serverImmediatelyDisconnects()
     {
-        return new TypeSafeMatcher<TransportConnection>()
+        return new Condition<>( connection ->
         {
-            @Override
-            protected boolean matchesSafely( TransportConnection connection )
+            try
             {
-                try
-                {
-                    connection.recv( 1 );
-                }
-                catch ( Exception e )
-                {
-                    // take an IOException on send/receive as evidence of disconnection
-                    return e instanceof IOException;
-                }
-                return false;
+                connection.recv( 1 );
+            }
+            catch ( Exception e )
+            {
+                // take an IOException on send/receive as evidence of disconnection
+                return e instanceof IOException;
+            }
+            return false;
+        }, "Eventually Disconnects" );
+    }
+
+    public enum ResponseMatcherOptionality
+    {
+        REQUIRED,
+        OPTIONAL
+    }
+
+    public Condition<TransportConnection> eventuallyReceivesSelectedProtocolVersion()
+    {
+        return eventuallyReceives( new byte[]{0, 0, (byte) DEFAULT_BOLT_VERSION.getMinorVersion(), (byte) DEFAULT_BOLT_VERSION.getMajorVersion()} );
+    }
+
+    public static Condition<TransportConnection> eventuallyReceives( final byte[] expected )
+    {
+        var arrayReference = new MutableObject<>();
+        return new Condition<>( item -> {
+            try
+            {
+                byte[] received = item.recv( expected.length );
+                arrayReference.setValue( received );
+                return Arrays.equals( received, expected );
+            }
+            catch ( Exception e )
+            {
+                throw new RuntimeException( e );
+            }
+        }, "Eventually receive. Expected: " + Arrays.toString( expected ) +
+                ", actual: " + Arrays.toString( (byte[]) arrayReference.getValue() ) );
+    }
+
+    public <T extends TransportConnection> ResponseMessage receiveOneResponseMessage( T conn ) throws IOException,
+            InterruptedException
+    {
+        return receiveOneResponseMessage( false, () -> {}, conn );
+    }
+
+    public <T extends TransportConnection> ResponseMessage receiveOneResponseMessage( boolean allowNoOp,
+            Runnable noOpCallback, T conn )
+            throws IOException, InterruptedException
+    {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        while ( true )
+        {
+            int size = receiveChunkHeader( conn );
+            while ( allowNoOp && size == 0 )
+            {
+                size = receiveChunkHeader( conn );
+                noOpCallback.run();
             }
 
-            @Override
-            public void describeTo( Description description )
+            if ( size > 0 )
             {
-                description.appendText( "Eventually Disconnects" );
+                byte[] received = conn.recv( size );
+                bytes.write( received );
+                // Once this message started, then there should never be a NOOP
+                allowNoOp = false;
             }
-        };
+            else
+            {
+                return responseMessage( neo4jPack, bytes.toByteArray() );
+            }
+        }
+    }
+
+    public int receiveChunkHeader( TransportConnection conn ) throws IOException, InterruptedException
+    {
+        byte[] raw = conn.recv( 2 );
+        return ((raw[0] & 0xff) << 8 | (raw[1] & 0xff)) & 0xffff;
     }
 
     public interface MessageEncoder

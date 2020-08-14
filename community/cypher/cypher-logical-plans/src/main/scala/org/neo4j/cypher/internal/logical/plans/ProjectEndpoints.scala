@@ -20,18 +20,18 @@
 package org.neo4j.cypher.internal.logical.plans
 
 import org.neo4j.cypher.internal.ir.PatternLength
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
-import org.neo4j.cypher.internal.v4_0.expressions.RelTypeName
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.RelTypeName
 
 /**
-  * For every source row, consider the path described by the relationships in 'rel'
-  *
-  *   If rel == NO_VALUE or rel does not match the specified 'types', do nothing
-  *   If directed, produce one row containing source and the start and end nodes of rel
-  *   If not directed, produce two rows:
-  *     one like the directed case
-  *     one like the directed case, but with start and end node swapped, and rel = reverse(rel)
-  */
+ * For every source row, consider the path described by the relationships in 'rel'
+ *
+ *   If rel == NO_VALUE or rel does not match the specified 'types', do nothing
+ *   If directed, produce one row containing source and the start and end nodes of rel
+ *   If not directed, produce two rows:
+ *     one like the directed case
+ *     one like the directed case, but with start and end node swapped, and rel = reverse(rel)
+ */
 case class ProjectEndpoints(source: LogicalPlan,
                             rel: String,
                             start: String,

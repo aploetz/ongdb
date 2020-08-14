@@ -25,11 +25,13 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.DefaultPageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.time.Clocks;
+
+import static org.neo4j.io.ByteUnit.MebiByte;
 
 /*
  * This class is an helper to allow to construct properly a page cache in the few places we need it without all
@@ -44,20 +46,32 @@ public final class StandalonePageCacheFactory
     {
     }
 
-    public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler )
+    public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler, PageCacheTracer cacheTracer )
     {
-        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory();
-        factory.open( fileSystem );
+        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory( fileSystem );
+        return createPageCache( factory, jobScheduler, cacheTracer );
+    }
 
+<<<<<<< HEAD
         return createPageCache( factory, jobScheduler );
     }
 
     public static PageCache createPageCache( PageSwapperFactory factory, JobScheduler jobScheduler )
     {
+=======
+    public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler )
+    {
+        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory( fileSystem );
+>>>>>>> neo4j/4.1
         PageCacheTracer cacheTracer = PageCacheTracer.NULL;
-        DefaultPageCursorTracerSupplier cursorTracerSupplier = DefaultPageCursorTracerSupplier.INSTANCE;
+        return createPageCache( factory, jobScheduler, cacheTracer );
+    }
+
+    private static PageCache createPageCache( PageSwapperFactory factory, JobScheduler jobScheduler, PageCacheTracer cacheTracer )
+    {
         VersionContextSupplier versionContextSupplier = EmptyVersionContextSupplier.EMPTY;
-        MemoryAllocator memoryAllocator = MemoryAllocator.createAllocator( "8 MiB", EmptyMemoryTracker.INSTANCE );
-        return new MuninnPageCache( factory, memoryAllocator, cacheTracer, cursorTracerSupplier, versionContextSupplier, jobScheduler );
+        MemoryAllocator memoryAllocator = MemoryAllocator.createAllocator( MebiByte.toBytes( 8 ), EmptyMemoryTracker.INSTANCE );
+        return new MuninnPageCache( factory, memoryAllocator, cacheTracer, versionContextSupplier, jobScheduler, Clocks.nanoClock(),
+                EmptyMemoryTracker.INSTANCE );
     }
 }

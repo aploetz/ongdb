@@ -21,16 +21,28 @@ package org.neo4j.cypher.internal.runtime.interpreted.profiler
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
-import org.neo4j.cypher.internal.profiling.{KernelStatisticProvider, NoKernelStatisticProvider}
+import org.neo4j.cypher.internal.profiling.KernelStatisticProvider
+import org.neo4j.cypher.internal.profiling.NoKernelStatisticProvider
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryTransactionalContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
 import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.InterpretedCommandProjection
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{NestedPipeExpression, ProjectedPath}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes._
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext, QueryTransactionalContext}
-import org.neo4j.cypher.internal.v4_0.util.attribution.{Id, SequentialIdGen}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.result.{OperatorProfile, QueryProfile}
-import org.neo4j.kernel.impl.factory.DatabaseInfo
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NestedPipeCollectExpression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ProjectedPath
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ApplyPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ArgumentPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExternalCSVResource
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.Pipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.PipeWithSource
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ProjectionPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.SequentialIdGen
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.result.OperatorProfile
+import org.neo4j.cypher.result.QueryProfile
+import org.neo4j.kernel.impl.factory.DbmsInfo
 import org.neo4j.values.storable.Values.NO_VALUE
 
 class ProfilerTest extends CypherFunSuite {
@@ -43,7 +55,7 @@ class ProfilerTest extends CypherFunSuite {
     val pipe = ProfilerTestPipe(start, "foo", rows = 10, dbAccess = 20)(idGen.id())
     val queryContext: QueryContext = prepareQueryContext()
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.ENTERPRISE, profile)
+    val profiler = new Profiler(DbmsInfo.ENTERPRISE, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     //WHEN
@@ -60,7 +72,7 @@ class ProfilerTest extends CypherFunSuite {
     val pipe = ProfilerTestPipe(start, "foo", rows = 10, dbAccess = 20, statisticProvider, hits = 2, misses = 7)(idGen.id())
     val queryContext: QueryContext = prepareQueryContext(statisticProvider)
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.ENTERPRISE, profile)
+    val profiler = new Profiler(DbmsInfo.ENTERPRISE, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     //WHEN
@@ -79,7 +91,7 @@ class ProfilerTest extends CypherFunSuite {
     val pipe3 = ProfilerTestPipe(pipe2, "baz", rows = 1, dbAccess = 2)(idGen.id())
     val queryContext: QueryContext = prepareQueryContext()
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.COMMUNITY, profile)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     //WHEN
@@ -100,7 +112,7 @@ class ProfilerTest extends CypherFunSuite {
     val pipe3 = ProfilerTestPipe(pipe2, "baz", rows = 1, dbAccess = 2, statisticProvider, 37, 68)(idGen.id())
     val queryContext: QueryContext = prepareQueryContext(statisticProvider)
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.ENTERPRISE, profile)
+    val profiler = new Profiler(DbmsInfo.ENTERPRISE, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     //WHEN
@@ -121,7 +133,7 @@ class ProfilerTest extends CypherFunSuite {
     val apply = ApplyPipe(lhs, rhs)(idGen.id())
     val queryContext: QueryContext = prepareQueryContext()
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.COMMUNITY, profile)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     // WHEN we create the results,
@@ -138,13 +150,14 @@ class ProfilerTest extends CypherFunSuite {
     val DB_HITS = 100
     val start1 = ArgumentPipe()(idGen.id())
     val testPipe = ProfilerTestPipe(start1, "nested pipe", rows = 10, dbAccess = DB_HITS)(idGen.id())
-    val innerPipe = NestedPipeExpression(testPipe, projectedPath, Seq.empty)
     val start2 = ArgumentPipe()(idGen.id())
-    val pipeUnderInspection = ProjectionPipe(start2, InterpretedCommandProjection(Map("x" -> innerPipe)))(idGen.id())
+    val projectionId = idGen.id()
+    val innerPipe = NestedPipeCollectExpression(testPipe, projectedPath, Array(), projectionId)
+    val pipeUnderInspection = ProjectionPipe(start2, InterpretedCommandProjection(Map("x" -> innerPipe)))(projectionId)
 
     val queryContext: QueryContext = prepareQueryContext()
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.COMMUNITY, profile)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     // WHEN we create the results,
@@ -161,13 +174,14 @@ class ProfilerTest extends CypherFunSuite {
     val start1 = ArgumentPipe()(idGen.id())
     val statisticProvider = new ConfiguredKernelStatisticProvider()
     val testPipe = ProfilerTestPipe(start1, "nested pipe", rows = 10, dbAccess = 2, statisticProvider, hits = 3, misses = 4 )(idGen.id())
-    val innerPipe = NestedPipeExpression(testPipe, projectedPath, Seq.empty)
     val start2 = ArgumentPipe()(idGen.id())
-    val pipeUnderInspection = ProjectionPipe(start2,InterpretedCommandProjection(Map("x" -> innerPipe)))(idGen.id())
+    val projectionId = idGen.id()
+    val innerPipe = NestedPipeCollectExpression(testPipe, projectedPath, Array(), projectionId)
+    val pipeUnderInspection = ProjectionPipe(start2, InterpretedCommandProjection(Map("x" -> innerPipe)))(projectionId)
 
     val queryContext: QueryContext = prepareQueryContext(statisticProvider)
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.ENTERPRISE, profile)
+    val profiler = new Profiler(DbmsInfo.ENTERPRISE, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     // WHEN we create the results,
@@ -186,15 +200,17 @@ class ProfilerTest extends CypherFunSuite {
     val start2 = ArgumentPipe()(idGen.id())
     val start3 = ArgumentPipe()(idGen.id())
     val profiler1 = ProfilerTestPipe(start1, "nested pipe1", rows = 10, dbAccess = DB_HITS)(idGen.id())
-    val nestedExpression = NestedPipeExpression(profiler1, projectedPath, Seq.empty)
-    val innerInnerPipe = ProjectionPipe(start2, InterpretedCommandProjection(Map("y" -> nestedExpression)))(idGen.id())
+    val projectionId1 = idGen.id()
+    val nestedExpression = NestedPipeCollectExpression(profiler1, projectedPath, Array(), projectionId1)
+    val innerInnerPipe = ProjectionPipe(start2, InterpretedCommandProjection(Map("y" -> nestedExpression)))(projectionId1)
     val profiler2 = ProfilerTestPipe(innerInnerPipe, "nested pipe2", rows = 10, dbAccess = DB_HITS)(idGen.id())
-    val pipeExpression = NestedPipeExpression(profiler2, projectedPath, Seq.empty)
-    val pipeUnderInspection = ProjectionPipe(start3, InterpretedCommandProjection(Map("x" -> pipeExpression)))(idGen.id())
+    val projectionId2 = idGen.id()
+    val pipeExpression = NestedPipeCollectExpression(profiler2, projectedPath, Array(), projectionId2)
+    val pipeUnderInspection = ProjectionPipe(start3, InterpretedCommandProjection(Map("x" -> pipeExpression)))(projectionId2)
 
     val queryContext: QueryContext = prepareQueryContext()
     val profile = new InterpretedProfileInformation
-    val profiler = new Profiler(DatabaseInfo.COMMUNITY, profile)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, profile)
     val queryState = QueryStateHelper.emptyWith(query = queryContext, decorator = profiler)
 
     // WHEN we create the results,
@@ -205,50 +221,50 @@ class ProfilerTest extends CypherFunSuite {
   }
 
   test("should not count rows multiple times when the same pipe is used multiple times") {
-      val profiler = new Profiler(DatabaseInfo.COMMUNITY, new InterpretedProfileInformation)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, new InterpretedProfileInformation)
 
-      val pipe1 = ArgumentPipe()(idGen.id())
-      val ctx1: QueryContext = prepareQueryContext()
-      val state1 = QueryStateHelper.emptyWith(query = ctx1, resources = mock[ExternalCSVResource])
+    val pipe1 = ArgumentPipe()(idGen.id())
+    val ctx1: QueryContext = prepareQueryContext()
+    val state1 = QueryStateHelper.emptyWith(query = ctx1, resources = mock[ExternalCSVResource])
 
-      val profiled_1 = profiler.decorate(pipe1, state1)
-      val iter1 = Iterator(ExecutionContext.empty, ExecutionContext.empty, ExecutionContext.empty)
+    val profiled_1 = profiler.decorate(pipe1.id, state1)
+    val iter1 = Iterator(CypherRow.empty, CypherRow.empty, CypherRow.empty)
 
-      val profiled1 = profiler.decorate(pipe1, iter1)
-      profiled1.toList // consume it
-      profiled1.asInstanceOf[ProfilingIterator].count should equal(3)
+    val profiled1 = profiler.decorate(pipe1.id, iter1)
+    profiled1.toList // consume it
+    profiled1.asInstanceOf[ProfilingIterator].count should equal(3)
 
-      val pipe2 = ArgumentPipe()(idGen.id())
-      val ctx2: QueryContext = prepareQueryContext()
-      val state2 = QueryStateHelper.emptyWith(query = ctx2, resources = mock[ExternalCSVResource])
-      val iter2 = Iterator(ExecutionContext.empty, ExecutionContext.empty)
+    val pipe2 = ArgumentPipe()(idGen.id())
+    val ctx2: QueryContext = prepareQueryContext()
+    val state2 = QueryStateHelper.emptyWith(query = ctx2, resources = mock[ExternalCSVResource])
+    val iter2 = Iterator(CypherRow.empty, CypherRow.empty)
 
-      val profiled_2 = profiler.decorate(pipe2, state2)
-      val profiled2 = profiler.decorate(pipe2, iter2)
-      profiled2.toList // consume it
-      profiled2.asInstanceOf[ProfilingIterator].count should equal(2)
-    }
+    val profiled_2 = profiler.decorate(pipe2.id, state2)
+    val profiled2 = profiler.decorate(pipe2.id, iter2)
+    profiled2.toList // consume it
+    profiled2.asInstanceOf[ProfilingIterator].count should equal(2)
+  }
 
   test("should not count dbhits multiple times when the same pipe is used multiple times") {
-      val profiler = new Profiler(DatabaseInfo.COMMUNITY, new InterpretedProfileInformation)
+    val profiler = new Profiler(DbmsInfo.COMMUNITY, new InterpretedProfileInformation)
 
-      val pipe1 = ArgumentPipe()(idGen.id())
-      val ctx1: QueryContext = prepareQueryContext()
-      val state1 = QueryStateHelper.emptyWith(query = ctx1, resources = mock[ExternalCSVResource])
+    val pipe1 = ArgumentPipe()(idGen.id())
+    val ctx1: QueryContext = prepareQueryContext()
+    val state1 = QueryStateHelper.emptyWith(query = ctx1, resources = mock[ExternalCSVResource])
 
-      val profiled1 = profiler.decorate(pipe1, state1)
-      profiled1.query.createNode(Array.empty)
-      profiled1.query.asInstanceOf[ProfilingPipeQueryContext].count should equal(1)
+    val profiled1 = profiler.decorate(pipe1.id, state1)
+    profiled1.query.createNode(Array.empty)
+    profiled1.query.asInstanceOf[ProfilingPipeQueryContext].count should equal(1)
 
-      val pipe2 = ArgumentPipe()(idGen.id())
-      val ctx2: QueryContext = prepareQueryContext()
-      val state2 = QueryStateHelper.emptyWith(query = ctx2, resources = mock[ExternalCSVResource])
+    val pipe2 = ArgumentPipe()(idGen.id())
+    val ctx2: QueryContext = prepareQueryContext()
+    val state2 = QueryStateHelper.emptyWith(query = ctx2, resources = mock[ExternalCSVResource])
 
 
-      val profiled2 = profiler.decorate(pipe2, state2)
-      profiled2.query.createNode(Array.empty)
-      profiled2.query.asInstanceOf[ProfilingPipeQueryContext].count should equal(1)
-    }
+    val profiled2 = profiler.decorate(pipe2.id, state2)
+    profiled2.query.createNode(Array.empty)
+    profiled2.query.asInstanceOf[ProfilingPipeQueryContext].count should equal(1)
+  }
 
   private def prepareQueryContext(statisticProvider: KernelStatisticProvider = NoKernelStatisticProvider) = {
     val queryContext = mock[QueryContext]
@@ -280,16 +296,16 @@ case class ProfilerTestPipe(source: Pipe, name: String, rows: Int, dbAccess: Int
                             statisticProvider: ConfiguredKernelStatisticProvider = null,
                             hits: Long = 0,
                             misses: Long = 0)(val id: Id)
-    extends PipeWithSource(source) {
+  extends PipeWithSource(source) {
 
-  protected def internalCreateResults(input:Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input:Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     input.size
     if (statisticProvider != null) {
       statisticProvider.hits = hits
       statisticProvider.misses = misses
     }
     (0 until dbAccess).foreach(_ => state.query.createNode(Array.empty))
-    (0 until rows).map(_ => ExecutionContext.empty).toIterator
+    (0 until rows).map(_ => CypherRow.empty).toIterator
   }
 }
 

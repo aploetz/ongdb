@@ -19,16 +19,39 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.idp
 
-import org.mockito.Mockito.{times, verify, verifyNoMoreInteractions}
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, SemanticDirection}
-import org.neo4j.cypher.internal.v4_0.util.Cardinality
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.DirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.ExpandInto
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.LeftOuterHashJoin
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.ManySeekableArgs
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeHashJoin
+import org.neo4j.cypher.internal.logical.plans.Optional
+import org.neo4j.cypher.internal.logical.plans.OptionalExpand
+import org.neo4j.cypher.internal.logical.plans.ProjectEndpoints
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.ValueHashJoin
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.scalatest.exceptions.TestFailedException
-
-import scala.language.reflectiveCalls
 
 class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
   self =>
@@ -112,7 +135,7 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
     }.withLogicalPlanningContext { (cfg, ctx) =>
       val plan = queryGraphSolver.plan(cfg.qg, InterestingOrder.empty, ctx)
       plan should equal(
-        Expand(NodeByLabelScan("b", labelName("B"), Set.empty), "b", SemanticDirection.INCOMING, Seq.empty, "a", "r")
+        Expand(NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone), "b", SemanticDirection.INCOMING, Seq.empty, "a", "r")
       )
 
       verify(monitor).initTableFor(cfg.qg)
@@ -148,7 +171,7 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
       plan should equal(
         Selection(Seq(labelBPredicate),
           Expand(
-            NodeByLabelScan("a", labelName("A"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
+            NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
         ))
 
       verify(monitor).initTableFor(cfg.qg)
@@ -190,9 +213,9 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
       plan should equal(
         NodeHashJoin(Set("c"),
           Expand(
-            NodeByLabelScan("a", labelName("A"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "c", "r1"),
+            NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "c", "r1"),
           Expand(
-            NodeByLabelScan("b", labelName("B"), Set.empty), "b", SemanticDirection.INCOMING, Seq.empty, "c", "r2")
+            NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone), "b", SemanticDirection.INCOMING, Seq.empty, "c", "r2")
         ))
 
       verify(monitor).initTableFor(cfg.qg)
@@ -239,9 +262,9 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
         Selection(Seq(cfg.predicate),
           NodeHashJoin(Set("c"),
             Expand(
-              NodeByLabelScan("a", labelName("A"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "c", "r1"),
+              NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "c", "r1"),
             Expand(
-              NodeByLabelScan("b", labelName("B"), Set.empty), "b", SemanticDirection.INCOMING, Seq.empty, "c", "r2")
+              NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone), "b", SemanticDirection.INCOMING, Seq.empty, "c", "r2")
           )
         )
       )
@@ -401,8 +424,8 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
 
     new given {
       cost = {
-        case (ProjectEndpoints(Expand(_, _, _, _, _, _, _),_, _, _, _, _, _, _,_), _, _) => 10.0
-        case (Expand(ProjectEndpoints(_,_, _, _, _, _, _, _, _), _, _, _, _, _, _), _, _) => 1.0
+        case (ProjectEndpoints(Expand(_, _, _, _, _, _, _, _),_, _, _, _, _, _, _,_), _, _) => 10.0
+        case (Expand(ProjectEndpoints(_,_, _, _, _, _, _, _, _), _, _, _, _, _, _, _), _, _) => 1.0
       }
 
       queryGraphSolver = createQueryGraphSolver(monitor = monitor, solverConfig = ExpandOnlyIDPSolverConfig)
@@ -526,7 +549,7 @@ class IDPQueryGraphSolverTest extends CypherFunSuite with LogicalPlanningTestSup
       case None => counts
       case Some(NodeHashJoin(_, left, right)) =>
         incrCount(addCounts(expandsAndJoinsCount(Some(left), counts), expandsAndJoinsCount(Some(right), counts)), "joins")
-      case Some(Expand(source, _, _, _, _, _, _)) =>
+      case Some(Expand(source, _, _, _, _, _, _, _)) =>
         incrCount(expandsAndJoinsCount(Some(source), counts), "expands")
       case Some(p: LogicalPlan) =>
         addCounts(expandsAndJoinsCount(p.lhs, counts), expandsAndJoinsCount(p.rhs, counts))

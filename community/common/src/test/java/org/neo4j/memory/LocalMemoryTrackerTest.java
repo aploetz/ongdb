@@ -21,31 +21,66 @@ package org.neo4j.memory;
 
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.neo4j.memory.MemoryPools.NO_TRACKING;
 
 class LocalMemoryTrackerTest
 {
     @Test
-    void trackMemoryAllocations()
+    void trackDirectMemoryAllocations()
     {
         LocalMemoryTracker memoryTracker = new LocalMemoryTracker();
-        memoryTracker.allocated( 10 );
-        memoryTracker.allocated( 20 );
-        memoryTracker.allocated( 40 );
-        assertEquals( 70, memoryTracker.usedDirectMemory());
+        memoryTracker.allocateNative( 10 );
+        memoryTracker.allocateNative( 20 );
+        memoryTracker.allocateNative( 40 );
+        assertEquals( 70, memoryTracker.usedNativeMemory());
     }
 
     @Test
-    void trackMemoryDeallocations()
+    void trackDirectMemoryDeallocations()
     {
         LocalMemoryTracker memoryTracker = new LocalMemoryTracker();
-        memoryTracker.allocated( 100 );
-        assertEquals( 100, memoryTracker.usedDirectMemory() );
+        memoryTracker.allocateNative( 100 );
+        assertEquals( 100, memoryTracker.usedNativeMemory() );
 
-        memoryTracker.deallocated( 20 );
-        assertEquals( 80, memoryTracker.usedDirectMemory() );
+        memoryTracker.releaseNative( 20 );
+        assertEquals( 80, memoryTracker.usedNativeMemory() );
 
-        memoryTracker.deallocated( 40 );
-        assertEquals( 40, memoryTracker.usedDirectMemory() );
+        memoryTracker.releaseNative( 40 );
+        assertEquals( 40, memoryTracker.usedNativeMemory() );
+    }
+
+    @Test
+    void trackHeapMemoryAllocations()
+    {
+        LocalMemoryTracker memoryTracker = new LocalMemoryTracker();
+        memoryTracker.allocateHeap( 10 );
+        memoryTracker.allocateHeap( 20 );
+        memoryTracker.allocateHeap( 40 );
+        assertEquals( 70, memoryTracker.estimatedHeapMemory() );
+    }
+
+    @Test
+    void trackHeapMemoryDeallocations()
+    {
+        LocalMemoryTracker memoryTracker = new LocalMemoryTracker();
+        memoryTracker.allocateHeap( 100 );
+        assertEquals( 100, memoryTracker.estimatedHeapMemory() );
+
+        memoryTracker.releaseHeap( 20 );
+        assertEquals( 80, memoryTracker.estimatedHeapMemory() );
+
+        memoryTracker.releaseHeap( 40 );
+        assertEquals( 40, memoryTracker.estimatedHeapMemory() );
+    }
+
+    @Test
+    void throwsOnLimit()
+    {
+        LocalMemoryTracker memoryTracker = new LocalMemoryTracker( NO_TRACKING, 10, 0, "settingName" );
+        MemoryLimitExceededException memoryLimitExceededException = assertThrows( MemoryLimitExceededException.class, () -> memoryTracker.allocateHeap( 100 ) );
+        assertThat( memoryLimitExceededException.getMessage() ).contains( "settingName" );
     }
 }

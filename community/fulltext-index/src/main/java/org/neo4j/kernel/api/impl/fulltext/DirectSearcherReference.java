@@ -19,19 +19,18 @@
  */
 package org.neo4j.kernel.api.impl.fulltext;
 
-import org.apache.lucene.search.IndexSearcher;
-
 import java.io.Closeable;
 import java.io.IOException;
 
 import org.neo4j.kernel.api.impl.index.SearcherReference;
+import org.neo4j.kernel.api.impl.index.partition.Neo4jIndexSearcher;
 
 class DirectSearcherReference implements SearcherReference
 {
-    private final IndexSearcher searcher;
+    private final Neo4jIndexSearcher searcher;
     private final Closeable resource;
 
-    DirectSearcherReference( IndexSearcher searcher, Closeable resource )
+    DirectSearcherReference( Neo4jIndexSearcher searcher, Closeable resource )
     {
         this.searcher = searcher;
         this.resource = resource;
@@ -44,7 +43,7 @@ class DirectSearcherReference implements SearcherReference
     }
 
     @Override
-    public IndexSearcher getIndexSearcher()
+    public Neo4jIndexSearcher getIndexSearcher()
     {
         return searcher;
     }

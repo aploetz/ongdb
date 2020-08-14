@@ -25,5 +25,6 @@ import org.neo4j.internal.helpers.collection.LongRange;
 interface Checker
 {
     void check( LongRange nodeIdRange, boolean firstRange, boolean lastRange ) throws Exception;
+
     boolean shouldBeChecked( ConsistencyFlags flags );
 }

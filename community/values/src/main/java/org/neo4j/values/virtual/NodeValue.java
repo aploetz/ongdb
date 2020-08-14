@@ -19,11 +19,12 @@
  */
 package org.neo4j.values.virtual;
 
-
 import org.neo4j.values.AnyValueWriter;
 import org.neo4j.values.storable.TextArray;
 
 import static java.lang.String.format;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.values.AnyValueWriter.EntityMode.REFERENCE;
 
 public abstract class NodeValue extends VirtualNodeValue
 {
@@ -41,7 +42,14 @@ public abstract class NodeValue extends VirtualNodeValue
     @Override
     public <E extends Exception> void writeTo( AnyValueWriter<E> writer ) throws E
     {
-        writer.writeNode( id, labels(), properties() );
+        if ( writer.entityMode() == REFERENCE )
+        {
+            writer.writeNodeReference( id );
+        }
+        else
+        {
+            writer.writeNode( id, labels(), properties() );
+        }
     }
 
     @Override
@@ -62,6 +70,7 @@ public abstract class NodeValue extends VirtualNodeValue
         return "Node";
     }
 
+    private static final long DIRECT_NODE_SHALLOW_SIZE = shallowSizeOfInstance( DirectNodeValue.class );
     static class DirectNodeValue extends NodeValue
     {
         private final TextArray labels;
@@ -89,9 +98,9 @@ public abstract class NodeValue extends VirtualNodeValue
         }
 
         @Override
-        protected long estimatedPayloadSize()
+        public long estimatedHeapUsage()
         {
-            return 8 + Long.BYTES + labels.estimatedHeapUsage() + properties.estimatedHeapUsage();
+            return DIRECT_NODE_SHALLOW_SIZE + labels.estimatedHeapUsage() + properties.estimatedHeapUsage();
         }
     }
 }

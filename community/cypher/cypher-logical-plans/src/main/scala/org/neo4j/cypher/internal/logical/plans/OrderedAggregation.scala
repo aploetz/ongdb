@@ -19,13 +19,13 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, Property}
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * OrderedAggregation is like Aggregation, except that it relies on the input coming
-  * in a particular order, which it can leverage by keeping less state to aggregate at any given time.
-  */
+ * OrderedAggregation is like Aggregation, except that it relies on the input coming
+ * in a particular order, which it can leverage by keeping less state to aggregate at any given time.
+ */
 case class OrderedAggregation(source: LogicalPlan,
                               groupingExpressions: Map[String, Expression],
                               aggregationExpression: Map[String, Expression],

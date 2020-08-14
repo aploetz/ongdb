@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.database;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -39,13 +38,12 @@ import org.neo4j.token.TokenHolders;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.apache.commons.lang3.RandomStringUtils.random;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.token.api.TokenConstants.ANY_LABEL;
 
 @DbmsExtension
@@ -53,13 +51,8 @@ class TruncateDatabaseIT
 {
     @Inject
     private GraphDatabaseAPI databaseAPI;
+    @Inject
     private Database database;
-
-    @BeforeEach
-    void setUp()
-    {
-        database = databaseAPI.getDependencyResolver().resolveDependency( Database.class );
-    }
 
     @ParameterizedTest
     @EnumSource( TruncationTypes.class )
@@ -226,15 +219,14 @@ class TruncateDatabaseIT
             transaction.commit();
         }
         assertEquals( 20, countPropertyKeys() );
-        LogFiles logFiles = getLogFiles();
-        long lastEntryId = logFiles.getLogFileInformation().getLastEntryId();
+        long lastEntryId = getLogFiles().getLogFileInformation().getLastEntryId();
         // at least 10 transactions made it to the logs
-        assertThat( lastEntryId, greaterThanOrEqualTo( 10L ) );
+        assertThat( lastEntryId ).isGreaterThanOrEqualTo( 10L );
 
         truncator.truncate( database );
 
         long truncatedLastEntryId = getLogFiles().getLogFileInformation().getLastEntryId();
-        assertThat( truncatedLastEntryId, equalTo( 1L ) );
+        assertThat( truncatedLastEntryId ).isEqualTo( 1L );
     }
 
     @ParameterizedTest
@@ -261,16 +253,16 @@ class TruncateDatabaseIT
         int typeId = tokenHolders.relationshipTypeTokens().getIdByName( relationshipType.name() );
         try ( RecordStorageReader reader = getRecordStorageEngine().newReader() )
         {
-            assertEquals( 20, reader.countsForNode( labelId ) );
-            assertEquals( 10, reader.countsForRelationship( ANY_LABEL, typeId, ANY_LABEL ) );
+            assertEquals( 20, reader.countsForNode( labelId, NULL ) );
+            assertEquals( 10, reader.countsForRelationship( ANY_LABEL, typeId, ANY_LABEL, NULL ) );
         }
 
         truncator.truncate( database );
 
         try ( RecordStorageReader reader = getRecordStorageEngine().newReader() )
         {
-            assertEquals( 0, reader.countsForNode( labelId ) );
-            assertEquals( 0, reader.countsForRelationship( ANY_LABEL, typeId, ANY_LABEL ) );
+            assertEquals( 0, reader.countsForNode( labelId, NULL ) );
+            assertEquals( 0, reader.countsForRelationship( ANY_LABEL, typeId, ANY_LABEL, NULL ) );
         }
     }
 

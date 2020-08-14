@@ -35,11 +35,16 @@ import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.ByteBufferFactory;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
+import org.neo4j.kernel.impl.index.schema.IndexFiles;
+import org.neo4j.kernel.impl.index.schema.NativeMinimalIndexAccessor;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.migration.SchemaIndexMigrator;
 import org.neo4j.storageengine.migration.StoreMigrationParticipant;
@@ -77,12 +82,11 @@ public class FusionIndexProvider extends IndexProvider
         this.slotSelector = slotSelector;
         this.providers = new InstanceSelector<>();
         this.fs = fs;
-        fillProvidersSelector( genericProvider, luceneProvider );
+        fillProvidersSelector( providers, genericProvider, luceneProvider );
         slotSelector.validateSatisfied( providers );
     }
 
-    private void fillProvidersSelector( IndexProvider genericProvider,
-            IndexProvider luceneProvider )
+    private static void fillProvidersSelector( InstanceSelector<IndexProvider> providers, IndexProvider genericProvider, IndexProvider luceneProvider )
     {
         providers.put( GENERIC, genericProvider );
         providers.put( LUCENE, luceneProvider );
@@ -117,31 +121,40 @@ public class FusionIndexProvider extends IndexProvider
     }
 
     @Override
-    public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory )
+    public MinimalIndexAccessor getMinimalIndexAccessor( IndexDescriptor descriptor )
     {
-        EnumMap<IndexSlot,IndexPopulator> populators = providers.map( provider -> provider.getPopulator( descriptor, samplingConfig, bufferFactory ) );
-        return new FusionIndexPopulator( slotSelector, new InstanceSelector<>( populators ), descriptor.getId(), fs, directoryStructure(),
-                archiveFailedIndex );
+        return new NativeMinimalIndexAccessor( descriptor, indexFiles( descriptor ) );
+    }
+
+    @Override
+    public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory,
+            MemoryTracker memoryTracker )
+    {
+        EnumMap<IndexSlot,IndexPopulator> populators = providers.map( provider -> provider.getPopulator( descriptor, samplingConfig, bufferFactory,
+                memoryTracker ) );
+        IndexFiles indexFiles = indexFiles( descriptor );
+        return new FusionIndexPopulator( slotSelector, new InstanceSelector<>( populators ), indexFiles, archiveFailedIndex );
     }
 
     @Override
     public IndexAccessor getOnlineAccessor( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig ) throws IOException
     {
         EnumMap<IndexSlot,IndexAccessor> accessors = providers.map( provider -> provider.getOnlineAccessor( descriptor, samplingConfig ) );
-        return new FusionIndexAccessor( slotSelector, new InstanceSelector<>( accessors ), descriptor, fs, directoryStructure() );
+        IndexFiles indexFiles = indexFiles( descriptor );
+        return new FusionIndexAccessor( slotSelector, new InstanceSelector<>( accessors ), descriptor, indexFiles );
     }
 
     @Override
-    public String getPopulationFailure( IndexDescriptor descriptor )
+    public String getPopulationFailure( IndexDescriptor descriptor, PageCursorTracer cursorTracer )
     {
         StringBuilder builder = new StringBuilder();
-        providers.forAll( p -> writeFailure( p.getClass().getSimpleName(), builder, p, descriptor ) );
+        providers.forAll( p -> writeFailure( p.getClass().getSimpleName(), builder, p, descriptor, cursorTracer ) );
         return builder.toString();
     }
 
-    private void writeFailure( String indexName, StringBuilder builder, IndexProvider provider, IndexDescriptor descriptor )
+    private void writeFailure( String indexName, StringBuilder builder, IndexProvider provider, IndexDescriptor descriptor, PageCursorTracer cursorTracer )
     {
-        String failure = provider.getPopulationFailure( descriptor );
+        String failure = provider.getPopulationFailure( descriptor, cursorTracer );
         if ( isNotEmpty( failure ) )
         {
             builder.append( indexName );
@@ -152,9 +165,9 @@ public class FusionIndexProvider extends IndexProvider
     }
 
     @Override
-    public InternalIndexState getInitialState( IndexDescriptor descriptor )
+    public InternalIndexState getInitialState( IndexDescriptor descriptor, PageCursorTracer cursorTracer )
     {
-        Iterable<InternalIndexState> statesIterable = providers.transform( p -> p.getInitialState( descriptor ) );
+        Iterable<InternalIndexState> statesIterable = providers.transform( p -> p.getInitialState( descriptor, cursorTracer ) );
         List<InternalIndexState> states = Iterables.asList( statesIterable );
         if ( states.contains( FAILED ) )
         {
@@ -184,5 +197,10 @@ public class FusionIndexProvider extends IndexProvider
     public StoreMigrationParticipant storeMigrationParticipant( FileSystemAbstraction fs, PageCache pageCache, StorageEngineFactory storageEngineFactory )
     {
         return new SchemaIndexMigrator( "Schema indexes", fs, this.directoryStructure(), storageEngineFactory );
+    }
+
+    private IndexFiles indexFiles( IndexDescriptor descriptor )
+    {
+        return new IndexFiles( fs, directoryStructure(), descriptor.getId() );
     }
 }

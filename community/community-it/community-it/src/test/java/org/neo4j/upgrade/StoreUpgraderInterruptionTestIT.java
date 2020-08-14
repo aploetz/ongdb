@@ -19,6 +19,11 @@
  */
 package org.neo4j.upgrade;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -27,12 +32,15 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+<<<<<<< HEAD
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 
+=======
+>>>>>>> neo4j/4.1
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.ProgressReporter;
 import org.neo4j.configuration.Config;
@@ -40,10 +48,13 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.consistency.checking.full.ConsistencyCheckIncompleteException;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.exceptions.KernelException;
+import org.neo4j.internal.batchimport.BatchImporterFactory;
+import org.neo4j.internal.recordstorage.RecordStorageEngineFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.kernel.api.index.IndexProvider;
 import org.neo4j.kernel.impl.store.format.standard.StandardV3_4;
 import org.neo4j.kernel.impl.storemigration.IdGeneratorMigrator;
@@ -74,7 +85,12 @@ import static org.junit.Assert.fail;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.allow_upgrade;
 import static org.neo4j.consistency.store.StoreAssertions.assertConsistentStore;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.kernel.impl.storemigration.MigrationTestUtils.checkNeoStoreHasDefaultFormatVersion;
+<<<<<<< HEAD
+=======
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+>>>>>>> neo4j/4.1
 import static org.neo4j.storageengine.api.StorageEngineFactory.selectStorageEngine;
 
 @RunWith( Parameterized.class )
@@ -83,6 +99,7 @@ public class StoreUpgraderInterruptionTestIT
     private final TestDirectory directory = TestDirectory.testDirectory();
     private final DefaultFileSystemRule fileSystemRule = new DefaultFileSystemRule();
     private final PageCacheRule pageCacheRule = new PageCacheRule();
+    private final BatchImporterFactory batchImporterFactory = BatchImporterFactory.withHighestPriority();
 
     @Rule
     public RuleChain ruleChain = RuleChain.outerRule( directory )
@@ -129,10 +146,11 @@ public class StoreUpgraderInterruptionTestIT
     {
         MigrationTestUtils.prepareSampleLegacyDatabase( version, fs, workingDatabaseLayout.databaseDirectory(), prepareDirectory );
         RecordStoreVersionCheck versionCheck = new RecordStoreVersionCheck( fs, pageCache, workingDatabaseLayout, NullLogProvider.getInstance(),
-                Config.defaults() );
+                Config.defaults(), NULL );
         MigrationProgressMonitor progressMonitor = MigrationProgressMonitor.SILENT;
         LogService logService = NullLogService.getInstance();
-        RecordStorageMigrator failingStoreMigrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler )
+        RecordStorageMigrator failingStoreMigrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler, NULL, batchImporterFactory,
+                INSTANCE )
         {
             @Override
             public void migrate( DatabaseLayout directoryLayout, DatabaseLayout migrationLayout,
@@ -156,8 +174,8 @@ public class StoreUpgraderInterruptionTestIT
             assertEquals( "This upgrade is failing", e.getMessage() );
         }
 
-        RecordStorageMigrator migrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler );
-        IdGeneratorMigrator idMigrator = new IdGeneratorMigrator( fs, pageCache, CONFIG );
+        RecordStorageMigrator migrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler, NULL, batchImporterFactory, INSTANCE );
+        IdGeneratorMigrator idMigrator = new IdGeneratorMigrator( fs, pageCache, CONFIG, NULL );
         SchemaIndexMigrator indexMigrator = createIndexMigrator();
         newUpgrader( versionCheck, progressMonitor, indexMigrator, migrator, idMigrator ).migrateIfNeeded( workingDatabaseLayout );
 
@@ -171,6 +189,42 @@ public class StoreUpgraderInterruptionTestIT
     private SchemaIndexMigrator createIndexMigrator()
     {
         return new SchemaIndexMigrator( "upgrade test indexes", fs, IndexProvider.EMPTY.directoryStructure(), selectStorageEngine() );
+<<<<<<< HEAD
+=======
+    }
+
+    @Test
+    public void tracePageCacheAccessOnIdStoreUpgrade() throws IOException, ConsistencyCheckIncompleteException
+    {
+        MigrationTestUtils.prepareSampleLegacyDatabase( version, fs, workingDatabaseLayout.databaseDirectory(), prepareDirectory );
+        RecordStoreVersionCheck versionCheck = new RecordStoreVersionCheck( fs, pageCache, workingDatabaseLayout, NullLogProvider.getInstance(),
+                Config.defaults(), NULL );
+        MigrationProgressMonitor progressMonitor = MigrationProgressMonitor.SILENT;
+        LogService logService = NullLogService.getInstance();
+        var idMigratorTracer = new DefaultPageCacheTracer();
+        var recordMigratorTracer = new DefaultPageCacheTracer();
+        IdGeneratorMigrator idMigrator = new IdGeneratorMigrator( fs, pageCache, CONFIG, idMigratorTracer );
+
+        assertTrue( checkNeoStoreHasDefaultFormatVersion( versionCheck ) );
+
+        var migrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler, recordMigratorTracer, batchImporterFactory, INSTANCE );
+        newUpgrader( versionCheck, progressMonitor, createIndexMigrator(), migrator, idMigrator ).migrateIfNeeded( workingDatabaseLayout );
+
+        assertTrue( checkNeoStoreHasDefaultFormatVersion( versionCheck ) );
+
+        startStopDatabase( neo4jLayout.homeDirectory() );
+        assertConsistentStore( workingDatabaseLayout );
+
+        assertEquals( 21, idMigratorTracer.faults() );
+        assertEquals( 178, idMigratorTracer.hits() );
+        assertEquals( 199, idMigratorTracer.pins() );
+        assertEquals( 199, idMigratorTracer.unpins() );
+
+        assertEquals( 52, recordMigratorTracer.faults() );
+        assertEquals( 208, recordMigratorTracer.hits() );
+        assertEquals( 260, recordMigratorTracer.pins() );
+        assertEquals( 260, recordMigratorTracer.unpins() );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -179,10 +233,11 @@ public class StoreUpgraderInterruptionTestIT
     {
         MigrationTestUtils.prepareSampleLegacyDatabase( version, fs, workingDatabaseLayout.databaseDirectory(), prepareDirectory );
         RecordStoreVersionCheck versionCheck = new RecordStoreVersionCheck( fs, pageCache, workingDatabaseLayout, NullLogProvider.getInstance(),
-                Config.defaults() );
+                Config.defaults(), NULL );
         MigrationProgressMonitor progressMonitor = MigrationProgressMonitor.SILENT;
         LogService logService = NullLogService.getInstance();
-        RecordStorageMigrator failingStoreMigrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler )
+        RecordStorageMigrator failingStoreMigrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler, NULL, batchImporterFactory,
+                INSTANCE )
         {
             @Override
             public void moveMigratedFiles( DatabaseLayout migrationLayout, DatabaseLayout directoryLayout, String versionToUpgradeFrom,
@@ -192,7 +247,7 @@ public class StoreUpgraderInterruptionTestIT
                 throw new RuntimeException( "This upgrade is failing" );
             }
         };
-        IdGeneratorMigrator idMigrator = new IdGeneratorMigrator( fs, pageCache, CONFIG );
+        IdGeneratorMigrator idMigrator = new IdGeneratorMigrator( fs, pageCache, CONFIG, NULL );
 
         try
         {
@@ -207,7 +262,7 @@ public class StoreUpgraderInterruptionTestIT
 
         assertTrue( checkNeoStoreHasDefaultFormatVersion( versionCheck ) );
 
-        RecordStorageMigrator migrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler );
+        RecordStorageMigrator migrator = new RecordStorageMigrator( fs, pageCache, CONFIG, logService, jobScheduler, NULL, batchImporterFactory, INSTANCE );
         newUpgrader( versionCheck, progressMonitor, createIndexMigrator(), migrator, idMigrator ).migrateIfNeeded( workingDatabaseLayout );
 
         assertTrue( checkNeoStoreHasDefaultFormatVersion( versionCheck ) );
@@ -225,9 +280,17 @@ public class StoreUpgraderInterruptionTestIT
 
         Dependencies dependencies = new Dependencies();
         dependencies.satisfyDependencies( new Monitors() );
+<<<<<<< HEAD
         LogsUpgrader logsUpgrader = new LogsUpgrader(
                 fs, selectStorageEngine(), workingDatabaseLayout, pageCache, legacyTransactionLogsLocator, config, dependencies );
         StoreUpgrader upgrader = new StoreUpgrader( versionCheck, progressMonitor, config, fs, NullLogProvider.getInstance(), logsUpgrader );
+=======
+        RecordStorageEngineFactory storageEngineFactory = new RecordStorageEngineFactory();
+        LogsUpgrader logsUpgrader = new LogsUpgrader(
+                fs, storageEngineFactory, workingDatabaseLayout, pageCache, legacyTransactionLogsLocator, config, dependencies, NULL, INSTANCE );
+        StoreUpgrader upgrader = new StoreUpgrader(
+                versionCheck, progressMonitor, config, fs, NullLogProvider.getInstance(), logsUpgrader, NULL );
+>>>>>>> neo4j/4.1
         for ( StoreMigrationParticipant participant : participants )
         {
             upgrader.addParticipant( participant );

@@ -23,19 +23,17 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
+import org.neo4j.index.internal.gbptree.GBPTree;
 import org.neo4j.index.internal.gbptree.Seeker;
 import org.neo4j.index.internal.gbptree.Writer;
 import org.neo4j.internal.helpers.Exceptions;
@@ -43,17 +41,22 @@ import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.ByteUnit;
 import org.neo4j.io.IOUtils;
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.ByteBufferFactory;
 import org.neo4j.io.memory.ByteBufferFactory.Allocator;
-import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexPopulator;
-import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.IndexUpdater;
-import org.neo4j.kernel.impl.api.index.BatchingMultipleIndexPopulator;
+import org.neo4j.kernel.api.index.IndexValueValidator;
 import org.neo4j.kernel.impl.api.index.PhaseTracker;
+import org.neo4j.kernel.impl.api.index.updater.DelegatingIndexUpdater;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.scheduler.Group;
+import org.neo4j.scheduler.JobHandle;
+import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
+import org.neo4j.storageengine.api.UpdateMode;
 import org.neo4j.util.FeatureToggles;
 import org.neo4j.util.Preconditions;
 import org.neo4j.values.storable.Value;
@@ -61,6 +64,7 @@ import org.neo4j.values.storable.Value;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_WRITER;
 import static org.neo4j.internal.helpers.collection.Iterables.first;
 import static org.neo4j.io.ByteUnit.kibiBytes;
+import static org.neo4j.io.IOUtils.closeAllUnchecked;
 import static org.neo4j.kernel.impl.index.schema.BlockStorage.Monitor.NO_MONITOR;
 import static org.neo4j.kernel.impl.index.schema.NativeIndexUpdater.initializeKeyFromUpdate;
 import static org.neo4j.util.concurrent.Runnables.runAll;
@@ -69,7 +73,8 @@ import static org.neo4j.util.concurrent.Runnables.runAll;
  * {@link IndexPopulator} for native indexes that stores scan updates in parallel append-only files. When all scan updates have been collected
  * each file is sorted and then all of them merged together into the resulting index.
  *
- * Note on buffers: basically each thread adding scan updates will make use of a {@link ByteBufferFactory#acquireThreadLocalBuffer() thread-local buffer}.
+ * Note on buffers: basically each thread adding scan updates will make use of a {@link ByteBufferFactory#acquireThreadLocalBuffer(MemoryTracker)}
+ * thread-local buffer}.
  * This together with {@link ByteBufferFactory#globalAllocator() a global buffer for external updates} and carefully reused
  * {@link ByteBufferFactory#newLocalAllocator() local buffers} for merging allows memory consumption to stay virtually the same regardless
  * how many indexes are being built concurrently by the same job and regardless of index sizes. Formula for peak number of buffers in use is roughly
@@ -84,6 +89,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     public static final String BLOCK_SIZE_NAME = "blockSize";
 
     private final boolean archiveFailedIndex;
+    private final MemoryTracker memoryTracker;
     /**
      * When merging all blocks together the algorithm does multiple passes over the block storage, until the number of blocks reaches 1.
      * Every pass does one or more merges and every merge merges up to {@link #mergeFactor} number of blocks into one block,
@@ -101,25 +107,28 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     private final CloseCancellation cancellation = new CloseCancellation();
     // Will be instantiated right before merging and can be used to neatly await merge to complete
     private volatile CountDownLatch mergeOngoingLatch;
+    private IndexSample nonUniqueIndexSample;
+    private final AtomicLong numberOfIndexUpdatesSinceSample = new AtomicLong();
+    private IndexValueValidator validator;
 
     // progress state
-    private volatile long numberOfAppliedScanUpdates;
-    private volatile long numberOfAppliedExternalUpdates;
+    private final AtomicLong numberOfAppliedScanUpdates = new AtomicLong();
+    private final AtomicLong numberOfAppliedExternalUpdates = new AtomicLong();
 
-    BlockBasedIndexPopulator( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
-                              IndexProvider.Monitor monitor, IndexDescriptor descriptor,
-                              boolean archiveFailedIndex, ByteBufferFactory bufferFactory )
+    BlockBasedIndexPopulator( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
+            IndexDescriptor descriptor, boolean archiveFailedIndex, ByteBufferFactory bufferFactory, MemoryTracker memoryTracker )
     {
-        this( pageCache, fs, indexFiles, layout, monitor, descriptor, archiveFailedIndex, bufferFactory,
-              FeatureToggles.getInteger( BlockBasedIndexPopulator.class, "mergeFactor", 8 ), NO_MONITOR );
+        this( databaseIndexContext, indexFiles, layout, descriptor, archiveFailedIndex, bufferFactory, memoryTracker,
+              FeatureToggles.getInteger( BlockBasedIndexPopulator.class, "mergeFactor", 8 ), NO_MONITOR, GBPTree.NO_MONITOR );
     }
 
-    BlockBasedIndexPopulator( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
-                              IndexProvider.Monitor monitor, IndexDescriptor descriptor,
-                              boolean archiveFailedIndex, ByteBufferFactory bufferFactory, int mergeFactor, BlockStorage.Monitor blockStorageMonitor )
+    BlockBasedIndexPopulator( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout, IndexDescriptor descriptor,
+            boolean archiveFailedIndex, ByteBufferFactory bufferFactory, MemoryTracker memoryTracker, int mergeFactor, BlockStorage.Monitor blockStorageMonitor,
+            GBPTree.Monitor treeMonitor )
     {
-        super( pageCache, fs, indexFiles, layout, monitor, descriptor, NO_HEADER_WRITER );
+        super( databaseIndexContext, indexFiles, layout, descriptor, NO_HEADER_WRITER, treeMonitor );
         this.archiveFailedIndex = archiveFailedIndex;
+        this.memoryTracker = memoryTracker;
         this.mergeFactor = mergeFactor;
         this.blockStorageMonitor = blockStorageMonitor;
         this.scanUpdates = ThreadLocal.withInitial( this::newThreadLocalBlockStorage );
@@ -151,9 +160,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
      *
      * blockSize * numberOfPopulationWorkers * {@link #mergeFactor}
      *
-     * where typically {@link BatchingMultipleIndexPopulator} controls the number of population workers. The setting
-     * `unsupported.dbms.multi_threaded_schema_index_population_enabled` controls whether or not the multi-threaded {@link BatchingMultipleIndexPopulator}
-     * is used, otherwise a single-threaded populator is used instead.
+     * where {@link GraphDatabaseInternalSettings#index_population_workers} controls the number of population workers.
      */
     public static int parseBlockSize()
     {
@@ -170,17 +177,14 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
             indexFiles.archiveIndex();
         }
         super.create();
-        try
-        {
-            File storeFile = indexFiles.getStoreFile();
-            File externalUpdatesFile = new File( storeFile.getParent(), storeFile.getName() + ".ext" );
-            externalUpdates = new IndexUpdateStorage<>( fileSystem, externalUpdatesFile, bufferFactory.globalAllocator(), smallerBufferSize(), layout );
-        }
-        catch ( IOException e )
-        {
-            throw new UncheckedIOException( e );
-        }
+        File storeFile = indexFiles.getStoreFile();
+        File externalUpdatesFile = new File( storeFile.getParent(), storeFile.getName() + ".ext" );
+        validator = instantiateValueValidator();
+        externalUpdates = new IndexUpdateStorage<>( fileSystem, externalUpdatesFile, bufferFactory.globalAllocator(), smallerBufferSize(), layout,
+                memoryTracker );
     }
+
+    protected abstract IndexValueValidator instantiateValueValidator();
 
     private int smallerBufferSize()
     {
@@ -188,7 +192,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     }
 
     @Override
-    public void add( Collection<? extends IndexEntryUpdate<?>> updates )
+    public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer )
     {
         if ( !updates.isEmpty() )
         {
@@ -204,6 +208,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     {
         try
         {
+            validator.validate( values );
             KEY key = layout.newKey();
             VALUE value = layout.newValue();
             initializeKeyFromUpdate( key, entityId, values );
@@ -233,7 +238,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     }
 
     @Override
-    public void scanCompleted( PhaseTracker phaseTracker ) throws IndexEntryConflictException
+    public void scanCompleted( PhaseTracker phaseTracker, JobScheduler jobScheduler, PageCursorTracer cursorTracer ) throws IndexEntryConflictException
     {
         if ( !markMergeStarted() )
         {
@@ -247,7 +252,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
             phaseTracker.enterPhase( PhaseTracker.Phase.MERGE );
             if ( !allScanUpdates.isEmpty() )
             {
-                mergeScanUpdates();
+                mergeScanUpdates( jobScheduler );
             }
 
             externalUpdates.doneAdding();
@@ -263,25 +268,33 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
             File storeFile = indexFiles.getStoreFile();
             File duplicatesFile = new File( storeFile.getParentFile(), storeFile.getName() + ".dup" );
             int readBufferSize = smallerBufferSize();
-            try ( Allocator allocator = bufferFactory.newLocalAllocator();
-                    IndexKeyStorage<KEY> indexKeyStorage = new IndexKeyStorage<>( fileSystem, duplicatesFile, allocator, readBufferSize, layout ) )
+            try ( var allocator = bufferFactory.newLocalAllocator();
+                  var indexKeyStorage = new IndexKeyStorage<>( fileSystem, duplicatesFile, allocator, readBufferSize, layout, memoryTracker ) )
             {
                 RecordingConflictDetector<KEY,VALUE> recordingConflictDetector = new RecordingConflictDetector<>( !descriptor.isUnique(), indexKeyStorage );
-                writeScanUpdatesToTree( recordingConflictDetector, allocator, readBufferSize );
+                writeScanUpdatesToTree( recordingConflictDetector, allocator, readBufferSize, cursorTracer );
 
                 // Apply the external updates
                 phaseTracker.enterPhase( PhaseTracker.Phase.APPLY_EXTERNAL );
-                writeExternalUpdatesToTree( recordingConflictDetector );
+                writeExternalUpdatesToTree( recordingConflictDetector, cursorTracer );
 
                 // Verify uniqueness
                 if ( descriptor.isUnique() )
                 {
                     try ( IndexKeyStorage.KeyEntryCursor<KEY> allConflictingKeys = recordingConflictDetector.allConflicts() )
                     {
-                        verifyUniqueKeys( allConflictingKeys );
+                        verifyUniqueKeys( allConflictingKeys, cursorTracer );
                     }
                 }
+                else
+                {
+                    nonUniqueIndexSample = buildNonUniqueIndexSample( cursorTracer );
+                }
             }
+
+            // Flush the tree here, but keep its state as populating. This is done so that the "actual" flush-and-mark-online during flip
+            // becomes way faster and so the flip lock time is reduced.
+            flushTreeAndMarkAs( BYTE_POPULATING, cursorTracer );
         }
         catch ( IOException e )
         {
@@ -305,28 +318,22 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         }
     }
 
-    private void mergeScanUpdates() throws InterruptedException, ExecutionException, IOException
+    private void mergeScanUpdates( JobScheduler jobScheduler ) throws InterruptedException, ExecutionException, IOException
     {
-        ExecutorService executorService = Executors.newFixedThreadPool( allScanUpdates.size() );
-        List<Future<?>> mergeFutures = new ArrayList<>();
+        List<JobHandle<?>> mergeFutures = new ArrayList<>();
         for ( ThreadLocalBlockStorage part : allScanUpdates )
         {
             BlockStorage<KEY,VALUE> scanUpdates = part.blockStorage;
             // Call doneAdding here so that the buffer it allocates if it needs to flush something will be shared with other indexes
             scanUpdates.doneAdding();
-            mergeFutures.add( executorService.submit( () ->
+            mergeFutures.add( jobScheduler.schedule( Group.INDEX_POPULATION_WORK, () ->
             {
                 scanUpdates.merge( mergeFactor, cancellation );
                 return null;
             } ) );
         }
-        executorService.shutdown();
-        while ( !executorService.awaitTermination( 1, TimeUnit.SECONDS ) )
-        {
-            // just wait longer
-        }
-        // Let potential exceptions in the merge threads have a chance to propagate
-        for ( Future<?> mergeFuture : mergeFutures )
+        // Wait for merge jobs to finish and let potential exceptions in the merge threads have a chance to propagate
+        for ( JobHandle<?> mergeFuture : mergeFutures )
         {
             mergeFuture.get();
         }
@@ -339,9 +346,10 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
      * @throws IOException If something goes wrong while reading from index.
      * @throws IndexEntryConflictException If a duplicate is found.
      */
-    private void writeExternalUpdatesToTree( RecordingConflictDetector<KEY,VALUE> recordingConflictDetector ) throws IOException, IndexEntryConflictException
+    private void writeExternalUpdatesToTree( RecordingConflictDetector<KEY,VALUE> recordingConflictDetector, PageCursorTracer cursorTracer )
+            throws IOException, IndexEntryConflictException
     {
-        try ( Writer<KEY,VALUE> writer = tree.writer();
+        try ( Writer<KEY,VALUE> writer = tree.writer( cursorTracer );
               IndexUpdateCursor<KEY,VALUE> updates = externalUpdates.reader() )
         {
             while ( updates.next() && !cancellation.cancelled() )
@@ -361,18 +369,22 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
                 default:
                     throw new IllegalArgumentException( "Unknown update mode " + updates.updateMode() );
                 }
-                numberOfAppliedExternalUpdates++;
+                numberOfAppliedExternalUpdates.incrementAndGet();
             }
         }
     }
 
-    private void verifyUniqueKeys( IndexKeyStorage.KeyEntryCursor<KEY> allConflictingKeys ) throws IOException, IndexEntryConflictException
+    private void verifyUniqueKeys( IndexKeyStorage.KeyEntryCursor<KEY> allConflictingKeys, PageCursorTracer cursorTracer )
+            throws IOException, IndexEntryConflictException
     {
         while ( allConflictingKeys.next() && !cancellation.cancelled() )
         {
             KEY key = allConflictingKeys.key();
             key.setCompareId( false );
-            verifyUniqueSeek( tree.seek( key, key ) );
+            try ( var seeker = tree.seek( key, key, cursorTracer ) )
+            {
+                verifyUniqueSeek( seeker );
+            }
         }
     }
 
@@ -393,23 +405,26 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         }
     }
 
-    private void writeScanUpdatesToTree( RecordingConflictDetector<KEY,VALUE> recordingConflictDetector, Allocator allocator, int bufferSize )
-            throws IOException, IndexEntryConflictException
+    private void writeScanUpdatesToTree( RecordingConflictDetector<KEY,VALUE> recordingConflictDetector, Allocator allocator, int bufferSize,
+            PageCursorTracer cursorTracer ) throws IOException, IndexEntryConflictException
     {
-        try ( MergingBlockEntryReader<KEY,VALUE> allEntries = new MergingBlockEntryReader<>( layout ) )
+        try ( MergingBlockEntryReader<KEY,VALUE> allEntries = new MergingBlockEntryReader<>( layout );
+              var singleBlockScopedBuffer = allocator.allocate( (int) kibiBytes( 8 ), memoryTracker );
+              var readBuffers = new CompositeBuffer() )
         {
-            ByteBuffer singleBlockAssertionBuffer = allocator.allocate( (int) kibiBytes( 8 ) );
             for ( ThreadLocalBlockStorage part : allScanUpdates )
             {
+                var readScopedBuffer = allocator.allocate( bufferSize, memoryTracker );
+                readBuffers.addBuffer( readScopedBuffer );
                 try ( BlockReader<KEY,VALUE> reader = part.blockStorage.reader() )
                 {
-                    BlockEntryReader<KEY,VALUE> singleMergedBlock = reader.nextBlock( allocator.allocate( bufferSize ) );
+                    BlockEntryReader<KEY,VALUE> singleMergedBlock = reader.nextBlock( readScopedBuffer );
                     if ( singleMergedBlock != null )
                     {
                         allEntries.addSource( singleMergedBlock );
                         // Pass in some sort of ByteBuffer here. The point is that there should be no more data to read,
                         // if there is then it's due to a bug in the code and must be fixed.
-                        if ( reader.nextBlock( singleBlockAssertionBuffer ) != null )
+                        if ( reader.nextBlock( singleBlockScopedBuffer ) != null )
                         {
                             throw new IllegalStateException( "Final BlockStorage had multiple blocks" );
                         }
@@ -418,24 +433,33 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
             }
 
             int asMuchAsPossibleToTheLeft = 1;
-            try ( Writer<KEY,VALUE> writer = tree.writer( asMuchAsPossibleToTheLeft ) )
+            try ( Writer<KEY,VALUE> writer = tree.writer( asMuchAsPossibleToTheLeft, cursorTracer ) )
             {
                 while ( allEntries.next() && !cancellation.cancelled() )
                 {
                     writeToTree( writer, recordingConflictDetector, allEntries.key(), allEntries.value() );
-                    numberOfAppliedScanUpdates++;
+                    numberOfAppliedScanUpdates.incrementAndGet();
                 }
             }
         }
     }
 
     @Override
-    public IndexUpdater newPopulatingUpdater()
+    public IndexUpdater newPopulatingUpdater( PageCursorTracer cursorTracer )
     {
         if ( scanCompleted )
         {
             // Will need the reader from newReader, which a sub-class of this class implements
-            return super.newPopulatingUpdater();
+            return new DelegatingIndexUpdater( super.newPopulatingUpdater( cursorTracer ) )
+            {
+                @Override
+                public void process( IndexEntryUpdate<?> update ) throws IndexEntryConflictException
+                {
+                    validateUpdate( update );
+                    numberOfIndexUpdatesSinceSample.incrementAndGet();
+                    super.process( update );
+                }
+            };
         }
 
         return new IndexUpdater()
@@ -448,6 +472,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
                 assertOpen();
                 try
                 {
+                    validateUpdate( update );
                     externalUpdates.add( update );
                 }
                 catch ( IOException e )
@@ -472,6 +497,14 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         };
     }
 
+    private void validateUpdate( IndexEntryUpdate<?> update )
+    {
+        if ( update.updateMode() != UpdateMode.REMOVED )
+        {
+            validator.validate( update.values() );
+        }
+    }
+
     @Override
     public synchronized void drop()
     {
@@ -482,11 +515,11 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
     }
 
     @Override
-    public synchronized void close( boolean populationCompletedSuccessfully )
+    public synchronized void close( boolean populationCompletedSuccessfully, PageCursorTracer cursorTracer )
     {
         runAll( "Failed while trying to close index",
                 this::closeBlockStorage /* Close internal resources */,
-                () -> super.close( populationCompletedSuccessfully ) /* Super close will close inherited resources */
+                () -> super.close( populationCompletedSuccessfully, cursorTracer ) /* Super close will close inherited resources */
         );
     }
 
@@ -549,7 +582,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
             {
                 // We know the actual entry count to write during merge since we have been monitoring those values
                 ThreadLocalBlockStorage part = first( allScanUpdates );
-                completed = part.entriesMerged;
+                completed = part.entriesMerged.get();
                 total = part.totalEntriesToMerge;
             }
             builder.add( PopulationProgress.single( completed, total ), 1 );
@@ -560,7 +593,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         if ( allScanUpdates.stream().allMatch( part -> part.mergeStarted ) )
         {
             long entryCount = allScanUpdates.stream().mapToLong( part -> part.count ).sum() + externalUpdates.count();
-            treeBuildProgress = PopulationProgress.single( numberOfAppliedScanUpdates + numberOfAppliedExternalUpdates, entryCount );
+            treeBuildProgress = PopulationProgress.single( numberOfAppliedScanUpdates.get() + numberOfAppliedExternalUpdates.get(), entryCount );
         }
         else
         {
@@ -603,6 +636,20 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         }
     }
 
+    @Override
+    public IndexSample sample( PageCursorTracer cursorTracer )
+    {
+        if ( !descriptor.isUnique() )
+        {
+            return new IndexSample(
+                    nonUniqueIndexSample.indexSize(),
+                    nonUniqueIndexSample.uniqueValues(),
+                    nonUniqueIndexSample.sampleSize(),
+                    numberOfIndexUpdatesSinceSample.get() );
+        }
+        return super.sample( cursorTracer );
+    }
+
     /**
      * Keeps track of a {@link BlockStorage} instance as well as monitoring some aspects of it to be able to provide a fairly accurate
      * progress report from {@link BlockBasedIndexPopulator#progress(PopulationProgress)}.
@@ -613,14 +660,14 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         private volatile long count;
         private volatile boolean mergeStarted;
         private volatile long totalEntriesToMerge;
-        private volatile long entriesMerged;
+        private final AtomicLong entriesMerged = new AtomicLong();
 
         ThreadLocalBlockStorage( int id ) throws IOException
         {
             super( blockStorageMonitor );
             File storeFile = indexFiles.getStoreFile();
             File blockFile = new File( storeFile.getParentFile(), storeFile.getName() + ".scan-" + id );
-            this.blockStorage = new BlockStorage<>( layout, bufferFactory, fileSystem, blockFile, this );
+            this.blockStorage = new BlockStorage<>( layout, bufferFactory, fileSystem, blockFile, this, memoryTracker );
         }
 
         @Override
@@ -636,7 +683,7 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         public void entriesMerged( int entries )
         {
             super.entriesMerged( entries );
-            entriesMerged += entries;
+            entriesMerged.addAndGet( entries );
         }
     }
 
@@ -689,6 +736,22 @@ public abstract class BlockBasedIndexPopulator<KEY extends NativeIndexKey<KEY>,V
         void relaxUniqueness( KEY key )
         {
             key.setCompareId( true );
+        }
+    }
+
+    private static class CompositeBuffer implements AutoCloseable
+    {
+        private final Collection<AutoCloseable> buffers = new ArrayList<>();
+
+        public void addBuffer( AutoCloseable buffer )
+        {
+            buffers.add( buffer );
+        }
+
+        @Override
+        public void close()
+        {
+            closeAllUnchecked( buffers );
         }
     }
 }

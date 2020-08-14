@@ -25,7 +25,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import org.neo4j.graphdb.security.AuthorizationViolationException;
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.kernel.api.exceptions.Status;
 
 /** Controls the capabilities of a KernelTransaction. */
@@ -156,7 +156,7 @@ public interface AccessMode
         }
 
         @Override
-        public boolean allowsReadNodeProperty( Supplier<LabelSet> labels, int propertyKey )
+        public boolean allowsReadNodeProperty( Supplier<TokenSet> labels, int propertyKey )
         {
             return read;
         }
@@ -183,6 +183,54 @@ public interface AccessMode
         public boolean allowsProcedureWith( String[] allowed )
         {
             return procedure;
+        }
+
+        @Override
+        public boolean allowsSetLabel( long labelId )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsRemoveLabel( long labelId )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsCreateNode( int[] labelIds )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsDeleteNode( Supplier<TokenSet> labelSupplier )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsCreateRelationship( int relType )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsDeleteRelationship( int relType )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsSetProperty( Supplier<TokenSet> labels, int propertyKey )
+        {
+            return write;
+        }
+
+        @Override
+        public boolean allowsSetProperty( IntSupplier relType, int propertyKey )
+        {
+            return write;
         }
 
         @Override
@@ -224,7 +272,7 @@ public interface AccessMode
 
     boolean allowsReadPropertyAllLabels( int propertyKey );
     boolean disallowsReadPropertyForSomeLabel( int propertyKey );
-    boolean allowsReadNodeProperty( Supplier<LabelSet> labels, int propertyKey );
+    boolean allowsReadNodeProperty( Supplier<TokenSet> labels, int propertyKey );
 
     boolean allowsReadPropertyAllRelTypes( int propertyKey );
     boolean allowsReadRelationshipProperty( IntSupplier relType, int propertyKey );
@@ -240,6 +288,22 @@ public interface AccessMode
      * encoding permission
      */
     boolean allowsProcedureWith( String[] allowed );
+
+    boolean allowsSetLabel( long labelId );
+
+    boolean allowsRemoveLabel( long labelId );
+
+    boolean allowsCreateNode( int[] labelIds );
+
+    boolean allowsDeleteNode( Supplier<TokenSet> labelSupplier );
+
+    boolean allowsCreateRelationship( int relType );
+
+    boolean allowsDeleteRelationship( int relType );
+
+    boolean allowsSetProperty( Supplier<TokenSet> labels, int propertyKey );
+
+    boolean allowsSetProperty( IntSupplier relType, int propertyKey );
 
     AuthorizationViolationException onViolation( String msg );
     String name();

@@ -35,20 +35,24 @@ import org.neo4j.io.pagecache.checking.AccessCheckingPageCache;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.memory.LocalMemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
+import org.neo4j.time.Clocks;
+import org.neo4j.time.SystemNanoClock;
 
+import static java.lang.Boolean.TRUE;
+import static org.neo4j.io.ByteUnit.parse;
 import static org.neo4j.test.rule.PageCacheConfig.config;
 
 public class PageCacheRule extends ExternalResource
 {
     protected JobScheduler jobScheduler;
+    protected SystemNanoClock clock;
     protected PageCache pageCache;
-    final PageCacheConfig baseConfig;
+    private final PageCacheConfig baseConfig;
 
     public PageCacheRule()
     {
@@ -75,8 +79,12 @@ public class PageCacheRule extends ExternalResource
      */
     public PageCache getPageCache( FileSystemAbstraction fs, PageCacheConfig overriddenConfig )
     {
+<<<<<<< HEAD
         SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory();
         factory.open( fs );
+=======
+        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory( fs );
+>>>>>>> neo4j/4.1
         return getPageCache( factory, overriddenConfig );
     }
 
@@ -98,22 +106,23 @@ public class PageCacheRule extends ExternalResource
         closeExistingPageCache();
         Integer pageSize = selectConfig( baseConfig.pageSize, overriddenConfig.pageSize, null );
         PageCacheTracer cacheTracer = selectConfig( baseConfig.tracer, overriddenConfig.tracer, PageCacheTracer.NULL );
-        PageCursorTracerSupplier cursorTracerSupplier = selectConfig(
-                baseConfig.pageCursorTracerSupplier,
-                overriddenConfig.pageCursorTracerSupplier,
-                PageCursorTracerSupplier.NULL );
 
         VersionContextSupplier contextSupplier = EmptyVersionContextSupplier.EMPTY;
-        MemoryAllocator mman = MemoryAllocator.createAllocator( selectConfig( baseConfig.memory, overriddenConfig.memory, "8 MiB" ),
-                new LocalMemoryTracker() );
+        var memoryTracker = new LocalMemoryTracker();
+        MemoryAllocator mman = MemoryAllocator.createAllocator( parse( selectConfig( baseConfig.memory, overriddenConfig.memory, "8 MiB" ) ),
+                memoryTracker );
         initializeJobScheduler();
+        if ( clock == null )
+        {
+            clock = Clocks.nanoClock();
+        }
         if ( pageSize != null )
         {
-            pageCache = new MuninnPageCache( factory, mman, pageSize, cacheTracer, cursorTracerSupplier, contextSupplier, jobScheduler );
+            pageCache = new MuninnPageCache( factory, mman, pageSize, cacheTracer, contextSupplier, jobScheduler, clock, memoryTracker );
         }
         else
         {
-            pageCache = new MuninnPageCache( factory, mman, cacheTracer, cursorTracerSupplier, contextSupplier, jobScheduler );
+            pageCache = new MuninnPageCache( factory, mman, cacheTracer, contextSupplier, jobScheduler, clock, memoryTracker );
         }
         pageCachePostConstruct( overriddenConfig );
         return pageCache;
@@ -131,7 +140,7 @@ public class PageCacheRule extends ExternalResource
 
     protected void pageCachePostConstruct( PageCacheConfig overriddenConfig )
     {
-        if ( selectConfig( baseConfig.inconsistentReads, overriddenConfig.inconsistentReads, true ) )
+        if ( selectConfig( baseConfig.inconsistentReads, overriddenConfig.inconsistentReads, TRUE ) )
         {
             AtomicBoolean controller = selectConfig( baseConfig.nextReadIsInconsistent,
                     overriddenConfig.nextReadIsInconsistent, null );

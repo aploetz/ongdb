@@ -21,17 +21,14 @@ package org.neo4j.internal.schema;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.function.IntFunction;
 
 import org.neo4j.common.EntityType;
 import org.neo4j.common.TokenNameLookup;
 import org.neo4j.lock.ResourceType;
 import org.neo4j.lock.ResourceTypes;
 import org.neo4j.token.api.TokenConstants;
-import org.neo4j.token.api.TokenIdPrettyPrinter;
 
 import static java.util.Objects.requireNonNull;
 import static org.neo4j.common.EntityType.NODE;
@@ -215,19 +212,9 @@ public final class SchemaDescriptorImplementation implements SchemaDescriptor, L
     }
 
     @Override
-    public String toString()
-    {
-        return "SchemaDescriptor[" + userDescription( TokenNameLookup.idTokenNameLookup ) + "]";
-    }
-
-    @Override
     public String userDescription( TokenNameLookup tokenNameLookup )
     {
-        String prefix = entityType == RELATIONSHIP ? "-[" : "";
-        String suffix = entityType == RELATIONSHIP ? "]-" : "";
-        IntFunction<String> lookup = entityType == NODE ? tokenNameLookup::labelGetName : tokenNameLookup::relationshipTypeGetName;
-        return prefix + TokenIdPrettyPrinter.niceEntityLabels( lookup, entityTokens ) +
-                TokenIdPrettyPrinter.niceProperties( tokenNameLookup, propertyKeyIds ) + suffix;
+        return SchemaUserDescription.forSchema( tokenNameLookup, entityType, entityTokens, propertyKeyIds );
     }
 
     @Override

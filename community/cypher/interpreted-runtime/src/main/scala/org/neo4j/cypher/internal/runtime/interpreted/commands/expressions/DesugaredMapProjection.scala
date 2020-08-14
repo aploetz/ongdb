@@ -19,29 +19,28 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.GraphElementPropertyFunctions
+import org.neo4j.cypher.internal.runtime.interpreted.IsMap
+import org.neo4j.cypher.internal.runtime.interpreted.LazyMap
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.runtime.interpreted.{GraphElementPropertyFunctions, IsMap, LazyMap}
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
-import org.neo4j.values.virtual.{MapValueBuilder, VirtualValues}
+import org.neo4j.values.virtual.MapValueBuilder
+import org.neo4j.values.virtual.VirtualValues
 
 import scala.collection.Map
 
 case class DesugaredMapProjection(variable: VariableCommand, includeAllProps: Boolean, literalExpressions: Map[String, Expression])
   extends Expression with GraphElementPropertyFunctions {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val variableValue = variable(ctx, state)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val variableValue = variable(row, state)
 
     val mapOfProperties = variableValue match {
       case v if v eq Values.NO_VALUE => return Values.NO_VALUE
       case IsMap(m) => if (includeAllProps) m(state) else VirtualValues.EMPTY_MAP
-    }
-    val builder = new MapValueBuilder(literalExpressions.size)
-    literalExpressions.foreach {
-      case (k, e) => builder.add(k, e(ctx, state))
     }
 
     //in case we get a lazy map we need to make sure it has been loaded
@@ -50,7 +49,15 @@ case class DesugaredMapProjection(variable: VariableCommand, includeAllProps: Bo
       case _ =>
     }
 
-    mapOfProperties.updatedWith(builder.build())
+    if (literalExpressions.nonEmpty)
+    {
+      val builder = new MapValueBuilder(literalExpressions.size)
+      literalExpressions.foreach {
+        case (k, e) => builder.add(k, e(row, state))
+      }
+      return mapOfProperties.updatedWith(builder.build())
+    }
+    mapOfProperties
   }
 
   override def rewrite(f: Expression => Expression): Expression =

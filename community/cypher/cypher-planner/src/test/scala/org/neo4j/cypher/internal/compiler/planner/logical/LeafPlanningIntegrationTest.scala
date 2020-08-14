@@ -19,11 +19,23 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher._
+=======
+import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher.beLike
+>>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
 import org.neo4j.cypher.internal.compiler.planner.StubbedLogicalPlanningConfiguration
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.expressions.CountStar
+import org.neo4j.cypher.internal.expressions.Equals
+import org.neo4j.cypher.internal.expressions.LabelName
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.expressions.PropertyKeyToken
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SignedDecimalIntegerLiteral
 import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.logical.plans._
 import org.neo4j.cypher.internal.planner.spi.DelegatingGraphStatistics
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
@@ -33,6 +45,57 @@ import org.neo4j.cypher.internal.v4_0.util._
 import org.neo4j.cypher.internal.v4_0.util.symbols._
 import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
 import org.neo4j.cypher.internal.v4_0.util.test_helpers.Extractors.SetExtractor
+=======
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.DirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Distinct
+import org.neo4j.cypher.internal.logical.plans.DoNotGetValue
+import org.neo4j.cypher.internal.logical.plans.ExclusiveBound
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.GetValue
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.IndexSeek
+import org.neo4j.cypher.internal.logical.plans.IndexedProperty
+import org.neo4j.cypher.internal.logical.plans.InequalitySeekRangeWrapper
+import org.neo4j.cypher.internal.logical.plans.LeftOuterHashJoin
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.ManyQueryExpression
+import org.neo4j.cypher.internal.logical.plans.ManySeekableArgs
+import org.neo4j.cypher.internal.logical.plans.NodeByIdSeek
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeHashJoin
+import org.neo4j.cypher.internal.logical.plans.NodeIndexContainsScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexSeek
+import org.neo4j.cypher.internal.logical.plans.NodeUniqueIndexSeek
+import org.neo4j.cypher.internal.logical.plans.Optional
+import org.neo4j.cypher.internal.logical.plans.OptionalExpand
+import org.neo4j.cypher.internal.logical.plans.ProjectEndpoints
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.RangeBetween
+import org.neo4j.cypher.internal.logical.plans.RangeGreaterThan
+import org.neo4j.cypher.internal.logical.plans.RangeLessThan
+import org.neo4j.cypher.internal.logical.plans.RangeQueryExpression
+import org.neo4j.cypher.internal.logical.plans.RightOuterHashJoin
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.SingleQueryExpression
+import org.neo4j.cypher.internal.logical.plans.UndirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Union
+import org.neo4j.cypher.internal.logical.plans.ValueHashJoin
+import org.neo4j.cypher.internal.planner.spi.DelegatingGraphStatistics
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Cost
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.NonEmptyList
+import org.neo4j.cypher.internal.util.symbols.CTAny
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.Extractors.SetExtractor
+>>>>>>> neo4j/4.1
 
 class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 with PlanMatchHelp {
 
@@ -87,9 +150,9 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
       cost = nodeIndexScanCost
     } getLogicalPlanFor "MATCH (a:Person) WHERE a.name STARTS WITH 'short' AND a.lastname STARTS WITH 'longer' RETURN a")
       ._2 should equal(
-        Selection(ands(startsWith(prop("a", "name"), literalString("short"))),
-          IndexSeek("a:Person(lastname STARTS WITH 'longer')", propIds = Some(Map("lastname" -> 1)))
-        ))
+      Selection(ands(startsWith(prop("a", "name"), literalString("short"))),
+        IndexSeek("a:Person(lastname STARTS WITH 'longer')", propIds = Some(Map("lastname" -> 1)))
+      ))
   }
 
   test("should plan index seek by prefix for prefix search based on multiple STARTS WITHSs combined with AND, and choose the longer prefix even with predicates reversed") {
@@ -112,7 +175,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
     } getLogicalPlanFor "MATCH (a:Person) WHERE a.name STARTS WITH 'longer' AND NOT a.lastname STARTS WITH 'short' RETURN a")
       ._2 should equal(
       Selection(ands(not(startsWith(prop("a", "lastname"), literalString("short")))),
-                IndexSeek("a:Person(name STARTS WITH 'longer')")
+        IndexSeek("a:Person(name STARTS WITH 'longer')")
       ))
   }
 
@@ -122,7 +185,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
       cost = nodeIndexScanCost
     } getLogicalPlanFor "MATCH (a:Person) WHERE a.name STARTS WITH 'prefix' AND a.name = 'prefix1' RETURN a")._2 should equal(
       Selection(ands(startsWith(cachedNodeProp("a", "name"), literalString("prefix"))),
-                IndexSeek("a:Person(name = 'prefix1')", GetValue)
+        IndexSeek("a:Person(name = 'prefix1')", GetValue)
       ))
   }
 
@@ -132,13 +195,13 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
       cost = nodeIndexScanCost
     } getLogicalPlanFor "MATCH (a:Person) WHERE a.name STARTS WITH 'prefix%' AND a.name in ['prefix1', 'prefix2'] RETURN a")._2 should equal(
       Selection(ands(startsWith(cachedNodeProp("a", "name"), literalString("prefix%"))),
-                NodeIndexSeek(
-                  "a",
-                  LabelToken("Person", LabelId(0)),
-                  Seq(indexedProperty("name", 0, GetValue)),
-                  ManyQueryExpression(listOfString("prefix1", "prefix2")),
-                  Set.empty,
-                  IndexOrderNone)
+        NodeIndexSeek(
+          "a",
+          LabelToken("Person", LabelId(0)),
+          Seq(indexedProperty("name", 0, GetValue)),
+          ManyQueryExpression(listOfString("prefix1", "prefix2")),
+          Set.empty,
+          IndexOrderNone)
       ))
   }
 
@@ -165,8 +228,8 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         RangeQueryExpression(
           InequalitySeekRangeWrapper(
             RangeBetween(
-               than,
-               than1
+              than,
+              than1
             )
           )(pos)
         ),
@@ -183,9 +246,9 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
 
     plan should beLike {
       case ValueHashJoin(
-        NodeIndexSeek(_, _, _, RangeQueryExpression(_), _, _),
-        NodeIndexSeek(_, _, _, RangeQueryExpression(_), _, _),
-        Equals(_, _)
+      NodeIndexSeek(_, _, _, RangeQueryExpression(_), _, _),
+      NodeIndexSeek(_, _, _, RangeQueryExpression(_), _, _),
+      Equals(_, _)
       ) => ()
     }
   }
@@ -199,8 +262,8 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
 
     plan should beLike {
       case Selection(_, Apply(
-        NodeIndexSeek(_,_,_,RangeQueryExpression(_),_,_),
-        NodeIndexSeek(_,_,_,SingleQueryExpression(_),_,_))) => ()
+      NodeIndexSeek(_,_,_,RangeQueryExpression(_),_,_),
+      NodeIndexSeek(_,_,_,SingleQueryExpression(_),_,_))) => ()
     }
   }
 
@@ -250,7 +313,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         case _ => Double.MaxValue
       }
     } getLogicalPlanFor "MATCH (n:Awesome) RETURN n")._2 should equal(
-      NodeByLabelScan("n", labelName("Awesome"), Set.empty)
+      NodeByLabelScan("n", labelName("Awesome"), Set.empty, IndexOrderNone)
     )
   }
 
@@ -266,7 +329,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
     } getLogicalPlanFor "MATCH (n:Awesome) RETURN n"
 
     plan._2 should equal(
-      NodeByLabelScan("n", labelName("Awesome"), Set.empty)
+      NodeByLabelScan("n", labelName("Awesome"), Set.empty, IndexOrderNone)
     )
   }
 
@@ -287,7 +350,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
   private val nodeIndexSeekCost: PartialFunction[(LogicalPlan, QueryGraphSolverInput, Cardinalities), Cost] = {
     case (_: AllNodesScan, _, _) => 1000000000.0
     case (_: NodeIndexSeek, _, _) => 0.1
-    case (Expand(plan, _, _, _, _, _, _), input, c) => nodeIndexSeekCost((plan, input, c))
+    case (Expand(plan, _, _, _, _, _, _, _), input, c) => nodeIndexSeekCost((plan, input, c))
     case (Selection(_, plan), input, c) => nodeIndexSeekCost((plan, input, c))
     case _ => 1000.0
   }
@@ -386,14 +449,23 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         case Apply(
               Expand(
                 NodeByIdSeek("m", _, _),
+<<<<<<< HEAD
               "m", _, _, "n", _, _),
+=======
+              "m", _, _, "n", _, _, _),
+>>>>>>> neo4j/4.1
               Optional(
                 Selection(_,
                   Expand(
                     Expand(
                         Argument(SetExtractor("n")),
+<<<<<<< HEAD
                     _, _, _, _, _, _)
                   , _, _, _, _, _, _)
+=======
+                    _, _, _, _, _, _, _)
+                  , _, _, _, _, _, _, _)
+>>>>>>> neo4j/4.1
                 ),
               _)
             ) => ()
@@ -506,7 +578,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
     plan._2 should equal(
       Selection(
         ands(hasLabels("n", "Foo"), hasLabels("n", "Baz")),
-        NodeByLabelScan("n", labelName("Bar"), Set.empty)
+        NodeByLabelScan("n", labelName("Bar"), Set.empty, IndexOrderNone)
       )
     )
   }
@@ -677,10 +749,10 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         Union(
           NodeByLabelScan(
             "n",
-            LabelName("X"), _),
+            LabelName("X"), _, _),
           NodeByLabelScan(
             "n",
-            LabelName("Y"), _)),
+            LabelName("Y"), _, _)),
       _)
       => ()
     }
@@ -747,7 +819,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
       indexOn("Person", "name")
       cost = nodeIndexSeekCost
     } getLogicalPlanFor "MATCH (a:Person)-->(b) WHERE a.name = b.prop AND b.prop = 42 RETURN b")._2 should beLike {
-      case Selection(_, Expand(NodeIndexSeek("a", _, _, _, _, _), _, _, _, _, _, _)) => ()
+      case Selection(_, Expand(NodeIndexSeek("a", _, _, _, _, _), _, _, _, _, _, _, _)) => ()
     }
   }
 
@@ -756,7 +828,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
       indexOn("Person", "name")
       cost = nodeIndexSeekCost
     } getLogicalPlanFor "MATCH (a:Person)-->(b) WHERE b.prop = a.name AND b.prop = 42 RETURN b")._2 should beLike {
-      case Selection(_, Expand(NodeIndexSeek("a", _, _, _, _, _), _, _, _, _, _, _)) => ()
+      case Selection(_, Expand(NodeIndexSeek("a", _, _, _, _, _), _, _, _, _, _, _, _)) => ()
     }
   }
 
@@ -777,7 +849,7 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
 
     // Expected plan
     // Since (a)--(b) has a lower cardinality estimate than (a)--(c) it should be selected first
-    val scanA = NodeByLabelScan("a", labelName("A"), Set.empty)
+    val scanA = NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
     val expandB = Expand(scanA, "a", INCOMING, Seq.empty, "b", "rB", ExpandAll)
     val selectionB = Selection(Seq(hasLabels("b", "B")), expandB)
     val expandC = Expand(selectionB, "a", INCOMING, Seq.empty, "c", "rC", ExpandAll)

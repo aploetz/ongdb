@@ -23,12 +23,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.ProgressReporter;
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.database.DatabasePageCache;
 import org.neo4j.index.internal.gbptree.GroupingRecoveryCleanupWorkCollector;
@@ -37,15 +36,16 @@ import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.id.DefaultIdController;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.database.Database;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.DefaultForceOperation;
 import org.neo4j.kernel.extension.DatabaseExtensions;
 import org.neo4j.kernel.extension.ExtensionFactory;
@@ -54,7 +54,7 @@ import org.neo4j.kernel.extension.context.DatabaseExtensionContext;
 import org.neo4j.kernel.impl.api.DatabaseSchemaState;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.pagecache.ConfiguringPageCacheFactory;
 import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
 import org.neo4j.kernel.impl.storemigration.LegacyTransactionLogsLocator;
@@ -75,31 +75,33 @@ import org.neo4j.kernel.impl.transaction.log.rotation.LogRotation;
 import org.neo4j.kernel.impl.transaction.state.DefaultIndexProviderMap;
 import org.neo4j.kernel.impl.transaction.state.storeview.DynamicIndexStoreView;
 import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
-import org.neo4j.kernel.impl.transaction.tracing.CheckPointTracer;
 import org.neo4j.kernel.impl.util.monitoring.LogProgressReporter;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
-import org.neo4j.kernel.recovery.RecoveryStoreFileHelper.StoreFilesInfo;
+import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLog;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.SimpleLogService;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.MemoryPools;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Monitors;
+import org.neo4j.monitoring.PanicEventGenerator;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.service.Services;
 import org.neo4j.storageengine.api.LogVersionRepository;
+import org.neo4j.storageengine.api.RecoveryState;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageEngineFactory;
+import org.neo4j.storageengine.api.StorageFilesState;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.storageengine.api.TransactionIdStore;
+import org.neo4j.time.Clocks;
 import org.neo4j.token.DelegatingTokenHolder;
-import org.neo4j.token.NonTransactionalTokenNameLookup;
 import org.neo4j.token.ReadOnlyTokenCreator;
 import org.neo4j.token.TokenHolders;
 
@@ -110,8 +112,9 @@ import static org.neo4j.configuration.Config.defaults;
 import static org.neo4j.internal.helpers.collection.Iterables.stream;
 import static org.neo4j.kernel.impl.constraints.ConstraintSemantics.getConstraintSemantics;
 import static org.neo4j.kernel.recovery.RecoveryStartupChecker.EMPTY_CHECKER;
-import static org.neo4j.kernel.recovery.RecoveryStoreFileHelper.checkStoreFiles;
 import static org.neo4j.lock.LockService.NO_LOCK_SERVICE;
+import static org.neo4j.scheduler.Group.INDEX_CLEANUP;
+import static org.neo4j.scheduler.Group.INDEX_CLEANUP_WORK;
 import static org.neo4j.storageengine.api.StorageEngineFactory.selectStorageEngine;
 import static org.neo4j.token.api.TokenHolder.TYPE_LABEL;
 import static org.neo4j.token.api.TokenHolder.TYPE_PROPERTY_KEY;
@@ -126,7 +129,7 @@ import static org.neo4j.util.FeatureToggles.flag;
  */
 public final class Recovery
 {
-    public static final boolean IGNORE_STORE_ID = flag( Recovery.class, "ignoreStoreId", false );
+    private static final boolean IGNORE_STORE_ID = flag( Recovery.class, "ignoreStoreId", false );
 
     private Recovery()
     {
@@ -137,14 +140,15 @@ public final class Recovery
      *
      * @param fs database filesystem
      * @param pageCache page cache used to perform database recovery.
+     * @param tracers underlying operation tracers
      * @param config custom configuration
      * @param storageEngineFactory {@link StorageEngineFactory} for the storage to recover.
      * @return helper recovery checker
      */
-    public static RecoveryFacade recoveryFacade( FileSystemAbstraction fs, PageCache pageCache, Config config,
-            StorageEngineFactory storageEngineFactory )
+    public static RecoveryFacade recoveryFacade( FileSystemAbstraction fs, PageCache pageCache, Tracers tracers, Config config,
+            StorageEngineFactory storageEngineFactory, MemoryTracker memoryTracker )
     {
-        return new RecoveryFacade( fs, pageCache, config, storageEngineFactory );
+        return new RecoveryFacade( fs, pageCache, new DatabaseTracers( tracers ), config, storageEngineFactory, memoryTracker );
     }
 
     /**
@@ -155,13 +159,34 @@ public final class Recovery
      * @return true if recovery is required, false otherwise.
      * @throws Exception
      */
-    public static boolean isRecoveryRequired( DatabaseLayout databaseLayout, Config config ) throws Exception
+    public static boolean isRecoveryRequired( DatabaseLayout databaseLayout, Config config, MemoryTracker memoryTracker ) throws Exception
     {
         requireNonNull( databaseLayout );
         requireNonNull( config );
         try ( DefaultFileSystemAbstraction fs = new DefaultFileSystemAbstraction() )
         {
-            return isRecoveryRequired( fs, databaseLayout, config );
+            return isRecoveryRequired( fs, databaseLayout, config, memoryTracker );
+        }
+    }
+
+    /**
+     * Performs recovery of database described by provided layout.
+     * Transaction logs should be located in their default location.
+     * If recovery is not required nothing will be done to the the database or logs.
+     * Note: used by external tools.
+     * @param databaseLayout database to recover layout.
+     * @param tracers underlying events tracers.
+     * @throws Exception
+     */
+    public static void performRecovery( DatabaseLayout databaseLayout, DatabaseTracers tracers, MemoryTracker memoryTracker ) throws Exception
+    {
+        requireNonNull( databaseLayout );
+        Config config = defaults();
+        try ( DefaultFileSystemAbstraction fs = new DefaultFileSystemAbstraction();
+                JobScheduler jobScheduler = JobSchedulerFactory.createInitialisedScheduler();
+                PageCache pageCache = getPageCache( config, fs, jobScheduler ) )
+        {
+            performRecovery( fs, pageCache, tracers, config, databaseLayout, memoryTracker );
         }
     }
 
@@ -175,7 +200,8 @@ public final class Recovery
      * @return true if recovery is required, false otherwise.
      * @throws Exception
      */
-    public static boolean isRecoveryRequired( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config ) throws Exception
+    public static boolean isRecoveryRequired( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config,
+            MemoryTracker memoryTracker ) throws Exception
     {
         requireNonNull( databaseLayout );
         requireNonNull( config );
@@ -184,26 +210,7 @@ public final class Recovery
                 PageCache pageCache = getPageCache( config, fs, jobScheduler ) )
         {
             StorageEngineFactory storageEngineFactory = selectStorageEngine();
-            return isRecoveryRequired( fs, pageCache, databaseLayout, storageEngineFactory, config, Optional.empty() );
-        }
-    }
-
-    /**
-     * Performs recovery of database described by provided layout.
-     * Transaction logs should be located in their default location.
-     * If recovery is not required nothing will be done to the the database or logs.
-     * @param databaseLayout database to recover layout.
-     * @throws Exception
-     */
-    public static void performRecovery( DatabaseLayout databaseLayout ) throws Exception
-    {
-        requireNonNull( databaseLayout );
-        Config config = defaults();
-        try ( DefaultFileSystemAbstraction fs = new DefaultFileSystemAbstraction();
-                JobScheduler jobScheduler = JobSchedulerFactory.createInitialisedScheduler();
-                PageCache pageCache = getPageCache( config, fs, jobScheduler ) )
-        {
-            performRecovery( fs, pageCache, config, databaseLayout );
+            return isRecoveryRequired( fs, pageCache, databaseLayout, storageEngineFactory, config, Optional.empty(), memoryTracker );
         }
     }
 
@@ -218,9 +225,10 @@ public final class Recovery
      * @param databaseLayout database to recover layout.
      * @throws Exception
      */
-    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, Config config, DatabaseLayout databaseLayout ) throws IOException
+    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, DatabaseTracers tracers,
+            Config config, DatabaseLayout databaseLayout, MemoryTracker memoryTracker ) throws IOException
     {
-        performRecovery( fs, pageCache, config, databaseLayout, selectStorageEngine() );
+        performRecovery( fs, pageCache, tracers, config, databaseLayout, selectStorageEngine(), memoryTracker );
     }
 
     /**
@@ -230,13 +238,14 @@ public final class Recovery
      *
      * @param fs database filesystem
      * @param pageCache page cache used to perform database recovery.
+     * @param tracers underlying operations tracer
      * @param config custom configuration
      * @param databaseLayout database to recover layout.
      * @param storageEngineFactory storage engine factory
      * @throws Exception
      */
-    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, Config config, DatabaseLayout databaseLayout,
-            StorageEngineFactory storageEngineFactory ) throws IOException
+    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, DatabaseTracers tracers, Config config,
+            DatabaseLayout databaseLayout, StorageEngineFactory storageEngineFactory, MemoryTracker memoryTracker ) throws IOException
     {
         requireNonNull( fs );
         requireNonNull( pageCache );
@@ -245,8 +254,8 @@ public final class Recovery
         requireNonNull( storageEngineFactory );
         //remove any custom logical logs location
         Config recoveryConfig = Config.newBuilder().fromConfig( config ).set( GraphDatabaseSettings.transaction_logs_root_path, null ).build();
-        performRecovery( fs, pageCache, recoveryConfig, databaseLayout, selectStorageEngine(), NullLogProvider.getInstance(), new Monitors(), loadExtensions(),
-                Optional.empty(), EMPTY_CHECKER );
+        performRecovery( fs, pageCache, tracers, recoveryConfig, databaseLayout, selectStorageEngine(), NullLogProvider.getInstance(), new Monitors(),
+                loadExtensions(), Optional.empty(), EMPTY_CHECKER, memoryTracker );
     }
 
     /**
@@ -254,6 +263,7 @@ public final class Recovery
      *
      * @param fs database filesystem
      * @param pageCache page cache used to perform database recovery.
+     * @param tracers underlying operation tracers
      * @param config custom configuration
      * @param databaseLayout database to recover layout.
      * @param storageEngineFactory {@link StorageEngineFactory} for the storage to recover.
@@ -263,54 +273,60 @@ public final class Recovery
      * @param providedLogScanner log scanner
      * @throws IOException
      */
-    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, Config config, DatabaseLayout databaseLayout,
-            StorageEngineFactory storageEngineFactory, LogProvider logProvider, Monitors globalMonitors, Iterable<ExtensionFactory<?>> extensionFactories,
-            Optional<LogTailScanner> providedLogScanner, RecoveryStartupChecker startupChecker ) throws IOException
+    public static void performRecovery( FileSystemAbstraction fs, PageCache pageCache, DatabaseTracers tracers,
+            Config config, DatabaseLayout databaseLayout, StorageEngineFactory storageEngineFactory, LogProvider logProvider, Monitors globalMonitors,
+            Iterable<ExtensionFactory<?>> extensionFactories,
+            Optional<LogTailScanner> providedLogScanner, RecoveryStartupChecker startupChecker, MemoryTracker memoryTracker ) throws IOException
     {
         Log recoveryLog = logProvider.getLog( Recovery.class );
-        if ( !isRecoveryRequired( fs, pageCache, databaseLayout, storageEngineFactory, config, providedLogScanner ) )
+        if ( !isRecoveryRequired( fs, pageCache, databaseLayout, storageEngineFactory, config, providedLogScanner, memoryTracker ) )
         {
             return;
         }
-        checkAllFilesPresence( databaseLayout, fs );
+        checkAllFilesPresence( databaseLayout, fs, pageCache, storageEngineFactory );
         LifeSupport recoveryLife = new LifeSupport();
         Monitors monitors = new Monitors( globalMonitors );
         DatabasePageCache databasePageCache = new DatabasePageCache( pageCache, EmptyVersionContextSupplier.EMPTY );
         SimpleLogService logService = new SimpleLogService( logProvider );
-        VersionAwareLogEntryReader logEntryReader = new VersionAwareLogEntryReader();
+        VersionAwareLogEntryReader logEntryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
 
         DatabaseSchemaState schemaState = new DatabaseSchemaState( logProvider );
         JobScheduler scheduler = JobSchedulerFactory.createInitialisedScheduler();
 
-        DatabasePanicEventGenerator panicEventGenerator =
-                new DatabasePanicEventGenerator( new DatabaseEventListeners( recoveryLog ), databaseLayout.getDatabaseName() );
-        DatabaseHealth databaseHealth = new DatabaseHealth( panicEventGenerator, recoveryLog );
+        DatabaseHealth databaseHealth = new DatabaseHealth( PanicEventGenerator.NO_OP, recoveryLog );
 
         TokenHolders tokenHolders = new TokenHolders( new DelegatingTokenHolder( new ReadOnlyTokenCreator(), TYPE_PROPERTY_KEY ),
                 new DelegatingTokenHolder( new ReadOnlyTokenCreator(), TYPE_LABEL ),
                 new DelegatingTokenHolder( new ReadOnlyTokenCreator(), TYPE_RELATIONSHIP_TYPE ) );
-        TokenNameLookup tokenNameLookup = new NonTransactionalTokenNameLookup( tokenHolders );
 
-        RecoveryCleanupWorkCollector recoveryCleanupCollector = new GroupingRecoveryCleanupWorkCollector( scheduler );
+        RecoveryCleanupWorkCollector recoveryCleanupCollector = new GroupingRecoveryCleanupWorkCollector( scheduler, INDEX_CLEANUP, INDEX_CLEANUP_WORK );
         DatabaseExtensions extensions = instantiateRecoveryExtensions( databaseLayout, fs, config, logService, databasePageCache, scheduler,
-                recoveryCleanupCollector, DatabaseInfo.TOOL, monitors, tokenHolders, recoveryCleanupCollector, extensionFactories );
+                                                                       recoveryCleanupCollector, DbmsInfo.TOOL, monitors, tokenHolders,
+                                                                       recoveryCleanupCollector, extensionFactories );
         DefaultIndexProviderMap indexProviderMap = new DefaultIndexProviderMap( extensions, config );
 
         StorageEngine storageEngine = storageEngineFactory.instantiate( fs, databaseLayout, config, databasePageCache, tokenHolders, schemaState,
                 getConstraintSemantics(), indexProviderMap, NO_LOCK_SERVICE, new DefaultIdGeneratorFactory( fs, recoveryCleanupCollector ),
-                new DefaultIdController(), databaseHealth, logService.getInternalLogProvider(), recoveryCleanupCollector, true );
+                new DefaultIdController(), databaseHealth, logService.getInternalLogProvider(), recoveryCleanupCollector, tracers.getPageCacheTracer(),
+                true, memoryTracker );
 
         // Label index
         NeoStoreIndexStoreView neoStoreIndexStoreView = new NeoStoreIndexStoreView( NO_LOCK_SERVICE, storageEngine::newReader );
         LabelScanStore labelScanStore = Database.buildLabelIndex( recoveryCleanupCollector, storageEngine, neoStoreIndexStoreView, monitors,
-                logProvider, databasePageCache, databaseLayout, fs, false );
+                logProvider, databasePageCache, databaseLayout, fs, false, tracers.getPageCacheTracer(), memoryTracker );
+        RelationshipTypeScanStore relationshipTypeScanStore =
+                Database.buildRelationshipTypeIndex( recoveryCleanupCollector, storageEngine, neoStoreIndexStoreView, monitors, logProvider, databasePageCache,
+                        databaseLayout, fs, false, config, tracers.getPageCacheTracer(), memoryTracker );
 
         // Schema indexes
         DynamicIndexStoreView indexStoreView =
-                new DynamicIndexStoreView( neoStoreIndexStoreView, labelScanStore, NO_LOCK_SERVICE, storageEngine::newReader, logProvider );
-        IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( databasePageCache, databaseLayout, recoveryCleanupCollector, false );
+                new DynamicIndexStoreView( neoStoreIndexStoreView, labelScanStore, relationshipTypeScanStore, NO_LOCK_SERVICE, storageEngine::newReader,
+                        logProvider, config );
+        IndexStatisticsStore indexStatisticsStore =
+                new IndexStatisticsStore( databasePageCache, databaseLayout, recoveryCleanupCollector, false, tracers.getPageCacheTracer() );
         IndexingService indexingService = Database.buildIndexingService( storageEngine, schemaState, indexStoreView, indexStatisticsStore,
-                config, scheduler, indexProviderMap, tokenNameLookup, logProvider, logProvider, monitors.newMonitor( IndexingService.Monitor.class ), false );
+                config, scheduler, indexProviderMap, tokenHolders, logProvider, logProvider, monitors.newMonitor( IndexingService.Monitor.class ),
+                tracers.getPageCacheTracer(), memoryTracker, false );
 
         TransactionIdStore transactionIdStore = storageEngine.transactionIdStore();
         LogVersionRepository logVersionRepository = storageEngine.logVersionRepository();
@@ -326,8 +342,9 @@ public final class Recovery
                 .withDependencies( dependencies )
                 .build();
 
-        Boolean failOnCorruptedLogFiles = config.get( GraphDatabaseSettings.fail_on_corrupted_log_files );
-        LogTailScanner logTailScanner = providedLogScanner.orElseGet( () -> new LogTailScanner( logFiles, logEntryReader, monitors, failOnCorruptedLogFiles ) );
+        Boolean failOnCorruptedLogFiles = config.get( GraphDatabaseInternalSettings.fail_on_corrupted_log_files );
+        LogTailScanner logTailScanner = providedLogScanner.orElseGet( () -> new LogTailScanner( logFiles, logEntryReader, monitors, failOnCorruptedLogFiles,
+                memoryTracker ) );
 
         validateStoreId( logTailScanner, storageEngine.getStoreId() );
 
@@ -344,12 +361,12 @@ public final class Recovery
         TransactionLogsRecovery transactionLogsRecovery =
                 transactionLogRecovery( fs, transactionIdStore, logTailScanner, monitors.newMonitor( RecoveryMonitor.class ),
                         monitors.newMonitor( RecoveryStartInformationProvider.Monitor.class ), logFiles, storageEngine, transactionStore, logVersionRepository,
-                        schemaLife, databaseLayout, failOnCorruptedLogFiles, recoveryLog, startupChecker );
+                        schemaLife, databaseLayout, failOnCorruptedLogFiles, recoveryLog, startupChecker, tracers.getPageCacheTracer(), memoryTracker );
 
-        CheckPointerImpl.ForceOperation forceOperation = new DefaultForceOperation( indexingService, labelScanStore, storageEngine );
+        CheckPointerImpl.ForceOperation forceOperation = new DefaultForceOperation( indexingService, labelScanStore, relationshipTypeScanStore, storageEngine );
         CheckPointerImpl checkPointer =
                 new CheckPointerImpl( transactionIdStore, RecoveryThreshold.INSTANCE, forceOperation, LogPruning.NO_PRUNING, transactionAppender,
-                        databaseHealth, logProvider, CheckPointTracer.NULL, IOLimiter.UNLIMITED, new StoreCopyCheckPointMutex() );
+                        databaseHealth, logProvider, tracers, IOLimiter.UNLIMITED, new StoreCopyCheckPointMutex() );
         recoveryLife.add( scheduler );
         recoveryLife.add( recoveryCleanupCollector );
         recoveryLife.add( extensions );
@@ -357,6 +374,7 @@ public final class Recovery
         recoveryLife.add( storageEngine );
         recoveryLife.add( new MissingTransactionLogsCheck( databaseLayout, config, fs, logTailScanner, recoveryLog ) );
         recoveryLife.add( labelScanStore );
+        recoveryLife.add( relationshipTypeScanStore );
         recoveryLife.add( logFiles );
         recoveryLife.add( transactionLogsRecovery );
         recoveryLife.add( transactionAppender );
@@ -392,33 +410,29 @@ public final class Recovery
         }
     }
 
-    private static void checkAllFilesPresence( DatabaseLayout databaseLayout, FileSystemAbstraction fs )
+    private static void checkAllFilesPresence( DatabaseLayout databaseLayout, FileSystemAbstraction fs, PageCache pageCache,
+            StorageEngineFactory storageEngineFactory )
     {
-        StoreFilesInfo storeFilesInfo = checkStoreFiles( databaseLayout, fs );
-        if ( storeFilesInfo.allFilesPresent() )
+        StorageFilesState state = storageEngineFactory.checkRecoveryRequired( fs, databaseLayout, pageCache );
+        if ( state.getRecoveryState() == RecoveryState.UNRECOVERABLE )
         {
-            return;
+            throw new RuntimeException( format( "Store files %s is(are) missing and recovery is not possible. Please restore from a consistent backup.",
+                    state.getMissingFiles() ) );
         }
-        throw new RuntimeException( format( "Store files %s is(are) missing and recovery is not possible. Please restore from a consistent backup.",
-                getMissingStoreFiles( storeFilesInfo ) ) );
-    }
-
-    private static String getMissingStoreFiles( StoreFilesInfo storeFilesInfo )
-    {
-        return storeFilesInfo.getMissingStoreFiles().stream().map( File::getName ).collect( Collectors.joining( "," ) );
     }
 
     private static TransactionLogsRecovery transactionLogRecovery( FileSystemAbstraction fileSystemAbstraction, TransactionIdStore transactionIdStore,
             LogTailScanner tailScanner, RecoveryMonitor recoveryMonitor, RecoveryStartInformationProvider.Monitor positionMonitor, LogFiles logFiles,
             StorageEngine storageEngine, LogicalTransactionStore logicalTransactionStore, LogVersionRepository logVersionRepository,
-            Lifecycle schemaLife, DatabaseLayout databaseLayout, boolean failOnCorruptedLogFiles, Log log, RecoveryStartupChecker startupChecker )
+            Lifecycle schemaLife, DatabaseLayout databaseLayout, boolean failOnCorruptedLogFiles, Log log, RecoveryStartupChecker startupChecker,
+            PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
         RecoveryService recoveryService = new DefaultRecoveryService( storageEngine, tailScanner, transactionIdStore, logicalTransactionStore,
                 logVersionRepository, logFiles, positionMonitor, log );
-        CorruptedLogsTruncator logsTruncator = new CorruptedLogsTruncator( databaseLayout.databaseDirectory(), logFiles, fileSystemAbstraction );
+        CorruptedLogsTruncator logsTruncator = new CorruptedLogsTruncator( databaseLayout.databaseDirectory(), logFiles, fileSystemAbstraction, memoryTracker );
         ProgressReporter progressReporter = new LogProgressReporter( log );
         return new TransactionLogsRecovery( recoveryService, logsTruncator, schemaLife, recoveryMonitor, progressReporter, failOnCorruptedLogFiles,
-                startupChecker );
+                startupChecker, pageCacheTracer );
     }
 
     private static Iterable<ExtensionFactory<?>> loadExtensions()
@@ -427,7 +441,7 @@ public final class Recovery
     }
 
     private static DatabaseExtensions instantiateRecoveryExtensions( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem, Config config,
-            LogService logService, PageCache pageCache, JobScheduler jobScheduler, RecoveryCleanupWorkCollector recoveryCollector, DatabaseInfo databaseInfo,
+            LogService logService, PageCache pageCache, JobScheduler jobScheduler, RecoveryCleanupWorkCollector recoveryCollector, DbmsInfo dbmsInfo,
             Monitors monitors, TokenHolders tokenHolders, RecoveryCleanupWorkCollector recoveryCleanupCollector,
             Iterable<ExtensionFactory<?>> extensionFactories )
     {
@@ -439,23 +453,23 @@ public final class Recovery
         NonListenableMonitors nonListenableMonitors = new NonListenableMonitors( monitors );
         deps.satisfyDependencies( fileSystem, config, logService, pageCache, recoveryCollector, nonListenableMonitors, jobScheduler,
                 tokenHolders, recoveryCleanupCollector );
-        DatabaseExtensionContext extensionContext = new DatabaseExtensionContext( databaseLayout, databaseInfo, deps );
+        DatabaseExtensionContext extensionContext = new DatabaseExtensionContext( databaseLayout, dbmsInfo, deps );
         return new DatabaseExtensions( extensionContext, recoveryExtensions, deps, ExtensionFailureStrategies.fail() );
     }
 
     private static boolean isRecoveryRequired( FileSystemAbstraction fs, PageCache pageCache, DatabaseLayout databaseLayout,
-            StorageEngineFactory storageEngineFactory, Config config, Optional<LogTailScanner> logTailScanner ) throws IOException
+            StorageEngineFactory storageEngineFactory, Config config, Optional<LogTailScanner> logTailScanner, MemoryTracker memoryTracker ) throws IOException
     {
         RecoveryRequiredChecker requiredChecker = new RecoveryRequiredChecker( fs, pageCache, config, storageEngineFactory );
         return logTailScanner.isPresent() ? requiredChecker.isRecoveryRequiredAt( databaseLayout, logTailScanner.get() )
-                                          : requiredChecker.isRecoveryRequiredAt( databaseLayout );
+                                          : requiredChecker.isRecoveryRequiredAt( databaseLayout, memoryTracker );
     }
 
     private static PageCache getPageCache( Config config, FileSystemAbstraction fs, JobScheduler jobScheduler )
     {
         ConfiguringPageCacheFactory pageCacheFactory =
-                new ConfiguringPageCacheFactory( fs, config, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL, NullLog.getInstance(),
-                        EmptyVersionContextSupplier.EMPTY, jobScheduler );
+                new ConfiguringPageCacheFactory( fs, config, PageCacheTracer.NULL, NullLog.getInstance(),
+                        EmptyVersionContextSupplier.EMPTY, jobScheduler, Clocks.nanoClock(), new MemoryPools() );
         return pageCacheFactory.getOrCreatePageCache();
     }
 
@@ -463,7 +477,7 @@ public final class Recovery
     {
         throw new RuntimeException(
                 "Error reading transaction logs, recovery not possible. To force the database to start anyway, you can specify '" +
-                        GraphDatabaseSettings.fail_on_corrupted_log_files.name() + "=false'. This will try to recover as much " +
+                        GraphDatabaseInternalSettings.fail_on_corrupted_log_files.name() + "=false'. This will try to recover as much " +
                         "as possible and then truncate the corrupt part of the transaction log. Doing this means your database " +
                         "integrity might be compromised, please consider restoring from a consistent backup instead.", t );
     }

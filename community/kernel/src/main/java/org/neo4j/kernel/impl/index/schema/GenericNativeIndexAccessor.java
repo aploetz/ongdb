@@ -26,18 +26,16 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.neo4j.common.Validator;
 import org.neo4j.gis.spatial.index.curves.SpaceFillingCurveConfiguration;
 import org.neo4j.index.internal.gbptree.GBPTree;
 import org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector;
 import org.neo4j.index.internal.gbptree.Seeker;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.IOLimiter;
-import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexEntriesReader;
-import org.neo4j.kernel.api.index.IndexProvider;
 import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.IndexValueValidator;
 import org.neo4j.kernel.impl.index.schema.config.IndexSpecificSpaceFillingCurveSettings;
 import org.neo4j.values.storable.Value;
 
@@ -47,14 +45,13 @@ class GenericNativeIndexAccessor extends NativeIndexAccessor<GenericKey,NativeIn
 {
     private final IndexSpecificSpaceFillingCurveSettings spaceFillingCurveSettings;
     private final SpaceFillingCurveConfiguration configuration;
-    private Validator<Value[]> validator;
+    private IndexValueValidator validator;
 
-    GenericNativeIndexAccessor( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<GenericKey,NativeIndexValue> layout,
-            RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IndexProvider.Monitor monitor, IndexDescriptor descriptor,
-            IndexSpecificSpaceFillingCurveSettings spaceFillingCurveSettings, SpaceFillingCurveConfiguration configuration,
-            boolean readOnly )
+    GenericNativeIndexAccessor( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles,
+            IndexLayout<GenericKey,NativeIndexValue> layout, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IndexDescriptor descriptor,
+            IndexSpecificSpaceFillingCurveSettings spaceFillingCurveSettings, SpaceFillingCurveConfiguration configuration )
     {
-        super( pageCache, fs, indexFiles, layout, monitor, descriptor, NO_HEADER_WRITER, readOnly );
+        super( databaseIndexContext, indexFiles, layout, descriptor, NO_HEADER_WRITER );
         this.spaceFillingCurveSettings = spaceFillingCurveSettings;
         this.configuration = configuration;
         instantiateTree( recoveryCleanupWorkCollector, headerWriter );
@@ -63,7 +60,7 @@ class GenericNativeIndexAccessor extends NativeIndexAccessor<GenericKey,NativeIn
     @Override
     protected void afterTreeInstantiation( GBPTree<GenericKey,NativeIndexValue> tree )
     {
-        validator = new GenericIndexKeyValidator( tree.keyValueSizeCap(), layout );
+        validator = new GenericIndexKeyValidator( tree.keyValueSizeCap(), descriptor, layout );
     }
 
     @Override
@@ -80,10 +77,10 @@ class GenericNativeIndexAccessor extends NativeIndexAccessor<GenericKey,NativeIn
     }
 
     @Override
-    public void force( IOLimiter ioLimiter )
+    public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer )
     {
         // This accessor needs to use the header writer here because coordinate reference systems may have changed since last checkpoint.
-        tree.checkpoint( ioLimiter, headerWriter );
+        tree.checkpoint( ioLimiter, headerWriter, cursorTracer );
     }
 
     @Override
@@ -95,7 +92,7 @@ class GenericNativeIndexAccessor extends NativeIndexAccessor<GenericKey,NativeIn
     }
 
     @Override
-    public IndexEntriesReader[] newAllIndexEntriesReader( int partitions )
+    public IndexEntriesReader[] newAllIndexEntriesReader( int partitions, PageCursorTracer cursorTracer )
     {
         GenericKey lowest = layout.newKey();
         lowest.initialize( Long.MIN_VALUE );
@@ -105,7 +102,7 @@ class GenericNativeIndexAccessor extends NativeIndexAccessor<GenericKey,NativeIn
         highest.initValuesAsHighest();
         try
         {
-            Collection<Seeker<GenericKey,NativeIndexValue>> seekers = tree.partitionedSeek( lowest, highest, partitions );
+            Collection<Seeker<GenericKey,NativeIndexValue>> seekers = tree.partitionedSeek( lowest, highest, partitions, cursorTracer );
             Collection<IndexEntriesReader> readers = new ArrayList<>();
             for ( Seeker<GenericKey,NativeIndexValue> seeker : seekers )
             {

@@ -23,6 +23,7 @@ import java.io.IOException;
 
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 import static org.neo4j.index.internal.gbptree.PageCursorUtil.checkOutOfBounds;
 import static org.neo4j.index.internal.gbptree.PageCursorUtil.goTo;
@@ -100,11 +101,16 @@ class FreeListIdProvider implements IdProvider
      */
     private final Monitor monitor;
 
-    FreeListIdProvider( PagedFile pagedFile, int pageSize, long lastId, Monitor monitor )
+    FreeListIdProvider( PagedFile pagedFile, long lastId )
+    {
+        this( pagedFile, lastId, NO_MONITOR );
+    }
+
+    FreeListIdProvider( PagedFile pagedFile, long lastId, Monitor monitor )
     {
         this.pagedFile = pagedFile;
         this.monitor = monitor;
-        this.freelistNode = new FreelistNode( pageSize );
+        this.freelistNode = new FreelistNode( pagedFile.pageSize() );
         this.lastId = lastId;
     }
 
@@ -117,13 +123,13 @@ class FreeListIdProvider implements IdProvider
         this.readPos = readPos;
     }
 
-    void initializeAfterCreation() throws IOException
+    void initializeAfterCreation( PageCursorTracer cursorTracer ) throws IOException
     {
         // Allocate a new free-list page id and set both write/read free-list page id to it.
         writePageId = nextLastId();
         readPageId = writePageId;
 
-        try ( PageCursor cursor = pagedFile.io( writePageId, PagedFile.PF_SHARED_WRITE_LOCK ) )
+        try ( PageCursor cursor = pagedFile.io( writePageId, PagedFile.PF_SHARED_WRITE_LOCK, cursorTracer ) )
         {
             goTo( cursor, "free-list", writePageId );
             FreelistNode.initialize( cursor );
@@ -132,72 +138,57 @@ class FreeListIdProvider implements IdProvider
     }
 
     @Override
-    public long acquireNewId( long stableGeneration, long unstableGeneration ) throws IOException
+    public long acquireNewId( long stableGeneration, long unstableGeneration, PageCursorTracer cursorTracer ) throws IOException
     {
-        return acquireNewId( stableGeneration, unstableGeneration, true );
+        try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK, cursorTracer ) )
+        {
+            return acquireNewId( cursor, stableGeneration, unstableGeneration, true, cursorTracer );
+        }
     }
 
-    private long acquireNewId( long stableGeneration, long unstableGeneration, boolean allowTakeLastFromPage )
+    private long acquireNewId( PageCursor cursor, long stableGeneration, long unstableGeneration, boolean allowTakeLastFromPage, PageCursorTracer cursorTracer )
             throws IOException
     {
         // Acquire id from free-list or end of store file
-        long acquiredId = acquireNewIdFromFreelistOrEnd( stableGeneration, unstableGeneration, allowTakeLastFromPage );
+        long acquiredId = acquireNewIdFromFreelistOrEnd( cursor, stableGeneration, unstableGeneration, allowTakeLastFromPage, cursorTracer );
 
         // Zap the page, i.e. set all bytes to zero
-        try ( PageCursor cursor = pagedFile.io( acquiredId, PagedFile.PF_SHARED_WRITE_LOCK ) )
-        {
-            PageCursorUtil.goTo( cursor, "newly allocated free-list page", acquiredId );
-            cursor.zapPage();
-            // don't initialize node here since this acquisition can be used both for tree nodes
-            // as well as free-list nodes.
-        }
+        goTo( cursor, "newly allocated free-list page", acquiredId );
+        cursor.zapPage();
+        // don't initialize node here since this acquisition can be used both for tree nodes
+        // as well as free-list nodes.
         return acquiredId;
     }
 
-    private long acquireNewIdFromFreelistOrEnd( long stableGeneration, long unstableGeneration,
-            boolean allowTakeLastFromPage ) throws IOException
+    private long acquireNewIdFromFreelistOrEnd( PageCursor cursor, long stableGeneration, long unstableGeneration, boolean allowTakeLastFromPage,
+            PageCursorTracer cursorTracer ) throws IOException
     {
         if ( (readPageId != writePageId || readPos < writePos) &&
                 (allowTakeLastFromPage || readPos < freelistNode.maxEntries() - 1) )
         {
             // It looks like reader isn't even caught up to the writer page-wise,
             // or the read pos is < write pos so check if we can grab the next id (generation could still mismatch).
-            try ( PageCursor cursor = pagedFile.io( readPageId, PagedFile.PF_SHARED_READ_LOCK ) )
+            goTo( cursor, "Free-list read page ", readPageId );
+
+            long resultPageId = freelistNode.read( cursor, stableGeneration, readPos );
+
+            if ( resultPageId != FreelistNode.NO_PAGE_ID )
             {
-                if ( !cursor.next() )
+                // FreelistNode compares generation and so this means that we have an available
+                // id in the free list which we can acquire from a stable generation. Increment readPos
+                readPos++;
+                if ( readPos >= freelistNode.maxEntries() )
                 {
-                    throw new IOException( "Couldn't go to free-list read page " + readPageId );
-                }
+                    // The current reader page is exhausted, go to the next free-list page.
+                    readPos = 0;
+                    readPageId = FreelistNode.next( cursor );
 
-                long resultPageId;
-                do
-                {
-                    resultPageId = freelistNode.read( cursor, stableGeneration, readPos );
+                    // Put the exhausted free-list page id itself on the free-list
+                    long exhaustedFreelistPageId = cursor.getCurrentPageId();
+                    releaseId( stableGeneration, unstableGeneration, exhaustedFreelistPageId, cursorTracer );
+                    monitor.releasedFreelistPageId( exhaustedFreelistPageId );
                 }
-                while ( cursor.shouldRetry() );
-
-                if ( resultPageId != FreelistNode.NO_PAGE_ID )
-                {
-                    // FreelistNode compares generation and so this means that we have an available
-                    // id in the free list which we can acquire from a stable generation. Increment readPos
-                    readPos++;
-                    if ( readPos >= freelistNode.maxEntries() )
-                    {
-                        // The current reader page is exhausted, go to the next free-list page.
-                        readPos = 0;
-                        do
-                        {
-                            readPageId = FreelistNode.next( cursor );
-                        }
-                        while ( cursor.shouldRetry() );
-
-                        // Put the exhausted free-list page id itself on the free-list
-                        long exhaustedFreelistPageId = cursor.getCurrentPageId();
-                        releaseId( stableGeneration, unstableGeneration, exhaustedFreelistPageId );
-                        monitor.releasedFreelistPageId( exhaustedFreelistPageId );
-                    }
-                    return resultPageId;
-                }
+                return resultPageId;
             }
         }
 
@@ -211,41 +202,38 @@ class FreeListIdProvider implements IdProvider
     }
 
     @Override
-    public void releaseId( long stableGeneration, long unstableGeneration, long id ) throws IOException
+    public void releaseId( long stableGeneration, long unstableGeneration, long id, PageCursorTracer cursorTracer ) throws IOException
     {
-        try ( PageCursor cursor = pagedFile.io( writePageId, PagedFile.PF_SHARED_WRITE_LOCK ) )
+        try ( PageCursor cursor = pagedFile.io( writePageId, PagedFile.PF_SHARED_WRITE_LOCK, cursorTracer ) )
         {
             PageCursorUtil.goTo( cursor, "free-list write page", writePageId );
             freelistNode.write( cursor, unstableGeneration, id, writePos );
             writePos++;
-        }
 
-        if ( writePos >= freelistNode.maxEntries() )
-        {
-            // Current free-list write page is full, allocate a new one.
-            long nextFreelistPage = acquireNewId( stableGeneration, unstableGeneration, false );
-            try ( PageCursor cursor = pagedFile.io( writePageId, PagedFile.PF_SHARED_WRITE_LOCK ) )
+            if ( writePos >= freelistNode.maxEntries() )
             {
+                // Current free-list write page is full, allocate a new one.
+                long nextFreelistPage = acquireNewId( cursor, stableGeneration, unstableGeneration, false, cursorTracer );
                 PageCursorUtil.goTo( cursor, "free-list write page", writePageId );
                 FreelistNode.initialize( cursor );
                 // Link previous --> new writer page
                 FreelistNode.setNext( cursor, nextFreelistPage );
+                writePageId = nextFreelistPage;
+                writePos = 0;
+                monitor.acquiredFreelistPageId( nextFreelistPage );
             }
-            writePageId = nextFreelistPage;
-            writePos = 0;
-            monitor.acquiredFreelistPageId( nextFreelistPage );
         }
     }
 
     @Override
-    public void visitFreelist( IdProviderVisitor visitor ) throws IOException
+    public void visitFreelist( IdProviderVisitor visitor, PageCursorTracer cursorTracer ) throws IOException
     {
         if ( readPageId == FreelistNode.NO_PAGE_ID )
         {
             return;
         }
 
-        try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_READ_LOCK ) )
+        try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_READ_LOCK, cursorTracer ) )
         {
             GenerationKeeper generation = new GenerationKeeper();
             long prevPage;

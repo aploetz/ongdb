@@ -25,11 +25,15 @@ import java.io.IOException;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.kernel.impl.store.MetaDataStore.Position;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.storageengine.api.TransactionId;
 import org.neo4j.storageengine.api.TransactionIdStore;
 
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET;
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.LAST_CLOSED_TRANSACTION_LOG_VERSION;
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.LAST_TRANSACTION_CHECKSUM;
+import static org.neo4j.kernel.impl.store.MetaDataStore.Position.LAST_TRANSACTION_ID;
 import static org.neo4j.kernel.impl.store.MetaDataStore.getRecord;
 
 public class ReadOnlyTransactionIdStore implements TransactionIdStore
@@ -39,19 +43,20 @@ public class ReadOnlyTransactionIdStore implements TransactionIdStore
     private final long logVersion;
     private final long byteOffset;
 
-    public ReadOnlyTransactionIdStore( FileSystemAbstraction fs, PageCache pageCache, DatabaseLayout databaseLayout ) throws IOException
+    public ReadOnlyTransactionIdStore( FileSystemAbstraction fs, PageCache pageCache, DatabaseLayout databaseLayout, PageCursorTracer cursorTracer )
+            throws IOException
     {
         long id = 0;
         int checksum = 0;
         long logVersion = 0;
         long byteOffset = 0;
-        if ( NeoStores.isStorePresent( fs, pageCache, databaseLayout ) )
+        if ( NeoStores.isStorePresent( fs, databaseLayout ) )
         {
             File neoStore = databaseLayout.metadataStore();
-            id = getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_ID );
-            checksum = (int) getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_CHECKSUM );
-            logVersion = getRecord( pageCache, neoStore, Position.LAST_CLOSED_TRANSACTION_LOG_VERSION );
-            byteOffset = getRecord( pageCache, neoStore, Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET );
+            id = getRecord( pageCache, neoStore, LAST_TRANSACTION_ID, cursorTracer );
+            checksum = (int) getRecord( pageCache, neoStore, LAST_TRANSACTION_CHECKSUM, cursorTracer );
+            logVersion = getRecord( pageCache, neoStore, LAST_CLOSED_TRANSACTION_LOG_VERSION, cursorTracer );
+            byteOffset = getRecord( pageCache, neoStore, LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET, cursorTracer );
         }
 
         this.transactionId = id;
@@ -73,7 +78,7 @@ public class ReadOnlyTransactionIdStore implements TransactionIdStore
     }
 
     @Override
-    public void transactionCommitted( long transactionId, int checksum, long commitTimestamp )
+    public void transactionCommitted( long transactionId, int checksum, long commitTimestamp, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Read-only transaction ID store" );
     }
@@ -109,25 +114,26 @@ public class ReadOnlyTransactionIdStore implements TransactionIdStore
     }
 
     @Override
-    public void setLastCommittedAndClosedTransactionId( long transactionId, int checksum, long commitTimestamp, long logByteOffset, long logVersion )
+    public void setLastCommittedAndClosedTransactionId( long transactionId, int checksum, long commitTimestamp, long logByteOffset, long logVersion,
+            PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Read-only transaction ID store" );
     }
 
     @Override
-    public void transactionClosed( long transactionId, long logVersion, long logByteOffset )
+    public void transactionClosed( long transactionId, long logVersion, long logByteOffset, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Read-only transaction ID store" );
     }
 
     @Override
-    public void resetLastClosedTransaction( long transactionId, long logVersion, long byteOffset, boolean missingLogs )
+    public void resetLastClosedTransaction( long transactionId, long logVersion, long byteOffset, boolean missingLogs, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Read-only transaction ID store" );
     }
 
     @Override
-    public void flush()
+    public void flush( PageCursorTracer cursorTracer )
     {   // Nothing to flush
     }
 }

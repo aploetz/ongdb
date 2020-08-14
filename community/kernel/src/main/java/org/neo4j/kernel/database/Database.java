@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.database;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -33,8 +35,10 @@ import java.util.function.Supplier;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.common.EntityType;
 import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.configuration.SettingChangeListener;
 import org.neo4j.counts.CountsAccessor;
@@ -45,9 +49,10 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector;
 import org.neo4j.internal.id.IdController;
 import org.neo4j.internal.id.IdGeneratorFactory;
+import org.neo4j.internal.index.label.FullStoreChangeStream;
 import org.neo4j.internal.index.label.LabelScanStore;
 import org.neo4j.internal.index.label.LoggingMonitor;
-import org.neo4j.internal.index.label.NativeLabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemUtils;
@@ -56,7 +61,7 @@ import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
@@ -79,27 +84,25 @@ import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.IndexingServiceFactory;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.kernel.impl.api.scan.FullLabelStream;
+import org.neo4j.kernel.impl.api.scan.FullRelationshipTypeStream;
 import org.neo4j.kernel.impl.api.state.ConstraintIndexCreator;
 import org.neo4j.kernel.impl.api.transaction.monitor.KernelTransactionMonitor;
-import org.neo4j.kernel.impl.api.transaction.monitor.KernelTransactionMonitorScheduler;
+import org.neo4j.kernel.impl.api.transaction.monitor.TransactionMonitorScheduler;
 import org.neo4j.kernel.impl.constraints.ConstraintSemantics;
 import org.neo4j.kernel.impl.factory.AccessCapability;
 import org.neo4j.kernel.impl.factory.AccessCapabilityFactory;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.factory.FacadeKernelTransactionFactory;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.factory.KernelTransactionFactory;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.StatementLocksFactory;
 import org.neo4j.kernel.impl.pagecache.PageCacheLifecycle;
-import org.neo4j.kernel.impl.pagecache.PageCacheStartMetricsReporter;
-import org.neo4j.kernel.impl.pagecache.PageCacheStopMetricsReporter;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.store.stats.DatabaseEntityCounters;
 import org.neo4j.kernel.impl.storemigration.DatabaseMigratorFactory;
 import org.neo4j.kernel.impl.transaction.log.BatchingTransactionAppender;
-import org.neo4j.kernel.impl.transaction.log.LogVersionUpgradeChecker;
 import org.neo4j.kernel.impl.transaction.log.LoggingLogFileMonitor;
 import org.neo4j.kernel.impl.transaction.log.LogicalTransactionStore;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogicalTransactionStore;
@@ -128,7 +131,6 @@ import org.neo4j.kernel.impl.transaction.state.DefaultIndexProviderMap;
 import org.neo4j.kernel.impl.transaction.state.storeview.DynamicIndexStoreView;
 import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
 import org.neo4j.kernel.impl.transaction.stats.DatabaseTransactionStats;
-import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
 import org.neo4j.kernel.internal.event.GlobalTransactionEventListeners;
@@ -136,23 +138,23 @@ import org.neo4j.kernel.internal.locker.FileLockerService;
 import org.neo4j.kernel.internal.locker.LockerLifecycleAdapter;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
-import org.neo4j.kernel.monitoring.tracing.Tracers;
+import org.neo4j.kernel.monitoring.DatabaseEventListeners;
 import org.neo4j.kernel.recovery.LogTailScanner;
 import org.neo4j.kernel.recovery.LoggingLogTailScannerMonitor;
 import org.neo4j.kernel.recovery.RecoveryStartupChecker;
 import org.neo4j.lock.LockService;
-import org.neo4j.lock.LockTracer;
 import org.neo4j.lock.ReentrantLockService;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.internal.DatabaseLogProvider;
 import org.neo4j.logging.internal.DatabaseLogService;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.memory.ScopedMemoryPool;
 import org.neo4j.monitoring.DatabaseHealth;
 import org.neo4j.monitoring.Health;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageEngineFactory;
@@ -165,11 +167,15 @@ import org.neo4j.token.TokenHolders;
 import org.neo4j.util.VisibleForTesting;
 
 import static java.lang.String.format;
-import static org.neo4j.configuration.GraphDatabaseSettings.fail_on_corrupted_log_files;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.fail_on_corrupted_log_files;
 import static org.neo4j.configuration.GraphDatabaseSettings.read_only;
 import static org.neo4j.function.Predicates.alwaysTrue;
 import static org.neo4j.function.ThrowingAction.executeAll;
 import static org.neo4j.internal.helpers.collection.Iterators.asList;
+import static org.neo4j.internal.index.label.TokenScanStore.LABEL_SCAN_STORE_MONITOR_TAG;
+import static org.neo4j.internal.index.label.TokenScanStore.RELATIONSHIP_TYPE_SCAN_STORE_MONITOR_TAG;
+import static org.neo4j.internal.index.label.TokenScanStore.labelScanStore;
+import static org.neo4j.internal.index.label.TokenScanStore.toggledRelationshipTypeScanStore;
 import static org.neo4j.kernel.database.DatabaseFileHelper.filesToDeleteOnTruncation;
 import static org.neo4j.kernel.database.DatabaseFileHelper.filesToKeepOnTruncation;
 import static org.neo4j.kernel.extension.ExtensionFailureStrategies.fail;
@@ -178,6 +184,7 @@ import static org.neo4j.kernel.recovery.Recovery.validateStoreId;
 
 public class Database extends LifecycleAdapter
 {
+    private static final String STORE_ID_VALIDATOR_TAG = "storeIdValidator";
     private final Monitors parentMonitors;
     private final DependencyResolver globalDependencies;
     private final PageCache globalPageCache;
@@ -186,7 +193,6 @@ public class Database extends LifecycleAdapter
     private final DatabaseLogService databaseLogService;
     private final DatabaseLogProvider internalLogProvider;
     private final DatabaseLogProvider userLogProvider;
-    private final TokenNameLookup tokenNameLookup;
     private final TokenHolders tokenHolders;
     private final StatementLocksFactory statementLocksFactory;
     private final GlobalTransactionEventListeners transactionEventListeners;
@@ -204,9 +210,7 @@ public class Database extends LifecycleAdapter
     private final CollectionsFactorySupplier collectionsFactorySupplier;
     private final Locks locks;
     private final DatabaseEventListeners eventListeners;
-    private final DatabaseTracer databaseTracer;
-    private final PageCursorTracerSupplier pageCursorTracerSupplier;
-    private final LockTracer lockTracer;
+    private final DatabaseTracers tracers;
     private final AccessCapabilityFactory accessCapabilityFactory;
     private final LeaseService leaseService;
 
@@ -220,7 +224,7 @@ public class Database extends LifecycleAdapter
     private final DatabaseLayout databaseLayout;
     private final boolean readOnly;
     private final IdController idController;
-    private final DatabaseInfo databaseInfo;
+    private final DbmsInfo dbmsInfo;
     private final VersionContextSupplier versionContextSupplier;
     private AccessCapability accessCapability;
 
@@ -236,10 +240,13 @@ public class Database extends LifecycleAdapter
     private Monitors databaseMonitors;
     private DatabasePageCache databasePageCache;
     private CheckpointerLifecycle checkpointerLifecycle;
+    private ScopedMemoryPool otherDatabasePool;
     private final GraphDatabaseFacade databaseFacade;
     private final FileLockerService fileLockerService;
     private final KernelTransactionFactory kernelTransactionFactory;
     private final DatabaseStartupController startupController;
+    private final GlobalMemoryGroupTracker transactionsMemoryPool;
+    private final GlobalMemoryGroupTracker otherMemoryPool;
 
     public Database( DatabaseCreationContext context )
     {
@@ -247,9 +254,10 @@ public class Database extends LifecycleAdapter
         this.databaseLayout = context.getDatabaseLayout();
         this.databaseConfig = context.getDatabaseConfig();
         this.idGeneratorFactory = context.getIdGeneratorFactory();
-        this.tokenNameLookup = context.getTokenNameLookup();
         this.globalDependencies = context.getGlobalDependencies();
         this.scheduler = context.getScheduler();
+        this.transactionsMemoryPool = context.getTransactionsMemoryPool();
+        this.otherMemoryPool = context.getOtherMemoryPool();
         this.databaseLogService = context.getDatabaseLogService();
         this.storeCopyCheckPointMutex = context.getStoreCopyCheckPointMutex();
         this.internalLogProvider = context.getDatabaseLogService().getInternalLogProvider();
@@ -271,7 +279,7 @@ public class Database extends LifecycleAdapter
 
         this.readOnly = databaseConfig.get( read_only );
         this.idController = context.getIdController();
-        this.databaseInfo = context.getDatabaseInfo();
+        this.dbmsInfo = context.getDbmsInfo();
         this.versionContextSupplier = context.getVersionContextSupplier();
         this.extensionFactories = context.getExtensionFactories();
         this.watcherServiceFactory = context.getWatcherServiceFactory();
@@ -282,14 +290,11 @@ public class Database extends LifecycleAdapter
         this.globalPageCache = context.getPageCache();
         this.collectionsFactorySupplier = context.getCollectionsFactorySupplier();
         this.storageEngineFactory = context.getStorageEngineFactory();
-        long availabilityGuardTimeout = databaseConfig.get( GraphDatabaseSettings.transaction_start_timeout ).toMillis();
+        long availabilityGuardTimeout = databaseConfig.get( GraphDatabaseInternalSettings.transaction_start_timeout ).toMillis();
         this.databaseAvailabilityGuard = context.getDatabaseAvailabilityGuardFactory().apply( availabilityGuardTimeout );
-        this.databaseFacade = new GraphDatabaseFacade( this, databaseConfig, databaseInfo, databaseAvailabilityGuard );
+        this.databaseFacade = new GraphDatabaseFacade( this, databaseConfig, dbmsInfo, databaseAvailabilityGuard );
         this.kernelTransactionFactory = new FacadeKernelTransactionFactory( databaseConfig, databaseFacade );
-        Tracers globalTracers = context.getTracers();
-        this.databaseTracer = globalTracers.getDatabaseTracer();
-        this.pageCursorTracerSupplier = globalTracers.getPageCursorTracerSupplier();
-        this.lockTracer = globalTracers.getLockTracer();
+        this.tracers = new DatabaseTracers( context.getTracers() );
         this.fileLockerService = context.getFileLockerService();
         this.leaseService = context.getLeaseService();
         this.startupController = context.getStartupController();
@@ -336,13 +341,11 @@ public class Database extends LifecycleAdapter
             databaseDependencies.satisfyDependency( idController );
             databaseDependencies.satisfyDependency( lockService );
             databaseDependencies.satisfyDependency( versionContextSupplier );
-            databaseDependencies.satisfyDependency( databaseTracer );
-            databaseDependencies.satisfyDependency( lockTracer );
+            databaseDependencies.satisfyDependency( tracers.getDatabaseTracer() );
 
             RecoveryCleanupWorkCollector recoveryCleanupWorkCollector = RecoveryCleanupWorkCollector.immediate();
             databaseDependencies.satisfyDependency( recoveryCleanupWorkCollector );
 
-            life.add( new PageCacheStopMetricsReporter( pageCursorTracerSupplier ) );
             life.add( new PageCacheLifecycle( databasePageCache ) );
             life.add( initializeExtensions( databaseDependencies ) );
 
@@ -350,35 +353,41 @@ public class Database extends LifecycleAdapter
             life.add( watcherService );
             databaseDependencies.satisfyDependency( watcherService );
 
+            otherDatabasePool = otherMemoryPool.newDatabasePool( namedDatabaseId.name(), 0, null );
+            life.add( onShutdown( () -> otherDatabasePool.close() ) );
+            var otherDatabaseMemoryTracker = otherDatabasePool.getPoolMemoryTracker();
+
+            databaseDependencies.satisfyDependency( new DatabaseMemoryTrackers( otherDatabaseMemoryTracker ) );
             // Upgrade the store before we begin
-            upgradeStore( databaseConfig, databasePageCache );
+            upgradeStore( databaseConfig, databasePageCache, otherDatabaseMemoryTracker );
 
             // Check the tail of transaction logs and validate version
-            final LogEntryReader logEntryReader = new VersionAwareLogEntryReader();
+            final LogEntryReader logEntryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
 
             LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fs ).withLogEntryReader( logEntryReader )
                     .withConfig( databaseConfig )
                     .withDependencies( databaseDependencies )
                     .withLogProvider( internalLogProvider )
-                    .withDatabaseTracer( databaseTracer )
+                    .withDatabaseTracers( tracers )
+                    .withMemoryTracker( otherDatabaseMemoryTracker )
+                    .withCommandReaderFactory( storageEngineFactory.commandReaderFactory() )
                     .build();
 
             databaseMonitors.addMonitorListener( new LoggingLogFileMonitor( msgLog ) );
             databaseMonitors.addMonitorListener( new LoggingLogTailScannerMonitor( internalLogProvider.getLog( LogTailScanner.class ) ) );
             databaseMonitors.addMonitorListener(
                     new ReverseTransactionCursorLoggingMonitor( internalLogProvider.getLog( ReversedSingleFileTransactionCursor.class ) ) );
-            LogTailScanner tailScanner =
-                    new LogTailScanner( logFiles, logEntryReader, databaseMonitors, databaseConfig.get( fail_on_corrupted_log_files ) );
-            LogVersionUpgradeChecker.check( tailScanner, databaseConfig );
+
+            var pageCacheTracer = tracers.getPageCacheTracer();
+            LogTailScanner tailScanner = new LogTailScanner( logFiles, logEntryReader, databaseMonitors, databaseConfig.get( fail_on_corrupted_log_files ),
+                    internalLogProvider, otherDatabaseMemoryTracker );
 
             boolean storageExists = storageEngineFactory.storageExists( fs, databaseLayout, databasePageCache );
-            if ( storageExists )
-            {
-                validateStoreId( tailScanner, storageEngineFactory.storeId( databaseLayout, databasePageCache ) );
-            }
+            validateStoreAndTxLogs( logFiles, pageCacheTracer, tailScanner, storageExists );
 
-            performRecovery( fs, databasePageCache, databaseConfig, databaseLayout, storageEngineFactory, internalLogProvider, databaseMonitors,
-                    extensionFactories, Optional.of( tailScanner ), new RecoveryStartupChecker( startupController, namedDatabaseId ) );
+            performRecovery( fs, databasePageCache, tracers, databaseConfig, databaseLayout, storageEngineFactory, internalLogProvider, databaseMonitors,
+                    extensionFactories, Optional.of( tailScanner ), new RecoveryStartupChecker( startupController, namedDatabaseId ),
+                    otherDatabaseMemoryTracker );
 
             // Build all modules and their services
             DatabaseSchemaState databaseSchemaState = new DatabaseSchemaState( internalLogProvider );
@@ -388,22 +397,29 @@ public class Database extends LifecycleAdapter
 
             storageEngine = storageEngineFactory.instantiate( fs, databaseLayout, databaseConfig, databasePageCache, tokenHolders, databaseSchemaState,
                     constraintSemantics, indexProviderMap, lockService, idGeneratorFactory, idController, databaseHealth, internalLogProvider,
-                    recoveryCleanupWorkCollector, !storageExists );
+                    recoveryCleanupWorkCollector, pageCacheTracer, !storageExists, otherDatabaseMemoryTracker );
 
             life.add( storageEngine );
             life.add( storageEngine.schemaAndTokensLifecycle() );
             life.add( logFiles );
 
-            // Label index
+            // Token indexes
             NeoStoreIndexStoreView neoStoreIndexStoreView = new NeoStoreIndexStoreView( lockService, storageEngine::newReader );
             LabelScanStore labelScanStore =
-                    buildLabelIndex( databasePageCache, recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, databaseMonitors );
+                    buildLabelIndex( databasePageCache, recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, databaseMonitors,
+                            pageCacheTracer, otherDatabaseMemoryTracker );
+            RelationshipTypeScanStore relationshipTypeScanStore =
+                    buildRelationshipTypeIndex( databasePageCache, recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, databaseMonitors,
+                            databaseConfig, otherDatabaseMemoryTracker );
 
             // Schema indexes
             DynamicIndexStoreView indexStoreView =
-                    new DynamicIndexStoreView( neoStoreIndexStoreView, labelScanStore, lockService, storageEngine::newReader, internalLogProvider );
-            IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( databasePageCache, databaseLayout, recoveryCleanupWorkCollector, readOnly );
-            IndexingService indexingService = buildIndexingService( storageEngine, databaseSchemaState, indexStoreView, indexStatisticsStore );
+                    new DynamicIndexStoreView( neoStoreIndexStoreView, labelScanStore, relationshipTypeScanStore, lockService, storageEngine::newReader,
+                            internalLogProvider, databaseConfig );
+            IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( databasePageCache, databaseLayout, recoveryCleanupWorkCollector,
+                    readOnly, pageCacheTracer );
+            IndexingService indexingService = buildIndexingService( storageEngine, databaseSchemaState, indexStoreView, indexStatisticsStore,
+                    pageCacheTracer, otherDatabaseMemoryTracker );
 
             TransactionIdStore transactionIdStore = storageEngine.transactionIdStore();
             databaseDependencies.satisfyDependency( transactionIdStore );
@@ -412,7 +428,8 @@ public class Database extends LifecycleAdapter
 
             versionContextSupplier.init( transactionIdStore::getLastClosedTransactionId );
 
-            CheckPointerImpl.ForceOperation forceOperation = new DefaultForceOperation( indexingService, labelScanStore, storageEngine );
+            CheckPointerImpl.ForceOperation forceOperation =
+                    new DefaultForceOperation( indexingService, labelScanStore, relationshipTypeScanStore, storageEngine );
             DatabaseTransactionLogModule transactionLogModule =
                     buildTransactionLogs( logFiles, databaseConfig, internalLogProvider, scheduler, forceOperation,
                             logEntryReader, transactionIdStore, databaseMonitors );
@@ -424,6 +441,7 @@ public class Database extends LifecycleAdapter
                     indexingService,
                     databaseSchemaState,
                     labelScanStore,
+                    relationshipTypeScanStore,
                     storageEngine,
                     transactionIdStore,
                     databaseAvailabilityGuard,
@@ -439,13 +457,14 @@ public class Database extends LifecycleAdapter
             databaseDependencies.satisfyDependency( logEntryReader );
             databaseDependencies.satisfyDependency( storageEngine );
             databaseDependencies.satisfyDependency( labelScanStore );
+            databaseDependencies.satisfyDependency( relationshipTypeScanStore );
             databaseDependencies.satisfyDependency( indexingService );
             databaseDependencies.satisfyDependency( indexStoreView );
             databaseDependencies.satisfyDependency( indexStatisticsStore );
             databaseDependencies.satisfyDependency( indexProviderMap );
             databaseDependencies.satisfyDependency( forceOperation );
-            databaseDependencies.satisfyDependency( new DatabaseEntityCounters( this.idGeneratorFactory,
-                    databaseDependencies.resolveDependency( CountsAccessor.class ) ) );
+            databaseDependencies.satisfyDependency(
+                    new DatabaseEntityCounters( this.idGeneratorFactory, databaseDependencies.resolveDependency( CountsAccessor.class ) ) );
 
             var providerSpi = QueryEngineProvider.spi( internalLogProvider, databaseMonitors, scheduler, life, getKernel(), databaseConfig );
             this.executionEngine = QueryEngineProvider.initialize( databaseDependencies, databaseFacade, engineProvider, isSystem(), providerSpi );
@@ -455,12 +474,11 @@ public class Database extends LifecycleAdapter
             life.add( databaseHealth );
             life.add( databaseAvailabilityGuard );
             life.add( databaseAvailability );
-            life.add( new PageCacheStartMetricsReporter( pageCursorTracerSupplier ) );
             life.setLast( checkpointerLifecycle );
 
             databaseDependencies.resolveDependency( DbmsDiagnosticsManager.class ).dumpDatabaseDiagnostics( this );
             life.start();
-            eventListeners.databaseStart( namedDatabaseId.name() );
+            eventListeners.databaseStart( namedDatabaseId );
         }
         catch ( Throwable e )
         {
@@ -469,7 +487,7 @@ public class Database extends LifecycleAdapter
             msgLog.warn( "Exception occurred while starting the database. Trying to stop already started components.", e );
             try
             {
-                executeAll( () -> safeLifeShutdown( life ), () -> safeStorageEngineClose( storageEngine ) );
+                executeAll( () -> safeLifeShutdown( life ), () -> safeStorageEngineClose( storageEngine ), () -> safePoolRelease( otherDatabasePool ) );
             }
             catch ( Exception closeException )
             {
@@ -487,11 +505,41 @@ public class Database extends LifecycleAdapter
         started = true;
     }
 
+    private void validateStoreAndTxLogs( LogFiles logFiles, PageCacheTracer pageCacheTracer, LogTailScanner tailScanner, boolean storageExists )
+            throws IOException
+    {
+        if ( storageExists )
+        {
+            checkStoreId( pageCacheTracer, tailScanner );
+        }
+        else
+        {
+            validateLogsAndStoreAbsence( logFiles );
+        }
+    }
+
+    private void validateLogsAndStoreAbsence( LogFiles logFiles )
+    {
+        if ( ArrayUtils.isNotEmpty( logFiles.logFiles() ) )
+        {
+            throw new RuntimeException( format( "Fail to start database '%s' since transaction logs were found, while database " +
+                    "files are missing.", namedDatabaseId.name() ) );
+        }
+    }
+
+    private void checkStoreId( PageCacheTracer pageCacheTracer, LogTailScanner tailScanner ) throws IOException
+    {
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( STORE_ID_VALIDATOR_TAG ) )
+        {
+            validateStoreId( tailScanner, storageEngineFactory.storeId( databaseLayout, databasePageCache, cursorTracer ) );
+        }
+    }
+
     private LifeSupport initializeExtensions( Dependencies dependencies )
     {
         LifeSupport extensionsLife = new LifeSupport();
 
-        extensionsLife.add( new DatabaseExtensions( new DatabaseExtensionContext( databaseLayout, databaseInfo, dependencies ), extensionFactories,
+        extensionsLife.add( new DatabaseExtensions( new DatabaseExtensionContext( databaseLayout, dbmsInfo, dependencies ), extensionFactories,
                 dependencies, fail() ) );
 
         indexProviderMap = extensionsLife.add( new DefaultIndexProviderMap( dependencies, databaseConfig ) );
@@ -500,10 +548,14 @@ public class Database extends LifecycleAdapter
         return extensionsLife;
     }
 
+<<<<<<< HEAD
     private void upgradeStore( DatabaseConfig databaseConfig, DatabasePageCache databasePageCache )
+=======
+    private void upgradeStore( DatabaseConfig databaseConfig, DatabasePageCache databasePageCache, MemoryTracker memoryTracker )
+>>>>>>> neo4j/4.1
     {
-        new DatabaseMigratorFactory( fs, databaseConfig, databaseLogService, databasePageCache, scheduler, namedDatabaseId )
-                .createDatabaseMigrator( databaseLayout, storageEngineFactory, databaseDependencies ).migrate();
+        new DatabaseMigratorFactory( fs, databaseConfig, databaseLogService, databasePageCache, scheduler, namedDatabaseId, tracers.getPageCacheTracer(),
+                memoryTracker ).createDatabaseMigrator( databaseLayout, storageEngineFactory, databaseDependencies ).migrate();
     }
 
     /**
@@ -513,11 +565,13 @@ public class Database extends LifecycleAdapter
             StorageEngine storageEngine,
             DatabaseSchemaState databaseSchemaState,
             DynamicIndexStoreView indexStoreView,
-            IndexStatisticsStore indexStatisticsStore )
+            IndexStatisticsStore indexStatisticsStore,
+            PageCacheTracer pageCacheTracer,
+            MemoryTracker memoryTracker )
     {
         return life.add( buildIndexingService( storageEngine, databaseSchemaState, indexStoreView, indexStatisticsStore, databaseConfig, scheduler,
-                indexProviderMap, tokenNameLookup, internalLogProvider, userLogProvider, databaseMonitors.newMonitor( IndexingService.Monitor.class ),
-                readOnly ) );
+                indexProviderMap, tokenHolders, internalLogProvider, userLogProvider, databaseMonitors.newMonitor( IndexingService.Monitor.class ),
+                pageCacheTracer, memoryTracker, readOnly ) );
     }
 
     /**
@@ -535,11 +589,13 @@ public class Database extends LifecycleAdapter
             LogProvider internalLogProvider,
             LogProvider userLogProvider,
             IndexingService.Monitor indexingServiceMonitor,
+            PageCacheTracer pageCacheTracer,
+            MemoryTracker memoryTracker,
             boolean readOnly )
     {
         IndexingService indexingService = IndexingServiceFactory.createIndexingService( config, jobScheduler, indexProviderMap, indexStoreView,
                 tokenNameLookup, initialSchemaRulesLoader( storageEngine ), internalLogProvider, userLogProvider, indexingServiceMonitor,
-                databaseSchemaState, indexStatisticsStore, readOnly );
+                databaseSchemaState, indexStatisticsStore, pageCacheTracer, memoryTracker, readOnly );
         storageEngine.addIndexUpdateListener( indexingService );
         return indexingService;
     }
@@ -552,15 +608,27 @@ public class Database extends LifecycleAdapter
     /**
      * Builds a {@link LabelScanStore} and adds it to this database's {@link LifeSupport}.
      */
-    private LabelScanStore buildLabelIndex(
+    private LabelScanStore buildLabelIndex( PageCache pageCache, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, StorageEngine storageEngine,
+            NeoStoreIndexStoreView neoStoreIndexStoreView, Monitors monitors, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
+    {
+        return life.add( buildLabelIndex( recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, monitors, internalLogProvider,
+                pageCache, databaseLayout, fs, readOnly, pageCacheTracer, memoryTracker ) );
+    }
+
+    /**
+     * Builds a {@link RelationshipTypeScanStore} and adds it to this database's {@link LifeSupport}.
+     */
+    private RelationshipTypeScanStore buildRelationshipTypeIndex(
             PageCache pageCache,
             RecoveryCleanupWorkCollector recoveryCleanupWorkCollector,
             StorageEngine storageEngine,
             NeoStoreIndexStoreView neoStoreIndexStoreView,
-            Monitors monitors )
+            Monitors monitors,
+            Config config,
+            MemoryTracker memoryTracker )
     {
-        return life.add( buildLabelIndex( recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, monitors, internalLogProvider,
-                pageCache, databaseLayout, fs, readOnly ) );
+        return life.add( buildRelationshipTypeIndex( recoveryCleanupWorkCollector, storageEngine, neoStoreIndexStoreView, monitors, internalLogProvider,
+                pageCache, databaseLayout, fs, readOnly, config, tracers.getPageCacheTracer(), memoryTracker ) );
     }
 
     /**
@@ -575,13 +643,43 @@ public class Database extends LifecycleAdapter
             PageCache pageCache,
             DatabaseLayout databaseLayout,
             FileSystemAbstraction fs,
-            boolean readOnly )
+            boolean readOnly,
+            PageCacheTracer cacheTracer,
+            MemoryTracker memoryTracker )
     {
-        monitors.addMonitorListener( new LoggingMonitor( logProvider.getLog( NativeLabelScanStore.class ) ) );
-        NativeLabelScanStore labelScanStore = new NativeLabelScanStore( pageCache, databaseLayout, fs, new FullLabelStream( indexStoreView ),
-                readOnly, monitors, recoveryCleanupWorkCollector );
-        storageEngine.addNodeLabelUpdateListener( labelScanStore );
+        monitors.addMonitorListener( new LoggingMonitor( logProvider.getLog( LabelScanStore.class ), EntityType.NODE ), LABEL_SCAN_STORE_MONITOR_TAG );
+        FullStoreChangeStream labelStream = new FullLabelStream( indexStoreView );
+        LabelScanStore labelScanStore = labelScanStore( pageCache, databaseLayout, fs, labelStream, readOnly, monitors, recoveryCleanupWorkCollector,
+                cacheTracer, memoryTracker );
+        storageEngine.addNodeLabelUpdateListener( labelScanStore.updateListener() );
         return labelScanStore;
+    }
+
+    /**
+     * Convenience method for building a {@link RelationshipTypeScanStore}. Doesn't add it to a {@link LifeSupport}.
+     */
+    public static RelationshipTypeScanStore buildRelationshipTypeIndex(
+            RecoveryCleanupWorkCollector recoveryCleanupWorkCollector,
+            StorageEngine storageEngine,
+            IndexStoreView indexStoreView,
+            Monitors monitors,
+            LogProvider logProvider,
+            PageCache pageCache,
+            DatabaseLayout databaseLayout,
+            FileSystemAbstraction fs,
+            boolean readOnly,
+            Config config,
+            PageCacheTracer cacheTracer,
+            MemoryTracker memoryTracker )
+    {
+        monitors.addMonitorListener( new LoggingMonitor( logProvider.getLog( RelationshipTypeScanStore.class ), EntityType.RELATIONSHIP ),
+                RELATIONSHIP_TYPE_SCAN_STORE_MONITOR_TAG );
+        FullStoreChangeStream relationshipTypeStream = new FullRelationshipTypeStream( indexStoreView );
+        RelationshipTypeScanStore relationshipTypeScanStore =
+                toggledRelationshipTypeScanStore( pageCache, databaseLayout, fs, relationshipTypeStream, readOnly, monitors, recoveryCleanupWorkCollector,
+                        config, cacheTracer, memoryTracker );
+        storageEngine.addRelationshipTypeUpdateListener( relationshipTypeScanStore.updateListener() );
+        return relationshipTypeScanStore;
     }
 
     private DatabaseTransactionLogModule buildTransactionLogs( LogFiles logFiles, Config config,
@@ -604,8 +702,8 @@ public class Database extends LifecycleAdapter
         CheckPointThreshold threshold = CheckPointThreshold.createThreshold( config, clock, logPruning, logProvider );
 
         final CheckPointerImpl checkPointer =
-                new CheckPointerImpl( transactionIdStore, threshold, forceOperation, logPruning, appender, databaseHealth, logProvider, databaseTracer,
-                        ioLimiter, storeCopyCheckPointMutex );
+                new CheckPointerImpl( transactionIdStore, threshold, forceOperation, logPruning, appender, databaseHealth, logProvider,
+                        tracers, ioLimiter, storeCopyCheckPointMutex );
 
         long recurringPeriod = threshold.checkFrequencyMillis();
         CheckPointScheduler checkPointScheduler = new CheckPointScheduler( checkPointer, ioLimiter, scheduler,
@@ -619,13 +717,12 @@ public class Database extends LifecycleAdapter
 
     private DatabaseKernelModule buildKernel( LogFiles logFiles, TransactionAppender appender,
             IndexingService indexingService, DatabaseSchemaState databaseSchemaState, LabelScanStore labelScanStore,
-            StorageEngine storageEngine, TransactionIdStore transactionIdStore,
+            RelationshipTypeScanStore relationshipTypeScanStore, StorageEngine storageEngine, TransactionIdStore transactionIdStore,
             AvailabilityGuard databaseAvailabilityGuard, SystemNanoClock clock,
             IndexStatisticsStore indexStatisticsStore, GraphDatabaseFacade facade,
             LeaseService leaseService )
     {
         AtomicReference<CpuClock> cpuClockRef = setupCpuClockAtomicReference();
-        AtomicReference<HeapAllocation> heapAllocationRef = setupHeapAllocationAtomicReference();
 
         TransactionCommitProcess transactionCommitProcess = commitProcessFactory.create( appender, storageEngine, databaseConfig );
 
@@ -644,9 +741,9 @@ public class Database extends LifecycleAdapter
                         transactionCommitProcess, databaseTransactionEventListeners, transactionStats,
                         databaseAvailabilityGuard,
                         storageEngine, globalProcedures, transactionIdStore, clock, cpuClockRef,
-                        heapAllocationRef, accessCapability, versionContextSupplier, collectionsFactorySupplier,
-                        constraintSemantics, databaseSchemaState, tokenHolders, getNamedDatabaseId(), indexingService, labelScanStore, indexStatisticsStore,
-                        databaseDependencies, databaseTracer, pageCursorTracerSupplier, lockTracer, leaseService ) );
+                        accessCapability, versionContextSupplier, collectionsFactorySupplier,
+                        constraintSemantics, databaseSchemaState, tokenHolders, getNamedDatabaseId(), indexingService, labelScanStore,
+                        relationshipTypeScanStore, indexStatisticsStore, databaseDependencies, tracers, leaseService, transactionsMemoryPool ) );
 
         buildTransactionMonitor( kernelTransactions, databaseConfig );
 
@@ -655,7 +752,8 @@ public class Database extends LifecycleAdapter
         life.add( kernel );
 
         final DatabaseFileListing fileListing =
-                new DatabaseFileListing( databaseLayout, logFiles, labelScanStore, indexingService, storageEngine, idGeneratorFactory );
+                new DatabaseFileListing( databaseLayout, logFiles, labelScanStore, relationshipTypeScanStore, indexingService, storageEngine,
+                        idGeneratorFactory );
         databaseDependencies.satisfyDependency( fileListing );
 
         return new DatabaseKernelModule( transactionCommitProcess, kernel, kernelTransactions, fileListing );
@@ -680,31 +778,12 @@ public class Database extends LifecycleAdapter
         return cpuClock;
     }
 
-    private AtomicReference<HeapAllocation> setupHeapAllocationAtomicReference()
-    {
-        AtomicReference<HeapAllocation> heapAllocation = new AtomicReference<>( HeapAllocation.NOT_AVAILABLE );
-        SettingChangeListener<Boolean> heapAllocationUpdater = ( before, after ) ->
-        {
-            if ( after )
-            {
-                heapAllocation.set( HeapAllocation.HEAP_ALLOCATION );
-            }
-            else
-            {
-                heapAllocation.set( HeapAllocation.NOT_AVAILABLE );
-            }
-        };
-        heapAllocationUpdater.accept( null, databaseConfig.get( GraphDatabaseSettings.track_query_allocation ) );
-        databaseConfig.addListener( GraphDatabaseSettings.track_query_allocation, heapAllocationUpdater );
-        return heapAllocation;
-    }
-
     private void buildTransactionMonitor( KernelTransactions kernelTransactions, Config config )
     {
         KernelTransactionMonitor kernelTransactionTimeoutMonitor = new KernelTransactionMonitor( kernelTransactions, clock, databaseLogService );
         databaseDependencies.satisfyDependency( kernelTransactionTimeoutMonitor );
-        KernelTransactionMonitorScheduler transactionMonitorScheduler =
-                new KernelTransactionMonitorScheduler( kernelTransactionTimeoutMonitor, scheduler,
+        TransactionMonitorScheduler transactionMonitorScheduler =
+                new TransactionMonitorScheduler( kernelTransactionTimeoutMonitor, scheduler,
                         config.get( GraphDatabaseSettings.transaction_monitor_check_interval ).toMillis() );
         life.add( transactionMonitorScheduler );
     }
@@ -717,7 +796,7 @@ public class Database extends LifecycleAdapter
             return;
         }
 
-        eventListeners.databaseShutdown( namedDatabaseId.name() );
+        eventListeners.databaseShutdown( namedDatabaseId );
         life.stop();
         awaitAllClosingTransactions();
         life.shutdown();
@@ -893,6 +972,11 @@ public class Database extends LifecycleAdapter
         return versionContextSupplier;
     }
 
+    public StorageEngineFactory getStorageEngineFactory()
+    {
+        return storageEngineFactory;
+    }
+
     private void prepareStop( Predicate<PagedFile> deleteFilePredicate )
     {
         databasePageCache.listExistingMappings()
@@ -932,6 +1016,14 @@ public class Database extends LifecycleAdapter
         if ( storageEngine != null )
         {
             storageEngine.forceClose();
+        }
+    }
+
+    private static void safePoolRelease( ScopedMemoryPool pool )
+    {
+        if ( pool != null )
+        {
+            pool.close();
         }
     }
 

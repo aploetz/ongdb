@@ -19,12 +19,17 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, ExpressionVariable, Literal}
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{CoercedPredicate, Predicate}
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.values.storable.Values.{FALSE, NO_VALUE, TRUE}
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ExpressionVariable
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.CoercedPredicate
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.values.storable.Values.FALSE
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.TRUE
 
 class ListLiteralTest extends CypherFunSuite {
 
@@ -97,7 +102,7 @@ class ListLiteralTest extends CypherFunSuite {
     private def check(expected: Any,
                       collectionFunction: (Expression, String, Int, Predicate) => InList) {
       val function = collectionFunction(Literal(values), "x", 0, CoercedPredicate(ExpressionVariable(0, "x")))
-      val result = function(ExecutionContext.empty, QueryStateHelper.emptyWith(expressionVariables = new Array(1)))
+      val result = function(CypherRow.empty, QueryStateHelper.emptyWith(expressionVariables = new Array(1)))
       result should equal(expected)
     }
   }

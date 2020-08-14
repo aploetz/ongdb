@@ -33,9 +33,12 @@ import org.neo4j.io.IOUtils;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexProvider;
 
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_READER;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 
 abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends NativeIndexValue> implements ConsistencyCheckable
 {
@@ -45,20 +48,22 @@ abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends Native
     final FileSystemAbstraction fileSystem;
     final IndexDescriptor descriptor;
     private final IndexProvider.Monitor monitor;
+    private final GBPTree.Monitor treeMonitor;
     private final boolean readOnly;
 
     protected GBPTree<KEY,VALUE> tree;
 
-    NativeIndex( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout, IndexProvider.Monitor monitor,
-            IndexDescriptor descriptor, boolean readOnly )
+    NativeIndex( DatabaseIndexContext databaseIndexContext, IndexLayout<KEY,VALUE> layout, IndexFiles indexFiles, IndexDescriptor descriptor,
+            GBPTree.Monitor treeMonitor )
     {
-        this.pageCache = pageCache;
+        this.pageCache = databaseIndexContext.pageCache;
+        this.fileSystem = databaseIndexContext.fileSystem;
+        this.monitor = databaseIndexContext.monitor;
+        this.readOnly = databaseIndexContext.readOnly;
         this.indexFiles = indexFiles;
         this.layout = layout;
-        this.fileSystem = fs;
         this.descriptor = descriptor;
-        this.monitor = monitor;
-        this.readOnly = readOnly;
+        this.treeMonitor = treeMonitor;
     }
 
     void instantiateTree( RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, Consumer<PageCursor> headerWriter )
@@ -66,7 +71,8 @@ abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends Native
         ensureDirectoryExist();
         GBPTree.Monitor monitor = treeMonitor();
         File storeFile = indexFiles.getStoreFile();
-        tree = new GBPTree<>( pageCache, storeFile, layout, 0, monitor, NO_HEADER_READER, headerWriter, recoveryCleanupWorkCollector, readOnly );
+        tree = new GBPTree<>( pageCache, storeFile, layout, 0, monitor, NO_HEADER_READER, headerWriter, recoveryCleanupWorkCollector,
+                readOnly, NULL, immutable.empty() );
         afterTreeInstantiation( tree );
     }
 
@@ -99,16 +105,16 @@ abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends Native
     }
 
     @Override
-    public boolean consistencyCheck( ReporterFactory reporterFactory )
+    public boolean consistencyCheck( ReporterFactory reporterFactory, PageCursorTracer cursorTracer )
     {
-        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ) );
+        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ), cursorTracer );
     }
 
-    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<KEY> visitor )
+    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<KEY> visitor, PageCursorTracer cursorTracer )
     {
         try
         {
-            return tree.consistencyCheck( visitor );
+            return tree.consistencyCheck( visitor, cursorTracer );
         }
         catch ( IOException e )
         {
@@ -116,18 +122,25 @@ abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends Native
         }
     }
 
-    private class NativeIndexTreeMonitor extends GBPTree.Monitor.Adaptor
+    private class NativeIndexTreeMonitor extends GBPTree.Monitor.Delegate
     {
+        NativeIndexTreeMonitor()
+        {
+            super( treeMonitor );
+        }
+
         @Override
         public void cleanupRegistered()
         {
             monitor.recoveryCleanupRegistered( indexFiles.getStoreFile(), descriptor );
+            super.cleanupRegistered();
         }
 
         @Override
         public void cleanupStarted()
         {
             monitor.recoveryCleanupStarted( indexFiles.getStoreFile(), descriptor );
+            super.cleanupStarted();
         }
 
         @Override
@@ -135,18 +148,21 @@ abstract class NativeIndex<KEY extends NativeIndexKey<KEY>, VALUE extends Native
         {
             monitor.recoveryCleanupFinished( indexFiles.getStoreFile(), descriptor,
                     numberOfPagesVisited, numberOfTreeNodes, numberOfCleanedCrashPointers, durationMillis );
+            super.cleanupFinished( numberOfPagesVisited, numberOfTreeNodes, numberOfCleanedCrashPointers, durationMillis );
         }
 
         @Override
         public void cleanupClosed()
         {
             monitor.recoveryCleanupClosed( indexFiles.getStoreFile(), descriptor );
+            super.cleanupClosed();
         }
 
         @Override
         public void cleanupFailed( Throwable throwable )
         {
             monitor.recoveryCleanupFailed( indexFiles.getStoreFile(), descriptor, throwable );
+            super.cleanupFailed( throwable );
         }
     }
 }

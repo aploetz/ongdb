@@ -40,7 +40,12 @@ public class PropertyRecordFormat extends BaseRecordFormat<PropertyRecord>
 
     public PropertyRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, StandardFormatSettings.PROPERTY_MAXIMUM_ID_BITS );
+        this( false );
+    }
+
+    public PropertyRecordFormat( boolean pageAligned )
+    {
+        super( fixedRecordSize( RECORD_SIZE ), 0, StandardFormatSettings.PROPERTY_MAXIMUM_ID_BITS, pageAligned );
     }
 
     @Override
@@ -50,7 +55,7 @@ public class PropertyRecordFormat extends BaseRecordFormat<PropertyRecord>
     }
 
     @Override
-    public void read( PropertyRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( PropertyRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         int offsetAtBeginning = cursor.getOffset();
 
@@ -97,7 +102,7 @@ public class PropertyRecordFormat extends BaseRecordFormat<PropertyRecord>
     }
 
     @Override
-    public void write( PropertyRecord record, PageCursor cursor, int recordSize )
+    public void write( PropertyRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

@@ -19,11 +19,14 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.logical.plans.IndexOrder
+import org.neo4j.cypher.internal.logical.plans.IndexedProperty
+import org.neo4j.cypher.internal.logical.plans.QueryExpression
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.{CachedProperty, LabelToken}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 
 case class NodeIndexSeekPipe(ident: String,
                              label: LabelToken,
@@ -41,11 +44,13 @@ case class NodeIndexSeekPipe(ident: String,
     indexPropertyIndices.map(offset => properties(offset).asCachedProperty(ident))
   private val needsValues: Boolean = indexPropertyIndices.nonEmpty
 
-  valueExpr.expressions.foreach(_.registerOwningPipe(this))
-
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
     val index = state.queryIndexes(queryIndexId)
+<<<<<<< HEAD
     val baseContext = state.newExecutionContext(executionContextFactory)
+=======
+    val baseContext = state.newExecutionContextWithInitialContext(executionContextFactory)
+>>>>>>> neo4j/4.1
     new IndexIterator(state.query, baseContext, indexSeek(state, index, needsValues, indexOrder, baseContext))
   }
 

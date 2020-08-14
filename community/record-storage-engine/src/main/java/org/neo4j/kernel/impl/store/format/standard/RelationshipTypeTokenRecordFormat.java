@@ -25,12 +25,17 @@ public class RelationshipTypeTokenRecordFormat extends TokenRecordFormat<Relatio
 {
     public RelationshipTypeTokenRecordFormat()
     {
-        this( StandardFormatSettings.RELATIONSHIP_TYPE_TOKEN_MAXIMUM_ID_BITS );
+        this( false );
     }
 
-    public RelationshipTypeTokenRecordFormat( int maxIdBits )
+    public RelationshipTypeTokenRecordFormat( boolean pageAligned )
     {
-        super( BASE_RECORD_SIZE, maxIdBits );
+        this( StandardFormatSettings.RELATIONSHIP_TYPE_TOKEN_MAXIMUM_ID_BITS, pageAligned );
+    }
+
+    public RelationshipTypeTokenRecordFormat( int maxIdBits, boolean pageAligned )
+    {
+        super( BASE_RECORD_SIZE, maxIdBits, pageAligned );
     }
 
     @Override

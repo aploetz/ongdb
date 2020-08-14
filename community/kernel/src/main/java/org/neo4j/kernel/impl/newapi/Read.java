@@ -20,11 +20,19 @@
 package org.neo4j.kernel.impl.newapi;
 
 import org.neo4j.common.EntityType;
+import org.neo4j.configuration.Config;
 import org.neo4j.exceptions.KernelException;
+<<<<<<< HEAD
 import org.neo4j.internal.index.label.LabelScan;
 import org.neo4j.internal.index.label.LabelScanReader;
+=======
+import org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings;
+import org.neo4j.internal.index.label.TokenScan;
+import org.neo4j.internal.index.label.TokenScanReader;
+>>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.NodeCursor;
@@ -32,18 +40,18 @@ import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.QueryContext;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
+import org.neo4j.internal.kernel.api.RelationshipTypeIndexCursor;
 import org.neo4j.internal.kernel.api.Scan;
-import org.neo4j.internal.kernel.api.TokenRead;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptorSupplier;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.AssertOpen;
 import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
 import org.neo4j.kernel.api.index.IndexProgressor;
@@ -55,6 +63,7 @@ import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.lock.LockTracer;
 import org.neo4j.lock.ResourceType;
 import org.neo4j.lock.ResourceTypes;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
 import org.neo4j.values.storable.Value;
@@ -62,10 +71,7 @@ import org.neo4j.values.storable.ValueGroup;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.String.format;
-import static org.neo4j.kernel.impl.newapi.RelationshipReferenceEncoding.clearEncoding;
-import static org.neo4j.storageengine.api.RelationshipDirection.INCOMING;
-import static org.neo4j.storageengine.api.RelationshipDirection.LOOP;
-import static org.neo4j.storageengine.api.RelationshipDirection.OUTGOING;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.values.storable.ValueGroup.GEOMETRY;
 import static org.neo4j.values.storable.ValueGroup.NUMBER;
 
@@ -78,20 +84,24 @@ abstract class Read implements TxStateHolder,
         LockingNodeUniqueIndexSeek.UniqueNodeIndexSeeker<DefaultNodeValueIndexCursor>,
         QueryContext
 {
-    private final StorageReader storageReader;
+    protected final StorageReader storageReader;
     protected final DefaultPooledCursors cursors;
+    protected final PageCursorTracer cursorTracer;
     final KernelTransactionImplementation ktx;
+    private final boolean relationshipTypeScanStoreEnabled;
 
-    Read( StorageReader storageReader, DefaultPooledCursors cursors,
-            KernelTransactionImplementation ktx )
+    Read( StorageReader storageReader, DefaultPooledCursors cursors, PageCursorTracer cursorTracer,
+            KernelTransactionImplementation ktx, Config config )
     {
         this.storageReader = storageReader;
         this.cursors = cursors;
+        this.cursorTracer = cursorTracer;
         this.ktx = ktx;
+        this.relationshipTypeScanStoreEnabled = config.get( RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store );
     }
 
     @Override
-    public final void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
+    public final void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
             throws IndexNotApplicableKernelException
     {
         ktx.assertOpen();
@@ -105,11 +115,15 @@ abstract class Read implements TxStateHolder,
         EntityIndexSeekClient client = (EntityIndexSeekClient) cursor;
         client.setRead( this );
         IndexProgressor.EntityValueClient withFullPrecision = injectFullValuePrecision( client, query, indexSession.reader );
+<<<<<<< HEAD
         indexSession.reader.query( this, withFullPrecision, indexOrder, needsValues, query );
+=======
+        indexSession.reader.query( this, withFullPrecision, constraints, query );
+>>>>>>> neo4j/4.1
     }
 
     @Override
-    public final void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQuery... query )
+    public final void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
             throws IndexNotApplicableKernelException, IndexNotFoundKernelException
     {
         ktx.assertOpen();
@@ -122,6 +136,7 @@ abstract class Read implements TxStateHolder,
         IndexReader reader = indexReader( index, false );
         client.setRead( this );
         IndexProgressor.EntityValueClient withFullPrecision = injectFullValuePrecision( client, query, reader );
+<<<<<<< HEAD
         reader.query( this, withFullPrecision, IndexOrder.NONE, false, query );
     }
 
@@ -135,6 +150,9 @@ abstract class Read implements TxStateHolder,
         cursorImpl.setRead( this );
         CursorPropertyAccessor accessor = new CursorPropertyAccessor( cursors.allocateNodeCursor(), cursors.allocatePropertyCursor(), this );
         reader.distinctValues( cursorImpl, accessor, needsValues );
+=======
+        reader.query( this, withFullPrecision, constraints, query );
+>>>>>>> neo4j/4.1
     }
 
     private IndexProgressor.EntityValueClient injectFullValuePrecision( IndexProgressor.EntityValueClient cursor,
@@ -177,8 +195,8 @@ abstract class Read implements TxStateHolder,
             {
                 // filters[] can contain null elements. The non-null elements are the filters and each sit in the designated slot
                 // matching the values from the index.
-                target = new NodeValueClientFilter( target, cursors.allocateNodeCursor(),
-                        cursors.allocatePropertyCursor(), this, filters );
+                target = new NodeValueClientFilter( target, cursors.allocateNodeCursor( cursorTracer ),
+                        cursors.allocatePropertyCursor( cursorTracer, memoryTracker() ), this, filters );
             }
         }
         return target;
@@ -226,14 +244,13 @@ abstract class Read implements TxStateHolder,
         cursor.setRead( this );
         IndexProgressor.EntityValueClient target = injectFullValuePrecision( cursor, query, indexReader );
         // we never need values for exact predicates
-        indexReader.query( this, target, IndexOrder.NONE, false, query );
+        indexReader.query( this, target, unconstrained(), query );
     }
 
     @Override
     public final void nodeIndexScan( IndexReadSession index,
                                      NodeValueIndexCursor cursor,
-                                     IndexOrder indexOrder,
-                                     boolean needsValues ) throws KernelException
+                                     IndexQueryConstraints constraints ) throws KernelException
     {
         ktx.assertOpen();
         DefaultIndexReadSession indexSession = (DefaultIndexReadSession) index;
@@ -248,25 +265,34 @@ abstract class Read implements TxStateHolder,
 
         DefaultNodeValueIndexCursor cursorImpl = (DefaultNodeValueIndexCursor) cursor;
         cursorImpl.setRead( this );
+<<<<<<< HEAD
         indexSession.reader.query( this, cursorImpl, indexOrder, needsValues, IndexQuery.exists( firstProperty ) );
+=======
+        indexSession.reader.query( this, cursorImpl, constraints, IndexQuery.exists( firstProperty ) );
+>>>>>>> neo4j/4.1
     }
 
     @Override
-    public final void nodeLabelScan( int label, NodeLabelIndexCursor cursor )
+    public final void nodeLabelScan( int label, NodeLabelIndexCursor cursor, IndexOrder order )
     {
         ktx.assertOpen();
 
         DefaultNodeLabelIndexCursor indexCursor = (DefaultNodeLabelIndexCursor) cursor;
         indexCursor.setRead( this );
+<<<<<<< HEAD
         LabelScan labelScan = labelScanReader().nodeLabelScan( label );
         indexCursor.scan( labelScan.initialize( indexCursor.nodeLabelClient() ), label );
+=======
+        TokenScan labelScan = labelScanReader().entityTokenScan( label, cursorTracer );
+        indexCursor.scan( labelScan.initialize( indexCursor.nodeLabelClient(), order, cursorTracer ), label, order );
+>>>>>>> neo4j/4.1
     }
 
     @Override
     public final Scan<NodeLabelIndexCursor> nodeLabelScan( int label )
     {
         ktx.assertOpen();
-        return new NodeLabelIndexCursorScan( this, label, labelScanReader().nodeLabelScan( label ) );
+        return new NodeLabelIndexCursorScan( this, label, labelScanReader().entityTokenScan( label, cursorTracer ), cursorTracer );
     }
 
     @Override
@@ -280,7 +306,7 @@ abstract class Read implements TxStateHolder,
     public final Scan<NodeCursor> allNodesScan()
     {
         ktx.assertOpen();
-        return new NodeCursorScan( storageReader.allNodeScan(), this );
+        return new NodeCursorScan( storageReader.allNodeScan(), this, cursorTracer );
     }
 
     @Override
@@ -308,7 +334,7 @@ abstract class Read implements TxStateHolder,
     public final Scan<RelationshipScanCursor> allRelationshipsScan()
     {
         ktx.assertOpen();
-        return new RelationshipCursorScan( storageReader.allRelationshipScan(), this );
+        return new RelationshipCursorScan( storageReader.allRelationshipScan(), this, cursorTracer );
     }
 
     @Override
@@ -319,66 +345,30 @@ abstract class Read implements TxStateHolder,
     }
 
     @Override
-    public void relationshipGroups( long nodeReference, long reference, RelationshipGroupCursor cursor )
+    public final void relationshipTypeScan( int type, RelationshipTypeIndexCursor relationshipTypeIndexCursor )
     {
-        RelationshipReferenceEncoding encoding = RelationshipReferenceEncoding.parseEncoding( reference );
-        switch ( encoding )
+        ktx.assertOpen();
+        if ( relationshipTypeScanStoreEnabled() )
         {
-        case NONE:
-            // Reference was retrieved from NodeCursor#relationshipGroupReference() for a sparse node
-            ((DefaultRelationshipGroupCursor) cursor).init( nodeReference, reference, false, this );
-            break;
-        case DENSE:
-            // Reference was retrieved from NodeCursor#relationshipGroupReference() for a sparse node
-            ((DefaultRelationshipGroupCursor) cursor).init( nodeReference, clearEncoding( reference ), true, this );
-            break;
-        default:
-            throw new IllegalArgumentException( "Unexpected encoding " + encoding );
+            DefaultRelationshipTypeIndexCursor cursor = (DefaultRelationshipTypeIndexCursor)relationshipTypeIndexCursor;
+            cursor.setRead( this );
+
+            TokenScanReader relationshipTypeScanReader = relationshipTypeScanReader();
+            TokenScan relationshipTypeScan = relationshipTypeScanReader.entityTokenScan( type, cursorTracer );
+            IndexProgressor progressor = relationshipTypeScan.initialize( cursor.relationshipTypeClient(), IndexOrder.NONE, cursorTracer );
+
+            cursor.scan( progressor, type );
+        }
+        else
+        {
+            throw new IllegalStateException( "Cannot search relationship type scan store when feature is not enabled." );
         }
     }
 
     @Override
-    public void relationships( long nodeReference, long reference, RelationshipTraversalCursor cursor )
+    public void relationships( long nodeReference, long reference, RelationshipSelection selection, RelationshipTraversalCursor cursor )
     {
-        RelationshipReferenceEncoding encoding = RelationshipReferenceEncoding.parseEncoding( reference );
-        switch ( encoding )
-        {
-        case NONE:
-            // Reference was retrieved from NodeCursor#allRelationshipsReference() for a sparse node.
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, reference, false, this );
-            break;
-        case DENSE:
-            // Reference was retrieved from NodeCursor#allRelationshipsReference() for a dense node
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, clearEncoding( reference ), true, this );
-            break;
-        case SELECTION:
-            // Reference was retrieved from RelationshipGroupCursor#outgoingReference() or similar for a sparse node
-            // Do lazy selection, i.e. discover type/direction from the first relationship read, so that it can be used to query tx-state.
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, clearEncoding( reference ), TokenRead.ANY_RELATIONSHIP_TYPE, null, false, this );
-            break;
-        case DENSE_SELECTION:
-            // Reference was retrieved from RelationshipGroupCursor#outgoingReference() or similar for a dense node
-            // Do lazy selection, i.e. discover type/direction from the first relationship read, so that it can be used to query tx-state.
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, clearEncoding( reference ), TokenRead.ANY_RELATIONSHIP_TYPE, null, true, this );
-            break;
-        case NO_OUTGOING_OF_TYPE:
-            // Reference was retrieved from RelationshipGroupCursor#outgoingReference() where there were no relationships in store
-            // and so therefore the type and direction was encoded into the reference instead
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, NO_ID, (int) reference, OUTGOING, true, this );
-            break;
-        case NO_INCOMING_OF_TYPE:
-            // Reference was retrieved from RelationshipGroupCursor#incomingReference() where there were no relationships in store
-            // and so therefore the type and direction was encoded into the reference instead
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, NO_ID, (int) reference, INCOMING, true, this );
-            break;
-        case NO_LOOPS_OF_TYPE:
-            // Reference was retrieved from RelationshipGroupCursor#loopsReference() where there were no relationships in store
-            // and so therefore the type and direction was encoded into the reference instead
-            ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, NO_ID, (int) reference, LOOP, true, this );
-            break;
-        default:
-            throw new IllegalArgumentException( "Unexpected encoding " + encoding );
-        }
+        ((DefaultRelationshipTraversalCursor) cursor).init( nodeReference, reference, selection, this );
     }
 
     @Override
@@ -395,7 +385,9 @@ abstract class Read implements TxStateHolder,
 
     public abstract IndexReader indexReader( IndexDescriptor index, boolean fresh ) throws IndexNotFoundKernelException;
 
-    abstract LabelScanReader labelScanReader();
+    abstract TokenScanReader labelScanReader();
+
+    abstract TokenScanReader relationshipTypeScanReader();
 
     @Override
     public TransactionState txState()
@@ -511,6 +503,11 @@ abstract class Read implements TxStateHolder,
     void acquireSharedLock( ResourceType resource, long resourceId )
     {
         ktx.statementLocks().optimistic().acquireShared( ktx.lockTracer(), resource, resourceId );
+    }
+
+    boolean relationshipTypeScanStoreEnabled()
+    {
+        return relationshipTypeScanStoreEnabled;
     }
 
     private void acquireExclusiveLock( ResourceTypes types, long... ids )

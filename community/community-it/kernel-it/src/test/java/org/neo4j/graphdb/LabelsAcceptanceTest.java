@@ -19,6 +19,7 @@
  */
 package org.neo4j.graphdb;
 
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -33,7 +34,6 @@ import java.util.function.LongSupplier;
 import java.util.stream.Stream;
 
 import org.neo4j.collection.Dependencies;
-import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.factory.module.id.IdContextFactory;
@@ -42,9 +42,9 @@ import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.internal.id.IdGenerator;
 import org.neo4j.internal.id.IdType;
-import org.neo4j.internal.kernel.api.LabelSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
@@ -52,6 +52,7 @@ import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
@@ -64,28 +65,22 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.util.concurrent.BinaryLatch;
 
 import static java.util.stream.Collectors.toSet;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.glassfish.jersey.internal.guava.Iterators.size;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.collection.Iterables.asList;
+import static org.neo4j.internal.helpers.collection.Iterables.count;
 import static org.neo4j.internal.helpers.collection.Iterables.map;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
-import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier.NULL;
 import static org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier.EMPTY;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasLabel;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasLabels;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasNoLabels;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasNoNodes;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasNodes;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.inTx;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @ImpermanentDbmsExtension
 class LabelsAcceptanceTest
@@ -171,8 +166,11 @@ class LabelsAcceptanceTest
         }
 
         // Then
-        assertThat( "Label should have been added to node", myNode,
-                inTx( db, hasLabel( Labels.MY_LABEL ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var node = transaction.getNodeById( myNode.getId() );
+            assertTrue( node.hasLabel( Labels.MY_LABEL ) );
+        }
     }
 
     @Test
@@ -181,21 +179,13 @@ class LabelsAcceptanceTest
         // When I set an empty label
         try ( Transaction tx = db.beginTx() )
         {
-            tx.createNode().addLabel( label( "" ) );
-            fail( "Should have thrown exception" );
-        }
-        catch ( ConstraintViolationException ex )
-        {   // Happy
+            assertThrows( ConstraintViolationException.class, () -> tx.createNode().addLabel( label( "" ) ) );
         }
 
         // And When I set a null label
         try ( Transaction tx = db.beginTx() )
         {
-            tx.createNode().addLabel( () -> null );
-            fail( "Should have thrown exception" );
-        }
-        catch ( ConstraintViolationException ex )
-        {   // Happy
+            assertThrows( ConstraintViolationException.class, () -> tx.createNode().addLabel( () -> null ) );
         }
     }
 
@@ -216,8 +206,11 @@ class LabelsAcceptanceTest
         }
 
         // Then
-        assertThat( "Label should have been added to node", myNode,
-                inTx( db, hasLabel( Labels.MY_LABEL ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var node = transaction.getNodeById( myNode.getId() );
+            assertTrue( node.hasLabel( Labels.MY_LABEL ) );
+        }
     }
 
     @Test
@@ -226,7 +219,7 @@ class LabelsAcceptanceTest
         JobScheduler scheduler = JobSchedulerFactory.createScheduler();
         try ( EphemeralFileSystemAbstraction fileSystem = new EphemeralFileSystemAbstraction();
                 Lifespan lifespan = new Lifespan( scheduler );
-                PageCache pageCache = new MuninnPageCache( swapper( fileSystem ), 1_000, PageCacheTracer.NULL, NULL, EMPTY, scheduler ) )
+                PageCache pageCache = new MuninnPageCache( swapper( fileSystem ), 1_000, PageCacheTracer.NULL, EMPTY, scheduler ) )
         {
             // Given
             Dependencies dependencies = new Dependencies();
@@ -244,11 +237,7 @@ class LabelsAcceptanceTest
             // When
             try ( Transaction tx = graphDatabase.beginTx() )
             {
-                tx.createNode().addLabel( Labels.MY_LABEL );
-                fail( "Should have thrown exception" );
-            }
-            catch ( ConstraintViolationException ex )
-            {   // Happy
+                assertThrows( ConstraintViolationException.class, () -> tx.createNode().addLabel( Labels.MY_LABEL ) );
             }
 
             managementService.shutdown();
@@ -270,7 +259,11 @@ class LabelsAcceptanceTest
         }
 
         // Then
-        assertThat( myNode, not( inTx( db, hasLabel( label ) ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var node = transaction.getNodeById( myNode.getId() );
+            assertFalse( node.hasLabel( label ) );
+        }
     }
 
     @Test
@@ -287,7 +280,14 @@ class LabelsAcceptanceTest
         // THEN
 
         Set<String> names = Stream.of( Labels.values() ).map( Labels::name ).collect( toSet() );
-        assertThat( node, inTx( db, hasLabels( names ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var n = transaction.getNodeById( node.getId() );
+            for ( String labelName : names )
+            {
+                assertTrue( n.hasLabel( label( labelName ) ) );
+            }
+        }
     }
 
     @Test
@@ -306,7 +306,11 @@ class LabelsAcceptanceTest
         }
 
         // THEN
-        assertThat( myNode, not( inTx( db, hasLabel( label ) ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var node = transaction.getNodeById( myNode.getId() );
+            assertFalse( node.hasLabel( label ) );
+        }
     }
 
     @Test
@@ -325,7 +329,11 @@ class LabelsAcceptanceTest
         }
 
         // THEN
-        assertThat( myNode, not( inTx( db, hasLabel( label ) ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var node = transaction.getNodeById( myNode.getId() );
+            assertFalse( node.hasLabel( label ) );
+        }
     }
 
     @Test
@@ -365,7 +373,14 @@ class LabelsAcceptanceTest
             tx.commit();
         }
 
-        assertThat( node, inTx( db, hasLabels( expected ) ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var n = transaction.getNodeById( node.getId() );
+            for ( String label : expected )
+            {
+                assertTrue( n.hasLabel( label( label ) ) );
+            }
+        }
     }
 
     @Test
@@ -375,7 +390,11 @@ class LabelsAcceptanceTest
         Node node = createNode( db );
 
         // WHEN THEN
-        assertThat( node, inTx( db, hasNoLabels() ) );
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var n = transaction.getNodeById( node.getId() );
+            assertEquals( 0, count( n.getLabels() ) );
+        }
     }
 
     @Test
@@ -393,8 +412,8 @@ class LabelsAcceptanceTest
         // THEN
         try ( Transaction transaction = db.beginTx() )
         {
-            assertThat( transaction, hasNodes( Labels.MY_LABEL, node ) );
-            assertThat( transaction, hasNoNodes( Labels.MY_OTHER_LABEL ) );
+            assertTrue( size( transaction.findNodes( Labels.MY_LABEL ) ) > 0 );
+            assertEquals( 0, size( transaction.findNodes( Labels.MY_OTHER_LABEL ) ) );
         }
     }
 
@@ -439,7 +458,7 @@ class LabelsAcceptanceTest
 
         // Then
         assertEquals( 2, labels.size() );
-        assertThat( map( Label::name, labels ), hasItems( Labels.MY_LABEL.name(), Labels.MY_OTHER_LABEL.name() ) );
+        assertThat( map( Label::name, labels ) ).contains( Labels.MY_LABEL.name(), Labels.MY_OTHER_LABEL.name() );
     }
 
     @Test
@@ -463,7 +482,7 @@ class LabelsAcceptanceTest
 
         // Then
         assertEquals( 1, labels.size() );
-        assertThat( map( Label::name, labels ), hasItems( Labels.MY_LABEL.name() ) );
+        assertThat( map( Label::name, labels ) ).contains( Labels.MY_LABEL.name() );
     }
 
     @Test
@@ -506,7 +525,7 @@ class LabelsAcceptanceTest
 
             // Then
             assertEquals( 1, labels.size() );
-            assertThat( map( Label::name, labels ), hasItems( Labels.MY_LABEL.name() ) );
+            assertThat( map( Label::name, labels ) ).contains( Labels.MY_LABEL.name() );
         } );
     }
 
@@ -550,7 +569,7 @@ class LabelsAcceptanceTest
 
             // Then
             assertEquals( 1, relTypes.size() );
-            assertThat( map( RelationshipType::name, relTypes ), hasItems( relType.name() ) );
+            assertThat( map( RelationshipType::name, relTypes ) ).contains( relType.name() );
         } );
     }
 
@@ -581,7 +600,7 @@ class LabelsAcceptanceTest
         // THEN
         try ( Transaction tx = db.beginTx() )
         {
-            assertEquals( 0, Iterables.count( tx.getAllNodes() ) );
+            assertEquals( 0, count( tx.getAllNodes() ) );
         }
     }
 
@@ -690,10 +709,9 @@ class LabelsAcceptanceTest
         Set<Integer> seenLabels = new HashSet<>();
         try ( Transaction tx = db.beginTx() )
         {
-            DependencyResolver resolver = db.getDependencyResolver();
             KernelTransaction ktx = ((InternalTransaction) tx).kernelTransaction();
-            try ( NodeCursor nodes = ktx.cursors().allocateNodeCursor();
-                  PropertyCursor propertyCursor = ktx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor nodes = ktx.cursors().allocateNodeCursor( PageCursorTracer.NULL );
+                  PropertyCursor propertyCursor = ktx.cursors().allocatePropertyCursor( PageCursorTracer.NULL, INSTANCE ) )
             {
                 ktx.dataRead().singleNode( node.getId(), nodes );
                 while ( nodes.next() )
@@ -704,10 +722,10 @@ class LabelsAcceptanceTest
                         seenProperties.add( propertyCursor.propertyKey() );
                     }
 
-                    LabelSet labels = nodes.labels();
-                    for ( int i = 0; i < labels.numberOfLabels(); i++ )
+                    TokenSet labels = nodes.labels();
+                    for ( int i = 0; i < labels.numberOfTokens(); i++ )
                     {
-                        seenLabels.add( labels.label( i ) );
+                        seenLabels.add( labels.token( i ) );
                     }
                 }
             }
@@ -807,22 +825,22 @@ class LabelsAcceptanceTest
 
     private IdContextFactory createIdContextFactoryWithMaxedOutLabelTokenIds( FileSystemAbstraction fileSystem, JobScheduler jobScheduler )
     {
-        return IdContextFactoryBuilder.of( fileSystem, jobScheduler, Config.defaults() ).withIdGenerationFactoryProvider(
+        return IdContextFactoryBuilder.of( fileSystem, jobScheduler, Config.defaults(), PageCacheTracer.NULL ).withIdGenerationFactoryProvider(
                 any -> new DefaultIdGeneratorFactory( fileSystem, immediate() )
                 {
                     @Override
                     public IdGenerator open( PageCache pageCache, File fileName, IdType idType, LongSupplier highId, long maxId, boolean readOnly,
-                            OpenOption... openOptions )
+                            PageCursorTracer cursorTracer, ImmutableSet<OpenOption> openOptions )
                     {
-                        return super.open( pageCache, fileName, idType, highId, maxId( idType, maxId, highId ), readOnly, openOptions );
+                        return super.open( pageCache, fileName, idType, highId, maxId( idType, maxId, highId ), readOnly, cursorTracer, openOptions );
                     }
 
                     @Override
                     public IdGenerator create( PageCache pageCache, File fileName, IdType idType, long highId, boolean throwIfFileExists, long maxId,
-                            boolean readOnly, OpenOption... openOptions )
+                            boolean readOnly, PageCursorTracer cursorTracer, ImmutableSet<OpenOption> openOptions )
                     {
-                        return super
-                                .create( pageCache, fileName, idType, highId, throwIfFileExists, maxId( idType, maxId, () -> highId ), readOnly, openOptions );
+                        return super.create( pageCache, fileName, idType, highId, throwIfFileExists, maxId( idType, maxId, () -> highId ), readOnly,
+                                cursorTracer, openOptions );
                     }
 
                     private long maxId( IdType idType, long maxId, LongSupplier highId )
@@ -834,8 +852,6 @@ class LabelsAcceptanceTest
 
     private static PageSwapperFactory swapper( EphemeralFileSystemAbstraction fileSystem )
     {
-        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory();
-        factory.open( fileSystem );
-        return factory;
+        return new SingleFilePageSwapperFactory( fileSystem );
     }
 }

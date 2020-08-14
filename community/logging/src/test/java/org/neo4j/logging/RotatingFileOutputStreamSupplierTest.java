@@ -62,16 +62,11 @@ import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 import org.neo4j.test.rule.SuppressOutput;
 import org.neo4j.test.rule.TestDirectory;
 
-import static java.time.Duration.ofMillis;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.hamcrest.CoreMatchers.sameInstance;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.Is.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -127,7 +122,7 @@ class RotatingFileOutputStreamSupplierTest
     void createsLogOnConstruction() throws Exception
     {
         new RotatingFileOutputStreamSupplier( fileSystem, logFile, 250000, 0, 10, DIRECT_EXECUTOR );
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
     }
 
     @Test
@@ -138,21 +133,21 @@ class RotatingFileOutputStreamSupplierTest
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( false );
 
         write( supplier, "Short" );
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( true ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( true );
     }
 
     @Test
@@ -163,93 +158,89 @@ class RotatingFileOutputStreamSupplierTest
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile3 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile3 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile3 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile3 ) ).isEqualTo( false );
     }
 
     @Test
-    void rotationShouldNotDeadlockOnListener()
+    void rotationShouldNotDeadlockOnListener() throws Exception
     {
-        assertTimeoutPreemptively( ofMillis( TEST_TIMEOUT_MILLIS ), () ->
+        String logContent = "Output file created";
+        final AtomicReference<Exception> listenerException = new AtomicReference<>( null );
+        CountDownLatch latch = new CountDownLatch( 1 );
+        RotationListener listener = new RotationListener()
         {
-            String logContent = "Output file created";
-            final AtomicReference<Exception> listenerException = new AtomicReference<>( null );
-            CountDownLatch latch = new CountDownLatch( 1 );
-            RotationListener listener = new RotationListener()
+            @Override
+            public void outputFileCreated( OutputStream out )
             {
-                @Override
-                public void outputFileCreated( OutputStream out )
+                try
                 {
-                    try
+                    Thread thread = new Thread( () ->
                     {
-                        Thread thread = new Thread( () ->
+                        try
                         {
-                            try
-                            {
-                                out.write( logContent.getBytes() );
-                                out.flush();
-                            }
-                            catch ( IOException e )
-                            {
-                                listenerException.set( e );
-                            }
-                        } );
-                        thread.start();
-                        thread.join();
-                    }
-                    catch ( Exception e )
-                    {
-                        listenerException.set( e );
-                    }
-                    super.outputFileCreated( out );
+                            out.write( logContent.getBytes() );
+                            out.flush();
+                        }
+                        catch ( IOException e )
+                        {
+                            listenerException.set( e );
+                        }
+                    } );
+                    thread.start();
+                    thread.join();
                 }
-
-                @Override
-                public void rotationCompleted( OutputStream out )
+                catch ( Exception e )
                 {
-                    latch.countDown();
+                    listenerException.set( e );
                 }
-            };
-            ExecutorService executor = Executors.newSingleThreadExecutor();
-            DefaultFileSystemAbstraction defaultFileSystemAbstraction = new DefaultFileSystemAbstraction();
-            RotatingFileOutputStreamSupplier supplier =
-                    new RotatingFileOutputStreamSupplier( defaultFileSystemAbstraction, logFile, 0, 0, 10, executor, listener );
+                super.outputFileCreated( out );
+            }
 
-            OutputStream outputStream = supplier.get();
-            LockingPrintWriter lockingPrintWriter = new LockingPrintWriter( outputStream );
-            lockingPrintWriter.withLock( () ->
+            @Override
+            public void rotationCompleted( OutputStream out )
             {
-                supplier.rotate();
-                latch.await();
-                return Void.TYPE;
-            } );
+                latch.countDown();
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        DefaultFileSystemAbstraction defaultFileSystemAbstraction = new DefaultFileSystemAbstraction();
+        RotatingFileOutputStreamSupplier supplier = new RotatingFileOutputStreamSupplier( defaultFileSystemAbstraction, logFile, 0, 0, 10, executor, listener );
 
-            shutDownExecutor( executor );
-
-            String actual = Files.readString( logFile.toPath() );
-            assertEquals( logContent, actual );
-            assertNull( listenerException.get() );
+        OutputStream outputStream = supplier.get();
+        LockingPrintWriter lockingPrintWriter = new LockingPrintWriter( outputStream );
+        lockingPrintWriter.withLock( () ->
+        {
+            supplier.rotate();
+            latch.await();
+            return Void.TYPE;
         } );
+
+        shutDownExecutor( executor );
+
+        String actual = Files.readString( logFile.toPath() );
+        assertEquals( logContent, actual );
+        assertNull( listenerException.get() );
     }
 
     private void shutDownExecutor( ExecutorService executor ) throws InterruptedException
@@ -271,14 +262,14 @@ class RotatingFileOutputStreamSupplierTest
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( false );
 
         write( supplier, "A string longer than 10 bytes" );
 
@@ -288,10 +279,10 @@ class RotatingFileOutputStreamSupplierTest
         clock.setValue( clock.getAsLong() + SECONDS.toMillis( 1 ) );
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile3 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile3 ) ).isEqualTo( false );
     }
 
     @Test
@@ -303,13 +294,13 @@ class RotatingFileOutputStreamSupplierTest
         write( supplier, "A string longer than 10 bytes" );
         write( supplier, "A string longer than 10 bytes" );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( false ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( false );
 
         List<File> allArchives = getAllArchives( fileSystem, logFile );
-        assertThat( allArchives.size(), is( 1 ) );
-        assertThat( allArchives, hasItem( archiveLogFile1 ) );
+        assertThat( allArchives.size() ).isEqualTo( 1 );
+        assertThat( allArchives ).contains( archiveLogFile1 );
     }
 
     @Test
@@ -385,7 +376,7 @@ class RotatingFileOutputStreamSupplierTest
         doThrow( exception ).when( executor ).execute( any( Runnable.class ) );
 
         write( supplier, "A string longer than 10 bytes" );
-        assertThat( supplier.get(), is( outputStream ) );
+        assertThat( supplier.get() ).isEqualTo( outputStream );
 
         verify( rotationListener ).rotationError( exception, outputStream );
     }
@@ -403,8 +394,8 @@ class RotatingFileOutputStreamSupplierTest
         doThrow( exception ).when( executor ).execute( any( Runnable.class ) );
 
         write( supplier, "A string longer than 10 bytes" );
-        assertThat( supplier.get(), is( outputStream ) );
-        assertThat( supplier.get(), is( outputStream ) );
+        assertThat( supplier.get() ).isEqualTo( outputStream );
+        assertThat( supplier.get() ).isEqualTo( outputStream );
 
         verify( rotationListener, times( 2 ) ).rotationError( exception, outputStream );
     }
@@ -422,7 +413,7 @@ class RotatingFileOutputStreamSupplierTest
         doThrow( exception ).when( fs ).renameFile( any( File.class ), any( File.class ) );
 
         write( supplier, "A string longer than 10 bytes" );
-        assertThat( supplier.get(), is( outputStream ) );
+        assertThat( supplier.get() ).isEqualTo( outputStream );
 
         verify( rotationListener ).rotationError( eq( exception ), any( OutputStream.class ) );
     }
@@ -468,7 +459,7 @@ class RotatingFileOutputStreamSupplierTest
             OutputStream outputStream = supplier.get();
 
             write( supplier, "A string longer than 10 bytes" );
-            assertThat( supplier.get(), is( outputStream ) );
+            assertThat( supplier.get() ).isEqualTo( outputStream );
 
             allowRotationComplete.countDown();
             supplier.close();
@@ -532,7 +523,7 @@ class RotatingFileOutputStreamSupplierTest
         doThrow( exception ).when( mockStream ).close();
 
         IOException ioException = assertThrows( IOException.class, supplier::close );
-        assertThat( ioException, sameInstance( exception ) );
+        assertThat( ioException ).isSameAs( exception );
         verify( mockStream ).close();
     }
 
@@ -554,16 +545,16 @@ class RotatingFileOutputStreamSupplierTest
         adversary.setProbabilityFactor( 0 );
         writeLines( supplier, 10000 );
 
-        assertThat( fileSystem.fileExists( logFile ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile1 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile2 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile3 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile4 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile5 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile6 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile7 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile8 ), is( true ) );
-        assertThat( fileSystem.fileExists( archiveLogFile9 ), is( true ) );
+        assertThat( fileSystem.fileExists( logFile ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile1 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile2 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile3 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile4 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile5 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile6 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile7 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile8 ) ).isEqualTo( true );
+        assertThat( fileSystem.fileExists( archiveLogFile9 ) ).isEqualTo( true );
     }
 
     private void write( RotatingFileOutputStreamSupplier supplier, String line )
@@ -589,7 +580,7 @@ class RotatingFileOutputStreamSupplierTest
         assertThrows( ClosedChannelException.class, () -> stream.write( 0 ) );
     }
 
-    private class LockingPrintWriter extends PrintWriter
+    private static class LockingPrintWriter extends PrintWriter
     {
         LockingPrintWriter( OutputStream out )
         {

@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
@@ -54,7 +55,7 @@ public class DefaultIndexProviderMap extends LifecycleAdapter implements IndexPr
     @Override
     public void init()
     {
-        Iterable<? extends IndexProvider> indexProviders = dependencies.resolveTypeDependencies( IndexProvider.class );
+        Iterable<IndexProvider> indexProviders = dependencies.resolveTypeDependencies( IndexProvider.class );
         for ( IndexProvider provider : indexProviders )
         {
             IndexProviderDescriptor providerDescriptor = provider.getProviderDescriptor();
@@ -93,7 +94,7 @@ public class DefaultIndexProviderMap extends LifecycleAdapter implements IndexPr
     }
 
     @Override
-    public IndexProvider lookup( String providerDescriptorName ) throws IndexProviderNotFoundException
+    public IndexProvider lookup( String providerDescriptorName )
     {
         assertInit();
         IndexProvider provider = indexProvidersByName.get( providerDescriptorName );
@@ -134,7 +135,7 @@ public class DefaultIndexProviderMap extends LifecycleAdapter implements IndexPr
                 indexProvidersByName.keySet().toString() ) );
         defaultIndexProvider = configuredDefaultProvider;
 
-        String fulltextProviderName = config.get( GraphDatabaseSettings.default_fulltext_provider );
+        String fulltextProviderName = config.get( GraphDatabaseInternalSettings.default_fulltext_provider );
         fulltextIndexProvider = indexProvidersByName.get( fulltextProviderName );
         if ( fulltextIndexProvider == null )
         {

@@ -20,7 +20,9 @@
 package org.neo4j.io.mem;
 
 import org.neo4j.internal.unsafe.UnsafeUtil;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
+
+import java.lang.ref.Cleaner;
 
 import java.lang.ref.Cleaner;
 
@@ -46,7 +48,7 @@ public final class GrabAllocator implements MemoryAllocator
      * actual amount of memory used can end up greater than this value, if some of it gets wasted on alignment padding.
      * @param memoryTracker memory usage tracker
      */
-    GrabAllocator( long expectedMaxMemory, MemoryAllocationTracker memoryTracker )
+    GrabAllocator( long expectedMaxMemory, MemoryTracker memoryTracker )
     {
         this.grabs = new Grabs( expectedMaxMemory, memoryTracker );
         this.cleanable = globalCleaner.register( this, new GrabsDeallocator( grabs ) );
@@ -81,10 +83,10 @@ public final class GrabAllocator implements MemoryAllocator
         public final Grab next;
         private final long address;
         private final long limit;
-        private final MemoryAllocationTracker memoryTracker;
+        private final MemoryTracker memoryTracker;
         private long nextPointer;
 
-        Grab( Grab next, long size, MemoryAllocationTracker memoryTracker )
+        Grab( Grab next, long size, MemoryTracker memoryTracker )
         {
             this.next = next;
             this.address = UnsafeUtil.allocateMemory( size, memoryTracker );
@@ -93,7 +95,7 @@ public final class GrabAllocator implements MemoryAllocator
             nextPointer = address;
         }
 
-        Grab( Grab next, long address, long limit, long nextPointer, MemoryAllocationTracker memoryTracker )
+        Grab( Grab next, long address, long limit, long nextPointer, MemoryTracker memoryTracker )
         {
             this.next = next;
             this.address = address;
@@ -102,7 +104,7 @@ public final class GrabAllocator implements MemoryAllocator
             this.memoryTracker = memoryTracker;
         }
 
-        private long nextAligned( long pointer, long alignment )
+        private static long nextAligned( long pointer, long alignment )
         {
             if ( alignment == 1 )
             {
@@ -155,11 +157,11 @@ public final class GrabAllocator implements MemoryAllocator
          */
         private static final long GRAB_SIZE = getInteger( GrabAllocator.class, "GRAB_SIZE", (int) kibiBytes( 512 ) );
 
-        private final MemoryAllocationTracker memoryTracker;
+        private final MemoryTracker memoryTracker;
         private long expectedMaxMemory;
         private Grab head;
 
-        Grabs( long expectedMaxMemory, MemoryAllocationTracker memoryTracker )
+        Grabs( long expectedMaxMemory, MemoryTracker memoryTracker )
         {
             this.expectedMaxMemory = expectedMaxMemory;
             this.memoryTracker = memoryTracker;

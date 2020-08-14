@@ -34,9 +34,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.neo4j.collection.RawIterator;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.GraphDatabaseSettings;
-import org.neo4j.cypher.internal.StringCacheMonitor;
+import org.neo4j.cypher.internal.ExecutionEngineQueryCacheMonitor;
 import org.neo4j.graphdb.Resource;
-import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.kernel.api.SchemaReadCore;
 import org.neo4j.internal.kernel.api.SchemaWrite;
 import org.neo4j.internal.kernel.api.TokenWrite;
@@ -63,6 +62,7 @@ import org.neo4j.values.virtual.VirtualValues;
 
 import static java.util.Collections.singletonList;
 import static java.util.concurrent.TimeUnit.MINUTES;
+<<<<<<< HEAD
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.any;
 import static org.hamcrest.Matchers.arrayContaining;
@@ -73,6 +73,9 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItemInArray;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.core.IsEqual.equalTo;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+>>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -105,7 +108,33 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
                 procs().procedureCallRead( procs().procedureGet( procedureName( "db", "labels" ) ).id(), new AnyValue[0], EMPTY );
 
         // Then
-        assertThat( asList( stream ), contains( equalTo( new AnyValue[]{stringValue( "MyLabel" )} ) ) );
+        assertThat( asList( stream ) ).containsExactly( new AnyValue[]{stringValue( "MyLabel" )} );
+    }
+
+    @Test
+    void databaseInfo() throws ProcedureException
+    {
+        RawIterator<AnyValue[],ProcedureException> stream =
+                procs().procedureCallRead( procs().procedureGet( procedureName( "db", "info" ) ).id(), new AnyValue[0], EMPTY );
+
+        var procedureResult = asList( stream );
+        assertFalse( procedureResult.isEmpty() );
+        var dbInfoRow = procedureResult.get( 0 );
+        assertThat( dbInfoRow ).contains( stringValue( db.databaseName() ) );
+        assertThat( dbInfoRow ).hasSize( 3 );
+    }
+
+    @Test
+    void dbmsInfo() throws ProcedureException
+    {
+        RawIterator<AnyValue[],ProcedureException> stream =
+                procs().procedureCallRead( procs().procedureGet( procedureName( "dbms", "info" ) ).id(), new AnyValue[0], EMPTY );
+
+        var procedureResult = asList( stream );
+        assertFalse( procedureResult.isEmpty() );
+        var dbmsInfoRow = procedureResult.get( 0 );
+        assertThat( dbmsInfoRow ).contains( stringValue( SYSTEM_DATABASE_NAME ) );
+        assertThat( dbmsInfoRow ).hasSize( 3 );
     }
 
     @Test
@@ -173,7 +202,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         // Then
         try
         {
-            assertThat( asList( stream ), contains( equalTo( new AnyValue[]{stringValue( "MyLabel" )} ) ) );
+            assertThat( asList( stream ) ).containsExactly( new AnyValue[]{stringValue( "MyLabel" )} );
         }
         finally
         {
@@ -196,7 +225,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
                 procs().procedureCallRead( procs().procedureGet( procedureName( "db", "propertyKeys" ) ).id(), new AnyValue[0], EMPTY );
 
         // Then
-        assertThat( asList( stream ), contains( equalTo( new AnyValue[]{stringValue( "MyProp" )} ) ) );
+        assertThat( asList( stream ) ).containsExactly( new AnyValue[]{stringValue( "MyProp" )} );
     }
 
     @Test
@@ -216,7 +245,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
                         EMPTY );
 
         // Then
-        assertThat( asList( stream ), contains( equalTo( new AnyValue[]{stringValue( "MyRelType" )} ) ) );
+        assertThat( asList( stream ) ).containsExactly( new AnyValue[]{stringValue( "MyRelType" )} );
     }
 
     @Test
@@ -238,8 +267,8 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
                         EMPTY );
 
         // Then
-        assertThat( asList( stream ), contains( equalTo( new AnyValue[]{stringValue( "Neo4j Kernel" ),
-                VirtualValues.list( stringValue( Version.getNeo4jVersion() ) ), stringValue( "community" )} ) ) );
+        assertThat( asList( stream ) ).containsExactly(
+                new AnyValue[]{stringValue( "Neo4j Kernel" ), VirtualValues.list( stringValue( Version.getNeo4jVersion() ) ), stringValue( "community" )} );
 
         commit();
     }
@@ -285,43 +314,13 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         }
 
         // Then
-        assertThat( result, containsInAnyOrder(
-                dbIndexesResult(
-                        ageFooIndex.getId(),
-                        ageFooIndex.getName(),
-                        "ONLINE",
-                        100D,
-                        "UNIQUE",
-                        "BTREE",
-                        "NODE",
-                        singletonList( "Age" ),
-                        singletonList( "foo" ),
-                        ageFooIndex.getIndexProvider().name() ),
-
-                dbIndexesResult(
-                        personFooIndex.getId(),
-                        personFooIndex.getName(),
-                        "ONLINE",
-                        100D,
-                        "NONUNIQUE",
-                        "BTREE",
-                        "NODE",
-                        singletonList( "Person" ),
-                        singletonList( "foo" ),
-                        personFooIndex.getIndexProvider().name() ),
-
-                dbIndexesResult(
-                        personFooBarIndex.getId(),
-                        personFooBarIndex.getName(),
-                        "ONLINE",
-                        100D,
-                        "NONUNIQUE",
-                        "BTREE",
-                        "NODE",
-                        singletonList( "Person" ),
-                        Arrays.asList( "foo", "bar" ),
-                        personFooBarIndex.getIndexProvider().name() )
-        ) );
+        assertThat( result ).contains(
+                dbIndexesResult( ageFooIndex.getId(), ageFooIndex.getName(), "ONLINE", 100D, "UNIQUE", "BTREE", "NODE", singletonList( "Age" ),
+                        singletonList( "foo" ), ageFooIndex.getIndexProvider().name() ),
+                dbIndexesResult( personFooIndex.getId(), personFooIndex.getName(), "ONLINE", 100D, "NONUNIQUE", "BTREE", "NODE", singletonList( "Person" ),
+                        singletonList( "foo" ), personFooIndex.getIndexProvider().name() ),
+                dbIndexesResult( personFooBarIndex.getId(), personFooBarIndex.getName(), "ONLINE", 100D, "NONUNIQUE", "BTREE", "NODE",
+                        singletonList( "Person" ), Arrays.asList( "foo", "bar" ), personFooBarIndex.getIndexProvider().name() ) );
         commit();
     }
 
@@ -417,55 +416,15 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         // Then
         try
         {
-            assertThat( result, containsInAnyOrder(
-                    dbIndexesResult(
-                            ageFooIndex.getId(),
-                            ageFooIndex.getName(),
-                            "ONLINE",
-                            100D,
-                            "UNIQUE",
-                            "BTREE",
-                            "NODE",
-                            singletonList( "Age" ),
-                            singletonList( "foo" ),
-                            ageFooIndex.getIndexProvider().name() ),
-
-                    dbIndexesResult(
-                            personFooIndex.getId(),
-                            personFooIndex.getName(),
-                            "ONLINE",
-                            100D,
-                            "NONUNIQUE",
-                            "BTREE",
-                            "NODE",
-                            singletonList( "Person" ),
-                            singletonList( "foo" ),
-                            personFooIndex.getIndexProvider().name() ),
-
-                    dbIndexesResult(
-                            personFooBarIndex.getId(),
-                            personFooBarIndex.getName(),
-                            "ONLINE",
-                            100D,
-                            "NONUNIQUE",
-                            "BTREE",
-                            "NODE",
-                            singletonList( "Person" ),
-                            Arrays.asList( "foo", "bar" ),
-                            personFooBarIndex.getIndexProvider().name() ),
-
-                    dbIndexesResult(
-                            personBazIndex.getId(),
-                            personBazIndex.getName() /*???*/,
-                            "POPULATING",
-                            100D,
-                            "UNIQUE",
-                            "BTREE",
-                            "NODE",
-                            singletonList( "Person" ),
-                            singletonList( "baz" ),
-                            personBazIndex.getIndexProvider().name() )
-            ) );
+            assertThat( result ).contains(
+                    dbIndexesResult( ageFooIndex.getId(), ageFooIndex.getName(), "ONLINE", 100D, "UNIQUE", "BTREE", "NODE", singletonList( "Age" ),
+                            singletonList( "foo" ), ageFooIndex.getIndexProvider().name() ),
+                    dbIndexesResult( personFooIndex.getId(), personFooIndex.getName(), "ONLINE", 100D, "NONUNIQUE", "BTREE", "NODE", singletonList( "Person" ),
+                            singletonList( "foo" ), personFooIndex.getIndexProvider().name() ),
+                    dbIndexesResult( personFooBarIndex.getId(), personFooBarIndex.getName(), "ONLINE", 100D, "NONUNIQUE", "BTREE", "NODE",
+                            singletonList( "Person" ), Arrays.asList( "foo", "bar" ), personFooBarIndex.getIndexProvider().name() ),
+                    dbIndexesResult( personBazIndex.getId(), personBazIndex.getName() /*???*/, "POPULATING", 100D, "UNIQUE", "BTREE", "NODE",
+                            singletonList( "Person" ), singletonList( "baz" ), personBazIndex.getIndexProvider().name() ) );
             commit();
         }
         finally
@@ -496,7 +455,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         }
 
         // Then, the initial query and the procedure call should now have been cleared
-        assertThat( monitor.numberOfFlushedItems(), equalTo( 2L ) );
+        assertThat( monitor.numberOfFlushedItems() ).isEqualTo( 2L );
     }
 
     @Test
@@ -515,7 +474,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         // Then
         IndexSamplingMode mode = monitor.samplingMode();
         assertNotEquals( IndexSamplingMode.NO_WAIT, mode.millisToWaitForCompletion() );
-        assertThat( mode.millisToWaitForCompletion(), greaterThan( 0L ) );
+        assertThat( mode.millisToWaitForCompletion() ).isGreaterThan( 0L );
     }
 
     private ReplanMonitor replanMonitor()
@@ -528,7 +487,7 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         return monitorListener;
     }
 
-    private static class ReplanMonitor extends IndexingService.MonitorAdapter implements StringCacheMonitor
+    private static class ReplanMonitor extends IndexingService.MonitorAdapter implements ExecutionEngineQueryCacheMonitor
     {
         private long numberOfFlushedItems = -1L;
         private IndexSamplingMode samplingMode;
@@ -553,27 +512,6 @@ class BuiltInProceduresIT extends CommunityProcedureITBase
         IndexSamplingMode samplingMode()
         {
             return samplingMode;
-        }
-
-        @Override
-        public void cacheHit( Pair<String,scala.collection.immutable.Map<String,Class<?>>> key )
-        {
-        }
-
-        @Override
-        public void cacheMiss( Pair<String,scala.collection.immutable.Map<String,Class<?>>> key )
-        {
-        }
-
-        @Override
-        public void cacheDiscard( Pair<String,scala.collection.immutable.Map<String,Class<?>>> key, String userKey,
-                int secondsSinceReplan )
-        {
-        }
-
-        @Override
-        public void cacheRecompile( Pair<String,scala.collection.immutable.Map<String,Class<?>>> key )
-        {
         }
     }
 }

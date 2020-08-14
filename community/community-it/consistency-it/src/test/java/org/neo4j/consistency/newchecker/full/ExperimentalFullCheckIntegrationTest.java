@@ -19,7 +19,6 @@
  */
 package org.neo4j.consistency.newchecker.full;
 
-import org.hamcrest.CoreMatchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -27,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.consistency.RecordType;
 import org.neo4j.consistency.checking.GraphStoreFixture;
 import org.neo4j.consistency.checking.full.FullCheckIntegrationTest;
@@ -37,17 +36,17 @@ import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.neo4j.configuration.GraphDatabaseSettings.experimental_consistency_checker_stop_threshold;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.experimental_consistency_checker_stop_threshold;
 import static org.neo4j.internal.kernel.api.TokenRead.ANY_LABEL;
 import static org.neo4j.internal.kernel.api.TokenRead.ANY_RELATIONSHIP_TYPE;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_PROPERTY;
+import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
 
 public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTest
 {
-    private HashMap<Setting<?>,Object> extraSettings;
+    private Map<Setting<?>,Object> extraSettings;
 
     @BeforeEach
     protected void setUp()
@@ -60,7 +59,7 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
     protected Map<Setting<?>,Object> getSettings()
     {
         Map<Setting<?>,Object> cfg = new HashMap<>( super.getSettings() );
-        cfg.put( GraphDatabaseSettings.experimental_consistency_checker, true );
+        cfg.put( GraphDatabaseInternalSettings.experimental_consistency_checker, true );
         cfg.putAll( extraSettings );
         return cfg;
     }
@@ -75,8 +74,8 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-                tx.create( new NodeRecord( next.node(), false, next.relationship(), -1 ) );
-                tx.create( new NodeRecord( next.node(), false, next.relationship(), -1 ) );
+                tx.create( new NodeRecord( next.node() ).initialize( false, -1, false, next.relationship(), 0 ) );
+                tx.create( new NodeRecord( next.node() ).initialize( false, -1, false, next.relationship(), 0 ) );
             }
         } );
 
@@ -100,8 +99,12 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-                tx.create( new RelationshipRecord( next.relationship(), 1, 2, C ) );
-                tx.create( new RelationshipRecord( next.relationship(), 1, 2, C ) );
+                RelationshipRecord relationshipA = new RelationshipRecord( next.relationship() );
+                relationshipA.setLinks(1, 2, C );
+                tx.create( relationshipA );
+                RelationshipRecord relationshipB = new RelationshipRecord( next.relationship() );
+                relationshipB.setLinks(1, 2, C );
+                tx.create( relationshipB );
             }
         } );
         extraSettings.put( experimental_consistency_checker_stop_threshold, 1 );
@@ -112,7 +115,7 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
         // then number of relationship inconsistencies may be 1 or 2, because in a fail-fast setting not all failures are necessarily reported
         // before the checker is aborted. The driver for this arose when adding memory-limited testing to the new checker.
         int relationshipInconsistencies = stats.getInconsistencyCountForRecordType( RecordType.RELATIONSHIP );
-        assertThat( relationshipInconsistencies, CoreMatchers.anyOf( equalTo( 1 ), equalTo( 2 ) ) );
+        assertThat( relationshipInconsistencies ).isIn( 1, 2 );
         assertEquals( stats.getTotalInconsistencyCount(), relationshipInconsistencies );
     }
 
@@ -136,11 +139,12 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
                 long otherNode = next.node();
                 long group = next.relationshipGroup();
                 long rel = next.relationship();
-                tx.create( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new NodeRecord( otherNode, false, rel, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new RelationshipRecord( rel, otherNode, otherNode, C ) );
-                tx.create( withOwner( withRelationships( new RelationshipGroupRecord( group, C ),
-                        rel, rel, rel ), node ) );
+                tx.create( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) );
+                tx.create( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
+                RelationshipRecord relationship = new RelationshipRecord( rel );
+                relationship.setLinks( otherNode, otherNode, C );
+                tx.create( relationship );
+                tx.create( new RelationshipGroupRecord( group ).initialize( false, C, rel, rel, rel, node, NULL_REFERENCE.longValue() ) );
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 1 );
                 tx.incrementRelationshipCount( ANY_LABEL, C, ANY_LABEL, 1 );
             }
@@ -167,10 +171,18 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
                 long node = next.node();
                 long otherNode = next.node();
                 long rel = next.relationship();
+<<<<<<< HEAD
                 tx.create( new NodeRecord( node, false, rel, NO_NEXT_PROPERTY.intValue() ) );
                 tx.create( new NodeRecord( otherNode, false, rel, NO_NEXT_PROPERTY.intValue() ) );
 
                 RelationshipRecord relationship = new RelationshipRecord( rel, node, otherNode, C );
+=======
+                tx.create( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
+                tx.create( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
+
+                RelationshipRecord relationship = new RelationshipRecord( rel );
+                relationship.setLinks( node, otherNode, C );
+>>>>>>> neo4j/4.1
                 relationship.setFirstNextRel( -3 ); //Set some negative pointers
                 relationship.setFirstPrevRel( -4 );
                 relationship.setSecondNextRel( -5 );
@@ -201,7 +213,11 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
+<<<<<<< HEAD
                 tx.create( new NodeRecord( next.node(), false, -6, NO_NEXT_PROPERTY.intValue() ) );
+=======
+                tx.create( new NodeRecord( next.node() ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, -6, 0 ) );
+>>>>>>> neo4j/4.1
             }
         } );
 
@@ -223,7 +239,13 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
+<<<<<<< HEAD
                 tx.create( new RelationshipRecord( next.relationship(), -2, -3, C ) );
+=======
+                RelationshipRecord relationship = new RelationshipRecord( next.relationship() );
+                relationship.setLinks( -2, -3, C );
+                tx.create( relationship );
+>>>>>>> neo4j/4.1
 
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 1 );
                 tx.incrementRelationshipCount( ANY_LABEL, C, ANY_LABEL, 1 );

@@ -41,7 +41,6 @@ import org.neo4j.internal.kernel.api.TokenWrite;
 import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
@@ -49,14 +48,12 @@ import org.neo4j.test.extension.ImpermanentDbmsExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 
 @ImpermanentDbmsExtension
@@ -170,7 +167,7 @@ class CompositeIndexingIT
             try ( NodeValueIndexCursor cursor = seek( ktx ) )
             {
                 assertTrue( cursor.next() );
-                assertThat( cursor.nodeReference(), equalTo( nodeID ) );
+                assertThat( cursor.nodeReference() ).isEqualTo( nodeID );
                 assertFalse( cursor.next() );
             }
         }
@@ -194,7 +191,7 @@ class CompositeIndexingIT
             try ( NodeValueIndexCursor cursor = seek( ktx ) )
             {
                 assertTrue( cursor.next() );
-                assertThat( cursor.nodeReference(), equalTo( nodeID ) );
+                assertThat( cursor.nodeReference() ).isEqualTo( nodeID );
                 assertFalse( cursor.next() );
             }
         }
@@ -272,7 +269,7 @@ class CompositeIndexingIT
                         result.add( cursor.nodeReference() );
                     }
                 }
-                assertThat( result, containsInAnyOrder( nodeID1, nodeID2, nodeID3 ) );
+                assertThat( result ).contains( nodeID1, nodeID2, nodeID3 );
             }
         }
     }
@@ -298,7 +295,7 @@ class CompositeIndexingIT
                         result.add( cursor.nodeReference() );
                     }
                 }
-                assertThat( result, containsInAnyOrder( nodeID1, nodeID2, nodeID3 ) );
+                assertThat( result ).contains( nodeID1, nodeID2, nodeID3 );
             }
         }
     }
@@ -329,7 +326,7 @@ class CompositeIndexingIT
                     result.add( cursor.nodeReference() );
                 }
             }
-            assertThat( result, contains( nodeID1 ) );
+            assertThat( result ).containsExactly( nodeID1 );
         }
     }
 
@@ -354,9 +351,9 @@ class CompositeIndexingIT
 
     private NodeValueIndexCursor seek( KernelTransaction transaction ) throws KernelException
     {
-        NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor();
+        NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor( transaction.pageCursorTracer() );
         IndexReadSession indexSession = transaction.dataRead().indexReadSession( index );
-        transaction.dataRead().nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, exactQuery() );
+        transaction.dataRead().nodeIndexSeek( indexSession, cursor, unconstrained(), exactQuery() );
         return cursor;
     }
 

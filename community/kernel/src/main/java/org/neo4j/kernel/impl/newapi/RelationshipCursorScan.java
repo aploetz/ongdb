@@ -22,20 +22,20 @@ package org.neo4j.kernel.impl.newapi;
 import org.eclipse.collections.api.iterator.LongIterator;
 
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.storageengine.api.AllRelationshipsScan;
 
 final class RelationshipCursorScan extends BaseCursorScan<RelationshipScanCursor,AllRelationshipsScan>
 {
 
-    RelationshipCursorScan( AllRelationshipsScan allRelationshipsScan, Read read )
+    RelationshipCursorScan( AllRelationshipsScan allRelationshipsScan, Read read, PageCursorTracer cursorTracer )
     {
-        super( allRelationshipsScan, read, () -> read.txState().addedAndRemovedRelationships().getAdded().toArray() );
+        super( allRelationshipsScan, read, () -> read.txState().addedAndRemovedRelationships().getAdded().toArray(), cursorTracer );
     }
 
     @Override
     boolean scanStore( RelationshipScanCursor cursor, int sizeHint, LongIterator addedItems )
     {
-        return ((DefaultRelationshipScanCursor) cursor)
-                .scanBatch( read, storageScan, sizeHint, addedItems, hasChanges );
+        return ((DefaultRelationshipScanCursor) cursor).scanBatch( read, storageScan, sizeHint, addedItems, hasChanges );
     }
 }

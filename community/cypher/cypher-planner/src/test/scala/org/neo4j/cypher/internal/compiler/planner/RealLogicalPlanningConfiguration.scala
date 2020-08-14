@@ -20,13 +20,19 @@
 package org.neo4j.cypher.internal.compiler.planner
 
 import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
-import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.{CardinalityModel, QueryGraphCardinalityModel, QueryGraphSolverInput}
-import org.neo4j.cypher.internal.compiler.planner.logical.{CardinalityCostModel, ExpressionEvaluator, Metrics, StatisticsBackedCardinalityModel}
+import org.neo4j.cypher.internal.compiler.planner.logical.CardinalityCostModel
+import org.neo4j.cypher.internal.compiler.planner.logical.ExpressionEvaluator
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.CardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphCardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.compiler.planner.logical.StatisticsBackedCardinalityModel
 import org.neo4j.cypher.internal.ir.QueryGraph
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, ProcedureSignature}
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
 import org.neo4j.cypher.internal.planner.spi.GraphStatistics
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, Cost}
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Cost
 
 case class RealLogicalPlanningConfiguration(cypherCompilerConfig: CypherPlannerConfiguration)
   extends LogicalPlanningConfiguration with LogicalPlanningConfigurationAdHocSemanticTable {
@@ -37,10 +43,7 @@ case class RealLogicalPlanningConfiguration(cypherCompilerConfig: CypherPlannerC
 
   //noinspection ScalaUnnecessaryParentheses
   override def costModel(): PartialFunction[(LogicalPlan, QueryGraphSolverInput, Cardinalities), Cost] = {
-    val model: Metrics.CostModel = CardinalityCostModel(cypherCompilerConfig)
-    ({
-      case (plan: LogicalPlan, input: QueryGraphSolverInput, cardinalities: Cardinalities) => model(plan, input, cardinalities)
-    })
+    case (plan: LogicalPlan, input: QueryGraphSolverInput, cardinalities: Cardinalities) => CardinalityCostModel(plan, input, cardinalities)
   }
 
   override def graphStatistics: GraphStatistics = HardcodedGraphStatistics
@@ -49,6 +52,7 @@ case class RealLogicalPlanningConfiguration(cypherCompilerConfig: CypherPlannerC
   override def procedureSignatures: Set[ProcedureSignature] = Set.empty
   override def labelCardinality: Map[String, Cardinality] = Map.empty
   override def knownLabels: Set[String] = Set.empty
+  override def knownRelationships: Set[String] = Set.empty
   override def labelsById: Map[Int, String] = Map.empty
 
   override def qg: QueryGraph = ???

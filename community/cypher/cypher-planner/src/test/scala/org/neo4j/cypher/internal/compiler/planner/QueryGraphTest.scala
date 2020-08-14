@@ -19,12 +19,16 @@
  */
 package org.neo4j.cypher.internal.compiler.planner
 
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.BOTH
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.ir.{PatternRelationship, QueryGraph, SimplePatternLength}
-import org.neo4j.cypher.internal.v4_0.ast.UsingIndexHint
-import org.neo4j.cypher.internal.v4_0.expressions.{LabelName, PropertyKeyName, Variable}
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
+import org.neo4j.cypher.internal.ast.UsingIndexHint
+import org.neo4j.cypher.internal.expressions.LabelName
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.SemanticDirection.BOTH
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class QueryGraphTest extends CypherFunSuite {
   val x = "x"

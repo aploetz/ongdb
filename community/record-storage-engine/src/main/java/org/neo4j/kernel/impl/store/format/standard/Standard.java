@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.store.format.standard;
 
 import org.neo4j.kernel.impl.store.format.RecordFormats;
+
 /**
  * This is a utility class always pointing to the latest Standard record format.
  */

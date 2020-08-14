@@ -33,7 +33,8 @@ import org.neo4j.test.extension.DbmsExtension;
 import org.neo4j.test.extension.Inject;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.neo4j.kernel.api.KernelTransaction.Type.explicit;
+import static org.neo4j.kernel.api.KernelTransaction.Type.EXPLICIT;
+import static org.neo4j.storageengine.api.RelationshipSelection.ALL_RELATIONSHIPS;
 
 @DbmsExtension
 class KernelAPIParallelTraversalStressIT
@@ -44,12 +45,12 @@ class KernelAPIParallelTraversalStressIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private Kernel kernel;
 
     @Test
     void shouldScanNodesAndTraverseInParallel() throws Throwable
     {
-        Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
-
         createRandomGraph( kernel );
 
         KernelAPIParallelStress.parallelStressInTx( kernel, N_THREADS, NodeAndTraverseCursors::new, KernelAPIParallelTraversalStressIT::scanAndTraverse );
@@ -60,7 +61,7 @@ class KernelAPIParallelTraversalStressIT
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         long[] nodes = new long[N_NODES];
-        KernelTransaction setup = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED );
+        KernelTransaction setup = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED );
 
         int relationshipType = setup.token().relationshipTypeCreateForName( "R", false );
         for ( int i = 0; i < N_NODES; i++ )
@@ -69,7 +70,7 @@ class KernelAPIParallelTraversalStressIT
             if ( (i + 1) % 10000 == 0 )
             {
                 setup.commit();
-                setup = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED );
+                setup = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED );
             }
         }
 
@@ -85,7 +86,7 @@ class KernelAPIParallelTraversalStressIT
             if ( (i + 1) % 10000 == 0 )
             {
                 setup.commit();
-                setup = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED );
+                setup = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED );
             }
         }
 
@@ -101,7 +102,7 @@ class KernelAPIParallelTraversalStressIT
             int r = 0;
             while ( cursors.nodeCursor.next() )
             {
-                cursors.nodeCursor.allRelationships( cursors.traversalCursor );
+                cursors.nodeCursor.relationships( cursors.traversalCursor, ALL_RELATIONSHIPS );
                 while ( cursors.traversalCursor.next() )
                 {
                     r++;
@@ -120,8 +121,8 @@ class KernelAPIParallelTraversalStressIT
 
         NodeAndTraverseCursors( KernelTransaction tx )
         {
-            nodeCursor = tx.cursors().allocateNodeCursor();
-            traversalCursor = tx.cursors().allocateRelationshipTraversalCursor();
+            nodeCursor = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+            traversalCursor = tx.cursors().allocateRelationshipTraversalCursor( tx.pageCursorTracer() );
         }
 
         @Override

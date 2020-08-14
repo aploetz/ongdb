@@ -19,19 +19,21 @@
  */
 package org.neo4j.cypher.internal.runtime
 
+import org.neo4j.cypher.internal.expressions.LabelToken
 import org.neo4j.cypher.internal.logical.plans.IndexedProperty
-import org.neo4j.cypher.internal.v4_0.expressions.LabelToken
-import org.neo4j.internal.kernel.api.{IndexReadSession, SchemaRead}
-import org.neo4j.internal.schema.{IndexDescriptor, SchemaDescriptor}
+import org.neo4j.internal.kernel.api.IndexReadSession
+import org.neo4j.internal.kernel.api.SchemaRead
+import org.neo4j.internal.schema.IndexDescriptor
+import org.neo4j.internal.schema.SchemaDescriptor
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 import scala.collection.mutable.ArrayBuffer
 
 /**
-  * Helper class used to register the indexes for a query and allocate query-local index ids.
-  *
-  * @param schemaRead SchemaRead used to acquire index references for registered indexes.
-  */
+ * Helper class used to register the indexes for a query and allocate query-local index ids.
+ *
+ * @param schemaRead SchemaRead used to acquire index references for registered indexes.
+ */
 class QueryIndexRegistrator(schemaRead: SchemaRead) {
 
   private val buffer = new ArrayBuffer[InternalIndexReference]

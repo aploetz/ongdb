@@ -21,14 +21,21 @@ package org.neo4j.cypher.internal.spi
 
 import java.util.Collections.singletonList
 
-import org.mockito.ArgumentMatchers._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.when
 import org.neo4j.cypher.internal.planner.spi.IndexDescriptor
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.{LabelId, PropertyKeyId, Selectivity}
-import org.neo4j.internal.kernel.api.{Read, SchemaRead}
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.Selectivity
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.internal.kernel.api.Read
+import org.neo4j.internal.kernel.api.SchemaRead
+import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException
 import org.neo4j.internal.schema
-import org.neo4j.internal.schema.{IndexPrototype, SchemaDescriptor}
+import org.neo4j.internal.schema.IndexPrototype
+import org.neo4j.internal.schema.SchemaDescriptor
+import org.neo4j.logging.Log
 
 class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
 
@@ -38,6 +45,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
   private val descriptor: schema.IndexDescriptor = IndexPrototype.forSchema(SchemaDescriptor.forLabel(labelId, propertyId)).withName("wut!").materialise(11L)
   private var read: Read = _
   private var schemaRead: SchemaRead = _
+  private val log = mock[Log]
 
 
   test("indexPropertyExistsSelectivity should compute selectivity") {
@@ -46,7 +54,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(500L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.indexPropertyExistsSelectivity(index) should equal(Some(Selectivity(0.5)))
@@ -58,7 +66,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(2000L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.indexPropertyExistsSelectivity(index) should equal(Some(Selectivity.ONE))
@@ -70,10 +78,25 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(2000L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.indexPropertyExistsSelectivity(index) should equal(Some(Selectivity.ZERO))
+  }
+
+  test("indexPropertyExistsSelectivity should log if index wasn't found") {
+    //given
+    when(read.countsForNodeWithoutTxState(labelId)).thenReturn(20L)
+    val exception = new IndexNotFoundKernelException("wut")
+    when(schemaRead.indexSize(descriptor)).thenThrow(exception)
+    val theLog = mock[Log]
+
+    //when
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, theLog)
+
+    //then
+    statistics.indexPropertyExistsSelectivity(index) should equal(None)
+    verify(theLog).debug("Index not found for indexPropertyExistsSelectivity", exception)
   }
 
   test("uniqueValueSelectivity should compute selectivity") {
@@ -82,7 +105,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(2000L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.uniqueValueSelectivity(index) should equal(Some(Selectivity(0.001)))
@@ -94,7 +117,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(100)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.uniqueValueSelectivity(index) should equal(Some(Selectivity.ONE))
@@ -106,7 +129,7 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(0L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.uniqueValueSelectivity(index) should equal(Some(Selectivity.ZERO))
@@ -118,10 +141,26 @@ class TransactionBoundGraphStatisticsTest extends CypherFunSuite {
     when(schemaRead.indexSize(descriptor)).thenReturn(2000L)
 
     //when
-    val statistics = TransactionBoundGraphStatistics(read, schemaRead)
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, log)
 
     //then
     statistics.uniqueValueSelectivity(index) should equal(Some(Selectivity.ZERO))
+  }
+
+
+  test("uniqueValueSelectivity should log if index wasn't found") {
+    //given
+    when(schemaRead.indexUniqueValuesSelectivity(descriptor)).thenReturn(0.0)
+    val exception = new IndexNotFoundKernelException("wut")
+    when(schemaRead.indexSize(descriptor)).thenThrow(exception)
+    val theLog = mock[Log]
+
+    //when
+    val statistics = TransactionBoundGraphStatistics(read, schemaRead, theLog)
+
+    //then
+    statistics.uniqueValueSelectivity(index) should equal(None)
+    verify(theLog).debug("Index not found for uniqueValueSelectivity", exception)
   }
 
   override protected def beforeEach(): Unit = {

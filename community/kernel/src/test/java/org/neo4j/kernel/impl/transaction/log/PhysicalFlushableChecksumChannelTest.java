@@ -30,12 +30,14 @@ import org.junit.jupiter.api.Test;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.PhysicalFlushableChecksumChannel;
 import org.neo4j.io.fs.StoreChannel;
+import org.neo4j.io.memory.HeapScopedBuffer;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.io.fs.ChecksumWriter.CHECKSUM_FACTORY;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @SuppressWarnings( "ResultOfMethodCallIgnored" )
 @TestDirectoryExtension
@@ -53,7 +55,11 @@ class PhysicalFlushableChecksumChannelTest
         StoreChannel storeChannel = fileSystem.write( firstFile );
         ByteBuffer chanBuf = ByteBuffer.allocate( 100 );
         int channelChecksum;
+<<<<<<< HEAD
         try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, chanBuf ) )
+=======
+        try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, new HeapScopedBuffer( 100, INSTANCE ) ) )
+>>>>>>> neo4j/4.1
         {
             channel.beginChecksum();
             channel.put( (byte) 10 );
@@ -84,7 +90,11 @@ class PhysicalFlushableChecksumChannelTest
         StoreChannel storeChannel = fileSystem.write( firstFile );
         ByteBuffer chanBuf = ByteBuffer.allocate( 100 );
         int channelChecksum;
+<<<<<<< HEAD
         try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, chanBuf ) )
+=======
+        try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, new HeapScopedBuffer( 100, INSTANCE ) ) )
+>>>>>>> neo4j/4.1
         {
             channel.put( (byte) 5 );
             channel.beginChecksum();

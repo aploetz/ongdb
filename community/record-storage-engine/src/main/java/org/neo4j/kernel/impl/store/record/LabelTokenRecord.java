@@ -19,11 +19,20 @@
  */
 package org.neo4j.kernel.impl.store.record;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+
 public class LabelTokenRecord extends TokenRecord
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( LabelTokenRecord.class );
+
     public LabelTokenRecord( long id )
     {
         super( id );
+    }
+
+    public LabelTokenRecord( LabelTokenRecord other )
+    {
+        super( other );
     }
 
     @Override
@@ -40,8 +49,12 @@ public class LabelTokenRecord extends TokenRecord
     }
 
     @Override
+<<<<<<< HEAD
     public LabelTokenRecord clone()
+=======
+    public LabelTokenRecord copy()
+>>>>>>> neo4j/4.1
     {
-        return (LabelTokenRecord) super.clone();
+        return new LabelTokenRecord( this );
     }
 }

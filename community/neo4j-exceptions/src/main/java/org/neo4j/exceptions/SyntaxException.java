@@ -126,6 +126,10 @@ public class SyntaxException extends Neo4jException
                .append( "\"" )
                .append( lineSeparator() )
                .append( " ".repeat( currentOffset + 1 ) ) // extra space to compensate for an opening quote
+<<<<<<< HEAD
                .append( "^" );
+=======
+               .append( '^' );
+>>>>>>> neo4j/4.1
     }
 }

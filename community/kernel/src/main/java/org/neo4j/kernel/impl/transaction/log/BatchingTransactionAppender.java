@@ -165,11 +165,11 @@ public class BatchingTransactionAppender extends LifecycleAdapter implements Tra
         }
     }
 
-    private void publishAsCommitted( TransactionToApply batch )
+    private static void publishAsCommitted( TransactionToApply batch )
     {
         while ( batch != null )
         {
-            batch.commitment().publishAsCommitted();
+            batch.publishAsCommitted();
             batch = batch.next();
         }
     }
@@ -218,7 +218,8 @@ public class BatchingTransactionAppender extends LifecycleAdapter implements Tra
 
             transactionMetadataCache.cacheTransactionMetadata( transactionId, logPositionBeforeCommit, checksum, transaction.getTimeCommitted() );
 
-            return new TransactionCommitment( transactionId, checksum, transaction.getTimeCommitted(), logPositionAfterCommit, transactionIdStore );
+            return new TransactionCommitment( transactionId, checksum, transaction.getTimeCommitted(), logPositionAfterCommit,
+                    transactionIdStore );
         }
         catch ( final Throwable panic )
         {
@@ -301,7 +302,7 @@ public class BatchingTransactionAppender extends LifecycleAdapter implements Tra
         }
     }
 
-    private void unparkAll( ThreadLink links )
+    private static void unparkAll( ThreadLink links )
     {
         do
         {

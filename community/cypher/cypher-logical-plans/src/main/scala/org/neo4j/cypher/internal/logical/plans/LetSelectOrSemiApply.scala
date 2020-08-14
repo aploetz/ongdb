@@ -19,42 +19,42 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * Like LetSemiApply, but with a precondition 'expr'. If 'expr' is true, 'idName' will be set to true without
-  * executing right.
-  *
-  * for ( leftRow <- left ) {
-  *   if ( leftRow.evaluate( expr) ) {
-  *     produce leftRow
-  *   } else {
-  *     right.setArgument( leftRow )
-  *     if ( right.nonEmpty ) {
-  *       produce leftRow
-  *     }
-  *   }
-  * }
-  */
+ * Like LetSemiApply, but with a precondition 'expr'. If 'expr' is true, 'idName' will be set to true without
+ * executing right.
+ *
+ * for ( leftRow <- left ) {
+ *   if ( leftRow.evaluate( expr) ) {
+ *     produce leftRow
+ *   } else {
+ *     right.setArgument( leftRow )
+ *     if ( right.nonEmpty ) {
+ *       produce leftRow
+ *     }
+ *   }
+ * }
+ */
 case class LetSelectOrSemiApply(left: LogicalPlan, right: LogicalPlan, idName: String, expr: Expression)(implicit idGen: IdGen)
   extends AbstractLetSelectOrSemiApply(left, right, idName, expr)(idGen)
 
 /**
-  * Like LetAntiSemiApply, but with a precondition 'expr'. If 'expr' is true, 'idName' will be set to true without
-  * executing right.
-  *
-  * for ( leftRow <- left ) {
-  *   if ( leftRow.evaluate( expr) ) {
-  *     produce leftRow
-  *   } else {
-  *     right.setArgument( leftRow )
-  *     if ( right.isEmpty ) {
-  *       produce leftRow
-  *     }
-  *   }
-  * }
-  */
+ * Like LetAntiSemiApply, but with a precondition 'expr'. If 'expr' is true, 'idName' will be set to true without
+ * executing right.
+ *
+ * for ( leftRow <- left ) {
+ *   if ( leftRow.evaluate( expr) ) {
+ *     produce leftRow
+ *   } else {
+ *     right.setArgument( leftRow )
+ *     if ( right.isEmpty ) {
+ *       produce leftRow
+ *     }
+ *   }
+ * }
+ */
 case class LetSelectOrAntiSemiApply(left: LogicalPlan, right: LogicalPlan, idName: String, expr: Expression)(implicit idGen: IdGen)
   extends AbstractLetSelectOrSemiApply(left, right, idName, expr)(idGen)
 

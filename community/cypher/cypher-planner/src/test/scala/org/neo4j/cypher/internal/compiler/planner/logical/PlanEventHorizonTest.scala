@@ -19,13 +19,43 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-import org.neo4j.cypher.internal.compiler.planner.{LogicalPlanningTestSupport2, ProcedureCallProjection}
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.ast.ProcedureResultItem
-import org.neo4j.cypher.internal.v4_0.expressions.{Namespace, ProcedureName}
-import org.neo4j.cypher.internal.v4_0.util.symbols._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.ast.ProcedureResultItem
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
+import org.neo4j.cypher.internal.compiler.planner.ProcedureCallProjection
+import org.neo4j.cypher.internal.expressions.Namespace
+import org.neo4j.cypher.internal.expressions.ProcedureName
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.CallSubqueryHorizon
+import org.neo4j.cypher.internal.ir.DistinctQueryProjection
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.QueryPagination
+import org.neo4j.cypher.internal.ir.RegularQueryProjection
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.ir.ordering.RequiredOrderCandidate
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.Distinct
+import org.neo4j.cypher.internal.logical.plans.DoNotIncludeTies
+import org.neo4j.cypher.internal.logical.plans.FieldSignature
+import org.neo4j.cypher.internal.logical.plans.Limit
+import org.neo4j.cypher.internal.logical.plans.ProcedureCall
+import org.neo4j.cypher.internal.logical.plans.ProcedureReadOnlyAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.logical.plans.ResolvedCall
+import org.neo4j.cypher.internal.logical.plans.Skip
+import org.neo4j.cypher.internal.logical.plans.Sort
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.symbols.CTList
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -37,7 +67,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       val inputPlan = Argument()
 
       // When
-      val producedPlan = PlanEventHorizon(pq, inputPlan, context)
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       producedPlan should equal(Projection(inputPlan, Map("a" -> literal)))
@@ -60,7 +90,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       val inputPlan = Argument()
 
       // When
-      val producedPlan = PlanEventHorizon(pq, inputPlan, context)
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       producedPlan should equal(ProcedureCall(inputPlan, call))
@@ -73,14 +103,34 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
 
       val sq = RegularSinglePlannerQuery(QueryGraph(patternNodes = Set("a")), horizon = RegularQueryProjection(Map("a" -> varFor("a"))))
 
-      val pq = RegularSinglePlannerQuery(horizon = CallSubqueryHorizon(sq))
+      val pq = RegularSinglePlannerQuery(horizon = CallSubqueryHorizon(sq, correlated = false))
       val inputPlan = Argument()
 
       // When
-      val producedPlan = PlanEventHorizon(pq, inputPlan, context)
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       producedPlan should equal(CartesianProduct(
+        inputPlan,
+        AllNodesScan("a", Set.empty)
+      ))
+    }
+  }
+
+  test("should plan correlated subqueries calls") {
+    // Given
+    new given().withLogicalPlanningContextWithFakeAttributes { (_, context) =>
+
+      val sq = RegularSinglePlannerQuery(QueryGraph(patternNodes = Set("a")), horizon = RegularQueryProjection(Map("a" -> varFor("a"))))
+
+      val pq = RegularSinglePlannerQuery(horizon = CallSubqueryHorizon(sq, correlated = true))
+      val inputPlan = Argument()
+
+      // When
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
+
+      // Then
+      producedPlan should equal(Apply(
         inputPlan,
         AllNodesScan("a", Set.empty)
       ))
@@ -98,7 +148,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       context.planningAttributes.solveds.set(inputPlan.id, SinglePlannerQuery.empty)
 
       // When
-      val producedPlan = PlanEventHorizon(pq, inputPlan, context)
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       producedPlan should equal(Projection(Sort(inputPlan, Seq(Ascending("a"))), Map("b" -> literal, "c" -> literal)))
@@ -116,7 +166,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       context.planningAttributes.solveds.set(inputPlan.id, SinglePlannerQuery.empty)
 
       // When
-      val producedPlan = PlanEventHorizon(pq, inputPlan, context)
+      val producedPlan = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       producedPlan should equal(Projection(Sort(Projection(inputPlan, Map("a" -> literal)), Seq(Ascending("a"))), Map("b" -> literal, "c" -> literal)))
@@ -134,7 +184,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       val inputPlan = fakeLogicalPlanFor(context.planningAttributes, "x")
 
       // When
-      val result = PlanEventHorizon(pq, inputPlan, context)
+      val result = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       val sorted = Sort(inputPlan, Seq(Ascending("x")))
@@ -159,7 +209,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       val inputPlan = fakeLogicalPlanFor(context.planningAttributes, "m", "n")
 
       // When
-      val result = PlanEventHorizon(pq, inputPlan, context)
+      val result = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       val distinct = Distinct(inputPlan, groupingExpressions = projectionsMap)
@@ -190,7 +240,7 @@ class PlanEventHorizonTest extends CypherFunSuite with LogicalPlanningTestSuppor
       val inputPlan = fakeLogicalPlanFor(context.planningAttributes, "m", "n", "o")
 
       // When
-      val result = PlanEventHorizon(pq, inputPlan, context)
+      val result = PlanEventHorizon(pq, inputPlan, None, context)
 
       // Then
       val aggregation = Aggregation(inputPlan, grouping, aggregating)

@@ -29,8 +29,7 @@ import java.nio.file.Path;
 import org.neo4j.cli.ExecutionContext;
 import org.neo4j.dbms.archive.Dumper;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class DumpCommandTest
@@ -44,7 +43,7 @@ class DumpCommandTest
         {
             CommandLine.usage( command, new PrintStream( out ) );
         }
-        assertThat( baos.toString().trim(), equalTo( String.format(
+        assertThat( baos.toString().trim() ).isEqualTo( String.format(
                 "Dump a database into a single-file archive.%n" +
                 "%n" +
                 "USAGE%n" +
@@ -65,6 +64,6 @@ class DumpCommandTest
                 "                    Name of the database to dump.%n" +
                 "                      Default: neo4j%n" +
                 "      --to=<path>   Destination (file or folder) of database dump."
-        ) ) );
+        ) );
     }
 }

@@ -19,22 +19,22 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
 case class CoalesceFunction(override val arguments: Expression*) extends Expression {
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue =
+  override def apply(row: ReadableRow, state: QueryState): AnyValue =
     arguments.
       view.
-      map(expression => expression(ctx, state)).
+      map(expression => expression(row, state)).
       find(value => !(value eq Values.NO_VALUE)) match {
-        case None    => Values.NO_VALUE
-        case Some(x) => x
-      }
+      case None    => Values.NO_VALUE
+      case Some(x) => x
+    }
 
   def innerExpectedType: Option[CypherType] = None
 

@@ -30,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.StubPagedFile;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.scheduler.CallableExecutorService;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
 
 import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
@@ -52,7 +55,8 @@ class CrashGenerationCleanerCrashTest
 
         try
         {
-            Throwable exception = assertThrows( Throwable.class, () -> cleaner.clean( executorService ) );
+            CallableExecutorService executor = new CallableExecutorService( executorService );
+            Throwable exception = assertThrows( Throwable.class, () -> cleaner.clean( executor ) );
             Throwable rootCause = getRootCause( exception );
             assertTrue( rootCause instanceof IOException );
             assertEquals( exceptionMessage, rootCause.getMessage() );
@@ -72,7 +76,7 @@ class CrashGenerationCleanerCrashTest
             AtomicBoolean first = new AtomicBoolean( true );
 
             @Override
-            public PageCursor io( long pageId, int pf_flags ) throws IOException
+            public PageCursor io( long pageId, int pf_flags, PageCursorTracer tracer ) throws IOException
             {
                 try
                 {
@@ -86,10 +90,10 @@ class CrashGenerationCleanerCrashTest
                 {
                     throw new IOException( message );
                 }
-                return super.io( pageId, pf_flags );
+                return super.io( pageId, pf_flags, tracer );
             }
         };
         return new CrashGenerationCleaner( pagedFile, new TreeNodeFixedSize<>( pageSize, SimpleLongLayout.longLayout().build() ), 0,
-                MAX_BATCH_SIZE * 1_000_000_000, 5, 7, NO_MONITOR );
+                MAX_BATCH_SIZE * 1_000_000_000, 5, 7, NO_MONITOR, PageCacheTracer.NULL );
     }
 }

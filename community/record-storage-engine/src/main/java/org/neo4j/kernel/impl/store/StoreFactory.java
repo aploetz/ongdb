@@ -19,18 +19,25 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.IOException;
 import java.nio.file.OpenOption;
 
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.UnderlyingStorageException;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
+import org.neo4j.kernel.impl.store.format.aligned.AlignedFormatFamily;
 import org.neo4j.logging.LogProvider;
 
+import static org.eclipse.collections.api.factory.Sets.immutable;
+import static org.neo4j.io.pagecache.PageCacheOpenOptions.DIRECT;
 import static org.neo4j.kernel.impl.store.format.RecordFormatPropertyConfigurator.configureRecordFormat;
 import static org.neo4j.kernel.impl.store.format.RecordFormatSelector.selectForStoreOrConfig;
 
@@ -46,25 +53,28 @@ public class StoreFactory
     private final LogProvider logProvider;
     private final PageCache pageCache;
     private final RecordFormats recordFormats;
-    private final OpenOption[] openOptions;
+    private final PageCacheTracer cacheTracer;
+    private final ImmutableSet<OpenOption> openOptions;
 
     public StoreFactory( DatabaseLayout directoryStructure, Config config, IdGeneratorFactory idGeneratorFactory, PageCache pageCache,
-            FileSystemAbstraction fileSystemAbstraction, LogProvider logProvider )
+            FileSystemAbstraction fileSystemAbstraction, LogProvider logProvider, PageCacheTracer cacheTracer )
     {
         this( directoryStructure, config, idGeneratorFactory, pageCache, fileSystemAbstraction,
-                selectForStoreOrConfig( config, directoryStructure, fileSystemAbstraction, pageCache, logProvider ),
-                logProvider );
+                selectForStoreOrConfig( config, directoryStructure, fileSystemAbstraction, pageCache, logProvider, cacheTracer ),
+                logProvider, cacheTracer, immutable.empty() );
     }
 
     public StoreFactory( DatabaseLayout databaseLayout, Config config, IdGeneratorFactory idGeneratorFactory, PageCache pageCache,
-            FileSystemAbstraction fileSystemAbstraction, RecordFormats recordFormats, LogProvider logProvider, OpenOption... openOptions )
+            FileSystemAbstraction fileSystemAbstraction, RecordFormats recordFormats, LogProvider logProvider, PageCacheTracer cacheTracer,
+            ImmutableSet<OpenOption> openOptions )
     {
         this.databaseLayout = databaseLayout;
         this.config = config;
         this.idGeneratorFactory = idGeneratorFactory;
         this.fileSystemAbstraction = fileSystemAbstraction;
         this.recordFormats = recordFormats;
-        this.openOptions = openOptions;
+        this.cacheTracer = cacheTracer;
+        this.openOptions = buildOpenOptions( config, recordFormats, openOptions );
         this.logProvider = logProvider;
         this.pageCache = pageCache;
         configureRecordFormat( recordFormats, config );
@@ -123,6 +133,25 @@ public class StoreFactory
             }
         }
         return new NeoStores( fileSystemAbstraction, databaseLayout, config, idGeneratorFactory, pageCache, logProvider, recordFormats, createStoreIfNotExists,
-                storeTypes, openOptions );
+                cacheTracer, storeTypes, openOptions );
+    }
+
+    private static ImmutableSet<OpenOption> buildOpenOptions( Config config, RecordFormats recordFormats, ImmutableSet<OpenOption> openOptions )
+    {
+        // we need to modify options only for aligned format and avoid passing direct io option in all other cases
+        if ( recordFormats.getFormatFamily() != AlignedFormatFamily.INSTANCE )
+        {
+            return openOptions;
+        }
+        if ( !config.get( GraphDatabaseSettings.pagecache_direct_io ) )
+        {
+            return openOptions;
+        }
+
+        if ( openOptions.contains( DIRECT ) )
+        {
+            return openOptions;
+        }
+        return openOptions.newWith( DIRECT );
     }
 }

@@ -31,13 +31,13 @@ import org.neo4j.kernel.impl.store.record.PropertyBlock;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class PropertyRecordTest
 {
@@ -59,8 +59,8 @@ class PropertyRecordTest
 
         // Then the record should only contain a single block, because blockB overwrote blockA
         List<PropertyBlock> propertyBlocks = Iterables.asList( record );
-        assertThat( propertyBlocks, hasItem( blockB ) );
-        assertThat( propertyBlocks, hasSize( 1 ) );
+        assertThat( propertyBlocks ).contains( blockB );
+        assertThat( propertyBlocks ).hasSize( 1 );
     }
 
     @Test
@@ -96,6 +96,7 @@ class PropertyRecordTest
         for ( int i = 0; i < 4; i++ )
         {
             PropertyBlock block = new PropertyBlock();
+            block.setValueBlocks( new long[]{i} );
             record.addPropertyBlock( block );
             blocks.add( block );
         }
@@ -155,7 +156,7 @@ class PropertyRecordTest
     private static void addBlock( PropertyRecord record, int key, int value )
     {
         PropertyBlock block = new PropertyBlock();
-        PropertyStore.encodeValue( block, key, Values.of( value ), null, null, true );
+        PropertyStore.encodeValue( block, key, Values.of( value ), null, null, true, NULL, INSTANCE );
         for ( long valueBlock : block.getValueBlocks() )
         {
             record.addLoadedBlock( valueBlock );

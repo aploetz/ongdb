@@ -54,6 +54,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.id.indexed.IdRange.IdState.DELETED;
 import static org.neo4j.internal.id.indexed.IndexedIdGenerator.NO_MONITOR;
+<<<<<<< HEAD
+=======
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+>>>>>>> neo4j/4.1
 
 @PageCacheExtension
 class IdRangeMarkerTest
@@ -95,7 +99,7 @@ class IdRangeMarkerTest
 
         // then
         verifyNoMoreInteractions( merger );
-        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( 1 ) ) )
+        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( 1 ), NULL ) )
         {
             assertTrue( seek.next() );
             assertEquals( 0, seek.key().getIdRangeIdx() );
@@ -120,7 +124,7 @@ class IdRangeMarkerTest
 
         // then
         verify( merger ).merge( any(), any(), any(), any() );
-        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( 1 ) ) )
+        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( 1 ), NULL ) )
         {
             assertTrue( seek.next() );
             assertEquals( 0, seek.key().getIdRangeIdx() );
@@ -142,7 +146,7 @@ class IdRangeMarkerTest
 
         // then
         verifyNoMoreInteractions( merger );
-        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( Long.MAX_VALUE ) ) )
+        try ( Seeker<IdRangeKey, IdRange> seek = tree.seek( new IdRangeKey( 0 ), new IdRangeKey( Long.MAX_VALUE ), NULL ) )
         {
             assertFalse( seek.next() );
         }
@@ -168,7 +172,7 @@ class IdRangeMarkerTest
         tree.visit( new GBPTreeVisitor.Adaptor<>()
         {
             @Override
-            public void key( IdRangeKey key, boolean isLeaf )
+            public void key( IdRangeKey key, boolean isLeaf, long offloadId )
             {
                 if ( isLeaf )
                 {
@@ -176,7 +180,7 @@ class IdRangeMarkerTest
                     exists.set( true );
                 }
             }
-        } );
+        }, NULL );
 
         // when
         try ( IdRangeMarker marker = instantiateMarker( mock( Lock.class ), IdRangeMerger.DEFAULT ) )
@@ -191,11 +195,11 @@ class IdRangeMarkerTest
         tree.visit( new GBPTreeVisitor.Adaptor<>()
         {
             @Override
-            public void key( IdRangeKey key, boolean isLeaf )
+            public void key( IdRangeKey key, boolean isLeaf, long offloadId )
             {
                 assertFalse( isLeaf, "Should not have any key still in the tree, but got: " + key );
             }
-        } );
+        }, NULL );
     }
 
     @Test
@@ -237,7 +241,11 @@ class IdRangeMarkerTest
 
         // when
         MutableLongSet expectedIds = LongSets.mutable.empty();
+<<<<<<< HEAD
         try ( IdRangeMarker marker = new IdRangeMarker( idsPerEntry, layout, tree.writer(), mock( Lock.class ), IdRangeMerger.DEFAULT, true,
+=======
+        try ( IdRangeMarker marker = new IdRangeMarker( idsPerEntry, layout, tree.writer( NULL ), mock( Lock.class ), IdRangeMerger.DEFAULT, true,
+>>>>>>> neo4j/4.1
                 new AtomicBoolean(), 1, new AtomicLong( reservedId - 1 ), true, NO_MONITOR ) )
         {
             for ( long id = reservedId - 1; id <= reservedId + 1; id++ )
@@ -257,7 +265,7 @@ class IdRangeMarkerTest
             private IdRangeKey idRangeKey;
 
             @Override
-            public void key( IdRangeKey idRangeKey, boolean isLeaf )
+            public void key( IdRangeKey idRangeKey, boolean isLeaf, long offloadId )
             {
                 this.idRangeKey = idRangeKey;
             }
@@ -273,7 +281,7 @@ class IdRangeMarkerTest
                     }
                 }
             }
-        } );
+        }, NULL );
         assertEquals( expectedIds, deletedIdsInTree );
     }
 
@@ -306,6 +314,10 @@ class IdRangeMarkerTest
 
     private IdRangeMarker instantiateMarker( Lock lock, ValueMerger merger ) throws IOException
     {
+<<<<<<< HEAD
         return new IdRangeMarker( idsPerEntry, layout, tree.writer(), lock, merger, true, new AtomicBoolean(), 1, highestWritternId, true, NO_MONITOR );
+=======
+        return new IdRangeMarker( idsPerEntry, layout, tree.writer( NULL ), lock, merger, true, new AtomicBoolean(), 1, highestWritternId, true, NO_MONITOR );
+>>>>>>> neo4j/4.1
     }
 }

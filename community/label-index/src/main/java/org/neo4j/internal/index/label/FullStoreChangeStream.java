@@ -22,23 +22,25 @@ package org.neo4j.internal.index.label;
 import java.io.IOException;
 import java.util.List;
 
-import org.neo4j.storageengine.api.NodeLabelUpdate;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 
 /**
- * Stream of changes used to rebuild a {@link LabelScanStore} from scratch.
+ * Stream of changes used to rebuild a {@link LabelScanStore} or {@link RelationshipTypeScanStore}.
  */
 public interface FullStoreChangeStream
 {
-    FullStoreChangeStream EMPTY = writer -> 0;
+    FullStoreChangeStream EMPTY = ( writer, cursorTracer, memoryTracker ) -> 0;
 
-    long applyTo( LabelScanWriter writer ) throws IOException;
+    long applyTo( TokenScanWriter writer, PageCursorTracer cursorTracer, MemoryTracker memoryTracker ) throws IOException;
 
-    static FullStoreChangeStream asStream( final List<NodeLabelUpdate> existingData )
+    static FullStoreChangeStream asStream( final List<EntityTokenUpdate> existingData )
     {
-        return writer ->
+        return ( writer, cursorTracer, memoryTracker ) ->
         {
             long count = 0;
-            for ( NodeLabelUpdate update : existingData )
+            for ( EntityTokenUpdate update : existingData )
             {
                 writer.write( update );
                 count++;

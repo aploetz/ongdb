@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.consistency.RecordType;
 import org.neo4j.consistency.checking.GraphStoreFixture;
@@ -66,7 +67,9 @@ import org.neo4j.internal.helpers.collection.MapUtil;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.LabelScanWriter;
+import org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings;
+import org.neo4j.internal.index.label.TokenScanStore;
+import org.neo4j.internal.index.label.TokenScanWriter;
 import org.neo4j.internal.kernel.api.TokenRead;
 import org.neo4j.internal.kernel.api.TokenWrite;
 import org.neo4j.internal.recordstorage.SchemaRuleAccess;
@@ -79,6 +82,8 @@ import org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory;
 import org.neo4j.io.memory.ByteBuffers;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexPopulator;
@@ -109,9 +114,9 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 import org.neo4j.logging.FormattedLog;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.string.UTF8;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.SuppressOutputExtension;
@@ -124,8 +129,7 @@ import org.neo4j.values.storable.Values;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.consistency.ConsistencyCheckService.defaultConsistencyCheckThreadsNumber;
@@ -144,7 +148,9 @@ import static org.neo4j.internal.kernel.api.TokenRead.ANY_RELATIONSHIP_TYPE;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.IndexPrototype.uniqueForSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.fs.FileUtils.writeAll;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.AbstractDynamicStore.readFullByteArrayFromHeavyRecords;
 import static org.neo4j.kernel.impl.store.DynamicArrayStore.allocateFromNumbers;
 import static org.neo4j.kernel.impl.store.DynamicArrayStore.getRightArray;
@@ -155,10 +161,12 @@ import static org.neo4j.kernel.impl.store.record.Record.NO_LABELS_FIELD;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_PROPERTY;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_RELATIONSHIP;
 import static org.neo4j.kernel.impl.store.record.Record.NO_PREVIOUS_PROPERTY;
+import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
-import static org.neo4j.storageengine.api.NodeLabelUpdate.labelChanges;
-import static org.neo4j.test.Property.property;
-import static org.neo4j.test.Property.set;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+import static org.neo4j.storageengine.api.EntityTokenUpdate.tokenChanges;
+import static org.neo4j.test.mockito.mock.Property.property;
+import static org.neo4j.test.mockito.mock.Property.set;
 import static org.neo4j.util.Bits.bits;
 
 @PageCacheExtension
@@ -220,7 +228,7 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                tx.create( new NodeRecord( next.node(), false, next.relationship(), -1 ) );
+                tx.create( new NodeRecord( next.node() ).initialize( false, -1, false, next.relationship(), 0 ) );
             }
         } );
 
@@ -242,8 +250,8 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord nodeRecord = new NodeRecord( next.node(), false, -1, -1 );
-                NodeLabelsField.parseLabelsField( nodeRecord ).add( 10, null, null );
+                NodeRecord nodeRecord = new NodeRecord( next.node() ).initialize( false, -1, false, -1, 0 );
+                NodeLabelsField.parseLabelsField( nodeRecord ).add( 10, null, null, NULL, INSTANCE );
                 tx.create( nodeRecord );
             }
         } );
@@ -266,11 +274,11 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord nodeRecord = new NodeRecord( next.node(), false, -1, -1 );
+                NodeRecord nodeRecord = new NodeRecord( next.node() ).initialize( false, -1, false, -1, 0 );
                 DynamicRecord record = inUse( new DynamicRecord( next.nodeLabel() ) );
                 Collection<DynamicRecord> newRecords = new ArrayList<>();
                 allocateFromNumbers( newRecords, prependNodeId( nodeRecord.getId(), new long[]{42L} ),
-                        new ReusableRecordsAllocator( 60, record ) );
+                        new ReusableRecordsAllocator( 60, record ), NULL, INSTANCE );
                 nodeRecord.setLabelField( dynamicPointer( newRecords ), newRecords );
 
                 tx.create( nodeRecord );
@@ -307,9 +315,7 @@ public class FullCheckIntegrationTest
         long labelId = idGenerator.label() - 1;
 
         LabelScanStore labelScanStore = fixture.directStoreAccess().labelScanStore();
-        Iterable<NodeLabelUpdate> nodeLabelUpdates = asIterable(
-                labelChanges( nodeId1, new long[]{}, new long[]{labelId} )
-        );
+        Iterable<EntityTokenUpdate> nodeLabelUpdates = asIterable( tokenChanges( nodeId1, new long[]{}, new long[]{labelId} ) );
         write( labelScanStore, nodeLabelUpdates );
 
         // when
@@ -320,12 +326,12 @@ public class FullCheckIntegrationTest
                    .andThatsAllFolks();
     }
 
-    private void write( LabelScanStore labelScanStore, Iterable<NodeLabelUpdate> nodeLabelUpdates )
+    void write( TokenScanStore tokenScanStore, Iterable<EntityTokenUpdate> entityTokenUpdates )
             throws IOException
     {
-        try ( LabelScanWriter writer = labelScanStore.newWriter() )
+        try ( TokenScanWriter writer = tokenScanStore.newWriter( NULL ) )
         {
-            for ( NodeLabelUpdate update : nodeLabelUpdates )
+            for ( EntityTokenUpdate update : entityTokenUpdates )
             {
                 writer.write( update );
             }
@@ -339,7 +345,7 @@ public class FullCheckIntegrationTest
         for ( Long indexedNodeId : indexedNodes )
         {
             fixture.directStoreAccess().nativeStores().getNodeStore().updateRecord(
-                    notInUse( new NodeRecord( indexedNodeId, false, -1, -1 ) ) );
+                    notInUse( new NodeRecord( indexedNodeId ).initialize( false, -1, false, -1, 0 ) ), NULL );
         }
 
         // when
@@ -367,15 +373,16 @@ public class FullCheckIntegrationTest
         {
             IndexDescriptor rule = rules.next();
             IndexSamplingConfig samplingConfig = new IndexSamplingConfig( Config.defaults() );
-            IndexPopulator populator = storeAccess.indexes().lookup( rule.getIndexProvider() ).getPopulator( rule, samplingConfig, heapBufferFactory( 1024 ) );
+            IndexPopulator populator = storeAccess.indexes().lookup( rule.getIndexProvider() )
+                    .getPopulator( rule, samplingConfig, heapBufferFactory( 1024 ), INSTANCE );
             populator.markAsFailed( "Oh noes! I was a shiny index and then I was failed" );
-            populator.close( false );
+            populator.close( false, NULL );
         }
 
         for ( Long indexedNodeId : indexedNodes )
         {
             storeAccess.nativeStores().getNodeStore().updateRecord(
-                    notInUse( new NodeRecord( indexedNodeId, false, -1, -1 ) ) );
+                    notInUse( new NodeRecord( indexedNodeId ).initialize( false, -1, false, -1, 0 ) ), NULL );
         }
 
         // when
@@ -400,7 +407,7 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord node = new NodeRecord( 42, false, -1, -1 );
+                NodeRecord node = new NodeRecord( 42 ).initialize( false, -1, false, -1, 0 );
                 node.setInUse( true );
                 List<DynamicRecord> dynamicRecords;
                 dynamicRecords = pair.first();
@@ -415,7 +422,7 @@ public class FullCheckIntegrationTest
         labels.remove( 1 );
         long[] after = asArray( labels );
 
-        write( fixture.directStoreAccess().labelScanStore(), singletonList( labelChanges( 42, before, after ) ) );
+        write( fixture.directStoreAccess().labelScanStore(), singletonList( tokenChanges( 42, before, after ) ) );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -445,14 +452,15 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord node = new NodeRecord( 42, false, -1, -1 );
+                NodeRecord node = new NodeRecord( 42 ).initialize( false, -1, false, -1, 0 );
                 node.setInUse( true );
                 node.setLabelField( inlinedLabelsLongRepresentation( label1, label2 ), Collections.emptySet() );
                 tx.create( node );
             }
         } );
 
-        write( fixture.directStoreAccess().labelScanStore(), singletonList( labelChanges( 42, new long[]{label1, label2}, new long[]{label1} ) ) );
+        EntityTokenUpdate update = tokenChanges( 42, new long[]{label1, label2}, new long[]{label1} );
+        write( fixture.directStoreAccess().labelScanStore(), singletonList( update ) );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -473,7 +481,7 @@ public class FullCheckIntegrationTest
             IndexDescriptor indexDescriptor = indexDescriptorIterator.next();
             IndexAccessor accessor = fixture.directStoreAccess().indexes().
                     lookup( indexDescriptor.getIndexProvider() ).getOnlineAccessor( indexDescriptor, samplingConfig );
-            try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+            try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
             {
                 for ( long nodeId : indexedNodes )
                 {
@@ -484,7 +492,7 @@ public class FullCheckIntegrationTest
                     }
                 }
             }
-            accessor.force( IOLimiter.UNLIMITED );
+            accessor.force( IOLimiter.UNLIMITED, NULL );
             accessor.close();
         }
 
@@ -508,7 +516,7 @@ public class FullCheckIntegrationTest
             {
                 for ( int i = 0; i < 50; i++ )
                 {
-                    NodeRecord node = new NodeRecord( next.node(), false, -1, -1 );
+                    NodeRecord node = new NodeRecord( next.node() ).initialize( false, -1, false, -1, 0 );
                     node.setInUse( true );
                     tx.create( node );
                 }
@@ -523,12 +531,12 @@ public class FullCheckIntegrationTest
             try ( IndexAccessor accessor = fixture.directStoreAccess().indexes().lookup( indexRule.getIndexProvider() ).getOnlineAccessor( indexRule,
                     samplingConfig ) )
             {
-                try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+                try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
                 {
                     // There is already another node (created in generateInitialData()) that has this value
                     updater.process( IndexEntryUpdate.add( 42, indexRule.schema(), values( indexRule ) ) );
                 }
-                accessor.force( IOLimiter.UNLIMITED );
+                accessor.force( IOLimiter.UNLIMITED, NULL );
             }
         }
 
@@ -562,7 +570,7 @@ public class FullCheckIntegrationTest
                     GraphStoreFixture.IdGenerator next )
             {
                 // structurally correct, but does not have the 'mandatory' property with the 'draconian' label
-                NodeRecord node = new NodeRecord( next.node(), false, -1, next.property() );
+                NodeRecord node = new NodeRecord( next.node() ).initialize( false, next.property(), false, -1, 0 );
                 node.setInUse( true );
                 node.setLabelField( inlinedLabelsLongRepresentation( draconian ),
                         Collections.emptySet() );
@@ -601,13 +609,12 @@ public class FullCheckIntegrationTest
                 long relId = next.relationship();
                 long propId = next.property();
 
-                NodeRecord node1 = new NodeRecord( nodeId1, true, false, relId, NO_NEXT_PROPERTY.intValue(),
-                        NO_LABELS_FIELD.intValue() );
-                NodeRecord node2 = new NodeRecord( nodeId2, true, false, relId, NO_NEXT_PROPERTY.intValue(),
-                        NO_LABELS_FIELD.intValue() );
+                NodeRecord node1 = new NodeRecord( nodeId1 ).initialize( true, NO_NEXT_PROPERTY.intValue(), false, relId, NO_LABELS_FIELD.intValue() );
+                NodeRecord node2 = new NodeRecord( nodeId2 ).initialize( true, NO_NEXT_PROPERTY.intValue(), false, relId, NO_LABELS_FIELD.intValue() );
 
                 // structurally correct, but does not have the 'mandatory' property with the 'M' rel type
-                RelationshipRecord relationship = new RelationshipRecord( relId, true, nodeId1, nodeId2, M,
+                RelationshipRecord relationship = new RelationshipRecord( relId );
+                relationship.initialize( true, 0, nodeId1, nodeId2, M,
                         1, NO_NEXT_RELATIONSHIP.intValue(), 1, NO_NEXT_RELATIONSHIP.intValue(), true, true );
                 relationship.setNextProp( propId );
 
@@ -662,8 +669,8 @@ public class FullCheckIntegrationTest
                                             GraphStoreFixture.IdGenerator next )
             {
                 long nodeId = ((long[]) getRightArray( readFullByteArrayFromHeavyRecords( chain, ARRAY ) ).asObject())[0];
-                NodeRecord before = inUse( new NodeRecord( nodeId, false, -1, -1 ) );
-                NodeRecord after = inUse( new NodeRecord( nodeId, false, -1, -1 ) );
+                NodeRecord before = inUse( new NodeRecord( nodeId ).initialize( false, -1, false, -1, 0 ) );
+                NodeRecord after = inUse( new NodeRecord( nodeId ).initialize( false, -1, false, -1, 0 ) );
                 DynamicRecord record1 = cloneRecord( chain.get( 0 ) );
                 DynamicRecord record2 = cloneRecord( chain.get( 1 ) );
                 DynamicRecord record3 = cloneRecord( chain.get( 2 ) );
@@ -714,13 +721,13 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord nodeRecord = new NodeRecord( next.node(), false, -1, -1 );
+                NodeRecord nodeRecord = new NodeRecord( next.node() ).initialize( false, -1, false, -1, 0 );
                 DynamicRecord record1 = inUse( new DynamicRecord( next.nodeLabel() ) );
                 DynamicRecord record2 = inUse( new DynamicRecord( next.nodeLabel() ) );
                 DynamicRecord record3 = inUse( new DynamicRecord( next.nodeLabel() ) );
                 labels[0] = nodeRecord.getId(); // the first id should not be a label id, but the id of the node
                 ReusableRecordsAllocator allocator = new ReusableRecordsAllocator( 60, record1, record2, record3 );
-                allocateFromNumbers( chain, labels, allocator );
+                allocateFromNumbers( chain, labels, allocator, NULL, INSTANCE );
 
                 nodeRecord.setLabelField( dynamicPointer( chain ), chain );
 
@@ -744,7 +751,7 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-                NodeRecord node = new NodeRecord( nodeId, false, -1, -1 );
+                NodeRecord node = new NodeRecord( nodeId ).initialize( false, -1, false, -1, 0 );
                 node.setInUse( true );
                 List<DynamicRecord> labelRecords = labels.first();
                 node.setLabelField( dynamicPointer( labelRecords ), labelRecords );
@@ -752,16 +759,16 @@ public class FullCheckIntegrationTest
 
                 Integer labelId = labels.other().get( 0 );
                 DynamicRecord record = inUse( new DynamicRecord( labelId ) );
-                allocateFromNumbers( duplicatedLabel, new long[]{nodeId, labelId, labelId}, new ReusableRecordsAllocator( 60, record ) );
+                allocateFromNumbers( duplicatedLabel, new long[]{nodeId, labelId, labelId}, new ReusableRecordsAllocator( 60, record ), NULL, INSTANCE );
             }
         } );
 
         StoreAccess storeAccess = fixture.directStoreAccess().nativeStores();
         NodeRecord nodeRecord = new NodeRecord( nodeId );
-        storeAccess.getNodeStore().getRecord( nodeId, nodeRecord, FORCE );
+        storeAccess.getNodeStore().getRecord( nodeId, nodeRecord, FORCE, NULL );
         nodeRecord.setLabelField( dynamicPointer( duplicatedLabel ), duplicatedLabel );
         nodeRecord.setInUse( true );
-        storeAccess.getNodeStore().updateRecord( nodeRecord );
+        storeAccess.getNodeStore().updateRecord( nodeRecord, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -784,11 +791,11 @@ public class FullCheckIntegrationTest
             {
                 tx.nodeLabel( 42, "Label", false );
 
-                NodeRecord nodeRecord = new NodeRecord( next.node(), false, -1, -1 );
+                NodeRecord nodeRecord = new NodeRecord( next.node() ).initialize( false, -1, false, -1, 0 );
                 DynamicRecord record = inUse( new DynamicRecord( next.nodeLabel() ) );
                 Collection<DynamicRecord> newRecords = new ArrayList<>();
                 allocateFromNumbers( newRecords, prependNodeId( next.node(), new long[]{42L} ),
-                        new ReusableRecordsAllocator( 60, record ) );
+                        new ReusableRecordsAllocator( 60, record ), NULL, INSTANCE );
                 nodeRecord.setLabelField( dynamicPointer( newRecords ), newRecords );
 
                 tx.create( nodeRecord );
@@ -813,7 +820,9 @@ public class FullCheckIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                                             GraphStoreFixture.IdGenerator next )
             {
-                tx.create( new RelationshipRecord( next.relationship(), 1, 2, C ) );
+                RelationshipRecord relationship = new RelationshipRecord( next.relationship() );
+                relationship.setLinks( 1, 2, C );
+                tx.create( relationship );
             }
         } );
 
@@ -839,9 +848,12 @@ public class FullCheckIntegrationTest
                 long node1 = next.node();
                 long node2 = next.node();
                 long rel = next.relationship();
-                tx.create( inUse( new RelationshipRecord( rel, node1, node2, 0 ) ) );
-                tx.create( inUse( new NodeRecord( node1, false, rel + 1, -1 ) ) );
-                tx.create( inUse( new NodeRecord( node2, false, rel + 2, -1 ) ) );
+
+                RelationshipRecord relationship = new  RelationshipRecord( rel );
+                relationship.setLinks( node1, node2, 0 );
+                tx.create( inUse( relationship ) );
+                tx.create( inUse( new NodeRecord( node1 ).initialize( false, -1, false, rel + 1, 0 ) ) );
+                tx.create( inUse( new NodeRecord( node2 ).initialize( false, -1, false, rel + 2, 0 ) ) );
             }
         } );
 
@@ -1073,12 +1085,12 @@ public class FullCheckIntegrationTest
                     }
 
                     @Override
-                    public DynamicRecord nextRecord()
+                    public DynamicRecord nextRecord( PageCursorTracer cursorTracer )
                     {
                         return StandardDynamicRecordAllocator.allocateRecord( next.arrayProperty() );
                     }
-                }, true );
-                assertThat( allocatedRecords.size(), greaterThan( 1 ) );
+                }, true, NULL, INSTANCE );
+                assertThat( allocatedRecords.size() ).isGreaterThan( 1 );
                 DynamicRecord array = allocatedRecords.get( 0 );
                 array.setType( ARRAY.intValue() );
 
@@ -1126,9 +1138,9 @@ public class FullCheckIntegrationTest
         } );
         StoreAccess access = fixture.directStoreAccess().nativeStores();
         DynamicRecord record = access.getRelationshipTypeNameStore().getRecord( inconsistentName.get(),
-                access.getRelationshipTypeNameStore().newRecord(), FORCE );
+                access.getRelationshipTypeNameStore().newRecord(), FORCE, NULL );
         record.setNextBlock( record.getId() );
-        access.getRelationshipTypeNameStore().updateRecord( record );
+        access.getRelationshipTypeNameStore().updateRecord( record, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -1155,9 +1167,9 @@ public class FullCheckIntegrationTest
         } );
         StoreAccess access = fixture.directStoreAccess().nativeStores();
         DynamicRecord record = access.getPropertyKeyNameStore().getRecord( inconsistentName.get() + 1,
-                access.getPropertyKeyNameStore().newRecord(), FORCE );
+                access.getPropertyKeyNameStore().newRecord(), FORCE, NULL );
         record.setNextBlock( record.getId() );
-        access.getPropertyKeyNameStore().updateRecord( record );
+        access.getPropertyKeyNameStore().updateRecord( record, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -1173,11 +1185,11 @@ public class FullCheckIntegrationTest
         // given
         StoreAccess access = fixture.directStoreAccess().nativeStores();
         RecordStore<RelationshipTypeTokenRecord> relTypeStore = access.getRelationshipTypeTokenStore();
-        RelationshipTypeTokenRecord record = relTypeStore.getRecord( (int) relTypeStore.nextId(),
-                relTypeStore.newRecord(), FORCE );
+        RelationshipTypeTokenRecord record = relTypeStore.getRecord( (int) relTypeStore.nextId( NULL ),
+                relTypeStore.newRecord(), FORCE, NULL );
         record.setNameId( 20 );
         record.setInUse( true );
-        relTypeStore.updateRecord( record );
+        relTypeStore.updateRecord( record, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -1194,10 +1206,10 @@ public class FullCheckIntegrationTest
         // given
         StoreAccess access = fixture.directStoreAccess().nativeStores();
         LabelTokenRecord record = access.getLabelTokenStore().getRecord( 1,
-                access.getLabelTokenStore().newRecord(), FORCE );
+                access.getLabelTokenStore().newRecord(), FORCE, NULL );
         record.setNameId( 20 );
         record.setInUse( true );
-        access.getLabelTokenStore().updateRecord( record );
+        access.getLabelTokenStore().updateRecord( record, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -1224,9 +1236,9 @@ public class FullCheckIntegrationTest
         } );
         StoreAccess access = fixture.directStoreAccess().nativeStores();
         DynamicRecord record = access.getPropertyKeyNameStore().getRecord( inconsistentKey.get() + 1,
-                access.getPropertyKeyNameStore().newRecord(), FORCE );
+                access.getPropertyKeyNameStore().newRecord(), FORCE, NULL );
         record.setInUse( false );
-        access.getPropertyKeyNameStore().updateRecord( record );
+        access.getPropertyKeyNameStore().updateRecord( record, NULL );
 
         // when
         ConsistencySummaryStatistics stats = check();
@@ -1279,8 +1291,8 @@ public class FullCheckIntegrationTest
                 long node = next.node();
                 long group = next.relationshipGroup();
                 int nonExistentType = next.relationshipType() + 1;
-                tx.create( inUse( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( group, nonExistentType ) ), node ) );
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) ) );
+                tx.create( withOwner( inUse( relationshipGroupRecord( group, nonExistentType ) ), node ) );
             }
         } );
 
@@ -1304,8 +1316,8 @@ public class FullCheckIntegrationTest
             {
                 long node = next.node();
                 long group = next.relationshipGroup();
-                tx.create( inUse( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withOwner( withNext( inUse( new RelationshipGroupRecord( group, C ) ),
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) ) );
+                tx.create( withOwner( withNext( inUse( relationshipGroupRecord( group, C ) ),
                         group + 1 /*non-existent group id*/ ), node ) );
             }
         } );
@@ -1331,10 +1343,10 @@ public class FullCheckIntegrationTest
                 long node = next.node();
                 long firstGroupId = next.relationshipGroup();
                 long otherGroupId = next.relationshipGroup();
-                tx.create( inUse( new NodeRecord( node, true, firstGroupId, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withOwner( withNext( inUse( new RelationshipGroupRecord( firstGroupId, T ) ),
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, firstGroupId, 0 ) ) );
+                tx.create( withOwner( withNext( inUse( relationshipGroupRecord( firstGroupId, T ) ),
                         otherGroupId ), node ) );
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( otherGroupId, C ) ), node ) );
+                tx.create( withOwner( inUse( relationshipGroupRecord( otherGroupId, C ) ), node ) );
             }
         } );
 
@@ -1359,8 +1371,8 @@ public class FullCheckIntegrationTest
                 long node = next.node();
                 long groupId = next.relationshipGroup();
                 long rel = next.relationship();
-                tx.create( inUse( new NodeRecord( node, true, groupId, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withOwner( withRelationships( inUse( new RelationshipGroupRecord( groupId, C ) ),
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, groupId, 0 ) ) );
+                tx.create( withOwner( withRelationships( inUse( relationshipGroupRecord( groupId, C ) ),
                         rel, rel, rel ), node ) );
             }
         } );
@@ -1394,11 +1406,16 @@ public class FullCheckIntegrationTest
                 long group = next.relationshipGroup();
                 long relA = next.relationship();
                 long relB = next.relationship();
-                tx.create( inUse( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( inUse( new NodeRecord( otherNode, false, relA, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withNext( inUse( new RelationshipRecord( relA, otherNode, node, C ) ), relB ) );
-                tx.create( withPrev( inUse( new RelationshipRecord( relB, node, otherNode, C ) ), relA ) );
-                tx.create( withOwner( withRelationships( inUse( new RelationshipGroupRecord( group, C ) ), relB, relB, relB ), node ) );
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) ) );
+                tx.create( inUse( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, relA, 0 ) ) );
+
+                RelationshipRecord relationshipA = new RelationshipRecord( relA );
+                relationshipA.setLinks( otherNode, node, C );
+                tx.create( withNext( inUse( relationshipA ), relB ) );
+                RelationshipRecord relationshipB = new RelationshipRecord( relB );
+                relationshipB.setLinks( node , otherNode, C);
+                tx.create( withPrev( inUse( relationshipB ), relA ) );
+                tx.create( withOwner( withRelationships( inUse( relationshipGroupRecord( group, C ) ), relB, relB, relB ), node ) );
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 2 );
                 tx.incrementRelationshipCount( ANY_LABEL, C, ANY_LABEL, 2 );
             }
@@ -1426,10 +1443,9 @@ public class FullCheckIntegrationTest
                 long node = next.node();
                 long otherNode = next.node();
                 long group = next.relationshipGroup();
-                tx.create( inUse( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( inUse( new NodeRecord( otherNode, false, NO_NEXT_RELATIONSHIP.intValue(),
-                        NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( group, C ) ), otherNode ) );
+                tx.create( new NodeRecord( node ).initialize( true, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) );
+                tx.create( new NodeRecord( otherNode ).initialize( true, NO_NEXT_PROPERTY.intValue(), false, NO_NEXT_RELATIONSHIP.intValue(), 0 ) );
+                tx.create( new RelationshipGroupRecord( group ).initialize( true, C, -1, -1, -1, otherNode, -1 ) );
             }
         } );
 
@@ -1463,12 +1479,11 @@ public class FullCheckIntegrationTest
                 long otherNode = next.node();
                 long groupA = next.relationshipGroup();
                 long groupB = next.relationshipGroup();
-                tx.create( inUse( new NodeRecord( node, true, groupA, NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( inUse( new NodeRecord( otherNode, false, NO_NEXT_RELATIONSHIP.intValue(),
-                        NO_NEXT_PROPERTY.intValue() ) ) );
-                tx.create( withNext( withOwner( inUse( new RelationshipGroupRecord( groupA, C ) ),
+                tx.create( inUse( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, groupA, 0 ) ) );
+                tx.create( inUse( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, NO_NEXT_RELATIONSHIP.intValue(), 0 ) ) );
+                tx.create( withNext( withOwner( inUse( relationshipGroupRecord( groupA, C ) ),
                         node ), groupB ) );
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( groupB, T ) ), otherNode ) );
+                tx.create( withOwner( inUse( relationshipGroupRecord( groupB, T ) ), otherNode ) );
             }
         } );
 
@@ -1493,7 +1508,7 @@ public class FullCheckIntegrationTest
                 // group -[owner]-> <not-in-use node>
                 long node = next.node();
                 long group = next.relationshipGroup();
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( group, C ) ), node ) );
+                tx.create( withOwner( inUse( relationshipGroupRecord( group, C ) ), node ) );
             }
         } );
 
@@ -1517,7 +1532,7 @@ public class FullCheckIntegrationTest
             {
                 // node -[first]-> group -[owner]-> -1
                 long group = next.relationshipGroup();
-                tx.create( withOwner( inUse( new RelationshipGroupRecord( group, C ) ), -1 ) );
+                tx.create( withOwner( inUse( relationshipGroupRecord( group, C ) ), -1 ) );
             }
         } );
 
@@ -1565,10 +1580,12 @@ public class FullCheckIntegrationTest
                 long otherNode = next.node();
                 long group = next.relationshipGroup();
                 long rel = next.relationship();
-                tx.create( new NodeRecord( node, true, group, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new NodeRecord( otherNode, false, rel, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new RelationshipRecord( rel, node, otherNode, T ) );
-                tx.create( withOwner( withRelationships( new RelationshipGroupRecord( group, C ),
+                tx.create( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, group, 0 ) );
+                tx.create( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
+                RelationshipRecord relationship = new RelationshipRecord( rel );
+                relationship.setLinks( node, otherNode, T );
+                tx.create( relationship );
+                tx.create( withOwner( withRelationships( relationshipGroupRecord( group, C ),
                         rel, rel, rel ), node ) );
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 1 );
                 tx.incrementRelationshipCount( ANY_LABEL, T, ANY_LABEL, 1 );
@@ -1608,15 +1625,17 @@ public class FullCheckIntegrationTest
                 long groupA = next.relationshipGroup();
                 long groupB = next.relationshipGroup();
 
-                tx.create( new NodeRecord( nodeA, true, groupA, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new NodeRecord( nodeB, false, rel, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( firstInChains( new RelationshipRecord( rel, nodeA, nodeB, C ), 1 ) );
+                tx.create( new NodeRecord( nodeA ).initialize( false, NO_NEXT_PROPERTY.intValue(), true, groupA, 0 ) );
+                tx.create( new NodeRecord( nodeB ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
+                RelationshipRecord relationship = new RelationshipRecord( rel );
+                relationship.setLinks( nodeA, nodeB, C );
+                tx.create( firstInChains( relationship, 1 ) );
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 1 );
                 tx.incrementRelationshipCount( ANY_LABEL, C, ANY_LABEL, 1 );
 
-                tx.create( withOwner( withRelationship( withNext( new RelationshipGroupRecord( groupA, C ), groupB ),
+                tx.create( withOwner( withRelationship( withNext( relationshipGroupRecord( groupA, C ), groupB ),
                         Direction.OUTGOING, rel ), nodeA ) );
-                tx.create( withOwner( new RelationshipGroupRecord( groupB, T ), nodeA ) );
+                tx.create( withOwner( relationshipGroupRecord( groupB, T ), nodeA ) );
             }
         } );
 
@@ -2113,6 +2132,22 @@ public class FullCheckIntegrationTest
         shouldReportBadCountsStore( this::corruptFileIfExists );
     }
 
+    @Test
+    void shouldWarnIfConfiguredToValidateRelationshipTypeScanStoreButItIsDisabled() throws ConsistencyCheckIncompleteException
+    {
+        // given
+        Config config = config();
+        config.set( RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store, false );
+        ConsistencyFlags flags = new ConsistencyFlags( true, true, true, true, true, true );
+
+        // when
+        ConsistencySummaryStatistics check = check( config, flags );
+
+        // then
+        assertThat( check.getTotalWarningCount() ).isEqualTo( 1 );
+        on( check ).andThatsAllFolks();
+    }
+
     private void shouldReportBadCountsStore( ThrowingFunction<File,Boolean,IOException> fileAction ) throws Exception
     {
         // given
@@ -2128,7 +2163,7 @@ public class FullCheckIntegrationTest
 
     protected Map<Setting<?>,Object> getSettings()
     {
-        return MapUtil.genericMap( GraphDatabaseSettings.experimental_consistency_checker, false );
+        return MapUtil.genericMap( GraphDatabaseInternalSettings.experimental_consistency_checker, false );
     }
 
     private GraphStoreFixture createFixture()
@@ -2138,19 +2173,23 @@ public class FullCheckIntegrationTest
             @Override
             protected void generateInitialData( GraphDatabaseService db )
             {
+                // Make sure all tokens are created in expected order
+                // because many tests rely on sort order for those token ids.
                 try ( org.neo4j.graphdb.Transaction tx = db.beginTx() )
                 {
-                    tx.schema().indexFor( label( "label3" ) ).on( PROP1 ).create();
                     KernelTransaction ktx = ((InternalTransaction) tx).kernelTransaction();
-
-                    // the Core API for composite index creation is not quite merged yet
+                    TokenRead tokenRead = ktx.tokenRead();
                     TokenWrite tokenWrite = ktx.tokenWrite();
+                    label1 = tokenWrite.labelGetOrCreateForName( "label1" );
+                    label2 = tokenWrite.labelGetOrCreateForName( "label2" );
+                    label3 = tokenWrite.labelGetOrCreateForName( "label3" );
+                    tokenWrite.labelGetOrCreateForName( "label4" );
+                    draconian = tokenWrite.labelGetOrCreateForName( "draconian" );
                     key1 = tokenWrite.propertyKeyGetOrCreateForName( PROP1 );
-                    int key2 = tokenWrite.propertyKeyGetOrCreateForName( PROP2 );
-                    label3 = ktx.tokenRead().nodeLabel( "label3" );
-                    ktx.schemaWrite().indexCreate( forLabel( label3, key1, key2 ), null );
-
-                    tx.schema().constraintFor( label( "label4" ) ).assertPropertyIsUnique( PROP1 ).create();
+                    mandatory = tokenWrite.propertyKeyGetOrCreateForName( "mandatory" );
+                    C = tokenWrite.relationshipTypeGetOrCreateForName( "C" );
+                    T = tokenWrite.relationshipTypeGetOrCreateForName( "T" );
+                    M = tokenWrite.relationshipTypeGetOrCreateForName( "M" );
                     tx.commit();
                 }
                 catch ( KernelException e )
@@ -2158,11 +2197,21 @@ public class FullCheckIntegrationTest
                     throw new RuntimeException( e );
                 }
 
+                // Create indexes
+                try ( org.neo4j.graphdb.Transaction tx = db.beginTx() )
+                {
+                    tx.schema().indexFor( label( "label3" ) ).on( PROP1 ).create();
+                    tx.schema().indexFor( label( "label3" ) ).on( PROP1 ).on( PROP2 ).create();
+
+                    tx.schema().constraintFor( label( "label4" ) ).assertPropertyIsUnique( PROP1 ).create();
+                    tx.commit();
+                }
                 try ( org.neo4j.graphdb.Transaction tx = db.beginTx() )
                 {
                     tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
                 }
 
+                // Create initial data
                 try ( org.neo4j.graphdb.Transaction tx = db.beginTx() )
                 {
                     Node node1 = set( tx.createNode( label( "label1" ) ) );
@@ -2174,25 +2223,7 @@ public class FullCheckIntegrationTest
                     indexedNodes.add( set( tx.createNode( label( "label3" ) ), property( PROP1, VALUE1 ), property( PROP2, VALUE2 ) ).getId() );
 
                     set( tx.createNode( label( "label4" ) ), property( PROP1, VALUE1 ) );
-
-                    KernelTransaction ktx = ((InternalTransaction) tx).kernelTransaction();
-                    TokenRead tokenRead = ktx.tokenRead();
-                    TokenWrite tokenWrite = ktx.tokenWrite();
-                    label1 = tokenRead.nodeLabel( "label1" );
-                    label2 = tokenRead.nodeLabel( "label2" );
-                    label3 = tokenRead.nodeLabel( "label3" );
-                    tokenRead.nodeLabel( "label4" );
-                    draconian = tokenWrite.labelGetOrCreateForName( "draconian" );
-                    key1 = tokenRead.propertyKey( PROP1 );
-                    mandatory = tokenWrite.propertyKeyGetOrCreateForName( "mandatory" );
-                    C = tokenRead.relationshipType( "C" );
-                    T = tokenRead.relationshipType( "T" );
-                    M = tokenWrite.relationshipTypeGetOrCreateForName( "M" );
                     tx.commit();
-                }
-                catch ( KernelException e )
-                {
-                    throw new RuntimeException( e );
                 }
             }
 
@@ -2211,13 +2242,13 @@ public class FullCheckIntegrationTest
             try ( RandomAccessFile accessFile = new RandomAccessFile( file, "rw" ) )
             {
                 FileChannel channel = accessFile.getChannel();
-                ByteBuffer buffer = ByteBuffers.allocate( 30 );
+                ByteBuffer buffer = ByteBuffers.allocate( 30, INSTANCE );
                 while ( buffer.hasRemaining() )
                 {
                     buffer.put( (byte) 9 );
                 }
                 buffer.flip();
-                channel.write( buffer );
+                writeAll( channel, buffer );
             }
             return true;
         }
@@ -2250,7 +2281,7 @@ public class FullCheckIntegrationTest
             {
                 PropertyRecord record = new PropertyRecord( id ).initialize( true, prev, next );
                 PropertyBlock block = new PropertyBlock();
-                PropertyStore.encodeValue( block, propertyKeyId, Values.intValue( 10 ), null, null, false );
+                PropertyStore.encodeValue( block, propertyKeyId, Values.intValue( 10 ), null, null, false, NULL, INSTANCE );
                 record.addPropertyBlock( block );
                 return record;
             }
@@ -2275,14 +2306,31 @@ public class FullCheckIntegrationTest
         return check( fixture.getInstantiatedPageCache(), stores, fixture.counts() );
     }
 
+    private ConsistencySummaryStatistics check( Config config, ConsistencyFlags consistencyFlags )
+            throws ConsistencyCheckIncompleteException
+    {
+        PageCache pageCache = fixture.getInstantiatedPageCache();
+        DirectStoreAccess stores = fixture.readOnlyDirectStoreAccess();
+        ThrowingSupplier<CountsStore,IOException> counts = fixture.counts();
+        return check( pageCache, stores, counts, config, consistencyFlags );
+    }
+
     private ConsistencySummaryStatistics check( PageCache pageCache, DirectStoreAccess stores, ThrowingSupplier<CountsStore,IOException> counts )
             throws ConsistencyCheckIncompleteException
     {
         Config config = config();
-        final var consistencyFlags = new ConsistencyFlags( true, true, true, true, true );
+        boolean checkRelationshipTypeScanStore = config.get( RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store );
+        final var consistencyFlags = new ConsistencyFlags( true, true, true, true, checkRelationshipTypeScanStore, true );
+        return check( pageCache, stores, counts, config, consistencyFlags );
+    }
+
+    private ConsistencySummaryStatistics check( PageCache pageCache, DirectStoreAccess stores, ThrowingSupplier<CountsStore,IOException> counts,
+            Config config, ConsistencyFlags consistencyFlags )
+            throws ConsistencyCheckIncompleteException
+    {
         FullCheck checker = new FullCheck( ProgressMonitorFactory.NONE, fixture.getAccessStatistics(), defaultConsistencyCheckThreadsNumber(),
                 consistencyFlags, config, false, memoryLimit() );
-        return checker.execute( pageCache, stores, counts, FormattedLog.toOutputStream( System.out ) );
+        return checker.execute( pageCache, stores, counts, PageCacheTracer.NULL, INSTANCE, FormattedLog.toOutputStream( System.out ) );
     }
 
     protected NodeBasedMemoryLimiter.Factory memoryLimit()
@@ -2438,8 +2486,8 @@ public class FullCheckIntegrationTest
     {
         SchemaStore schemaStore = fixture.directStoreAccess().nativeStores().getSchemaStore();
 
-        long ruleId1 = schemaStore.nextId();
-        long ruleId2 = schemaStore.nextId();
+        long ruleId1 = schemaStore.nextId( NULL );
+        long ruleId2 = schemaStore.nextId( NULL );
 
         String name = "constraint_" + ruleId2;
         IndexDescriptor indexRule = uniqueForSchema( forLabel( labelId, propertyKeyIds ), DESCRIPTOR )
@@ -2455,8 +2503,8 @@ public class FullCheckIntegrationTest
     {
         SchemaStore schemaStore = fixture.directStoreAccess().nativeStores().getSchemaStore();
 
-        long ruleId1 = schemaStore.nextId();
-        long ruleId2 = schemaStore.nextId();
+        long ruleId1 = schemaStore.nextId( NULL );
+        long ruleId2 = schemaStore.nextId( NULL );
 
         String name = "constraint_" + ruleId2;
         IndexDescriptor indexRule = uniqueForSchema( forLabel( labelId, propertyKeyIds ), DESCRIPTOR )
@@ -2471,7 +2519,7 @@ public class FullCheckIntegrationTest
     private void createNodePropertyExistenceConstraint( int labelId, int propertyKeyId ) throws KernelException
     {
         SchemaStore schemaStore = fixture.directStoreAccess().nativeStores().getSchemaStore();
-        long ruleId = schemaStore.nextId();
+        long ruleId = schemaStore.nextId( NULL );
         ConstraintDescriptor rule = nodePropertyExistenceConstraintRule( ruleId, labelId, propertyKeyId ).withName( "constraint_" + ruleId );
         writeToSchemaStore( schemaStore, rule );
     }
@@ -2479,22 +2527,22 @@ public class FullCheckIntegrationTest
     private void createRelationshipPropertyExistenceConstraint( int relTypeId, int propertyKeyId ) throws KernelException
     {
         SchemaStore schemaStore = fixture.directStoreAccess().nativeStores().getSchemaStore();
-        ConstraintDescriptor rule = relPropertyExistenceConstraintRule( schemaStore.nextId(), relTypeId, propertyKeyId );
+        ConstraintDescriptor rule = relPropertyExistenceConstraintRule( schemaStore.nextId( NULL ), relTypeId, propertyKeyId );
         writeToSchemaStore( schemaStore, rule );
     }
 
     private void writeToSchemaStore( SchemaStore schemaStore, SchemaRule rule ) throws KernelException
     {
         SchemaRuleAccess schemaRuleAccess = SchemaRuleAccess.getSchemaRuleAccess( schemaStore, fixture.writableTokenHolders() );
-        schemaRuleAccess.writeSchemaRule( rule );
+        schemaRuleAccess.writeSchemaRule( rule, NULL, INSTANCE );
     }
 
     private Iterator<IndexDescriptor> getIndexDescriptors()
     {
         StoreAccess storeAccess = fixture.directStoreAccess().nativeStores();
-        TokenHolders tokenHolders = StoreTokens.readOnlyTokenHolders( storeAccess.getRawNeoStores() );
+        TokenHolders tokenHolders = StoreTokens.readOnlyTokenHolders( storeAccess.getRawNeoStores(), NULL );
         SchemaRuleAccess schema = SchemaRuleAccess.getSchemaRuleAccess( storeAccess.getSchemaStore(), tokenHolders );
-        return schema.indexesGetAll();
+        return schema.indexesGetAll( NULL );
     }
 
     private static class Reference<T>
@@ -2561,7 +2609,7 @@ public class FullCheckIntegrationTest
         protoProperties.forEachKeyValue( ( keyId, value ) ->
         {
             PropertyBlock block = new PropertyBlock();
-            PropertyStore.encodeValue( block, keyId, value, stringAllocator, arrayAllocator, true );
+            PropertyStore.encodeValue( block, keyId, value, stringAllocator, arrayAllocator, true, NULL, INSTANCE );
             blocks.add( block );
         } );
 
@@ -2590,7 +2638,11 @@ public class FullCheckIntegrationTest
     @SuppressWarnings( "unchecked" )
     private <T extends AbstractBaseRecord> T cloneRecord( T record )
     {
+<<<<<<< HEAD
         return (T) record.clone();
+=======
+        return (T) record.copy();
+>>>>>>> neo4j/4.1
     }
 
     private PropertyRecord newInitialisedPropertyRecord( IdGenerator next, SchemaRule rule )
@@ -2606,5 +2658,12 @@ public class FullCheckIntegrationTest
         record.setPrevProp( prevPropId );
         record.setNextProp( nextProp );
         tx.update( cloneRecord( record ).initialize( false, Record.NO_PREVIOUS_PROPERTY.longValue(), Record.NO_PREVIOUS_PROPERTY.longValue() ), record );
+    }
+
+    private static RelationshipGroupRecord relationshipGroupRecord( long id, int type )
+    {
+        return new RelationshipGroupRecord( id )
+                .initialize( false, type, NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(),
+                        NULL_REFERENCE.longValue() );
     }
 }

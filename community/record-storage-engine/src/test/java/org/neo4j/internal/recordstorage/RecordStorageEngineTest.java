@@ -44,9 +44,9 @@ import org.neo4j.io.pagecache.DelegatingPageCache;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.kernel.impl.store.IdUpdateListener;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.lock.Lock;
-import org.neo4j.lock.LockGroup;
 import org.neo4j.lock.LockService;
 import org.neo4j.monitoring.DatabaseHealth;
 import org.neo4j.monitoring.Health;
@@ -60,9 +60,7 @@ import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 import org.neo4j.test.rule.RecordStorageEngineRule;
 
 import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -74,6 +72,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @EphemeralPageCacheExtension
 @EphemeralNeo4jLayoutExtension
@@ -126,10 +125,13 @@ class RecordStorageEngineTest
         verify( databaseHealth ).panic( any( Throwable.class ) );
     }
 
-    private static BatchTransactionApplierFacade transactionApplierFacadeTransformer(
-            BatchTransactionApplierFacade facade, Exception failure )
+    private static TransactionApplierFactoryChain transactionApplierFacadeTransformer(
+            TransactionApplierFactoryChain facade, Exception failure )
     {
-        return new FailingBatchTransactionApplierFacade( failure, facade );
+        return new CapturingTransactionApplierFactoryChain( value ->
+        {
+            throw new RuntimeException( failure );
+        } ).wrapAroundActualApplier( facade );
     }
 
     @Test
@@ -142,10 +144,10 @@ class RecordStorageEngineTest
         Throwable exception = captor.getValue();
         if ( exception instanceof KernelException )
         {
-            assertThat( ((KernelException) exception).status(), is( Status.General.UnknownError ) );
+            assertThat( ((KernelException) exception).status() ).isEqualTo( Status.General.UnknownError );
             exception = exception.getCause();
         }
-        assertThat( exception, is( applicationError ) );
+        assertThat( exception ).isEqualTo( applicationError );
     }
 
     @Test
@@ -164,9 +166,9 @@ class RecordStorageEngineTest
         };
 
         RecordStorageEngine engine = storageEngineRule.getWith( fs, pageCache2, databaseLayout ).build();
-        engine.flushAndForce( limiter );
+        engine.flushAndForce( limiter, NULL );
 
-        assertThat( observedLimiter.get(), sameInstance( limiter ) );
+        assertThat( observedLimiter.get() ).isSameAs( limiter );
     }
 
     @Test
@@ -175,9 +177,9 @@ class RecordStorageEngineTest
         RecordStorageEngine engine = buildRecordStorageEngine();
         final Collection<StoreFileMetadata> files = engine.listStorageFiles();
         Set<File> currentFiles = files.stream().map( StoreFileMetadata::file ).collect( Collectors.toSet() );
-        // current engine files should contain everything except another count store file and label scan store
         Set<File> allPossibleFiles = databaseLayout.storeFiles();
         allPossibleFiles.remove( databaseLayout.labelScanStore() );
+        allPossibleFiles.remove( databaseLayout.relationshipTypeScanStore() );
         allPossibleFiles.remove( databaseLayout.indexStatisticsStore() );
 
         assertEquals( allPossibleFiles, currentFiles );
@@ -192,12 +194,13 @@ class RecordStorageEngineTest
         Lock nodeLock = mock( Lock.class );
         when( lockService.acquireNodeLock( nodeId, LockService.LockType.WRITE_LOCK ) ).thenReturn( nodeLock );
         Consumer<Boolean> applierCloseCall = mock( Consumer.class ); // <-- simply so that we can use InOrder mockito construct
-        CapturingBatchTransactionApplierFacade applier = new CapturingBatchTransactionApplierFacade( applierCloseCall );
+        CapturingTransactionApplierFactoryChain applier = new CapturingTransactionApplierFactoryChain( applierCloseCall );
         RecordStorageEngine engine = recordStorageEngineBuilder()
                 .lockService( lockService )
                 .transactionApplierTransformer( applier::wrapAroundActualApplier )
                 .build();
         CommandsToApply commandsToApply = mock( CommandsToApply.class );
+        when( commandsToApply.cursorTracer() ).thenReturn( NULL );
         when( commandsToApply.accept( any() ) ).thenAnswer( invocationOnMock ->
         {
             // Visit one node command
@@ -256,56 +259,91 @@ class RecordStorageEngineTest
         return transaction;
     }
 
-    private static class FailingBatchTransactionApplierFacade extends BatchTransactionApplierFacade
-    {
-        private final Exception failure;
-
-        FailingBatchTransactionApplierFacade( Exception failure, BatchTransactionApplier... appliers )
-        {
-            super( appliers );
-            this.failure = failure;
-        }
-
-        @Override
-        public void close() throws Exception
-        {
-            throw failure;
-        }
-    }
-
-    private static class CapturingBatchTransactionApplierFacade extends BatchTransactionApplierFacade
+    private static class CapturingTransactionApplierFactoryChain extends TransactionApplierFactoryChain
     {
         private final Consumer<Boolean> applierCloseCall;
-        private BatchTransactionApplierFacade actual;
+        private TransactionApplierFactoryChain actual;
 
-        CapturingBatchTransactionApplierFacade( Consumer<Boolean> applierCloseCall )
+        CapturingTransactionApplierFactoryChain( Consumer<Boolean> applierCloseCall )
         {
+            super( () -> IdUpdateListener.IGNORE );
             this.applierCloseCall = applierCloseCall;
         }
 
-        CapturingBatchTransactionApplierFacade wrapAroundActualApplier( BatchTransactionApplierFacade actual )
+        CapturingTransactionApplierFactoryChain wrapAroundActualApplier( TransactionApplierFactoryChain actual )
         {
             this.actual = actual;
             return this;
         }
 
         @Override
-        public TransactionApplier startTx( CommandsToApply transaction ) throws IOException
+        public TransactionApplier startTx( CommandsToApply transaction, BatchContext batchContext ) throws IOException
         {
-            return actual.startTx( transaction );
-        }
+            final TransactionApplier transactionApplier = actual.startTx( transaction, batchContext );
+            return new TransactionApplier()
+            {
 
-        @Override
-        public TransactionApplier startTx( CommandsToApply transaction, LockGroup lockGroup ) throws IOException
-        {
-            return actual.startTx( transaction, lockGroup );
-        }
+                public boolean visit( StorageCommand element ) throws IOException
+                {
+                    return transactionApplier.visit( element );
+                }
 
-        @Override
-        public void close() throws Exception
-        {
-            applierCloseCall.accept( true );
-            actual.close();
+                public boolean visitNodeCommand( Command.NodeCommand command ) throws IOException
+                {
+                    return transactionApplier.visitNodeCommand( command );
+                }
+
+                public boolean visitRelationshipCommand( Command.RelationshipCommand command ) throws IOException
+                {
+                    return transactionApplier.visitRelationshipCommand( command );
+                }
+
+                public boolean visitPropertyCommand( Command.PropertyCommand command ) throws IOException
+                {
+                    return transactionApplier.visitPropertyCommand( command );
+                }
+
+                public boolean visitRelationshipGroupCommand( Command.RelationshipGroupCommand command ) throws IOException
+                {
+                    return transactionApplier.visitRelationshipGroupCommand( command );
+                }
+
+                public boolean visitRelationshipTypeTokenCommand( Command.RelationshipTypeTokenCommand command ) throws IOException
+                {
+                    return transactionApplier.visitRelationshipTypeTokenCommand( command );
+                }
+
+                public boolean visitLabelTokenCommand( Command.LabelTokenCommand command ) throws IOException
+                {
+                    return transactionApplier.visitLabelTokenCommand( command );
+                }
+
+                public boolean visitPropertyKeyTokenCommand( Command.PropertyKeyTokenCommand command ) throws IOException
+                {
+                    return transactionApplier.visitPropertyKeyTokenCommand( command );
+                }
+
+                public boolean visitSchemaRuleCommand( Command.SchemaRuleCommand command ) throws IOException
+                {
+                    return transactionApplier.visitSchemaRuleCommand( command );
+                }
+
+                public boolean visitNodeCountsCommand( Command.NodeCountsCommand command ) throws IOException
+                {
+                    return transactionApplier.visitNodeCountsCommand( command );
+                }
+
+                public boolean visitRelationshipCountsCommand( Command.RelationshipCountsCommand command ) throws IOException
+                {
+                    return transactionApplier.visitRelationshipCountsCommand( command );
+                }
+
+                public void close() throws Exception
+                {
+                    applierCloseCall.accept( true );
+                    transactionApplier.close();
+                }
+            };
         }
     }
 }

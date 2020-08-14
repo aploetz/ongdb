@@ -19,16 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime
 
+import org.neo4j.cypher.internal.expressions.ImplicitProcedureArgument
+import org.neo4j.cypher.internal.expressions.Parameter
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 import org.neo4j.cypher.internal.runtime.ast.ParameterFromSlot
-import org.neo4j.cypher.internal.v4_0.expressions.{ImplicitProcedureArgument, Parameter}
-import org.neo4j.cypher.internal.v4_0.util.{Rewriter, bottomUp}
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.bottomUp
 import org.neo4j.kernel.impl.util.ValueUtils
 
 /**
-  * Rewrites a logical plan so that parameter access is done by offset into an array instead of accessing
-  * a hash map.
-  */
+ * Rewrites a logical plan so that parameter access is done by offset into an array instead of accessing
+ * a hash map.
+ */
 case object slottedParameters {
 
   def apply(input: LogicalPlan): (LogicalPlan, ParameterMapping) = {

@@ -19,21 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.neo4j.cypher.internal.runtime.ImplicitValueConversion._
-import org.neo4j.cypher.internal.runtime.interpreted.ExecutionContextHelper._
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{Not, Predicate, True}
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.graphdb.{Node, Relationship}
-import org.neo4j.kernel.impl.util.ValueUtils.{fromNodeEntity, fromRelationshipEntity}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Relationship
+import org.neo4j.kernel.impl.util.ValueUtils.fromRelationshipEntity
 import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.Values.NO_VALUE
 import org.neo4j.values.virtual.RelationshipValue
 
 class OptionalExpandAllPipeTest extends CypherFunSuite {
@@ -45,27 +42,13 @@ class OptionalExpandAllPipeTest extends CypherFunSuite {
   private val query = mock[QueryContext]
   private val queryState = QueryStateHelper.emptyWith(query = query)
 
-  test("should register owning pipe") {
-    // given
-    mockRelationships(relationship1)
-    val left = newMockedPipe("a",
-      row("a" -> startNode))
-
-    val pred = True()
-    // when
-    val pipe = OptionalExpandAllPipe(left, "a", "r", "b", SemanticDirection.OUTGOING, RelationshipTypes.empty, Some(pred))()
-
-    // then
-    pred.owningPipe should equal(pipe)
-  }
-
   private def mockRelationships(rels: Relationship*) {
     when(query.getRelationshipsForIds(any(), any(), any())).thenAnswer(new Answer[Iterator[RelationshipValue]] {
       def answer(invocation: InvocationOnMock): Iterator[RelationshipValue] = rels.iterator.map(fromRelationshipEntity)
     })
   }
 
-  private def row(values: (String, AnyValue)*) = ExecutionContext.from(values: _*)
+  private def row(values: (String, AnyValue)*) = CypherRow.from(values: _*)
 
   private def newMockedNode(id: Int) = {
     val node = mock[Node]
@@ -87,10 +70,10 @@ class OptionalExpandAllPipeTest extends CypherFunSuite {
     relationship
   }
 
-  private def newMockedPipe(node: String, rows: ExecutionContext*): Pipe = {
+  private def newMockedPipe(node: String, rows: CypherRow*): Pipe = {
     val pipe = mock[Pipe]
-    when(pipe.createResults(any())).thenAnswer(new Answer[Iterator[ExecutionContext]] {
-      def answer(invocation: InvocationOnMock): Iterator[ExecutionContext] = rows.iterator
+    when(pipe.createResults(any())).thenAnswer(new Answer[Iterator[CypherRow]] {
+      def answer(invocation: InvocationOnMock): Iterator[CypherRow] = rows.iterator
     })
 
     pipe

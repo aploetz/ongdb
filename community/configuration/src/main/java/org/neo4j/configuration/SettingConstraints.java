@@ -30,6 +30,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.neo4j.configuration.helpers.SocketAddress;
+import org.neo4j.graphdb.config.Configuration;
+import org.neo4j.graphdb.config.Setting;
 import org.neo4j.internal.helpers.ArrayUtil;
 import org.neo4j.internal.helpers.Numbers;
 
@@ -46,7 +48,7 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             @Override
-            public void validate( String value )
+            public void validate( String value, Configuration config )
             {
                 if ( StringUtils.isNotBlank( value ) )
                 {
@@ -81,11 +83,11 @@ public final class SettingConstraints
             private final Pattern pattern = Pattern.compile( regex );
 
             @Override
-            public void validate( String value )
+            public void validate( String value, Configuration config )
             {
                 if ( !pattern.matcher( value ).matches() )
                 {
-                    throw new IllegalArgumentException( format("value does not match expression: `%s`%s", regex, descMsg  ) );
+                    throw new IllegalArgumentException( format("value does not match expression: `%s`%s", regex, descMsg ) );
                 }
             }
 
@@ -107,7 +109,7 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             @Override
-            public void validate( T value )
+            public void validate( T value, Configuration config )
             {
                 if ( value == null )
                 {
@@ -133,7 +135,7 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             @Override
-            public void validate( T value )
+            public void validate( T value, Configuration config )
             {
                 if ( value == null )
                 {
@@ -162,10 +164,10 @@ public final class SettingConstraints
             private SettingConstraint<T> min = min( minValue );
 
             @Override
-            public void validate( T value )
+            public void validate( T value, Configuration config )
             {
-                min.validate( value );
-                max.validate( value );
+                min.validate( value, config );
+                max.validate( value, config );
             }
 
             @Override
@@ -181,9 +183,9 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             @Override
-            public void validate( T value )
+            public void validate( T value, Configuration config )
             {
-                if ( !Objects.equals( value, expected  ) )
+                if ( !Objects.equals( value, expected ) )
                 {
                     throw new IllegalArgumentException( format( "is not `%s`", valueToString( expected ) ) );
                 }
@@ -203,14 +205,15 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             private final SettingConstraint<T>[] constraints = ArrayUtil.concat( first, rest );
+
             @Override
-            public void validate( T value )
+            public void validate( T value, Configuration config )
             {
                 for ( SettingConstraint<T> constraint : constraints )
                 {
                     try
                     {
-                        constraint.validate( value );
+                        constraint.validate( value, config );
                         return; // Only one constraint needs to pass for this to pass.
                     }
                     catch ( RuntimeException e )
@@ -239,7 +242,7 @@ public final class SettingConstraints
     public static final SettingConstraint<Long> POWER_OF_2 = new SettingConstraint<>()
     {
         @Override
-        public void validate( Long value )
+        public void validate( Long value, Configuration config )
         {
             if ( value != null && !Numbers.isPowerOfTwo( value ) )
             {
@@ -259,7 +262,7 @@ public final class SettingConstraints
         return new SettingConstraint<>()
         {
             @Override
-            public void validate( List<T> value )
+            public void validate( List<T> value, Configuration config )
             {
                 if ( value == null )
                 {
@@ -283,7 +286,7 @@ public final class SettingConstraints
     public static final SettingConstraint<SocketAddress> HOSTNAME_ONLY = new SettingConstraint<>()
     {
         @Override
-        public void validate( SocketAddress value )
+        public void validate( SocketAddress value, Configuration config )
         {
             if ( value == null )
             {
@@ -299,7 +302,6 @@ public final class SettingConstraints
             {
                 throw new IllegalArgumentException( "needs not a hostname" );
             }
-
         }
 
         @Override
@@ -312,7 +314,7 @@ public final class SettingConstraints
     public static final SettingConstraint<Path> ABSOLUTE_PATH = new SettingConstraint<>()
     {
         @Override
-        public void validate( Path value )
+        public void validate( Path value, Configuration config )
         {
             if ( !value.isAbsolute() )
             {
@@ -326,4 +328,126 @@ public final class SettingConstraints
             return "is absolute";
         }
     };
+
+    public static <T,U> SettingConstraint<T> dependency( SettingConstraint<T> ifconstraint, SettingConstraint<T> elseconstraint,
+            Setting<U> dependency, SettingConstraint<U> condition )
+    {
+        return new SettingConstraint<>()
+        {
+            @Override
+            public void validate( T value, Configuration config )
+            {
+                U depValue = config.get( dependency );
+                try
+                {
+                    condition.validate( depValue, config );
+                }
+                catch ( IllegalArgumentException e )
+                {
+                    elseconstraint.validate( value, config );
+                    return;
+                }
+                ifconstraint.validate( value, config );
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return format( "depends on %s. If %s %s then it %s otherwise it %s.", dependency.name(), dependency.name(), condition.getDescription(),
+                        ifconstraint.getDescription(), elseconstraint.getDescription() );
+            }
+
+            @Override
+            void setParser( SettingValueParser<T> parser )
+            {
+                super.setParser( parser );
+                ifconstraint.setParser( parser );
+                elseconstraint.setParser( parser );
+                condition.setParser( ((SettingImpl<U>) dependency).parser() );
+            }
+        };
+    }
+
+    public static <T> SettingConstraint<T> unconstrained()
+    {
+        return new SettingConstraint<>()
+        {
+            @Override
+            public void validate( T value, Configuration config )
+            {
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return "is unconstrained";
+            }
+        };
+    }
+
+    public static SettingConstraint<Integer> greaterThanOrEqual( Setting<Integer> other )
+    {
+        return new SettingConstraint<>()
+        {
+            @Override
+            public void validate( Integer value, Configuration config )
+            {
+                var otherValue = config.get( other );
+                if ( value == null )
+                {
+                    throw new IllegalArgumentException( "can not be null" );
+                }
+                if ( otherValue == null )
+                {
+                    throw new IllegalArgumentException( other.name() + " can not be null" );
+                }
+                if ( value < otherValue )
+                {
+                    throw new IllegalArgumentException( getDescription() + format( "was %d, which is not more than or equal to %d", value, otherValue ) );
+                }
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return format( "Must be set greater than or equal to value of '%s'", other.name() );
+            }
+        };
+    }
+
+    public static SettingConstraint<Integer> lessThanOrEqual( Setting<Integer> other )
+    {
+        return new SettingConstraint<>()
+        {
+            @Override
+            public void validate( Integer value, Configuration config )
+            {
+                var otherValue = config.get( other );
+                if ( value == null )
+                {
+                    throw new IllegalArgumentException( "can not be null" );
+                }
+                if ( otherValue == null )
+                {
+                    throw new IllegalArgumentException( other.name() + " can not be null" );
+                }
+                if ( value > otherValue )
+                {
+                    throw new IllegalArgumentException( getDescription() + format( "was %d, which is not less than or equal to %d", value, otherValue ) );
+                }
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return format( "Must be set less than or equal to value of '%s'", other.name() );
+            }
+        };
+    }
+
+    public static <T> SettingConstraint<T> ifCluster( SettingConstraint<T> settingConstraint )
+    {
+        return dependency( settingConstraint, unconstrained(),
+                GraphDatabaseSettings.mode, any( is( GraphDatabaseSettings.Mode.CORE ), is( GraphDatabaseSettings.Mode.READ_REPLICA ) ) );
+    }
 }

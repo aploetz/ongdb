@@ -19,17 +19,18 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
 import org.neo4j.cypher.internal.ir.StrictnessMode
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, PropertyKeyName}
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * for ( row <- source )
-  *   entity = row.get(idName)
-  *   entity.setProperty( propertyKey, row.evaluate(value) )
-  *
-  *   produce row
-  */
+ * for ( row <- source )
+ *   entity = row.get(idName)
+ *   entity.setProperty( propertyKey, row.evaluate(value) )
+ *
+ *   produce row
+ */
 case class SetProperty(
                         source: LogicalPlan,
                         entity: Expression,

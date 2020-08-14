@@ -48,7 +48,7 @@ import org.neo4j.io.fs.IoPrimitiveUtils;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
 
-import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_database;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
 
@@ -307,11 +307,11 @@ public class DbRepresentation
                 rel.compareWith( otherRel, diff );
             }
 
-            for ( Long id : other.outRelationships.keySet() )
+            for ( Long relId : other.outRelationships.keySet() )
             {
-                if ( !outRelationships.containsKey( id ) )
+                if ( !outRelationships.containsKey( relId ) )
                 {
-                    diff.add( "Other has relationship " + id + " which I don't" );
+                    diff.add( "Other has relationship " + relId + " which I don't" );
                 }
             }
         }

@@ -19,12 +19,14 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.ir.{CreateNode, CreateRelationship, StrictnessMode}
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.ir.CreateNode
+import org.neo4j.cypher.internal.ir.CreateRelationship
+import org.neo4j.cypher.internal.ir.StrictnessMode
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * For each input row, create new nodes and relationships.
-  */
+ * For each input row, create new nodes and relationships.
+ */
 case class Create(source: LogicalPlan,
                   nodes: Seq[CreateNode],
                   relationships: Seq[CreateRelationship])

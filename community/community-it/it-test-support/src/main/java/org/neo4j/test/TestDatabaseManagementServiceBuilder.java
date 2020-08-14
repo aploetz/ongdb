@@ -27,6 +27,7 @@ import java.util.function.Predicate;
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.configuration.connectors.BoltConnector;
 import org.neo4j.dbms.api.DatabaseManagementService;
@@ -44,10 +45,17 @@ import org.neo4j.kernel.database.TestDatabaseIdRepository;
 import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.impl.index.schema.AbstractIndexProviderFactory;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.logging.NullLogProvider;
 import org.neo4j.monitoring.Monitors;
+<<<<<<< HEAD
 import org.neo4j.procedure.impl.GlobalProceduresRegistry;
+=======
+import org.neo4j.procedure.LazyProcedures;
+import org.neo4j.test.fabric.TestFabricDatabaseManagementServiceFactory;
+>>>>>>> neo4j/4.1
 import org.neo4j.time.SystemNanoClock;
+import org.neo4j.util.FeatureToggles;
+
+import static java.lang.Boolean.FALSE;
 
 /**
  * Test factory for graph databases.
@@ -58,33 +66,36 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
 {
     private static final File EPHEMERAL_PATH = new File( "/target/test data/" + GraphDatabaseSettings.DEFAULT_DATABASE_NAME );
     public static final Predicate<ExtensionFactory<?>> INDEX_PROVIDERS_FILTER = extension -> extension instanceof AbstractIndexProviderFactory;
+    public static final String FABRIC_IN_EMBEDDED_TEST_TRANSACTIONS_FLAG_NAME = "fabric_in_embedded_test_transactions";
+    public static final boolean FABRIC_IN_EMBEDDED_TEST_TRANSACTIONS_DEFAULT_VALUE = false;
 
     protected FileSystemAbstraction fileSystem;
     protected LogProvider internalLogProvider;
     protected SystemNanoClock clock;
     protected boolean impermanent;
-    private Config fromConfig;
+    protected Config fromConfig;
     private boolean noOpSystemGraphInitializer;
+<<<<<<< HEAD
     private boolean emptyExternalProcedures;
+=======
+    private boolean lazyProcedures = true;
+>>>>>>> neo4j/4.1
 
     public TestDatabaseManagementServiceBuilder()
     {
         super( null );
-        setUserLogProvider( NullLogProvider.getInstance() );
     }
 
     public TestDatabaseManagementServiceBuilder( File homeDirectory )
     {
         super( homeDirectory );
-        setUserLogProvider( NullLogProvider.getInstance() );
     }
 
     public TestDatabaseManagementServiceBuilder( Neo4jLayout layout )
     {
         super( layout.homeDirectory() );
-        setConfig( GraphDatabaseSettings.databases_root_path, layout.databasesDirectory().toPath() );
+        setConfig( GraphDatabaseInternalSettings.databases_root_path, layout.databasesDirectory().toPath() );
         setConfig( GraphDatabaseSettings.transaction_logs_root_path, layout.transactionLogsRootDirectory().toPath() );
-        setUserLogProvider( NullLogProvider.getInstance() );
     }
 
     public TestDatabaseManagementServiceBuilder( DatabaseLayout layout )
@@ -100,25 +111,47 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
                 .fromConfig( fromConfig )
                 .build();
 
+        var originalDependencies = dependencies;
         if ( noOpSystemGraphInitializer )
         {
             dependencies = TestDatabaseIdRepository.noOpSystemGraphInitializer( dependencies, cfg );
         }
+<<<<<<< HEAD
         if ( emptyExternalProcedures )
         {
             var dependencyWrapper = new Dependencies( dependencies );
             dependencyWrapper.satisfyDependency( new GlobalProceduresRegistry() );
+=======
+        if ( lazyProcedures )
+        {
+            var dependencyWrapper = new Dependencies( dependencies );
+            dependencyWrapper.satisfyDependency( new LazyProcedures() );
+>>>>>>> neo4j/4.1
             dependencies = dependencyWrapper;
         }
 
-        return newDatabaseManagementService( cfg, databaseDependencies() );
+        var dbms = newDatabaseManagementService( cfg, databaseDependencies() );
+        dependencies = originalDependencies;
+        return dbms;
     }
 
     @Override
     protected DatabaseManagementService newDatabaseManagementService( Config config, ExternalDependencies dependencies )
     {
-        return new TestDatabaseManagementServiceFactory( getDatabaseInfo(), getEditionFactory(), impermanent, fileSystem, clock, internalLogProvider )
-                .build( augmentConfig( config ), GraphDatabaseDependencies.newDependencies( dependencies ) );
+        var factory = fabricInEmbeddedTestTransactionsEnabled()
+                      ? new TestFabricDatabaseManagementServiceFactory(
+                              getDbmsInfo( config ), getEditionFactory( config ), impermanent, fileSystem, clock, internalLogProvider, config )
+                      : new TestDatabaseManagementServiceFactory(
+                              getDbmsInfo( config ), getEditionFactory( config ), impermanent, fileSystem, clock, internalLogProvider );
+
+        return factory.build( augmentConfig( config ), GraphDatabaseDependencies.newDependencies( dependencies ) );
+    }
+
+    private boolean fabricInEmbeddedTestTransactionsEnabled()
+    {
+        return FeatureToggles.flag( TestDatabaseManagementServiceBuilder.class,
+                                    FABRIC_IN_EMBEDDED_TEST_TRANSACTIONS_FLAG_NAME,
+                                    FABRIC_IN_EMBEDDED_TEST_TRANSACTIONS_DEFAULT_VALUE );
     }
 
     @Override
@@ -128,13 +161,18 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
                 .fromConfig( config )
                 .setDefault( GraphDatabaseSettings.pagecache_memory, "8m" )
                 .setDefault( GraphDatabaseSettings.logical_log_rotation_threshold, ByteUnit.kibiBytes( 128 ) )
-                .setDefault( BoltConnector.enabled, false )
+                .setDefault( BoltConnector.enabled, FALSE )
                 .build();
     }
 
     public FileSystemAbstraction getFileSystem()
     {
         return fileSystem;
+    }
+
+    public File getHomeDirectory()
+    {
+        return homeDirectory;
     }
 
     public TestDatabaseManagementServiceBuilder setFileSystem( FileSystemAbstraction fileSystem )
@@ -208,15 +246,22 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
         return this;
     }
 
+    @Override
     public DatabaseManagementServiceBuilder setConfigRaw( Map<String, String> raw )
     {
         config.setRaw( raw );
         return this;
     }
 
+<<<<<<< HEAD
     public TestDatabaseManagementServiceBuilder useEmptyExternalProcedures( boolean useEmptyExternalProcedureSet )
     {
         this.emptyExternalProcedures = useEmptyExternalProcedureSet;
+=======
+    public TestDatabaseManagementServiceBuilder useLazyProcedures( boolean useLazyProcedures )
+    {
+        this.lazyProcedures = useLazyProcedures;
+>>>>>>> neo4j/4.1
         return this;
     }
 

@@ -41,13 +41,18 @@ Apache Software License, Version 2.0
   Apache Shiro :: Lang
   Caffeine cache
   Java Concurrency Tools Core Library
+<<<<<<< HEAD
   Lucene codecs
+=======
+  Jettison
+>>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
-  Netty/All-in-One
   parboiled-core
   parboiled-scala
+  Scala Compiler
 
 BSD - Scala License
   Scala Library
@@ -57,11 +62,6 @@ BSD License
   asm-analysis
   asm-tree
   asm-util
-  Scala Compiler
-
-Bouncy Castle License
-  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
-  Bouncy Castle Provider
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API

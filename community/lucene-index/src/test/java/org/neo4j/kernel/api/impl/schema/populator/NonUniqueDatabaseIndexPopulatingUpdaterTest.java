@@ -26,16 +26,15 @@ import java.io.IOException;
 
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.kernel.api.impl.schema.writer.LuceneIndexWriter;
-import org.neo4j.kernel.api.index.DefaultNonUniqueIndexSampler;
 import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.NonUniqueIndexSampler;
 
-import static org.hamcrest.Matchers.hasToString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.hamcrest.MockitoHamcrest.argThat;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.impl.LuceneTestUtil.documentRepresentingProperties;
 import static org.neo4j.kernel.api.impl.schema.LuceneDocumentStructure.newTermForChangeOrRemove;
 import static org.neo4j.kernel.api.index.IndexQueryHelper.add;
@@ -259,13 +258,13 @@ class NonUniqueDatabaseIndexPopulatingUpdaterTest
 
     private void verifyDocument( LuceneIndexWriter writer, Term eq, String documentString ) throws IOException
     {
-        verify( writer ).updateDocument(  eq(eq), argThat( hasToString( documentString ) ) );
+        verify( writer ).updateDocument( eq(eq), argThat( doc -> documentString.equals( doc.toString() ) ) );
     }
 
     private static void verifySamplingResult( NonUniqueIndexSampler sampler, long expectedIndexSize,
             long expectedUniqueValues, long expectedSampleSize )
     {
-        IndexSample sample = sampler.result();
+        IndexSample sample = sampler.sample( NULL );
 
         assertEquals( expectedIndexSize, sample.indexSize() );
         assertEquals( expectedUniqueValues, sample.uniqueValues() );

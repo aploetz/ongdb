@@ -19,22 +19,21 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.Iterators
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.kernel.impl.util.collection
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
-import scala.collection.mutable
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 case class ValueHashJoinPipe(lhsExpression: Expression, rhsExpression: Expression, left: Pipe, right: Pipe)
                             (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(left) {
 
-  lhsExpression.registerOwningPipe(this)
-  rhsExpression.registerOwningPipe(this)
-
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
 
     if (input.isEmpty)
       return Iterator.empty
@@ -46,30 +45,31 @@ case class ValueHashJoinPipe(lhsExpression: Expression, rhsExpression: Expressio
 
     val table = buildProbeTable(input, state)
 
-    if (table.isEmpty)
+    if (table.isEmpty) {
+      table.close()
       return Iterator.empty
+    }
 
     val result = for {rhsRow <- rhsIterator
                       joinKey = rhsExpression(rhsRow, state) if !(joinKey eq Values.NO_VALUE) }
       yield {
-        val lhsRows = table.getOrElse(joinKey, mutable.MutableList.empty)
-        lhsRows.map { lhsRow =>
+        val lhsRows = table.get(joinKey)
+        lhsRows.asScala.map { lhsRow =>
           val outputRow = lhsRow.createClone()
           outputRow.mergeWith(rhsRow, state.query)
           outputRow
         }
       }
 
-    result.flatten
+    Iterators.resourceClosingIterator(result.flatten, table)
   }
 
-  private def buildProbeTable(input: Iterator[ExecutionContext], state: QueryState) = {
-    val table = new mutable.HashMap[AnyValue, mutable.MutableList[ExecutionContext]]
+  private def buildProbeTable(input: Iterator[CypherRow], state: QueryState): collection.ProbeTable[AnyValue, CypherRow] = {
+    val table = collection.ProbeTable.createProbeTable[AnyValue, CypherRow](state.memoryTracker.memoryTrackerForOperator(id.x))
 
     for (context <- input;
          joinKey = lhsExpression(context, state) if joinKey != null) {
-      val seq = table.getOrElseUpdate(joinKey, mutable.MutableList.empty)
-      seq += context
+      table.put(joinKey, context)
     }
 
     table

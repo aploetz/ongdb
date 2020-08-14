@@ -23,15 +23,14 @@ import java.util.function.LongPredicate;
 
 import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.schema.IndexDescriptor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.impl.api.index.IndexMapSnapshotProvider;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.scheduler.JobScheduler;
-
-import static org.neo4j.register.Registers.newDoubleLongRegister;
 
 public class IndexSamplingControllerFactory
 {
@@ -40,23 +39,25 @@ public class IndexSamplingControllerFactory
     private final JobScheduler scheduler;
     private final TokenNameLookup tokenNameLookup;
     private final LogProvider logProvider;
+    private final PageCacheTracer cacheTracer;
 
     public IndexSamplingControllerFactory( IndexSamplingConfig config, IndexStatisticsStore indexStatisticsStore,
                                            JobScheduler scheduler, TokenNameLookup tokenNameLookup,
-                                           LogProvider logProvider )
+                                           LogProvider logProvider, PageCacheTracer cacheTracer )
     {
         this.config = config;
         this.indexStatisticsStore = indexStatisticsStore;
         this.scheduler = scheduler;
         this.tokenNameLookup = tokenNameLookup;
         this.logProvider = logProvider;
+        this.cacheTracer = cacheTracer;
     }
 
     public IndexSamplingController create( IndexMapSnapshotProvider snapshotProvider )
     {
-        OnlineIndexSamplingJobFactory jobFactory = new OnlineIndexSamplingJobFactory( indexStatisticsStore, tokenNameLookup, logProvider );
+        OnlineIndexSamplingJobFactory jobFactory = new OnlineIndexSamplingJobFactory( indexStatisticsStore, tokenNameLookup, logProvider, cacheTracer );
         LongPredicate samplingUpdatePredicate = createSamplingPredicate();
-        IndexSamplingJobTracker jobTracker = new IndexSamplingJobTracker( config, scheduler );
+        IndexSamplingJobTracker jobTracker = new IndexSamplingJobTracker( scheduler );
         RecoveryCondition indexRecoveryCondition = createIndexRecoveryCondition( logProvider, tokenNameLookup );
         return new IndexSamplingController(
                 config, jobFactory, samplingUpdatePredicate, jobTracker, snapshotProvider, scheduler, indexRecoveryCondition,
@@ -66,10 +67,9 @@ public class IndexSamplingControllerFactory
     private LongPredicate createSamplingPredicate()
     {
         return indexId -> {
-            DoubleLongRegister output = newDoubleLongRegister();
-            indexStatisticsStore.indexUpdatesAndSize( indexId, output );
-            long updates = output.readFirst();
-            long size = output.readSecond();
+            var indexInfo = indexStatisticsStore.indexSample( indexId );
+            long updates = indexInfo.updates();
+            long size = indexInfo.indexSize();
             long threshold = Math.round( config.updateRatio() * size );
             return updates > threshold;
         };
@@ -81,19 +81,19 @@ public class IndexSamplingControllerFactory
         return new RecoveryCondition()
         {
             private final Log log = logProvider.getLog( IndexSamplingController.class );
-            private final DoubleLongRegister register = newDoubleLongRegister();
 
             @Override
             public boolean test( IndexDescriptor descriptor )
             {
-                final long samples = indexStatisticsStore.indexSample( descriptor.getId(), register ).readSecond();
-                final long size = indexStatisticsStore.indexUpdatesAndSize( descriptor.getId(), register ).readSecond();
-                final boolean result = samples == 0 || size == 0;
-                if ( result )
+                IndexSample indexSample = indexStatisticsStore.indexSample( descriptor.getId() );
+                long samples = indexSample.sampleSize();
+                long size = indexSample.indexSize();
+                boolean empty = (samples == 0) || (size == 0);
+                if ( empty )
                 {
                     log.debug( "Recovering index sampling for index %s", descriptor.schema().userDescription( tokenNameLookup ) );
                 }
-                return result;
+                return empty;
             }
         };
     }

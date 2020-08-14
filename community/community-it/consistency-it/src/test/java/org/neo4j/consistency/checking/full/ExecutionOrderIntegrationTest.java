@@ -49,11 +49,13 @@ import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.neo4j.consistency.ConsistencyCheckService.defaultConsistencyCheckThreadsNumber;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.test.Property.property;
-import static org.neo4j.test.Property.set;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+import static org.neo4j.test.mockito.mock.Property.property;
+import static org.neo4j.test.mockito.mock.Property.set;
 
 @PageCacheExtension
 @ExtendWith( SuppressOutputExtension.class )
@@ -112,10 +114,10 @@ public class ExecutionOrderIntegrationTest
 
         // when
         singlePass.execute( fixture.getInstantiatedPageCache(), fixture.directStoreAccess(),
-                new InconsistencyReport( logger, singlePassSummary ), fixture.counts().get() );
+                new InconsistencyReport( logger, singlePassSummary ), fixture.counts().get(), NULL, INSTANCE );
 
         // then
-        verifyZeroInteractions( logger );
+        verifyNoInteractions( logger );
         assertEquals( 0, singlePassSummary.getTotalInconsistencyCount(), "Expected no inconsistencies in single pass." );
     }
 

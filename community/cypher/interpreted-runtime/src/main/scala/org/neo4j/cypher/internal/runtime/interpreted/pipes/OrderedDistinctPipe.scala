@@ -19,46 +19,46 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.DistinctPipe.GroupingCol
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.kernel.impl.util.collection.DistinctSet
 import org.neo4j.values.AnyValue
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.ListValueBuilder
 import org.neo4j.values.virtual.VirtualValues
 
-import scala.collection.mutable
-
 /**
-  * Specialization of [[DistinctPipe]] that leverages the order of some grouping columns.
-  */
+ * Specialization of [[DistinctPipe]] that leverages the order of some grouping columns.
+ */
 case class OrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol])
                        (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  groupingColumns.map(_.expression).foreach(_.registerOwningPipe(this))
+  private val (orderedKeyNames, unorderedKeyNames) = {
+    val (ordered, unordered) = groupingColumns.partition(_.ordered)
+    (ordered.map(_.key), unordered.map(_.key))
+  }
 
-  // First the ordered columns, then the unordered ones
-  private val keyNames = groupingColumns.sortBy(!_.ordered).map(_.key)
-  private val numberOfSortedColumns = groupingColumns.count(_.ordered)
-
-  protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                      state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: Iterator[CypherRow],
+                                      state: QueryState): Iterator[CypherRow] = {
 
     /*
      * The filtering is done by extracting from the context the values of all return expressions, and keeping them
      * in a set.
      */
-    var seen = mutable.Set[AnyValue]()
+    val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
+    var seen: DistinctSet[AnyValue] = DistinctSet.createDistinctSet[AnyValue](memoryTracker)
     var currentOrderedGroupingValue: AnyValue = null
 
-    input.filter { ctx =>
+    val resultIter = input.filter { ctx =>
       var i = 0
       while (i < groupingColumns.length) {
         ctx.set(groupingColumns(i).key, groupingColumns(i).expression(ctx, state))
         i += 1
       }
-      val groupingValue = VirtualValues.list(keyNames.map(ctx.getByName): _*)
-      val orderedGroupingValue = groupingValue.take(numberOfSortedColumns)
 
+<<<<<<< HEAD
       if (currentOrderedGroupingValue == null || currentOrderedGroupingValue != orderedGroupingValue) {
         currentOrderedGroupingValue = orderedGroupingValue
         seen.foreach(state.memoryTracker.deallocated)
@@ -69,6 +69,30 @@ case class OrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol]
         state.memoryTracker.allocated(groupingValue)
       }
       added
+=======
+      val orderedGroupingValues = buildValueList(ctx, orderedKeyNames)
+      val unorderedGroupingValues = buildValueList(ctx, unorderedKeyNames)
+
+      if (currentOrderedGroupingValue == null || currentOrderedGroupingValue != orderedGroupingValues) {
+        currentOrderedGroupingValue = orderedGroupingValues
+        seen.close()
+        seen = DistinctSet.createDistinctSet[AnyValue](memoryTracker)
+      }
+      val added = seen.add(unorderedGroupingValues)
+      added
+    }
+    new Iterator[CypherRow]() {
+      override def hasNext: Boolean = {
+        val resultIterHasNext = resultIter.hasNext
+        if (!resultIterHasNext) {
+          seen.close()
+        }
+        resultIterHasNext
+      }
+
+      override def next(): CypherRow =
+        resultIter.next()
+>>>>>>> neo4j/4.1
     }
   }
 
@@ -79,22 +103,26 @@ case class OrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol]
       case _ => false
     }
   }
+
+  private def buildValueList(ctx: CypherRow, keyNames: Array[String]): ListValue = {
+    val builder = ListValueBuilder.newListBuilder(keyNames.length)
+    keyNames.foreach(name => builder.add(ctx.getByName(name)))
+    builder.build()
+  }
 }
 
 /**
-  * Specialization of [[OrderedDistinctPipe]] for the case that all groupingColumns are ordered.
-  */
+ * Specialization of [[OrderedDistinctPipe]] for the case that all groupingColumns are ordered.
+ */
 case class AllOrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol])
                        (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  groupingColumns.map(_.expression).foreach(_.registerOwningPipe(this))
-
   // First the ordered columns, then the unordered ones
   private val keyNames = groupingColumns.map(_.key)
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                      state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: Iterator[CypherRow],
+                                      state: QueryState): Iterator[CypherRow] = {
     var currentOrderedGroupingValue: AnyValue = null
 
     input.filter { ctx =>

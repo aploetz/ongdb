@@ -19,15 +19,14 @@
  */
 package org.neo4j.internal.batchimport.staging;
 
+import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
-
-import java.util.EnumMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.neo4j.csv.reader.Extractors;
 import org.neo4j.internal.batchimport.Configuration;
 import org.neo4j.internal.batchimport.ImportLogic;
@@ -41,6 +40,7 @@ import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.logging.internal.NullLogService;
+import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 import org.neo4j.test.extension.Inject;
@@ -57,7 +57,7 @@ import static org.neo4j.configuration.Config.defaults;
 import static org.neo4j.internal.batchimport.AdditionalInitialIds.EMPTY;
 import static org.neo4j.internal.batchimport.input.DataGeneratorInput.bareboneNodeHeader;
 import static org.neo4j.internal.batchimport.input.DataGeneratorInput.bareboneRelationshipHeader;
-import static org.neo4j.internal.batchimport.staging.HumanUnderstandableExecutionMonitor.NO_EXTERNAL_MONITOR;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.kernel.impl.store.format.standard.Standard.LATEST_RECORD_FORMATS;
 
 @PageCacheExtension
@@ -83,7 +83,7 @@ class HumanUnderstandableExecutionMonitorIT
     {
         // given
         CapturingMonitor progress = new CapturingMonitor();
-        HumanUnderstandableExecutionMonitor monitor = new HumanUnderstandableExecutionMonitor( progress, NO_EXTERNAL_MONITOR );
+        HumanUnderstandableExecutionMonitor monitor = new HumanUnderstandableExecutionMonitor( progress );
         IdType idType = IdType.INTEGER;
         Input input = new DataGeneratorInput( NODE_COUNT, RELATIONSHIP_COUNT, idType, random.seed(),
                 0, bareboneNodeHeader( idType, new Extractors( ';' ) ), bareboneRelationshipHeader( idType, new Extractors( ';' ) ),
@@ -92,10 +92,16 @@ class HumanUnderstandableExecutionMonitorIT
         // when
         try ( JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
+<<<<<<< HEAD
             new ParallelBatchImporter( databaseLayout, fileSystem, pageCache, Configuration.DEFAULT, NullLogService.getInstance(), monitor,
                                        EMPTY, defaults(), LATEST_RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
                                        LogFilesInitializer.NULL )
                     .doImport( input );
+=======
+            new ParallelBatchImporter( databaseLayout, fileSystem, pageCache, NULL, Configuration.DEFAULT, NullLogService.getInstance(), monitor,
+                    EMPTY, defaults(), LATEST_RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY, LogFilesInitializer.NULL,
+                    EmptyMemoryTracker.INSTANCE ).doImport( input );
+>>>>>>> neo4j/4.1
 
             // then
             progress.assertAllProgressReachedEnd();

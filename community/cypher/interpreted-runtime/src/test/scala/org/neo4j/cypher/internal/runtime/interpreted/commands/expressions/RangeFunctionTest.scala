@@ -19,9 +19,9 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.values.storable.Values
 import org.neo4j.values.virtual.ListValue
 import org.neo4j.values.virtual.VirtualValues.list
@@ -52,6 +52,6 @@ class RangeFunctionTest extends CypherFunSuite {
 
   private def range(start: Long, end: Long, step: Long): ListValue = {
     val expr = RangeFunction(Literal(start), Literal(end), Literal(step))
-    expr(ExecutionContext.empty, QueryStateHelper.empty).asInstanceOf[ListValue]
+    expr(CypherRow.empty, QueryStateHelper.empty).asInstanceOf[ListValue]
   }
 }

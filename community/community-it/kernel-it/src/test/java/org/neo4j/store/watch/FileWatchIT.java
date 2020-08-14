@@ -19,11 +19,14 @@
  */
 package org.neo4j.store.watch;
 
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.condition.OS;
+>>>>>>> neo4j/4.1
 
 import java.io.File;
 import java.io.IOException;
@@ -58,14 +61,18 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.condition.OS.LINUX;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @Neo4jLayoutExtension
+<<<<<<< HEAD
 @EnabledOnOs( LINUX )
+=======
+@EnabledOnOs( OS.LINUX )
+>>>>>>> neo4j/4.1
 class FileWatchIT
 {
     @Inject
@@ -110,7 +117,7 @@ class FileWatchIT
         deleteFile( databaseLayout.databaseDirectory(), fileName );
         deletionListener.awaitDeletionNotification();
 
-        logProvider.formattedMessageMatcher().assertContains( "'" + fileName + "' which belongs to the '" + databaseLayout.databaseDirectory().getName() +
+        assertThat( logProvider ).containsMessages( "'" + fileName + "' which belongs to the '" + databaseLayout.databaseDirectory().getName() +
                 "' database was deleted while it was running." );
     }
 
@@ -127,7 +134,7 @@ class FileWatchIT
                     .build();
             assertNotNull( managementService.database( DEFAULT_DATABASE_NAME ) );
 
-            logProvider.formattedMessageMatcher().assertContains(
+            assertThat( logProvider ).containsMessages(
                     "Can not create file watcher for current file system. " + "File monitoring capabilities for store files will be disabled." );
         }
         finally
@@ -197,9 +204,7 @@ class FileWatchIT
         deleteFile( databaseLayout.getTransactionLogsDirectory(), fileName );
         deletionListener.awaitDeletionNotification();
 
-        AssertableLogProvider.LogMatcher logMatcher =
-                AssertableLogProvider.inLog( DefaultFileDeletionEventListener.class ).info( containsString( fileName ) );
-        logProvider.assertNone( logMatcher );
+        assertThat( logProvider ).forClass( DefaultFileDeletionEventListener.class ).forLevel( INFO ).doesNotContainMessage( fileName );
     }
 
     @Test
@@ -226,7 +231,7 @@ class FileWatchIT
 
         eventListener.awaitDeletionNotification();
 
-        logProvider.formattedMessageMatcher().assertContains( "'" + storeDirectoryName + "' which belongs to the '" +
+        assertThat( logProvider ).containsMessages( "'" + storeDirectoryName + "' which belongs to the '" +
                 databaseLayout.databaseDirectory().getName() + "' database was deleted while it was running." );
     }
 
@@ -234,7 +239,6 @@ class FileWatchIT
     void shouldLogWhenDisabled()
     {
         AssertableLogProvider logProvider = new AssertableLogProvider( true );
-        GraphDatabaseService db = null;
         DatabaseManagementService service = null;
         try
         {
@@ -245,7 +249,7 @@ class FileWatchIT
                     .build();
             assertNotNull( managementService.database( DEFAULT_DATABASE_NAME ) );
 
-            logProvider.formattedMessageMatcher().assertContains( "File watcher disabled by configuration." );
+            assertThat( logProvider ).containsMessages( "File watcher disabled by configuration." );
         }
         finally
         {
@@ -356,7 +360,7 @@ class FileWatchIT
 
         void assertDoesNotHaveAnyDeletions()
         {
-            assertThat( "Should not have any deletions registered", deletedFiles, Matchers.empty() );
+            assertThat( deletedFiles ).as( "Should not have any deletions registered" ).isEmpty();
         }
     }
 

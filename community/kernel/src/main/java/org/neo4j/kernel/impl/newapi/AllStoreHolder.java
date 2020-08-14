@@ -28,10 +28,12 @@ import java.util.function.Predicate;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.collection.RawIterator;
+import org.neo4j.configuration.Config;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.helpers.collection.Iterators;
-import org.neo4j.internal.index.label.LabelScanReader;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.index.label.TokenScanReader;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.PopulationProgress;
@@ -51,9 +53,11 @@ import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.procedure.Context;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
 import org.neo4j.kernel.api.txstate.TransactionState;
@@ -66,8 +70,7 @@ import org.neo4j.kernel.impl.api.security.RestrictedAccessMode;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.util.DefaultValueMapper;
 import org.neo4j.lock.ResourceTypes;
-import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.register.Registers;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.CountsDelta;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.StorageSchemaReader;
@@ -83,35 +86,33 @@ import static org.neo4j.storageengine.api.txstate.TxStateVisitor.EMPTY;
 
 public class AllStoreHolder extends Read
 {
-    private final StorageReader storageReader;
     private final GlobalProcedures globalProcedures;
     private final SchemaState schemaState;
     private final IndexingService indexingService;
     private final LabelScanStore labelScanStore;
+    private final RelationshipTypeScanStore relationshipTypeScanStore;
     private final IndexStatisticsStore indexStatisticsStore;
     private final Dependencies databaseDependencies;
+    private final MemoryTracker memoryTracker;
     private final IndexReaderCache indexReaderCache;
-    private LabelScanReader labelScanReader;
+    private TokenScanReader labelScanReader;
+    private TokenScanReader relationshipTypeScanReader;
 
-    public AllStoreHolder( StorageReader storageReader,
-                           KernelTransactionImplementation ktx,
-                           DefaultPooledCursors cursors,
-                           GlobalProcedures globalProcedures,
-                           SchemaState schemaState,
-                           IndexingService indexingService,
-                           LabelScanStore labelScanStore,
-                           IndexStatisticsStore indexStatisticsStore,
-                           Dependencies databaseDependencies )
+    public AllStoreHolder( StorageReader storageReader, KernelTransactionImplementation ktx, DefaultPooledCursors cursors, GlobalProcedures globalProcedures,
+            SchemaState schemaState, IndexingService indexingService, LabelScanStore labelScanStore, RelationshipTypeScanStore relationshipTypeScanStore,
+            IndexStatisticsStore indexStatisticsStore, PageCursorTracer cursorTracer, Dependencies databaseDependencies, Config config,
+            MemoryTracker memoryTracker )
     {
-        super( storageReader, cursors, ktx );
-        this.storageReader = storageReader;
+        super( storageReader, cursors, cursorTracer, ktx, config );
         this.globalProcedures = globalProcedures;
         this.schemaState = schemaState;
         this.indexReaderCache = new IndexReaderCache( indexingService );
         this.indexingService = indexingService;
         this.labelScanStore = labelScanStore;
+        this.relationshipTypeScanStore = relationshipTypeScanStore;
         this.indexStatisticsStore = indexStatisticsStore;
         this.databaseDependencies = databaseDependencies;
+        this.memoryTracker = memoryTracker;
     }
 
     @Override
@@ -133,7 +134,7 @@ public class AllStoreHolder extends Read
         }
 
         AccessMode mode = ktx.securityContext().mode();
-        boolean existsInNodeStore = storageReader.nodeExists( reference );
+        boolean existsInNodeStore = storageReader.nodeExists( reference, cursorTracer );
 
         if ( mode.allowsTraverseAllLabels() )
         {
@@ -145,7 +146,7 @@ public class AllStoreHolder extends Read
         }
         else
         {
-            try ( DefaultNodeCursor node = cursors.allocateNodeCursor() ) // DefaultNodeCursor already contains traversal checks within next()
+            try ( DefaultNodeCursor node = cursors.allocateNodeCursor( cursorTracer ) ) // DefaultNodeCursor already contains traversal checks within next()
             {
                 ktx.dataRead().singleNode( reference, node );
                 return node.next();
@@ -193,7 +194,7 @@ public class AllStoreHolder extends Read
         AccessMode mode = ktx.securityContext().mode();
         if ( mode.allowsTraverseAllLabels() )
         {
-            return storageReader.countsForNode( labelId );
+            return storageReader.countsForNode( labelId, cursorTracer );
         }
         else
         {
@@ -202,12 +203,20 @@ public class AllStoreHolder extends Read
             // We need to calculate the counts through expensive operations. We cannot use a NodeLabelScan because the
             // label requested might not be allowed for that node, and yet the node might be visible due to Traverse rules.
             long count = 0;
+<<<<<<< HEAD
             try ( DefaultNodeCursor nodes = cursors.allocateNodeCursor() ) // DefaultNodeCursor already contains traversal checks within next()
+=======
+            try ( DefaultNodeCursor nodes = cursors.allocateNodeCursor( cursorTracer ) ) // DefaultNodeCursor already contains traversal checks within next()
+>>>>>>> neo4j/4.1
             {
                 this.allNodesScan( nodes );
                 while ( nodes.next() )
                 {
+<<<<<<< HEAD
                     if ( labelId == TokenRead.ANY_LABEL || nodes.labels().contains( labelId ) )
+=======
+                    if ( labelId == TokenRead.ANY_LABEL || nodes.hasLabel( labelId ) )
+>>>>>>> neo4j/4.1
                     {
                         count++;
                     }
@@ -227,13 +236,17 @@ public class AllStoreHolder extends Read
             try
             {
                 TransactionState txState = ktx.txState();
+<<<<<<< HEAD
                 try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts ) )
+=======
+                try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts, cursorTracer ) )
+>>>>>>> neo4j/4.1
                 {
                     txState.accept( countingVisitor );
                 }
                 if ( counts.hasChanges() )
                 {
-                    count += counts.nodeCount( labelId );
+                    count += counts.nodeCount( labelId, cursorTracer );
                 }
             }
             catch ( KernelException e )
@@ -248,6 +261,8 @@ public class AllStoreHolder extends Read
     public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
     {
         return countsForRelationshipWithoutTxState( startLabelId, typeId, endLabelId ) + countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
+<<<<<<< HEAD
+=======
     }
 
     @Override
@@ -258,27 +273,90 @@ public class AllStoreHolder extends Read
              mode.allowsTraverseNode( startLabelId ) &&
              mode.allowsTraverseNode( endLabelId ) )
         {
-            return storageReader.countsForRelationship( startLabelId, typeId, endLabelId );
+            return storageReader.countsForRelationship( startLabelId, typeId, endLabelId, cursorTracer );
+        }
+        else if ( relationshipTypeScanStoreEnabled() )
+        {
+            long count = 0;
+            try ( DefaultRelationshipTypeIndexCursor relationshipsWithType = cursors.allocateRelationshipTypeIndexCursor();
+                  DefaultRelationshipScanCursor relationship = cursors.allocateRelationshipScanCursor( cursorTracer );
+                  DefaultNodeCursor sourceNode = cursors.allocateNodeCursor( cursorTracer );
+                  DefaultNodeCursor targetNode = cursors.allocateNodeCursor( cursorTracer ) )
+            {
+                this.relationshipTypeScan( typeId, relationshipsWithType );
+                while ( relationshipsWithType.next() )
+                {
+                    relationshipsWithType.relationship( relationship );
+                    count += countRelationshipsWithEndLabels( relationship, sourceNode, targetNode, startLabelId, endLabelId );
+                }
+            }
+            return count - countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
         }
         else
         {
+            long count;
+            try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor( cursorTracer );
+                    DefaultNodeCursor sourceNode = cursors.allocateFullAccessNodeCursor( cursorTracer );
+                    DefaultNodeCursor targetNode = cursors.allocateFullAccessNodeCursor( cursorTracer ) )
+            {
+                this.relationshipTypeScan( typeId, rels );
+                count = countRelationshipsWithEndLabels( rels, sourceNode, targetNode, startLabelId, endLabelId );
+            }
+            return count - countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
+        }
+>>>>>>> neo4j/4.1
+    }
+
+    private static long countRelationshipsWithEndLabels( DefaultRelationshipScanCursor relationship, DefaultNodeCursor sourceNode, DefaultNodeCursor targetNode,
+            int startLabelId, int endLabelId )
+    {
+<<<<<<< HEAD
+        AccessMode mode = ktx.securityContext().mode();
+        if ( mode.allowsTraverseRelType( typeId ) &&
+             mode.allowsTraverseNode( startLabelId ) &&
+             mode.allowsTraverseNode( endLabelId ) )
+=======
+        long internalCount = 0;
+        while ( relationship.next() )
+>>>>>>> neo4j/4.1
+        {
+            relationship.source( sourceNode );
+            relationship.target( targetNode );
+            if ( sourceNode.next() && (startLabelId == TokenRead.ANY_LABEL || sourceNode.hasLabel( startLabelId )) &&
+                    targetNode.next() && (endLabelId == TokenRead.ANY_LABEL || targetNode.hasLabel( endLabelId )) )
+            {
+                internalCount++;
+            }
+        }
+        return internalCount;
+    }
+
+    private long countsForRelationshipInTxState( int startLabelId, int typeId, int endLabelId )
+    {
+        long count = 0;
+        if ( ktx.hasTxStateWithChanges() )
+        {
+<<<<<<< HEAD
             long count = 0;
             try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor();
                     DefaultNodeCursor sourceNode = cursors.allocateFullAccessNodeCursor();
                     DefaultNodeCursor targetNode = cursors.allocateFullAccessNodeCursor() )
+=======
+            CountsDelta counts = new CountsDelta();
+            try
+>>>>>>> neo4j/4.1
             {
-                this.relationshipTypeScan( typeId, rels );
-                while ( rels.next() )
+                TransactionState txState = ktx.txState();
+                try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts, cursorTracer ) )
                 {
-                    rels.source( sourceNode );
-                    rels.target( targetNode );
-                    if ( sourceNode.next() && (startLabelId == TokenRead.ANY_LABEL || sourceNode.labels().contains( startLabelId )) &&
-                           targetNode.next() && (endLabelId == TokenRead.ANY_LABEL || targetNode.labels().contains( endLabelId )) )
-                    {
-                        count++;
-                    }
+                    txState.accept( countingVisitor );
+                }
+                if ( counts.hasChanges() )
+                {
+                    count += counts.relationshipCount( startLabelId, typeId, endLabelId, cursorTracer );
                 }
             }
+<<<<<<< HEAD
             return count - countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
         }
     }
@@ -301,6 +379,8 @@ public class AllStoreHolder extends Read
                     count += counts.relationshipCount( startLabelId, typeId, endLabelId );
                 }
             }
+=======
+>>>>>>> neo4j/4.1
             catch ( KernelException e )
             {
                 throw new IllegalArgumentException( "Unexpected error: " + e.getMessage() );
@@ -327,7 +407,11 @@ public class AllStoreHolder extends Read
             }
         }
         AccessMode mode = ktx.securityContext().mode();
+<<<<<<< HEAD
         boolean existsInRelStore = storageReader.relationshipExists( reference );
+=======
+        boolean existsInRelStore = storageReader.relationshipExists( reference, cursorTracer );
+>>>>>>> neo4j/4.1
 
         if ( mode.allowsTraverseAllRelTypes() )
         {
@@ -340,7 +424,11 @@ public class AllStoreHolder extends Read
         else
         {
             // DefaultNodeCursor already contains traversal checks within next()
+<<<<<<< HEAD
             try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor() )
+=======
+            try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor( cursorTracer ) )
+>>>>>>> neo4j/4.1
             {
                 ktx.dataRead().singleRelationship( reference, rels );
                 return rels.next();
@@ -370,13 +458,23 @@ public class AllStoreHolder extends Read
     }
 
     @Override
-    LabelScanReader labelScanReader()
+    TokenScanReader labelScanReader()
     {
         if ( labelScanReader == null )
         {
             labelScanReader = labelScanStore.newReader();
         }
         return labelScanReader;
+    }
+
+    @Override
+    TokenScanReader relationshipTypeScanReader()
+    {
+        if ( relationshipTypeScanReader == null )
+        {
+            relationshipTypeScanReader = relationshipTypeScanStore.newReader();
+        }
+        return relationshipTypeScanReader;
     }
 
     @Override
@@ -665,9 +763,9 @@ public class AllStoreHolder extends Read
         acquireSharedSchemaLock( index );
         ktx.assertOpen();
         assertIndexExists( index ); // Throws if the index has been dropped.
-        DoubleLongRegister output = indexStatisticsStore.indexSample( index.getId(), Registers.newDoubleLongRegister() );
-        long unique = output.readFirst();
-        long size = output.readSecond();
+        final IndexSample indexSample = indexStatisticsStore.indexSample( index.getId() );
+        long unique = indexSample.uniqueValues();
+        long size = indexSample.sampleSize();
         return size == 0 ? 1.0d : ((double) unique) / ((double) size);
     }
 
@@ -677,7 +775,7 @@ public class AllStoreHolder extends Read
         assertValidIndex( index );
         acquireSharedSchemaLock( index );
         ktx.assertOpen();
-        return indexStatisticsStore.indexUpdatesAndSize( index.getId(), Registers.newDoubleLongRegister() ).readSecond();
+        return indexStatisticsStore.indexSample( index.getId() ).indexSize();
     }
 
     @Override
@@ -686,7 +784,7 @@ public class AllStoreHolder extends Read
         ktx.assertOpen();
         assertValidIndex( index );
         IndexReader reader = indexReaderCache.getOrCreate( index );
-        return reader.countIndexedNodes( nodeId, new int[] {propertyKeyId}, value );
+        return reader.countIndexedNodes( nodeId, cursorTracer, new int[] {propertyKeyId}, value );
     }
 
     @Override
@@ -699,6 +797,7 @@ public class AllStoreHolder extends Read
     public long relationshipsGetCount( )
     {
         return countsForRelationship( TokenRead.ANY_LABEL, TokenRead.ANY_RELATIONSHIP_TYPE, TokenRead.ANY_LABEL );
+<<<<<<< HEAD
     }
 
     @Override
@@ -709,15 +808,16 @@ public class AllStoreHolder extends Read
         assertValidIndex( index );
         return indexStatisticsStore.indexUpdatesAndSize( index.getId(), target );
 
+=======
+>>>>>>> neo4j/4.1
     }
 
     @Override
-    public DoubleLongRegister indexSample( IndexDescriptor index, DoubleLongRegister target )
-            throws IndexNotFoundKernelException
+    public IndexSample indexSample( IndexDescriptor index ) throws IndexNotFoundKernelException
     {
         ktx.assertOpen();
         assertValidIndex( index );
-        return indexStatisticsStore.indexSample( index.getId(), target );
+        return indexStatisticsStore.indexSample( index.getId() );
     }
 
     private boolean checkIndexState( IndexDescriptor index, DiffSets<IndexDescriptor> diffSet )
@@ -1012,5 +1112,17 @@ public class AllStoreHolder extends Read
     public void release()
     {
         indexReaderCache.close();
+    }
+
+    @Override
+    public PageCursorTracer cursorTracer()
+    {
+        return cursorTracer;
+    }
+
+    @Override
+    public MemoryTracker memoryTracker()
+    {
+        return memoryTracker;
     }
 }

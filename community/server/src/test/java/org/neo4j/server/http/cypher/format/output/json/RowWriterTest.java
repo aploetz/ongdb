@@ -19,7 +19,6 @@
  */
 package org.neo4j.server.http.cypher.format.output.json;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -34,9 +33,7 @@ import org.neo4j.server.http.cypher.format.common.Neo4jJsonCodec;
 import org.neo4j.server.rest.domain.JsonParseException;
 
 import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
 import static org.neo4j.server.rest.domain.JsonHelper.jsonNode;
 
@@ -46,15 +43,15 @@ class RowWriterTest
     void shouldWriteNestedMaps() throws Exception
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        JsonGenerator json = new JsonFactory( new Neo4jJsonCodec() ).createJsonGenerator( out );
+        JsonGenerator json = new Neo4jJsonCodec().createGenerator( out );
 
         JsonNode row = serialize( out, json, new RowWriter() );
 
-        assertThat( row.size(), equalTo( 1 ) );
+        assertThat( row.size() ).isEqualTo( 1 );
         JsonNode firstCell = row.get( 0 );
-        assertThat( firstCell.get( "one" ).get( "two" ).size(), is( 2 ) );
-        assertThat( firstCell.get( "one" ).get( "two" ).get( 0 ).asBoolean(), is( true ) );
-        assertThat( firstCell.get( "one" ).get( "two" ).get( 1 ).get( "three" ).asInt(), is( 42 ) );
+        assertThat( firstCell.get( "one" ).get( "two" ).size() ).isEqualTo( 2 );
+        assertThat( firstCell.get( "one" ).get( "two" ).get( 0 ).asBoolean() ).isEqualTo( true );
+        assertThat( firstCell.get( "one" ).get( "two" ).get( 1 ).get( "three" ).asInt() ).isEqualTo( 42 );
     }
 
     private JsonNode serialize( ByteArrayOutputStream out, JsonGenerator json, ResultDataContentWriter

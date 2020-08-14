@@ -19,12 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.kernel.impl.query.{QuerySubscriber, QuerySubscriberAdapter}
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.kernel.impl.query.QuerySubscriber
+import org.neo4j.kernel.impl.query.QuerySubscriberAdapter
 import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.Values.{FALSE, TRUE, intValue, stringValue}
+import org.neo4j.values.storable.Values.FALSE
+import org.neo4j.values.storable.Values.TRUE
+import org.neo4j.values.storable.Values.intValue
+import org.neo4j.values.storable.Values.stringValue
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -39,23 +43,13 @@ class ProduceResultsPipeTest extends CypherFunSuite {
 
     val subscriber: QuerySubscriber = new QuerySubscriberAdapter {
       private val record: mutable.Map[String, AnyValue] = mutable.Map.empty
-      private var currentOffset = -1
 
-      override def onField(value: AnyValue): Unit = {
-        try {
-          record.put(columns(currentOffset), value)
-        } finally {
-          currentOffset += 1
-        }
+      override def onField(offset: Int, value: AnyValue): Unit = {
+        record.put(columns(offset), value)
       }
 
       override def onRecordCompleted(): Unit = {
-        currentOffset = -1
         records.append(record.toMap)
-      }
-
-      override def onRecord(): Unit = {
-        currentOffset = 0
       }
     }
     val queryState = mock[QueryState]
@@ -64,8 +58,8 @@ class ProduceResultsPipeTest extends CypherFunSuite {
     when(queryState.decorator).thenReturn(NullPipeDecorator)
     when(sourcePipe.createResults(queryState)).thenReturn(
       Iterator(
-        ExecutionContext.from("a" -> stringValue("foo"), "b" -> intValue(10), "c" -> TRUE, "d" -> stringValue("d")),
-        ExecutionContext.from("a" -> stringValue("bar"), "b" -> intValue(20), "c" -> FALSE, "d" -> stringValue("d"))
+        CypherRow.from("a" -> stringValue("foo"), "b" -> intValue(10), "c" -> TRUE, "d" -> stringValue("d")),
+        CypherRow.from("a" -> stringValue("bar"), "b" -> intValue(20), "c" -> FALSE, "d" -> stringValue("d"))
       ))
 
     val pipe = ProduceResultsPipe(sourcePipe, columns)()

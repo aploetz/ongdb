@@ -22,8 +22,7 @@ package org.neo4j.internal.batchimport.cache.idmapping;
 import org.eclipse.collections.api.iterator.LongIterator;
 import org.eclipse.collections.impl.iterator.ImmutableEmptyLongIterator;
 
-import java.util.function.LongFunction;
-
+import org.neo4j.internal.batchimport.PropertyValueLookup;
 import org.neo4j.internal.batchimport.cache.MemoryStatsVisitor;
 import org.neo4j.internal.batchimport.cache.NumberArrayFactory;
 import org.neo4j.internal.batchimport.cache.idmapping.string.EncodingIdMapper;
@@ -37,6 +36,8 @@ import org.neo4j.internal.batchimport.input.Group;
 import org.neo4j.internal.batchimport.input.Groups;
 import org.neo4j.internal.batchimport.input.ReadableGroups;
 import org.neo4j.internal.helpers.progress.ProgressListener;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.memory.MemoryTracker;
 
 import static org.neo4j.internal.batchimport.cache.idmapping.string.EncodingIdMapper.NO_MONITOR;
 import static org.neo4j.internal.batchimport.cache.idmapping.string.TrackerFactories.dynamic;
@@ -60,7 +61,7 @@ public class IdMappers
         }
 
         @Override
-        public void prepare( LongFunction<Object> inputIdLookup, Collector collector, ProgressListener progress )
+        public void prepare( PropertyValueLookup inputIdLookup, Collector collector, ProgressListener progress )
         {   // No need to prepare anything
         }
 
@@ -118,12 +119,13 @@ public class IdMappers
      *
      * @param cacheFactory {@link NumberArrayFactory} for allocating memory for the cache used by this index.
      * @param groups {@link Groups} containing all id groups.
+     * @param memoryTracker underlying buffers allocation memory tracker
      * @return {@link IdMapper} for when input ids are strings.
      */
-    public static IdMapper strings( NumberArrayFactory cacheFactory, ReadableGroups groups )
+    public static IdMapper strings( NumberArrayFactory cacheFactory, ReadableGroups groups, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
-        return new EncodingIdMapper( cacheFactory, new StringEncoder(), Radix.STRING, NO_MONITOR, dynamic(), groups,
-                numberOfCollisions -> new StringCollisionValues( cacheFactory, numberOfCollisions ) );
+        return new EncodingIdMapper( cacheFactory, new StringEncoder(), Radix.STRING, NO_MONITOR, dynamic( memoryTracker ), groups,
+                numberOfCollisions -> new StringCollisionValues( cacheFactory, numberOfCollisions, memoryTracker ), pageCacheTracer, memoryTracker );
     }
 
     /**
@@ -131,11 +133,12 @@ public class IdMappers
      *
      * @param cacheFactory {@link NumberArrayFactory} for allocating memory for the cache used by this index.
      * @param groups {@link Groups} containing all id groups.
+     * @param memoryTracker underlying buffers allocation memory tracker
      * @return {@link IdMapper} for when input ids are numbers.
      */
-    public static IdMapper longs( NumberArrayFactory cacheFactory, ReadableGroups groups )
+    public static IdMapper longs( NumberArrayFactory cacheFactory, ReadableGroups groups, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
-        return new EncodingIdMapper( cacheFactory, new LongEncoder(), Radix.LONG, NO_MONITOR, dynamic(), groups,
-                numberOfCollisions -> new LongCollisionValues( cacheFactory, numberOfCollisions ) );
+        return new EncodingIdMapper( cacheFactory, new LongEncoder(), Radix.LONG, NO_MONITOR, dynamic( memoryTracker ), groups,
+                numberOfCollisions -> new LongCollisionValues( cacheFactory, numberOfCollisions, memoryTracker ), pageCacheTracer, memoryTracker );
     }
 }

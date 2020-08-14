@@ -48,6 +48,7 @@ import javax.net.ssl.CertPathTrustManagerParameters;
 import javax.net.ssl.TrustManagerFactory;
 
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.SslSystemSettings;
 import org.neo4j.configuration.ssl.ClientAuth;
 import org.neo4j.configuration.ssl.SslPolicyConfig;
 import org.neo4j.configuration.ssl.SslPolicyScope;
@@ -222,7 +223,7 @@ public class SslPolicyLoader
         return new KeyAndChain( privateKey, keyCertChain, trustStore );
     }
 
-    private Collection<X509CRL> getCRLs( File revokedCertificatesDir )
+    private static Collection<X509CRL> getCRLs( File revokedCertificatesDir )
     {
         Collection<X509CRL> crls = new ArrayList<>();
         File[] revocationFiles = revokedCertificatesDir.exists() ? revokedCertificatesDir.listFiles() : new File[0];
@@ -263,7 +264,7 @@ public class SslPolicyLoader
         return crls;
     }
 
-    private X509Certificate[] loadCertificateChain( File keyCertChainFile )
+    private static X509Certificate[] loadCertificateChain( File keyCertChainFile )
     {
         try
         {
@@ -290,7 +291,7 @@ public class SslPolicyLoader
         }
     }
 
-    private TrustManagerFactory createTrustManagerFactory( boolean trustAll, Collection<X509CRL> crls, KeyStore trustStore ) throws Exception
+    private static TrustManagerFactory createTrustManagerFactory( boolean trustAll, Collection<X509CRL> crls, KeyStore trustStore ) throws Exception
     {
         if ( trustAll )
         {
@@ -356,7 +357,7 @@ public class SslPolicyLoader
         return trustStore;
     }
 
-    private static class KeyAndChain
+    private static final class KeyAndChain
     {
         final PrivateKey privateKey;
         final X509Certificate[] keyCertChain;

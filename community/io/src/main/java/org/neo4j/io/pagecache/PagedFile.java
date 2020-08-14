@@ -22,6 +22,8 @@ package org.neo4j.io.pagecache;
 import java.io.File;
 import java.io.IOException;
 
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+
 /**
  * The representation of a file that has been mapped into the associated page cache.
  */
@@ -59,9 +61,9 @@ public interface PagedFile extends AutoCloseable
      */
     int PF_NO_GROW = 1 << 2;
     /**
-     * Read-ahead hint for sequential forward scanning.
+     * Read-ahead hint for sequential scanning.
      */
-    int PF_READ_AHEAD = 1 << 3; // TBD
+    int PF_READ_AHEAD = 1 << 3;
     /**
      * Do not load in the page if it is not loaded already. The methods {@link PageCursor#next()} and
      * {@link PageCursor#next(long)} will always return {@code true} for pages that are within the range of the file,
@@ -69,7 +71,7 @@ public interface PagedFile extends AutoCloseable
      * not in-memory. The current page id <em>must</em> be checked on every {@link PageCursor#shouldRetry()} loop
      * iteration, in case it (for a read cursor) was evicted concurrently with the page access.
      * <p>
-     * {@link #PF_NO_FAULT} implies {@link #PF_NO_GROW}, since a page fault is necessary to be able to extend a file.
+     * {@code PF_NO_FAULT} implies {@link #PF_NO_GROW}, since a page fault is necessary to be able to extend a file.
      */
     int PF_NO_FAULT = 1 << 4;
     /**
@@ -130,11 +132,12 @@ public interface PagedFile extends AutoCloseable
      * @param pf_flags A bitmap of <code>PF_*</code> constants composed with
      * the bitwise-OR operator, that expresses the desired
      * locking behaviour, and other hints.
+     * @param tracer underlying page cursor tracer
      * @return A PageCursor in its initial unbound state.
      * Never <code>null</code>.
      * @throws IOException if there was an error accessing the underlying file.
      */
-    PageCursor io( long pageId, int pf_flags ) throws IOException;
+    PageCursor io( long pageId, int pf_flags, PageCursorTracer tracer ) throws IOException;
 
     /**
      * Get the size of the file-pages, in bytes.

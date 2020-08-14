@@ -20,17 +20,17 @@
 package org.neo4j.cypher.internal.logical.plans
 
 import org.neo4j.cypher.internal.ir.StrictnessMode
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * for ( row <- source )
-  * thing = row.get(idName)
-  * for ( (key,value) <- row.evaluate( expression ) )
-  *     thing.setProperty( key, value )
-  *
-  * produce row
-  */
+ * for ( row <- source )
+ * thing = row.get(idName)
+ * for ( (key,value) <- row.evaluate( expression ) )
+ *     thing.setProperty( key, value )
+ *
+ * produce row
+ */
 case class SetPropertiesFromMap(source: LogicalPlan,
                                 entity: Expression,
                                 expression: Expression,

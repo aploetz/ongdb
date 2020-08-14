@@ -21,15 +21,19 @@ package org.neo4j.internal.collector
 
 import java.nio.file.Files
 
-import org.neo4j.configuration.GraphDatabaseSettings
-import org.neo4j.graphdb.{Node, Path, Relationship}
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.neo4j.configuration.GraphDatabaseInternalSettings
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Path
+import org.neo4j.graphdb.Relationship
+import org.neo4j.internal.collector.DataCollectorMatchers.beCypher
+import org.neo4j.internal.collector.DataCollectorMatchers.beListWithoutOrder
+import org.neo4j.internal.collector.DataCollectorMatchers.beMapContaining
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 
 import scala.collection.mutable.ArrayBuffer
 
 class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
-
-  import DataCollectorMatchers._
 
   test("should collect and retrieve queries") {
     // given
@@ -319,7 +323,7 @@ class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
 
   test("should limit the collected query text size by configured max_query_text_size") {
     // given
-    restartWithConfig(Map(GraphDatabaseSettings.data_collector_max_query_text_size -> Integer.valueOf(33)))
+    restartWithConfig(Map(GraphDatabaseInternalSettings.data_collector_max_query_text_size -> Integer.valueOf(33)))
     val largeQuery = (0 until 10).map(i => s"CREATE (n$i) ").mkString("\n")
     execute(largeQuery)
 
@@ -339,7 +343,7 @@ class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
 
   test("should drop query text on max_query_text_size=0") {
     // given
-    restartWithConfig(Map(GraphDatabaseSettings.data_collector_max_query_text_size -> Integer.valueOf(0)))
+    restartWithConfig(Map(GraphDatabaseInternalSettings.data_collector_max_query_text_size -> Integer.valueOf(0)))
     execute("RETURN 1")
 
     // when
@@ -356,7 +360,7 @@ class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
 
   test("should distinguish queries even though dropped query text is not unique") {
     // given
-    restartWithConfig(Map(GraphDatabaseSettings.data_collector_max_query_text_size -> Integer.valueOf(6)))
+    restartWithConfig(Map(GraphDatabaseInternalSettings.data_collector_max_query_text_size -> Integer.valueOf(6)))
     execute("RETURN 1+1 AS a", params = Map("p" -> 1))
     execute("RETURN 1+2 AS a", params = Map("p" -> 2))
     execute("RETURN 1+3 AS a", params = Map("p" -> 3))
@@ -461,7 +465,7 @@ class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
 
   test("should respect the configured max_recent_query_count") {
     // given
-    restartWithConfig(Map(GraphDatabaseSettings.data_collector_max_recent_query_count -> Integer.valueOf(4)))
+    restartWithConfig(Map(GraphDatabaseInternalSettings.data_collector_max_recent_query_count -> Integer.valueOf(4)))
     execute("RETURN 1")
     execute("RETURN 1, 2")
     execute("RETURN 1, 2, 3")
@@ -495,7 +499,7 @@ class DataCollectorQueriesAcceptanceTest extends DataCollectorTestSupport {
 
   test("should not collect queries for max_recent_query_count=0") {
     // given
-    restartWithConfig(Map(GraphDatabaseSettings.data_collector_max_recent_query_count -> Integer.valueOf(0)))
+    restartWithConfig(Map(GraphDatabaseInternalSettings.data_collector_max_recent_query_count -> Integer.valueOf(0)))
     execute("RETURN 1")
 
     // when

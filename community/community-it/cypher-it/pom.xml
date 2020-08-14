@@ -152,8 +152,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-util-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-util</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

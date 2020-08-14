@@ -19,13 +19,46 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.neo4j.cypher.internal.logical.plans._
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.expressions.LogicalProperty
+import org.neo4j.cypher.internal.expressions.LogicalVariable
+import org.neo4j.cypher.internal.expressions.MapExpression
+import org.neo4j.cypher.internal.expressions.Property
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.Anti
+import org.neo4j.cypher.internal.logical.plans.AntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.ApplyPlan
+import org.neo4j.cypher.internal.logical.plans.CacheProperties
+import org.neo4j.cypher.internal.logical.plans.CanGetValue
+import org.neo4j.cypher.internal.logical.plans.Eager
+import org.neo4j.cypher.internal.logical.plans.ForeachApply
+import org.neo4j.cypher.internal.logical.plans.IndexLeafPlan
+import org.neo4j.cypher.internal.logical.plans.IndexedProperty
+import org.neo4j.cypher.internal.logical.plans.LetAntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.LetSelectOrAntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.LogicalPlans
+import org.neo4j.cypher.internal.logical.plans.OrderedAggregation
+import org.neo4j.cypher.internal.logical.plans.ProjectingPlan
+import org.neo4j.cypher.internal.logical.plans.RollUpApply
+import org.neo4j.cypher.internal.logical.plans.SelectOrAntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.SetNodePropertiesFromMap
+import org.neo4j.cypher.internal.logical.plans.SetNodeProperty
+import org.neo4j.cypher.internal.logical.plans.SetProperty
+import org.neo4j.cypher.internal.logical.plans.SetRelationshipPropertiesFromMap
+import org.neo4j.cypher.internal.logical.plans.SetRelationshipProperty
+import org.neo4j.cypher.internal.logical.plans.Union
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.attribution.{Attributes, Id}
-import org.neo4j.cypher.internal.v4_0.util.symbols.{CTNode, CTRelationship}
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, InputPosition, Rewriter, bottomUp}
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.attribution.Attributes
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.bottomUp
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.symbols.CTRelationship
 import org.neo4j.exceptions.InternalException
 
 import scala.collection.mutable
@@ -48,157 +81,176 @@ case object PushdownPropertyReads {
                    availableWholeEntities: Set[String],
                    incomingCardinality: Cardinality)
 
-    val Acc(_, propertyReadOptima, _, _, _) =
-      LogicalPlans.foldPlan(Acc(Map.empty, Seq.empty, Set.empty, Set.empty, Cardinality.SINGLE))(
-        logicalPlan,
-        (acc, plan) => {
-          val newPropertyExpressions =
-            plan.treeFold(List.empty[Property]) {
-              case lp: LogicalPlan if lp.id != plan.id =>
-                acc2 => (acc2, None) // do not traverse further
-              case p @ Property(v: LogicalVariable, _) if isNodeOrRel(v) =>
-                acc2 => (p :: acc2, Some(acc3 => acc3) )
+    def foldSingleChildPlan(acc: Acc, argumentAcc: Acc, plan: LogicalPlan): Acc = {
+      val newPropertyExpressions =
+        plan.treeFold(List.empty[Property]) {
+          case lp: LogicalPlan if lp.id != plan.id =>
+            acc2 => (acc2, None) // do not traverse further
+          case p @ Property(v: LogicalVariable, _) if isNodeOrRel(v) =>
+            acc2 => (p :: acc2, Some(acc3 => acc3) )
+        }
+
+      val newPropertyReadOptima =
+        newPropertyExpressions.flatMap {
+          case p @ Property(v: LogicalVariable, _) =>
+            acc.variableOptima.get(v.name) match {
+              case Some(optimum: CardinalityOptimum) =>
+                if (optimum.cardinality < acc.incomingCardinality &&
+                  !acc.availableProperties.contains(p) &&
+                  !acc.availableWholeEntities.contains(v.name))
+                  Some((optimum, p))
+                else
+                  None
+              // this happens for variables introduced in expressions, we ignore those for now
+              case None => None
+            }
+        }
+
+      val outgoingCardinality = cardinalities(plan.id)
+      val outgoingReadOptima = acc.propertyReadOptima ++ newPropertyReadOptima
+
+      plan match {
+        case _: Anti =>
+          argumentAcc
+
+        case _: Aggregation |
+             _: OrderedAggregation |
+             _: Eager =>
+          // Do _not_ pushdown past these plans
+          val newVariables = plan.availableSymbols
+          val outgoingVariableOptima = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v))).toMap
+
+          Acc(outgoingVariableOptima, outgoingReadOptima, Set.empty, Set.empty, outgoingCardinality)
+
+        case p: ProjectingPlan => // except for aggregations which were already matched
+          val renamings: Map[String, String] =
+            p.projectExpressions.collect {
+              case (key, v: Variable) if key != v.name => (v.name, key)
             }
 
-          val newPropertyReadOptima =
-            newPropertyExpressions.flatMap {
-              case p @ Property(v: LogicalVariable, _) =>
-                acc.variableOptima.get(v.name) match {
-                  case Some(optimum: CardinalityOptimum) =>
-                    if (optimum.cardinality < acc.incomingCardinality &&
-                        !acc.availableProperties.contains(p) &&
-                        !acc.availableWholeEntities.contains(v.name))
-                      Some((optimum, p))
-                    else
-                      None
-                  // this happens for variables introduced in expressions, we ignore those for now
-                  case None => None
+          val renamedVariableOptima =
+            acc.variableOptima.map {
+              case (oldName, optimum) =>
+                (renamings.getOrElse(oldName, oldName), optimum)
+            }
+
+          val renamedAvailableProperties =
+            acc.availableProperties.map(
+              prop => {
+                val propVariable = prop.map.asInstanceOf[LogicalVariable].name
+                renamings.get(propVariable) match {
+                  case Some(newName) => propertyWithName(newName, prop)
+                  case None => prop
                 }
+              })
+
+          Acc(renamedVariableOptima, outgoingReadOptima, renamedAvailableProperties, acc.availableWholeEntities, outgoingCardinality)
+
+        case _ =>
+          val newLowestCardinalities =
+            acc.variableOptima.mapValues(optimum =>
+              if (outgoingCardinality < optimum.cardinality) {
+                CardinalityOptimum(outgoingCardinality, plan.id, optimum.variableName)
+              } else {
+                optimum
+              }
+            )
+
+          val currentVariables = plan.availableSymbols
+          val newVariables = currentVariables -- acc.variableOptima.keySet
+          val newVariableCardinalities = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v)))
+          val outgoingVariableOptima = newLowestCardinalities ++ newVariableCardinalities
+
+          val propertiesFromPlan: Seq[Property] =
+            plan match {
+              case indexPlan: IndexLeafPlan =>
+                indexPlan.properties
+                  .filter(_.getValueFromIndex == CanGetValue)
+                  // NOTE: as we pushdown before inserting cached properties
+                  //       the getValue behaviour will still be CanGetValue
+                  //       instead of GetValue
+                  .map(asProperty(indexPlan.idName))
+
+              case SetProperty(_, variable: LogicalVariable, propertyKey, _) =>
+                Seq(Property(variable, propertyKey)(InputPosition.NONE))
+
+              case SetNodeProperty(_, idName, propertyKey, _) =>
+                Seq(Property(Variable(idName)(InputPosition.NONE), propertyKey)(InputPosition.NONE))
+
+              case SetRelationshipProperty(_, idName, propertyKey, _) =>
+                Seq(Property(Variable(idName)(InputPosition.NONE), propertyKey)(InputPosition.NONE))
+
+              case SetNodePropertiesFromMap(_, idName, map: MapExpression, false) =>
+                propertiesFromMap(idName, map)
+
+              case SetRelationshipPropertiesFromMap(_, idName, map: MapExpression, false) =>
+                propertiesFromMap(idName, map)
+
+              case _ => Seq.empty
             }
 
+          val maybeEntityFromPlan =
+            plan match {
+              case SetNodePropertiesFromMap(_, idName, _, true) => Some(idName)
+              case SetNodePropertiesFromMap(_, idName, expr, _) if !expr.isInstanceOf[MapExpression] => Some(idName)
+              case SetRelationshipPropertiesFromMap(_, idName, _, true) => Some(idName)
+              case SetRelationshipPropertiesFromMap(_, idName, expr, _) if !expr.isInstanceOf[MapExpression] => Some(idName)
+              case _ => None
+            }
+
+          val outgoingAvailableProperties = acc.availableProperties ++ newPropertyExpressions ++ propertiesFromPlan
+
+          Acc(outgoingVariableOptima, outgoingReadOptima, outgoingAvailableProperties, acc.availableWholeEntities ++ maybeEntityFromPlan, outgoingCardinality)
+      }
+    }
+
+    def foldTwoChildPlan(lhsAcc: Acc, rhsAcc: Acc, plan: LogicalPlan): Acc = {
+      plan match {
+        case _: Union =>
+          val newVariables = plan.availableSymbols
           val outgoingCardinality = cardinalities(plan.id)
-          val outgoingReadOptima = acc.propertyReadOptima ++ newPropertyReadOptima
+          val outgoingVariableOptima = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v))).toMap
+          Acc(outgoingVariableOptima, lhsAcc.propertyReadOptima ++ rhsAcc.propertyReadOptima, Set.empty, Set.empty, outgoingCardinality)
 
-          // TODO: handle aliasing in projections
+        case _: AntiSemiApply
+           | _: LetAntiSemiApply
+           | _: SelectOrAntiSemiApply
+           | _: LetSelectOrAntiSemiApply
+           | _: ForeachApply
+           | _: RollUpApply =>
+          lhsAcc
 
-          plan match {
-            case _: Aggregation |
-                 _: OrderedAggregation |
-                 _: Eager =>
-              // Do _not_ pushdown past these plans
-              val newVariables = plan.availableSymbols
-              val outgoingVariableOptima = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v))).toMap
+        case _: ApplyPlan =>
+          // No ApplyPlan needs an argumentAcc yet, so it is stubbed for now.
+          // If you need a real argumentAcc, this is where you have to fix it.
+          val argumentAcc = null
+          foldSingleChildPlan(rhsAcc, argumentAcc, plan)
 
-              Acc(outgoingVariableOptima, outgoingReadOptima, Set.empty, Set.empty, outgoingCardinality)
-
-            case p: ProjectingPlan => // except for aggregations which were already matched
-              val renamings: Map[String, String] =
-                p.projectExpressions.collect {
-                  case (key, v: Variable) if key != v.name => (v.name, key)
-                }
-
-              val renamedVariableOptima =
-                acc.variableOptima.map {
-                  case (oldName, optimum) =>
-                    (renamings.getOrElse(oldName, oldName), optimum)
-                }
-
-              val renamedAvailableProperties =
-                acc.availableProperties.map(
-                  prop => {
-                    val propVariable = prop.map.asInstanceOf[LogicalVariable].name
-                    renamings.get(propVariable) match {
-                      case Some(newName) => propertyWithName(newName, prop)
-                      case None => prop
-                    }
-                  })
-
-              Acc(renamedVariableOptima, outgoingReadOptima, renamedAvailableProperties, acc.availableWholeEntities, outgoingCardinality)
-
-            case _ =>
-              val newLowestCardinalities =
-                acc.variableOptima.mapValues(optimum =>
-                  if (outgoingCardinality < optimum.cardinality) {
-                    CardinalityOptimum(outgoingCardinality, plan.id, optimum.variableName)
-                  } else {
-                    optimum
-                  }
-                )
-
-              val currentVariables = plan.availableSymbols
-              val newVariables = currentVariables -- acc.variableOptima.keySet
-              val newVariableCardinalities = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v)))
-              val outgoingVariableOptima = newLowestCardinalities ++ newVariableCardinalities
-
-              val propertiesFromPlan: Seq[Property] =
-                plan match {
-                  case indexPlan: IndexLeafPlan =>
-                    indexPlan.properties
-                      .filter(_.getValueFromIndex == CanGetValue) // NOTE: as we pushdown before inserting cached properties
-                                                                  //       the getValue behaviour will still be CanGetValue
-                                                                  //       instead of GetValue
-                      .map(asProperty(indexPlan.idName))
-
-                  case SetProperty(_, variable: LogicalVariable, propertyKey, _) =>
-                    Seq(Property(variable, propertyKey)(InputPosition.NONE))
-
-                  case SetNodeProperty(_, idName, propertyKey, _) =>
-                    Seq(Property(Variable(idName)(InputPosition.NONE), propertyKey)(InputPosition.NONE))
-
-                  case SetRelationshipProperty(_, idName, propertyKey, _) =>
-                    Seq(Property(Variable(idName)(InputPosition.NONE), propertyKey)(InputPosition.NONE))
-
-                  case SetNodePropertiesFromMap(_, idName, map: MapExpression, false) =>
-                    propertiesFromMap(idName, map)
-
-                  case SetRelationshipPropertiesFromMap(_, idName, map: MapExpression, false) =>
-                    propertiesFromMap(idName, map)
-
-                  case _ => Seq.empty
-                }
-
-              val maybeEntityFromPlan =
-                plan match {
-                  case SetNodePropertiesFromMap(_, idName, _, true) => Some(idName)
-                  case SetNodePropertiesFromMap(_, idName, expr, _) if !expr.isInstanceOf[MapExpression] => Some(idName)
-                  case SetRelationshipPropertiesFromMap(_, idName, _, true) => Some(idName)
-                  case SetRelationshipPropertiesFromMap(_, idName, expr, _) if !expr.isInstanceOf[MapExpression] => Some(idName)
-                  case _ => None
-                }
-
-              val outgoingAvailableProperties = acc.availableProperties ++ newPropertyExpressions ++ propertiesFromPlan
-
-              Acc(outgoingVariableOptima, outgoingReadOptima, outgoingAvailableProperties, acc.availableWholeEntities ++ maybeEntityFromPlan, outgoingCardinality)
-          }
-        },
-        (lhsAcc, rhsAcc, plan) => {
-
-          plan match {
-            case _: Union =>
-              val newVariables = plan.availableSymbols
-              val outgoingCardinality = cardinalities(plan.id)
-              val outgoingVariableOptima = newVariables.map(v => (v, CardinalityOptimum(outgoingCardinality, plan.id, v))).toMap
-              Acc(outgoingVariableOptima, lhsAcc.propertyReadOptima ++ rhsAcc.propertyReadOptima, Set.empty, Set.empty, outgoingCardinality)
-
-            case _ =>
-              val mergedVariableOptima =
-                lhsAcc.variableOptima ++ rhsAcc.variableOptima.map {
-                  case (v, rhsOptimum) =>
-                    lhsAcc.variableOptima.get(v) match {
+        case _ =>
+          val mergedVariableOptima =
+            lhsAcc.variableOptima ++ rhsAcc.variableOptima.map {
+              case (v, rhsOptimum) =>
+                lhsAcc.variableOptima.get(v) match {
                   case Some(lhsOptimum) =>
                     (v, Seq(lhsOptimum, rhsOptimum).minBy(_.cardinality))
                   case None =>
                     (v, rhsOptimum)
                 }
-              }
+            }
 
-              Acc(mergedVariableOptima,
-                  lhsAcc.propertyReadOptima ++ rhsAcc.propertyReadOptima,
-                  lhsAcc.availableProperties ++ rhsAcc.availableProperties,
-                  lhsAcc.availableWholeEntities ++ rhsAcc.availableWholeEntities,
-                  cardinalities(plan.id))
-          }
-        }
+          Acc(mergedVariableOptima,
+            lhsAcc.propertyReadOptima ++ rhsAcc.propertyReadOptima,
+            lhsAcc.availableProperties ++ rhsAcc.availableProperties,
+            lhsAcc.availableWholeEntities ++ rhsAcc.availableWholeEntities,
+            cardinalities(plan.id))
+      }
+    }
+
+    val Acc(_, propertyReadOptima, _, _, _) =
+      LogicalPlans.foldPlan(Acc(Map.empty, Seq.empty, Set.empty, Set.empty, Cardinality.SINGLE))(
+        logicalPlan,
+        foldSingleChildPlan,
+        foldTwoChildPlan
       )
 
     val propertyMap = new mutable.HashMap[Id, Set[LogicalProperty]]

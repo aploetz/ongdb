@@ -26,10 +26,10 @@ import java.util.concurrent.Callable;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.TinyLockManager;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_READ_LOCK;
@@ -37,12 +37,14 @@ import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_WRITE_LOCK;
 
 public class RecordStresser implements Callable<Void>
 {
+    private static final String RECORD_STRESSER = "recordStresser";
     private final PagedFile pagedFile;
     private final Condition condition;
     private final int maxRecords;
     private final RecordFormat format;
     private final int threadId;
     private final TinyLockManager locks;
+    private final PageCacheTracer cacheTracer;
     private long countSum;
 
     public RecordStresser( PagedFile pagedFile,
@@ -50,7 +52,8 @@ public class RecordStresser implements Callable<Void>
                            int maxRecords,
                            RecordFormat format,
                            int threadId,
-                           TinyLockManager locks )
+                           TinyLockManager locks,
+                           PageCacheTracer cacheTracer )
     {
         this.pagedFile = pagedFile;
         this.condition = condition;
@@ -58,6 +61,7 @@ public class RecordStresser implements Callable<Void>
         this.format = format;
         this.threadId = threadId;
         this.locks = locks;
+        this.cacheTracer = cacheTracer;
     }
 
     @Override
@@ -66,7 +70,8 @@ public class RecordStresser implements Callable<Void>
         Random random = new Random();
         int recordsPerPage = format.getRecordsPerPage();
         int recordSize = format.getRecordSize();
-        try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_WRITE_LOCK ) )
+        try ( PageCursorTracer cursorTracer = cacheTracer.createPageCursorTracer( RECORD_STRESSER );
+              PageCursor cursor = pagedFile.io( 0, PF_SHARED_WRITE_LOCK, cursorTracer ) )
         {
             while ( !condition.fulfilled() )
             {
@@ -82,7 +87,8 @@ public class RecordStresser implements Callable<Void>
                     long newValue = format.incrementCounter( cursor, threadId );
                     countSum++;
                     assertFalse( cursor.shouldRetry(), "Write lock, so never a need to retry" );
-                    assertThat( "Record-local count must be less than or equal to thread-local count sum", newValue, lessThanOrEqualTo( countSum ) );
+                    assertThat( newValue ).describedAs( "Record-local count must be less than or equal to thread-local count sum" )
+                            .isLessThanOrEqualTo( countSum );
                 }
                 finally
                 {
@@ -97,13 +103,14 @@ public class RecordStresser implements Callable<Void>
     public void verifyCounts() throws IOException
     {
         long actualSum = 0;
-        try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_READ_LOCK ) )
+        try ( PageCursorTracer cursorTracer = cacheTracer.createPageCursorTracer( RECORD_STRESSER );
+              PageCursor cursor = pagedFile.io( 0, PF_SHARED_READ_LOCK, cursorTracer ) )
         {
             while ( cursor.next() )
             {
                 actualSum += format.sumCountsForThread( cursor, threadId );
             }
         }
-        assertThat( "Thread specific sum across all records", actualSum, is( countSum ) );
+        assertThat( actualSum ).describedAs( "Thread specific sum across all records" ).isEqualTo( countSum );
     }
 }

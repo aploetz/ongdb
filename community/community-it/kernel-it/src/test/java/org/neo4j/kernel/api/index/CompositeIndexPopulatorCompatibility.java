@@ -27,7 +27,6 @@ import java.util.Arrays;
 import org.neo4j.collection.PrimitiveLongCollections;
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.kernel.api.IndexQuery;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
@@ -40,9 +39,12 @@ import org.neo4j.values.storable.Values;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 
 @Ignore( "Not a test. This is a compatibility suite that provides test cases for verifying" +
@@ -70,9 +72,10 @@ public class CompositeIndexPopulatorCompatibility extends IndexProviderCompatibi
         {
             // when
             IndexSamplingConfig indexSamplingConfig = new IndexSamplingConfig( Config.defaults() );
-            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ) ), p -> p.add( Arrays.asList(
+            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ), INSTANCE ),
+                    p -> p.add( Arrays.asList(
                     add( 1, descriptor.schema(), Values.of( "v1" ), Values.of( "v2" ) ),
-                    add( 2, descriptor.schema(), Values.of( "v1" ), Values.of( "v2" ) ) ) ) );
+                    add( 2, descriptor.schema(), Values.of( "v1" ), Values.of( "v2" ) ) ), NULL ) );
 
             // then
             try ( IndexAccessor accessor = indexProvider.getOnlineAccessor( descriptor, indexSamplingConfig ) )
@@ -80,7 +83,8 @@ public class CompositeIndexPopulatorCompatibility extends IndexProviderCompatibi
                 try ( IndexReader reader = accessor.newReader();
                       NodeValueIterator nodes = new NodeValueIterator() )
                 {
-                    reader.query( NULL_CONTEXT, nodes, IndexOrder.NONE, false, IndexQuery.exact( 1, "v1" ), IndexQuery.exact( 1, "v2" ) );
+                    reader.query( NULL_CONTEXT, nodes, unconstrained(),
+                            IndexQuery.exact( 1, "v1" ), IndexQuery.exact( 1, "v2" ) );
                     assertEquals( asSet( 1L, 2L ), PrimitiveLongCollections.toSet( nodes ) );
                 }
             }
@@ -106,17 +110,17 @@ public class CompositeIndexPopulatorCompatibility extends IndexProviderCompatibi
         {
             // when
             IndexSamplingConfig indexSamplingConfig = new IndexSamplingConfig( Config.defaults() );
-            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ) ), p ->
+            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ), INSTANCE ), p ->
             {
                 try
                 {
                     p.add( Arrays.asList(
                             add( nodeId1, descriptor.schema(), value1, value2 ),
-                            add( nodeId2, descriptor.schema(), value1, value2 ) ) );
+                            add( nodeId2, descriptor.schema(), value1, value2 ) ), NULL );
                     TestNodePropertyAccessor propertyAccessor =
                             new TestNodePropertyAccessor( nodeId1, descriptor.schema(), value1, value2 );
                     propertyAccessor.addNode( nodeId2, descriptor.schema(), value1, value2 );
-                    p.scanCompleted( PhaseTracker.nullInstance );
+                    p.scanCompleted( PhaseTracker.nullInstance, jobScheduler, NULL );
                     p.verifyDeferredConstraints( propertyAccessor );
 
                     fail( "expected exception" );
@@ -136,12 +140,12 @@ public class CompositeIndexPopulatorCompatibility extends IndexProviderCompatibi
         {
             // given
             IndexSamplingConfig indexSamplingConfig = new IndexSamplingConfig( Config.defaults() );
-            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ) ), p ->
+            withPopulator( indexProvider.getPopulator( descriptor, indexSamplingConfig, heapBufferFactory( 1024 ), INSTANCE ), p ->
             {
                 // when
                 p.add( Arrays.asList(
                         add( nodeId1, descriptor.schema(), value1, value2 ),
-                        add( nodeId2, descriptor.schema(), value1, value3 ) ) );
+                        add( nodeId2, descriptor.schema(), value1, value3 ) ), NULL );
 
                 TestNodePropertyAccessor propertyAccessor =
                         new TestNodePropertyAccessor( nodeId1, descriptor.schema(), value1, value2 );

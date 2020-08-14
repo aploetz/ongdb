@@ -19,11 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, LogicalPlans}
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.LogicalPlans
 
 /**
-  * Maps single logical plan operators to their respective pipes. Does not recurse.
-  */
+ * Maps single logical plan operators to their respective pipes. Does not recurse.
+ */
 trait PipeMapper extends LogicalPlans.Mapper[Pipe] {
   override def onLeaf(plan: LogicalPlan): Pipe
   override def onOneChildPlan(plan: LogicalPlan, source: Pipe): Pipe
@@ -32,8 +33,6 @@ trait PipeMapper extends LogicalPlans.Mapper[Pipe] {
 
 case class PipeTreeBuilder(pipeMapper: PipeMapper) {
   def build(logicalPlan: LogicalPlan): Pipe = {
-    val pipe = LogicalPlans.map(logicalPlan, pipeMapper)
-    OwningPipeAsserter.assertAllExpressionsHaveAnOwningPipe(pipe)
-    pipe
+    LogicalPlans.map(logicalPlan, pipeMapper)
   }
 }

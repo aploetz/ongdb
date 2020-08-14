@@ -20,6 +20,7 @@
 package org.neo4j.internal.batchimport;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -35,6 +36,8 @@ import org.neo4j.internal.batchimport.staging.ExecutionMonitors;
 import org.neo4j.internal.batchimport.store.BatchingNeoStores;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.RelationshipGroupStore;
 import org.neo4j.kernel.impl.store.format.ForcedSecondaryUnitRecordFormats;
@@ -51,6 +54,7 @@ import org.neo4j.test.rule.RandomRule;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.of;
@@ -59,8 +63,10 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.format.standard.Standard.LATEST_RECORD_FORMATS;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.CHECK;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 @ExtendWith( RandomExtension.class )
@@ -92,7 +98,7 @@ class RelationshipGroupDefragmenterTest
         this.units = units;
         jobScheduler = new ThreadPoolJobScheduler();
         stores = BatchingNeoStores.batchingNeoStores( testDirectory.getFileSystem(), databaseLayout, format, CONFIG, NullLogService.getInstance(),
-            AdditionalInitialIds.EMPTY, Config.defaults(), jobScheduler );
+            AdditionalInitialIds.EMPTY, Config.defaults(), jobScheduler, PageCacheTracer.NULL, INSTANCE );
         stores.createNew();
     }
 
@@ -101,6 +107,23 @@ class RelationshipGroupDefragmenterTest
     {
         stores.close();
         jobScheduler.close();
+    }
+
+    @Test
+    void tracePageCacheAccessOnDefragmentation() throws IOException
+    {
+        init( LATEST_RECORD_FORMATS, 1 );
+
+        int nodeCount = 10;
+        int relationshipTypeCount = 5;
+        RecordStore<RelationshipGroupRecord> groupStore = stores.getTemporaryRelationshipGroupStore();
+        prepareData( nodeCount, relationshipTypeCount, groupStore );
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        defrag( nodeCount, groupStore, pageCacheTracer );
+
+        assertThat( pageCacheTracer.pins() ).isEqualTo( 65 );
+        assertThat( pageCacheTracer.unpins() ).isEqualTo( 65 );
+        assertThat( pageCacheTracer.hits() ).isEqualTo( 65 );
     }
 
     @ParameterizedTest
@@ -112,30 +135,7 @@ class RelationshipGroupDefragmenterTest
         int nodeCount = 100;
         int relationshipTypeCount = 50;
         RecordStore<RelationshipGroupRecord> groupStore = stores.getTemporaryRelationshipGroupStore();
-        RelationshipGroupRecord groupRecord = groupStore.newRecord();
-        RecordStore<NodeRecord> nodeStore = stores.getNodeStore();
-        NodeRecord nodeRecord = nodeStore.newRecord();
-        long cursor = 0;
-        for ( int typeId = relationshipTypeCount - 1; typeId >= 0; typeId-- )
-        {
-            for ( long nodeId = 0; nodeId < nodeCount; nodeId++, cursor++ )
-            {
-                // next doesn't matter at all, as we're rewriting it anyway
-                // firstOut/In/Loop we could use in verification phase later
-                groupRecord.initialize( true, typeId, cursor, cursor + 1, cursor + 2, nodeId, 4 );
-                groupRecord.setId( groupStore.nextId() );
-                groupStore.updateRecord( groupRecord );
-
-                if ( typeId == 0 )
-                {
-                    // first round also create the nodes
-                    nodeRecord.initialize( true, -1, true, groupRecord.getId(), 0 );
-                    nodeRecord.setId( nodeId );
-                    nodeStore.updateRecord( nodeRecord );
-                    nodeStore.setHighestPossibleIdInUse( nodeId );
-                }
-            }
-        }
+        prepareData( nodeCount, relationshipTypeCount, groupStore );
 
         // WHEN
         defrag( nodeCount, groupStore );
@@ -172,14 +172,14 @@ class RelationshipGroupDefragmenterTest
                     // next doesn't matter at all, as we're rewriting it anyway
                     // firstOut/In/Loop we could use in verification phase later
                     groupRecord.initialize( true, typeId, cursor, cursor + 1, cursor + 2, nodeId, 4 );
-                    groupRecord.setId( groupStore.nextId() );
-                    groupStore.updateRecord( groupRecord );
+                    groupRecord.setId( groupStore.nextId( NULL ) );
+                    groupStore.updateRecord( groupRecord, NULL );
 
                     if ( !initializedNodes.get( nodeId ) )
                     {
                         nodeRecord.initialize( true, -1, true, groupRecord.getId(), 0 );
                         nodeRecord.setId( nodeId );
-                        nodeStore.updateRecord( nodeRecord );
+                        nodeStore.updateRecord( nodeRecord, NULL );
                         nodeStore.setHighestPossibleIdInUse( nodeId );
                         initializedNodes.set( nodeId );
                     }
@@ -194,11 +194,44 @@ class RelationshipGroupDefragmenterTest
         verifyGroupsAreSequentiallyOrderedByNode();
     }
 
+    private void prepareData( int nodeCount, int relationshipTypeCount, RecordStore<RelationshipGroupRecord> groupStore )
+    {
+        RelationshipGroupRecord groupRecord = groupStore.newRecord();
+        RecordStore<NodeRecord> nodeStore = stores.getNodeStore();
+        NodeRecord nodeRecord = nodeStore.newRecord();
+        long cursor = 0;
+        for ( int typeId = relationshipTypeCount - 1; typeId >= 0; typeId-- )
+        {
+            for ( long nodeId = 0; nodeId < nodeCount; nodeId++, cursor++ )
+            {
+                // next doesn't matter at all, as we're rewriting it anyway
+                // firstOut/In/Loop we could use in verification phase later
+                groupRecord.initialize( true, typeId, cursor, cursor + 1, cursor + 2, nodeId, 4 );
+                groupRecord.setId( groupStore.nextId( NULL ) );
+                groupStore.updateRecord( groupRecord, NULL );
+
+                if ( typeId == 0 )
+                {
+                    // first round also create the nodes
+                    nodeRecord.initialize( true, -1, true, groupRecord.getId(), 0 );
+                    nodeRecord.setId( nodeId );
+                    nodeStore.updateRecord( nodeRecord, NULL );
+                    nodeStore.setHighestPossibleIdInUse( nodeId );
+                }
+            }
+        }
+    }
+
     private void defrag( int nodeCount, RecordStore<RelationshipGroupRecord> groupStore )
+    {
+        defrag( nodeCount, groupStore, PageCacheTracer.NULL );
+    }
+
+    private void defrag( int nodeCount, RecordStore<RelationshipGroupRecord> groupStore, PageCacheTracer pageCacheTracer )
     {
         RelationshipGroupDefragmenter.Monitor monitor = mock( RelationshipGroupDefragmenter.Monitor.class );
         RelationshipGroupDefragmenter defragmenter = new RelationshipGroupDefragmenter( CONFIG,
-            ExecutionMonitors.invisible(), monitor, NumberArrayFactory.AUTO_WITHOUT_PAGECACHE );
+                ExecutionMonitors.invisible(), monitor, NumberArrayFactory.AUTO_WITHOUT_PAGECACHE, pageCacheTracer, INSTANCE );
 
         // Calculation below correlates somewhat to calculation in RelationshipGroupDefragmenter.
         // Anyway we verify below that we exercise the multi-pass bit, which is what we want
@@ -216,7 +249,7 @@ class RelationshipGroupDefragmenterTest
         long firstId = store.getNumberOfReservedLowIds();
         long groupCount = store.getHighId() - firstId;
         RelationshipGroupRecord groupRecord = store.newRecord();
-        PageCursor groupCursor = store.openPageCursorForReading( firstId );
+        PageCursor groupCursor = store.openPageCursorForReading( firstId, NULL );
         long highGroupId = store.getHighId();
         long currentNodeId = -1;
         int currentTypeId = -1;
@@ -252,7 +285,7 @@ class RelationshipGroupDefragmenterTest
             assertTrue(
                 groupRecord.getNext() == groupRecord.getId() + 1 ||
                     groupRecord.getNext() == Record.NO_NEXT_RELATIONSHIP.intValue(), "Expected this group to have a next of current + " + units + " OR NULL, " +
-                    "but was " + groupRecord.toString() );
+                    "but was " + groupRecord );
             assertTrue(
                 groupRecord.getType() > currentTypeId, "Expected " + groupRecord + " to have type > " + currentTypeId );
             currentTypeId = groupRecord.getType();

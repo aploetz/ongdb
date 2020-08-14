@@ -39,11 +39,13 @@ import org.neo4j.test.rule.RandomRule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.neo4j.index.internal.gbptree.FreeListIdProvider.NO_MONITOR;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @ExtendWith( RandomExtension.class )
 class FreeListIdProviderTest
@@ -58,7 +60,7 @@ class FreeListIdProviderTest
     private PageAwareByteArrayCursor cursor;
     private final PagedFile pagedFile = mock( PagedFile.class );
     private final FreelistPageMonitor monitor = new FreelistPageMonitor();
-    private final FreeListIdProvider freelist = new FreeListIdProvider( pagedFile, PAGE_SIZE, BASE_ID, monitor );
+    private FreeListIdProvider freelist;
 
     @Inject
     private RandomRule random;
@@ -67,8 +69,12 @@ class FreeListIdProviderTest
     void setUpPagedFile() throws IOException
     {
         cursor = new PageAwareByteArrayCursor( PAGE_SIZE );
-        when( pagedFile.io( anyLong(), anyInt() ) ).thenAnswer(
+
+        when( pagedFile.io( anyLong(), anyInt(), any() ) ).thenAnswer(
                 invocation -> cursor.duplicate( invocation.getArgument( 0 ) ) );
+        when( pagedFile.pageSize() ).thenReturn( PAGE_SIZE );
+
+        freelist = new FreeListIdProvider( pagedFile, BASE_ID, monitor );
         freelist.initialize( BASE_ID + 1, BASE_ID + 1, BASE_ID + 1, 0, 0 );
     }
 
@@ -80,8 +86,8 @@ class FreeListIdProviderTest
         fillPageWithRandomBytes( releasedId );
 
         // WHEN
-        freelist.releaseId( GENERATION_ONE, GENERATION_TWO, releasedId );
-        long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE );
+        freelist.releaseId( GENERATION_ONE, GENERATION_TWO, releasedId, NULL );
+        long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE, NULL );
 
         // THEN
         assertEquals( releasedId, acquiredId );
@@ -97,13 +103,13 @@ class FreeListIdProviderTest
         long baseId = 101;
         for ( int i = 0; i < entries; i++ )
         {
-            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, baseId + i );
+            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, baseId + i, NULL );
         }
 
         // WHEN/THEN
         for ( int i = 0; i < entries; i++ )
         {
-            long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE );
+            long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE, NULL );
             assertEquals( baseId + i, acquiredId );
         }
     }
@@ -119,8 +125,8 @@ class FreeListIdProviderTest
         do
         {
             prevId = acquiredId;
-            acquiredId = freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO );
-            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, acquiredId );
+            acquiredId = freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO, NULL );
+            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, acquiredId, NULL );
             released.add( acquiredId );
         }
         while ( acquiredId - prevId == 1 );
@@ -128,12 +134,12 @@ class FreeListIdProviderTest
         // WHEN
         while ( !released.isEmpty() )
         {
-            long reAcquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE );
+            long reAcquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE, NULL );
             released.remove( reAcquiredId );
         }
 
         // THEN
-        assertEquals( freelistPageId, freelist.acquireNewId( GENERATION_THREE, GENERATION_FOUR ) );
+        assertEquals( freelistPageId, freelist.acquireNewId( GENERATION_THREE, GENERATION_FOUR, NULL ) );
     }
 
     @Test
@@ -157,7 +163,7 @@ class FreeListIdProviderTest
                     int count = random.intBetween( 5, 10 );
                     for ( int k = 0; k < count; k++ )
                     {
-                        long acquiredId = freelist.acquireNewId( stableGeneration, unstableGeneration );
+                        long acquiredId = freelist.acquireNewId( stableGeneration, unstableGeneration, NULL );
                         assertTrue( acquired.add( acquiredId ) );
                         acquiredList.add( acquiredId );
                     }
@@ -170,14 +176,14 @@ class FreeListIdProviderTest
                     {
                         long id = acquiredList.remove( random.nextInt( acquiredList.size() ) );
                         assertTrue( acquired.remove( id ) );
-                        freelist.releaseId( stableGeneration, unstableGeneration, id );
+                        freelist.releaseId( stableGeneration, unstableGeneration, id, NULL );
                     }
                 }
             }
 
             for ( long id : acquiredList )
             {
-                freelist.releaseId( stableGeneration, unstableGeneration, id );
+                freelist.releaseId( stableGeneration, unstableGeneration, id, NULL );
             }
             acquiredList.clear();
             acquired.clear();
@@ -198,13 +204,13 @@ class FreeListIdProviderTest
         MutableLongSet expected = new LongHashSet();
         for ( int i = 0; i < 100; i++ )
         {
-            expected.add( freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO ) );
+            expected.add( freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO, NULL ) );
         }
         expected.forEach( id ->
         {
             try
             {
-                freelist.releaseId( GENERATION_ONE, GENERATION_TWO, id );
+                freelist.releaseId( GENERATION_ONE, GENERATION_TWO, id, NULL );
             }
             catch ( IOException e )
             {
@@ -214,7 +220,7 @@ class FreeListIdProviderTest
         // and only a few acquired
         for ( int i = 0; i < 10; i++ )
         {
-            long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE );
+            long acquiredId = freelist.acquireNewId( GENERATION_TWO, GENERATION_THREE, NULL );
             assertTrue( expected.remove( acquiredId ) );
         }
 
@@ -226,7 +232,7 @@ class FreeListIdProviderTest
             {
                 assertTrue( expected.remove( pageId ) );
             }
-        } );
+        }, NULL );
         assertTrue( expected.isEmpty() );
     }
 
@@ -247,8 +253,8 @@ class FreeListIdProviderTest
         } );
         for ( int i = 0; i < 100; i++ )
         {
-            long id = freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO );
-            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, id );
+            long id = freelist.acquireNewId( GENERATION_ONE, GENERATION_TWO, NULL );
+            freelist.releaseId( GENERATION_ONE, GENERATION_TWO, id, NULL );
         }
         assertTrue( expected.size() > 0 );
 
@@ -260,7 +266,7 @@ class FreeListIdProviderTest
             {
                 assertTrue( expected.remove( pageId ) );
             }
-        });
+        }, NULL );
         assertTrue( expected.isEmpty() );
     }
 

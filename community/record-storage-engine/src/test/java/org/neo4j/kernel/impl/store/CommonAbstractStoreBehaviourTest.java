@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.StandardOpenOption;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
@@ -40,6 +39,7 @@ import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.BaseRecordFormat;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
@@ -47,11 +47,14 @@ import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.io.pagecache.PageCache.PAGE_SIZE;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.CHECK;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
@@ -129,7 +132,7 @@ class CommonAbstractStoreBehaviourTest
     private void createStore()
     {
         store = new MyStore( config, pageCache, 8 );
-        store.initialise( true );
+        store.initialise( true, NULL );
     }
 
     @Test
@@ -137,83 +140,81 @@ class CommonAbstractStoreBehaviourTest
     {
         // 16-byte header will overflow an 8-byte page size
         MyStore store = new MyStore( config, pageCache, PAGE_SIZE + 1 );
-        assertThrowsUnderlyingStorageException( () -> store.initialise( true ) );
+        assertThrowsUnderlyingStorageException( () -> store.initialise( true, NULL ) );
     }
 
     @Test
     void extractHeaderRecordDuringLoadStorageMustThrowOnPageOverflow()
     {
         MyStore first = new MyStore( config, pageCache, 8 );
-        first.initialise( true );
+        first.initialise( true, NULL );
         first.close();
 
         MyStore second = new MyStore( config, pageCache, PAGE_SIZE + 1 );
-        assertThrowsUnderlyingStorageException( () -> second.initialise( false ) );
+        assertThrowsUnderlyingStorageException( () -> second.initialise( false, NULL ) );
     }
 
     @Test
     void getRawRecordDataMustNotThrowOnPageOverflow() throws Exception
     {
         prepareStoreForOutOfBoundsAccess();
-        store.getRawRecordData( 5 );
+        store.getRawRecordData( 5, NULL );
     }
 
     @Test
     void isInUseMustThrowOnPageOverflow()
     {
-        verifyExceptionOnOutOfBoundsAccess( () -> store.isInUse( 5 ) );
+        verifyExceptionOnOutOfBoundsAccess( () -> store.isInUse( 5, NULL ) );
     }
 
     @Test
     void isInUseMustThrowOnCursorError()
     {
-        verifyExceptionOnCursorError( () -> store.isInUse( 5 ) );
+        verifyExceptionOnCursorError( () -> store.isInUse( 5, NULL ) );
     }
 
     @Test
     void getRecordMustThrowOnPageOverflow()
     {
-        verifyExceptionOnOutOfBoundsAccess( () -> store.getRecord( 5, new IntRecord( 5 ), NORMAL ) );
+        verifyExceptionOnOutOfBoundsAccess( () -> store.getRecord( 5, new IntRecord( 5 ), NORMAL, NULL ) );
     }
 
     @Test
-    void getRecordMustNotThrowOnPageOverflowWithCheckLoadMode()
+    void getRecordMustThrowOnPageOverflowWithCheckLoadMode()
     {
-        prepareStoreForOutOfBoundsAccess();
-        store.getRecord( 5, new IntRecord( 5 ), CHECK );
+        verifyExceptionOnOutOfBoundsAccess( () -> store.getRecord( 5, new IntRecord( 5 ), CHECK, NULL ) );
     }
 
     @Test
     void getRecordMustNotThrowOnPageOverflowWithForceLoadMode()
     {
         prepareStoreForOutOfBoundsAccess();
-        store.getRecord( 5, new IntRecord( 5 ), FORCE );
+        store.getRecord( 5, new IntRecord( 5 ), FORCE, NULL );
     }
 
     @Test
     void updateRecordMustThrowOnPageOverflow()
     {
-        verifyExceptionOnOutOfBoundsAccess( () -> store.updateRecord( new IntRecord( 5 ) ) );
+        verifyExceptionOnOutOfBoundsAccess( () -> store.updateRecord( new IntRecord( 5 ), NULL ) );
     }
 
     @Test
     void getRecordMustThrowOnCursorError()
     {
-        verifyExceptionOnCursorError( () -> store.getRecord( 5, new IntRecord( 5 ), NORMAL ) );
+        verifyExceptionOnCursorError( () -> store.getRecord( 5, new IntRecord( 5 ), NORMAL, NULL ) );
     }
 
     @Test
-    void getRecordMustNotThrowOnCursorErrorWithCheckLoadMode()
+    void getRecordMustThrowOnCursorErrorWithCheckLoadMode()
     {
-        prepareStoreForCursorError();
-        store.getRecord( 5, new IntRecord( 5 ), CHECK );
+        verifyExceptionOnCursorError( () -> store.getRecord( 5, new IntRecord( 5 ), CHECK, NULL ) );
     }
 
     @Test
     void getRecordMustNotThrowOnCursorErrorWithForceLoadMode()
     {
         prepareStoreForCursorError();
-        store.getRecord( 5, new IntRecord( 5 ), FORCE );
+        store.getRecord( 5, new IntRecord( 5 ), FORCE, NULL );
     }
 
     @Test
@@ -223,9 +224,9 @@ class CommonAbstractStoreBehaviourTest
         store.setStoreNotOk( new RuntimeException() );
         IntRecord record = new IntRecord( 200 );
         record.value = 0xCAFEBABE;
-        store.updateRecord( record );
+        store.updateRecord( record, NULL );
         intsPerRecord = 8192;
-        assertThrowsUnderlyingStorageException( () -> store.start() );
+        assertThrowsUnderlyingStorageException( () -> store.start( NULL ) );
     }
 
     @Test
@@ -234,7 +235,7 @@ class CommonAbstractStoreBehaviourTest
         createStore();
         int headerSizeInRecords = store.getNumberOfReservedLowIds();
         int headerSizeInBytes = headerSizeInRecords * store.getRecordSize();
-        try ( PageCursor cursor = store.pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK ) )
+        try ( PageCursor cursor = store.pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK, NULL ) )
         {
             assertTrue( cursor.next() );
             for ( int i = 0; i < headerSizeInBytes; i++ )
@@ -244,7 +245,7 @@ class CommonAbstractStoreBehaviourTest
         }
         int pageSize = store.pagedFile.pageSize();
         store.close();
-        store.pageCache.map( store.getStorageFile(), pageSize, StandardOpenOption.TRUNCATE_EXISTING ).close();
+        store.pageCache.map( store.getStorageFile(), pageSize, immutable.of( TRUNCATE_EXISTING ) ).close();
         createStore();
     }
 
@@ -253,25 +254,25 @@ class CommonAbstractStoreBehaviourTest
     {
         // given
         createStore();
-        store.start();
+        store.start( NULL );
         MutableLongSet holes = LongSets.mutable.empty();
-        holes.add( store.nextId() );
-        holes.add( store.nextId() );
-        store.updateRecord( new IntRecord( store.nextId(), 1 ) );
-        holes.add( store.nextId() );
-        store.updateRecord( new IntRecord( store.nextId(), 1 ) );
+        holes.add( store.nextId( NULL ) );
+        holes.add( store.nextId( NULL ) );
+        store.updateRecord( new IntRecord( store.nextId( NULL ), 1 ), NULL );
+        holes.add( store.nextId( NULL ) );
+        store.updateRecord( new IntRecord( store.nextId( NULL ), 1 ), NULL );
 
         // when
         store.close();
         fs.deleteFile( new File( MyStore.ID_FILENAME ) );
         createStore();
-        store.start();
+        store.start( NULL );
 
         // then
         int numberOfHoles = holes.size();
         for ( int i = 0; i < numberOfHoles; i++ )
         {
-            assertTrue( holes.remove( store.nextId() ) );
+            assertTrue( holes.remove( store.nextId( NULL ) ) );
         }
         assertTrue( holes.isEmpty() );
     }
@@ -281,26 +282,26 @@ class CommonAbstractStoreBehaviourTest
     {
         // given
         createStore();
-        store.start();
+        store.start( NULL );
         MutableLongSet holes = LongSets.mutable.empty();
-        store.updateRecord( new IntRecord( store.nextId(), 1 ) );
-        holes.add( store.nextId() );
-        holes.add( store.nextId() );
-        store.updateRecord( new IntRecord( store.nextId(), 1 ) );
-        holes.add( store.nextId() );
-        store.updateRecord( new IntRecord( store.nextId(), 1 ) );
+        store.updateRecord( new IntRecord( store.nextId( NULL ), 1 ), NULL );
+        holes.add( store.nextId( NULL ) );
+        holes.add( store.nextId( NULL ) );
+        store.updateRecord( new IntRecord( store.nextId( NULL ), 1 ), NULL );
+        holes.add( store.nextId( NULL ) );
+        store.updateRecord( new IntRecord( store.nextId( NULL ), 1 ), NULL );
 
         // when
         store.close();
         fs.deleteFile( new File( MyStore.STORE_FILENAME ) );
         createStore();
-        store.start();
+        store.start( NULL );
 
         // then
         int numberOfReservedLowIds = store.getNumberOfReservedLowIds();
         for ( int i = 0; i < 10; i++ )
         {
-            assertEquals( numberOfReservedLowIds + i, store.nextId() );
+            assertEquals( numberOfReservedLowIds + i, store.nextId( NULL ) );
         }
     }
 
@@ -335,7 +336,7 @@ class CommonAbstractStoreBehaviourTest
     {
         MyFormat( int recordHeaderSize )
         {
-            super( x -> 4, recordHeaderSize, 32 );
+            super( x -> 4, recordHeaderSize, 32, false );
         }
 
         @Override
@@ -360,7 +361,7 @@ class CommonAbstractStoreBehaviourTest
         }
 
         @Override
-        public void read( IntRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+        public void read( IntRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
         {
             for ( int i = 0; i < intsPerRecord; i++ )
             {
@@ -379,7 +380,7 @@ class CommonAbstractStoreBehaviourTest
         }
 
         @Override
-        public void write( IntRecord record, PageCursor cursor, int recordSize )
+        public void write( IntRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
         {
             for ( int i = 0; i < intsPerRecord; i++ )
             {
@@ -435,11 +436,11 @@ class CommonAbstractStoreBehaviourTest
         {
             super( new File( STORE_FILENAME ), new File( ID_FILENAME ), config, IdType.NODE,
                     new DefaultIdGeneratorFactory( fs, immediate() ), pageCache,
-                    NullLogProvider.getInstance(), "T", format, format, "XYZ" );
+                    NullLogProvider.getInstance(), "T", format, format, "XYZ", immutable.empty() );
         }
 
         @Override
-        public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, IntRecord record )
+        public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, IntRecord record, PageCursorTracer cursorTracer )
         {
             throw new UnsupportedOperationException();
         }

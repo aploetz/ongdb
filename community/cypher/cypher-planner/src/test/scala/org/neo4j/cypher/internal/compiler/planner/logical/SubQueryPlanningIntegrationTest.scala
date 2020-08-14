@@ -21,7 +21,9 @@ package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.helpers.LogicalPlanBuilder
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -34,9 +36,7 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
       new LogicalPlanBuilder()
         .produceResults("y")
         .projection("2 AS y")
-        .cartesianProduct()
-        .|.projection("1 AS x")
-        .|.argument()
+        .projection("1 AS x")
         .argument()
         .build()
     )
@@ -47,9 +47,7 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
     planFor(query, stripProduceResults = false)._2 should equal(
       new LogicalPlanBuilder()
         .produceResults("x")
-        .cartesianProduct()
-        .|.projection("1 AS x")
-        .|.argument()
+        .projection("1 AS x")
         .argument()
         .build()
     )
@@ -63,9 +61,7 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
         .cartesianProduct()
         .|.projection("2 AS y")
         .|.argument()
-        .cartesianProduct()
-        .|.projection("1 AS x")
-        .|.argument()
+        .projection("1 AS x")
         .argument()
         .build()
     )
@@ -76,13 +72,7 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
     planFor(query, stripProduceResults = false)._2 should equal(
       new LogicalPlanBuilder()
         .produceResults("x")
-        .cartesianProduct()
-        .|.cartesianProduct()
-        .|.|.cartesianProduct()
-        .|.|.|.projection("1 AS x")
-        .|.|.|.argument()
-        .|.|.argument()
-        .|.argument()
+        .projection("1 AS x")
         .argument()
         .build()
     )
@@ -103,17 +93,11 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
     planFor(query, stripProduceResults = false)._2 should equal(
       new LogicalPlanBuilder()
         .produceResults("a", "b", "c")
-        .cartesianProduct()
-        .|.apply()
-        .|.|.allNodeScan("c", "a", "b")
-        .|.cartesianProduct()
-        .|.|.apply()
-        .|.|.|.allNodeScan("b", "a")
-        .|.|.cartesianProduct()
-        .|.|.|.allNodeScan("a")
-        .|.|.argument()
-        .|.argument()
-        .argument()
+        .apply()
+        .|.allNodeScan("c", "a", "b")
+        .apply()
+        .|.allNodeScan("b", "a")
+        .allNodeScan("a")
         .build()
     )
   }
@@ -126,15 +110,13 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
       new LogicalPlanBuilder()
         .produceResults("y")
         .projection("3 AS y")
-        .cartesianProduct()
-        .|.distinct(s"$x2 AS $x2")
-        .|.union()
-        .|.|.projection(s"$x3 AS $x2")
-        .|.|.projection(s"2 AS $x3")
-        .|.|.argument()
-        .|.projection(s"$x1 AS $x2")
-        .|.projection(s"1 AS $x1")
+        .distinct(s"$x2 AS $x2")
+        .union()
+        .|.projection(s"$x3 AS $x2")
+        .|.projection(s"2 AS $x3")
         .|.argument()
+        .projection(s"$x1 AS $x2")
+        .projection(s"1 AS $x1")
         .argument()
         .build()
     )
@@ -147,15 +129,13 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
     planFor(query, stripProduceResults = false)._2 should equal(
       new LogicalPlanBuilder()
         .produceResults(x2)
-        .cartesianProduct()
-        .|.distinct(s"$x2 AS $x2")
-        .|.union()
-        .|.|.projection(s"$x3 AS $x2")
-        .|.|.projection(s"2 AS $x3")
-        .|.|.argument()
-        .|.projection(s"$x1 AS $x2")
-        .|.projection(s"1 AS $x1")
+        .distinct(s"$x2 AS $x2")
+        .union()
+        .|.projection(s"$x3 AS $x2")
+        .|.projection(s"2 AS $x3")
         .|.argument()
+        .projection(s"$x1 AS $x2")
+        .projection(s"1 AS $x1")
         .argument()
         .build()
     )
@@ -169,17 +149,15 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
       new LogicalPlanBuilder()
         .produceResults("y")
         .filter(s"y.prop = $x2")
-        .cartesianProduct()
+        .apply()
         .|.allNodeScan("y", x2)
-        .cartesianProduct()
-        .|.distinct(s"$x2 AS $x2")
-        .|.union()
-        .|.|.projection(s"$x3 AS $x2")
-        .|.|.projection(s"2 AS $x3")
-        .|.|.argument()
-        .|.projection(s"$x1 AS $x2")
-        .|.projection(s"1 AS $x1")
+        .distinct(s"$x2 AS $x2")
+        .union()
+        .|.projection(s"$x3 AS $x2")
+        .|.projection(s"2 AS $x3")
         .|.argument()
+        .projection(s"$x1 AS $x2")
+        .projection(s"1 AS $x1")
         .argument()
         .build()
     )
@@ -194,17 +172,15 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
         .produceResults("sum")
         .aggregation(Seq.empty, Seq("sum(y.number) AS sum"))
         .filter(s"y.prop = $x2")
-        .cartesianProduct()
+        .apply()
         .|.allNodeScan("y", x2)
-        .cartesianProduct()
-        .|.distinct(s"$x2 AS $x2")
-        .|.union()
-        .|.|.projection(s"$x3 AS $x2")
-        .|.|.projection(s"2 AS $x3")
-        .|.|.argument()
-        .|.projection(s"$x1 AS $x2")
-        .|.projection(s"1 AS $x1")
+        .distinct(s"$x2 AS $x2")
+        .union()
+        .|.projection(s"$x3 AS $x2")
+        .|.projection(s"2 AS $x3")
         .|.argument()
+        .projection(s"$x1 AS $x2")
+        .projection(s"1 AS $x1")
         .argument()
         .build()
     )
@@ -225,7 +201,7 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
     )
   }
 
-  test("This should solve the aggregation on the RHS of the Apply") {
+  test("This should solve the aggregation on the RHS of the CartesianProduct") {
     val query = "WITH 1 AS x CALL { MATCH (y) RETURN sum(y.prop) AS sum } RETURN x + 1 AS res, sum"
     planFor(query, stripProduceResults = false)._2 should equal(
       new LogicalPlanBuilder()
@@ -263,16 +239,16 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
         .|.|.projection(s"$sum2 AS $sum3")
         .|.|.aggregation(Seq.empty, Seq(s"sum($x2.number) AS $sum2"))
         .|.|.filter(s"$x2.prop = i")
-        .|.|.cartesianProduct()
-        .|.|.|.nodeByLabelScan(x2, "X", "i")
+        .|.|.apply()
+        .|.|.|.nodeByLabelScan(x2, "X", IndexOrderNone, "i")
         .|.|.unwind("range(0, 10) AS i")
         .|.|.argument()
         .|.projection(s"$sum1 AS $sum3")
         .|.aggregation(Seq.empty, Seq(s"sum(y.number) AS $sum1"))
-        .|.nodeByLabelScan("y", "Y")
+        .|.nodeByLabelScan("y", "Y", IndexOrderNone)
         .expand(s"($x1)-[r]->(n)")
         .filter(s"$x1.prop = 5")
-        .nodeByLabelScan(x1, "X")
+        .nodeByLabelScan(x1, "X", IndexOrderNone)
         .build()
     )
   }
@@ -290,6 +266,251 @@ class SubQueryPlanningIntegrationTest extends CypherFunSuite with LogicalPlannin
         .|.expand(s"($x2)<-[r]-(y)")
         .|.allNodeScan(x2)
         .allNodeScan(x1)
+        .build()
+    )
+  }
+
+  test("should plan count store lookup in uncorrelated subquery") {
+    val query =
+      """MATCH (n)
+        |CALL {
+        | MATCH (x)-[r:REL]->(y)
+        | RETURN count(*) AS c
+        |}
+        |RETURN n, c""".stripMargin
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("n", "c")
+        .cartesianProduct()
+        .|.relationshipCountFromCountStore("c", None, Seq("REL"), None)
+        .allNodeScan("n")
+        .build()
+    )
+  }
+
+  // Correlated subqueries
+
+  test("CALL around single correlated query") {
+    val query = "WITH 1 AS x CALL { WITH x RETURN x as y } RETURN y"
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("y")
+        .projection("x AS y")
+        .projection("1 AS x")
+        .argument()
+        .build()
+    )
+  }
+
+  test("nested correlated subqueries") {
+    val query = "WITH 1 AS a CALL { WITH a CALL { WITH a CALL { WITH a RETURN a AS b } RETURN b AS c } RETURN c AS d } RETURN d"
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("d")
+        .projection("c AS d")
+        .projection("b AS c")
+        .projection("a AS b")
+        .projection("1 AS a")
+        .argument()
+        .build()
+    )
+  }
+
+  test("CALL around correlated union query") {
+    val query =
+      """
+        |WITH 1 AS x, 2 AS y CALL {
+        |  WITH x RETURN x AS z
+        |  UNION
+        |  WITH y RETURN y AS z
+        |} RETURN z""".stripMargin
+
+    val Seq(z49, z53, z80) = namespaced("z", 49, 53, 80)
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults(z53)
+        .apply()
+        .|.distinct(s"$z53 AS $z53")
+        .|.union()
+        .|.|.projection(s"$z80 AS $z53")
+        .|.|.projection(s"y AS $z80")
+        .|.|.argument("y")
+        .|.projection(s"$z49 AS $z53")
+        .|.projection(s"x AS $z49")
+        .|.argument("x")
+        .projection("2 AS y", "1 AS x")
+        .argument()
+        .build()
+    )
+  }
+
+  test("This should solve the aggregation on the RHS of the Apply") {
+    val query = "WITH 1 AS x CALL { WITH x MATCH (y) WHERE y.value > x RETURN sum(y.prop) AS sum } RETURN sum"
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("sum")
+        .apply()
+        .|.aggregation(Seq.empty, Seq("sum(y.prop) AS sum"))
+        .|.filter("y.value > x")
+        .|.allNodeScan("y", "x")
+        .projection("1 AS x")
+        .argument()
+        .build()
+    )
+  }
+
+  test("correlated CALL in a sequence with ambiguous variable names") {
+    val query = "WITH 1 AS x CALL { WITH x RETURN x as y } CALL { MATCH (x) RETURN 1 AS z } RETURN y"
+
+    val Seq(x10, x56) = namespaced("x", 10, 56)
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("y")
+        .cartesianProduct()
+        .|.projection("1 AS z")
+        .|.allNodeScan(x56)
+        .projection(s"$x10 AS y")
+        .projection(s"1 AS $x10")
+        .argument()
+        .build()
+    )
+  }
+
+  test("nested correlated CALLs with aggregation") {
+    val query =
+      """WITH 1 AS x
+        |CALL {
+        | WITH x
+        | CALL { WITH x RETURN max(x) AS xmax }
+        | CALL { WITH x RETURN min(x) AS xmin }
+        | RETURN xmax, xmin
+        |}
+        |RETURN x, xmax, xmin
+        |""".stripMargin
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("x", "xmax", "xmin")
+        .apply()
+        .|.apply()
+        .|.|.aggregation(Seq.empty, Seq("min(x) as xmin"))
+        .|.|.argument("x")
+        .|.aggregation(Seq.empty, Seq("max(x) as xmax"))
+        .|.argument("x")
+        .projection("1 AS x")
+        .argument()
+        .build()
+    )
+  }
+
+  test("correlated CALL with ordered aggregation") {
+    val query =
+      """WITH 1 AS x
+        |CALL {
+        | WITH x
+        | WITH x AS y
+        | ORDER BY y
+        | RETURN y, max(y) as ymax
+        |}
+        |RETURN x, y, ymax
+        |""".stripMargin
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("x", "y", "ymax")
+        .apply()
+        .|.orderedAggregation(Seq("y AS y"), Seq("max(y) AS ymax"), Seq("y") )
+        .|.sort(Seq(Ascending("y")))
+        .|.projection("x AS y")
+        .|.argument("x")
+        .projection("1 AS x")
+        .argument()
+        .build()
+    )
+  }
+
+  test("excessive aliasing should not confuse namespacer") {
+    val query =
+      """WITH 1 AS q
+        |CALL {
+        |  MATCH (a:A)
+        |  RETURN a AS a, 1 AS b
+        |  UNION
+        |  WITH q
+        |  MATCH (a:B)
+        |  RETURN q AS b, a AS a
+        |}
+        |RETURN a AS q, b AS a, q AS b
+        |""".stripMargin
+
+    val Seq(a28, a59, a83, a134) = namespaced("a", 28, 59, 83, 134)
+    val Seq(b55, b59, b102, b142) = namespaced("b", 55, 59, 102, 142)
+    val Seq(q10, q126) = namespaced("q", 10, 126)
+
+    planFor(query, stripProduceResults = false)._2 should equal {
+      new LogicalPlanBuilder()
+        .produceResults(q126, a134, b142)
+        .projection(s"$a59 AS $q126", s"$b59 AS $a134", s"$q10 AS $b142")
+        .apply()
+        .|.distinct(s"$a59 AS $a59", s"$b59 AS $b59")
+        .|.union()
+        .|.|.projection(s"$a83 AS $a59", s"$b102 AS $b59")
+        .|.|.projection(s"$q10 AS $b102")
+        .|.|.nodeByLabelScan(a83, "B", IndexOrderNone, q10)
+        .|.projection(s"$a28 AS $a59", s"$b55 AS $b59")
+        .|.projection(s"1 AS $b55")
+        .|.nodeByLabelScan(a28, "A", IndexOrderNone)
+        .projection(s"1 AS $q10")
+        .argument()
+        .build()
+    }
+  }
+
+  test("should not plan count store lookup in correlated subquery when node-variable is already bound") {
+    val query =
+      """MATCH (n)
+        |CALL {
+        | WITH n
+        | MATCH (n)-[r:REL]->(m)
+        | RETURN count(*) AS c
+        |}
+        |RETURN n, c""".stripMargin
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("n", "c")
+        .apply()
+        .|.aggregation(Seq.empty, Seq("count(*) AS c"))
+        .|.expand("(n)-[r:REL]->(m)")
+        .|.argument("n")
+        .allNodeScan("n")
+        .build()
+    )
+  }
+
+  test("should not plan count store lookup in correlated subquery when relationship-variable is already bound") {
+    val query =
+      """MATCH (n)-[r:REL]->(m)
+        |CALL {
+        | WITH r
+        | MATCH (x)-[r:REL]->(y)
+        | RETURN count(*) AS c
+        |}
+        |RETURN n, c""".stripMargin
+
+    planFor(query, stripProduceResults = false)._2 should equal(
+      new LogicalPlanBuilder()
+        .produceResults("n", "c")
+        .apply()
+        .|.aggregation(Seq.empty, Seq("count(*) AS c"))
+        .|.projectEndpoints("(x)-[r:REL]->(y)", startInScope = false, endInScope = false)
+        .|.argument("r")
+        .expand("(m)<-[r:REL]-(n)")
+        .allNodeScan("m")
         .build()
     )
   }

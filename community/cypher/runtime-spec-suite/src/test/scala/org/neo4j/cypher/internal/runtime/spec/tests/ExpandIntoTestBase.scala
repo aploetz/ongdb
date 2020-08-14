@@ -19,12 +19,19 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
+import org.neo4j.configuration.GraphDatabaseSettings.dense_node_threshold
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.plans.Ascending
-import org.neo4j.cypher.internal.runtime.spec._
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RowCount
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.cypher.internal.runtime.spec.tests.ExpandAllTestBase.smallTestGraph
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
 import org.neo4j.exceptions.ParameterWrongTypeException
-import org.neo4j.graphdb.{Label, RelationshipType}
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.RelationshipType
 
 abstract class ExpandIntoTestBase[CONTEXT <: RuntimeContext](
   edition: Edition[CONTEXT],
@@ -352,8 +359,8 @@ abstract class ExpandIntoTestBase[CONTEXT <: RuntimeContext](
       .apply()
       .|.expandAll("(b)-[:R]->(c)")
       .|.expandInto("(a)-[:R]->(b)")
-      .|.nodeByLabelScan("b", "B",  "a")
-      .nodeByLabelScan("a", "A")
+      .|.nodeByLabelScan("b", "B", IndexOrderNone,  "a")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -382,8 +389,8 @@ abstract class ExpandIntoTestBase[CONTEXT <: RuntimeContext](
       .produceResults("a", "b")
       .apply()
       .|.expandInto("(a)-[:R]->(b)")
-      .|.nodeByLabelScan("b", "B",  "a")
-      .nodeByLabelScan("a", "A")
+      .|.nodeByLabelScan("b", "B", IndexOrderNone,  "a")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -414,8 +421,8 @@ abstract class ExpandIntoTestBase[CONTEXT <: RuntimeContext](
       .produceResults("a", "b")
       .apply()
       .|.expandInto("(a)--(b)")
-      .|.nodeByLabelScan("b", "B",  "a")
-      .nodeByLabelScan("a", "A")
+      .|.nodeByLabelScan("b", "B", IndexOrderNone,  "a")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -425,11 +432,72 @@ abstract class ExpandIntoTestBase[CONTEXT <: RuntimeContext](
     // then
     runtimeResult should beColumns("a", "b").withRows(expected)
   }
+
+  test("expand into with dense nodes without the queried REL_TYPE") {
+    val relsToCreate = edition.getSetting(dense_node_threshold).getOrElse(dense_node_threshold.defaultValue()) + 1
+
+    // given
+    given {
+      // Two A nodes, and one dense B node.
+      val a1 = tx.createNode(Label.label("A"))
+      tx.createNode(Label.label("A"))
+      val b = tx.createNode(Label.label("B"))
+      // b has to be a dense node, but not have any REL relationships
+      for(_ <- 1 to relsToCreate) a1.createRelationshipTo(b, RelationshipType.withName("ANOTHER_REL"))
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a", "b")
+      .expandInto("(a)-[:REL]->(b)")
+      .cartesianProduct()
+      .|.nodeByLabelScan("b", "B", IndexOrderNone)
+      .nodeByLabelScan("a", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    runtimeResult should beColumns("a", "b").withNoRows()
+  }
 }
 
 // Supported by interpreted, slotted, pipelined, parallel
 trait ExpandIntoWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
   self: ExpandIntoTestBase[CONTEXT] =>
+
+  test("should handle arguments spanning two morsels with sort") {
+    // NOTE: This is a specific test for pipelined runtime with morsel size _4_
+    // where an argument will span two morsels that are put into a MorselBuffer
+
+    val (a1, a2, b1, b2, b3, c) = given { smallTestGraph(tx) }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a", "b", "c")
+      .apply()
+      .|.sort(Seq(Ascending("a"), Ascending("b")))
+      .|.expandAll("(b)-[:R]->(c)")
+      .|.expandInto("(a)-[:R]->(b)")
+      .|.nodeByLabelScan("b", "B", IndexOrderNone,  "a")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    val expected = for {
+      a <- Seq(a1, a2)
+      b <- Seq(b1, b2, b3)
+    } yield Array(a, b, c)
+
+    // then
+    /*
+     There is no defined order coming from the Label Scan, so the test can not assert on a total ordering,
+     however there is a defined grouping by argument 'a', and a per-argument ordering on 'b'.
+     */
+    runtimeResult should beColumns("a", "b", "c").withRows(groupedBy("a").asc("b"))
+    runtimeResult should beColumns("a", "b", "c").withRows(expected)
+  }
 
   test("given a null start point, returns an empty iterator") {
     // given
@@ -447,34 +515,6 @@ trait ExpandIntoWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
 
     // then
     runtimeResult should beColumns("x", "y", "r").withNoRows()
-  }
-
-  test("should handle arguments spanning two morsels with sort") {
-    // NOTE: This is a specific test for pipelined runtime with morsel size _4_
-    // where an argument will span two morsels that are put into a MorselBuffer
-
-    val (a1, a2, b1, b2, b3, c) = given { smallTestGraph(tx) }
-
-    // when
-    val logicalQuery = new LogicalQueryBuilder(this)
-      .produceResults("a", "b", "c")
-      .apply()
-      .|.sort(Seq(Ascending("a"), Ascending("b")))
-      .|.expandAll("(b)-[:R]->(c)")
-      .|.expandInto("(a)-[:R]->(b)")
-      .|.nodeByLabelScan("b", "B",  "a")
-      .nodeByLabelScan("a", "A")
-      .build()
-
-    val runtimeResult = execute(logicalQuery, runtime)
-
-    val expected = for {
-      a <- Seq(a1, a2)
-      b <- Seq(b1, b2, b3)
-    } yield Array(a, b, c)
-
-    // then
-    runtimeResult should beColumns("a", "b", "c").withRows(inOrder(expected))
   }
 
   test("should handle node reference as input") {
@@ -548,6 +588,35 @@ trait ExpandIntoWithOtherOperatorsTestBase[CONTEXT <: RuntimeContext] {
         r <- rels
         if r.getEndNode.getId >= size /2
         row <- List(Array(r.getStartNode, r.getEndNode))
+      } yield row
+    runtimeResult should beColumns("x", "y").withRows(expected)
+  }
+
+  test("should filter on cached relationship property") {
+    // given
+    val rels = given {
+      val (_,rs) = circleGraph(sizeHint)
+      rs.indices.foreach(i => rs(i).setProperty("prop", i))
+      rs
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y")
+      .filter("r2.prop = cacheR[r1.prop]")
+      .expandInto("(x)-[r2]-(y)")
+      .cacheProperties("cacheR[r1.prop]")
+      .expandAll("(x)<-[r1]-(y)")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected =
+      for {
+        r <- rels
+        row <- List(Array(r.getEndNode, r.getStartNode))
       } yield row
     runtimeResult should beColumns("x", "y").withRows(expected)
   }

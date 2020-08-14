@@ -14,6 +14,7 @@ Apache Software License, Version 2.0
   Jackson-core
   jackson-databind
   Java Concurrency Tools Core Library
+<<<<<<< HEAD
   jPowerShell
   jProcesses
   Lucene codecs
@@ -23,6 +24,15 @@ Apache Software License, Version 2.0
   Netty/All-in-One
   parboiled-core
   parboiled-scala
+=======
+  Jettison
+  jPowerShell
+  jProcesses
+  Lucene Common Analyzers
+  Lucene Core
+  Lucene Memory
+  Lucene QueryParsers
+>>>>>>> neo4j/4.1
   picocli - a mighty tiny Command Line Interface
   WMI4Java
 ------------------------------------------------------------------------------
@@ -232,6 +242,7 @@ Apache Software License, Version 2.0
 
 
 ------------------------------------------------------------------------------
+<<<<<<< HEAD
 BSD - Scala License
   Scala Library
 ------------------------------------------------------------------------------
@@ -281,6 +292,9 @@ BSD License
   asm-tree
   asm-util
   Scala Compiler
+=======
+BSD License
+>>>>>>> neo4j/4.1
   Zstandard
 ------------------------------------------------------------------------------
 
@@ -342,6 +356,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ------------------------------------------------------------------------------
+<<<<<<< HEAD
 Bouncy Castle License
   Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
   Bouncy Castle Provider
@@ -375,6 +390,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ------------------------------------------------------------------------------
+=======
+>>>>>>> neo4j/4.1
 Eclipse Distribution License - v 1.0
   Eclipse Collections API
   Eclipse Collections Main Library

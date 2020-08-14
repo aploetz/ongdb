@@ -19,10 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Literal, Null}
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{LiteralRegularExpression, RegularExpression}
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Null
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.LiteralRegularExpression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.RegularExpression
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class RegularExpressionPredicateTest extends CypherFunSuite {
   test("LiteralRegEx: should not match if the lhs expression evaluates to null") {

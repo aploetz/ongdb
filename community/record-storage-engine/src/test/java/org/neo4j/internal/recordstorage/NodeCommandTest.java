@@ -35,6 +35,7 @@ import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabels;
 import org.neo4j.kernel.impl.store.NodeStore;
@@ -49,15 +50,15 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.IsEqual.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.Numbers.safeCastLongToInt;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.DynamicNodeLabels.dynamicPointer;
 import static org.neo4j.kernel.impl.store.NodeLabelsField.parseLabelsField;
 import static org.neo4j.kernel.impl.store.ShortArray.LONG;
 import static org.neo4j.kernel.impl.store.record.AbstractBaseRecord.NO_ID;
-import static org.neo4j.kernel.impl.store.record.DynamicRecord.dynamicRecord;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @EphemeralPageCacheExtension
 @EphemeralNeo4jLayoutExtension
@@ -80,7 +81,7 @@ class NodeCommandTest
     {
         StoreFactory storeFactory =
                 new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fs, immediate() ), pageCache, fs,
-                        NullLogProvider.getInstance() );
+                        NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = storeFactory.openAllNeoStores( true );
         nodeStore = neoStores.getNodeStore();
     }
@@ -106,7 +107,7 @@ class NodeCommandTest
     {
         // Given
         NodeRecord before = new NodeRecord( 12 );
-        NodeRecord after = new NodeRecord( 12, false, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, false, 2, 0 );
         after.setCreated();
         after.setInUse( true );
         // When
@@ -117,9 +118,9 @@ class NodeCommandTest
     void shouldSerializeDenseRecord() throws Exception
     {
         // Given
-        NodeRecord before = new NodeRecord( 12, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 12 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
-        NodeRecord after = new NodeRecord( 12, true, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, true, 2, 0 );
         after.setInUse( true );
         // When
         assertSerializationWorksFor( new Command.NodeCommand( before, after ) );
@@ -129,9 +130,9 @@ class NodeCommandTest
     void shouldSerializeUpdatedRecord() throws Exception
     {
         // Given
-        NodeRecord before = new NodeRecord( 12, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 12 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
-        NodeRecord after = new NodeRecord( 12, false, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, false, 2, 0 );
         after.setInUse( true );
         // When
         assertSerializationWorksFor( new Command.NodeCommand( before, after ) );
@@ -141,12 +142,12 @@ class NodeCommandTest
     void shouldSerializeInlineLabels() throws Exception
     {
         // Given
-        NodeRecord before = new NodeRecord( 12, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 12 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
-        NodeRecord after = new NodeRecord( 12, false, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, false, 2, 0 );
         after.setInUse( true );
         NodeLabels nodeLabels = parseLabelsField( after );
-        nodeLabels.add( 1337, nodeStore, nodeStore.getDynamicLabelStore() );
+        nodeLabels.add( 1337, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
         // When
         assertSerializationWorksFor( new Command.NodeCommand( before, after ) );
     }
@@ -156,10 +157,10 @@ class NodeCommandTest
     {
         // Given
         // a record that is changed to include a secondary unit
-        NodeRecord before = new NodeRecord( 13, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 13 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
         before.setSecondaryUnitIdOnLoad( NO_ID ); // this and the previous line set the defaults, they are here for clarity
-        NodeRecord after = new NodeRecord( 13, false, 1, 2 );
+        NodeRecord after = new NodeRecord( 13 ).initialize( false, 2, false, 1, 0 );
         after.setInUse( true );
         after.setSecondaryUnitIdOnCreate( 14L );
 
@@ -173,14 +174,14 @@ class NodeCommandTest
     void shouldSerializeDynamicRecordLabels() throws Exception
     {
         // Given
-        NodeRecord before = new NodeRecord( 12, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 12 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
-        NodeRecord after = new NodeRecord( 12, false, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, false, 2, 0 );
         after.setInUse( true );
         NodeLabels nodeLabels = parseLabelsField( after );
         for ( int i = 10; i < 100; i++ )
         {
-            nodeLabels.add( i, nodeStore, nodeStore.getDynamicLabelStore() );
+            nodeLabels.add( i, nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
         }
         // When
         assertSerializationWorksFor( new Command.NodeCommand( before, after ) );
@@ -191,12 +192,12 @@ class NodeCommandTest
     {
         channel.reset();
         // Given
-        NodeRecord before = new NodeRecord( 12, false, 1, 2 );
+        NodeRecord before = new NodeRecord( 12 ).initialize( false, 2, false, 1, 0 );
         before.setInUse( true );
         List<DynamicRecord> beforeDyn = singletonList( dynamicRecord(
                 0, true, true, -1L, LONG.intValue(), new byte[]{1, 2, 3, 4, 5, 6, 7, 8} ) );
         before.setLabelField( dynamicPointer( beforeDyn ), beforeDyn );
-        NodeRecord after = new NodeRecord( 12, false, 2, 1 );
+        NodeRecord after = new NodeRecord( 12 ).initialize( false, 1, false, 2, 0 );
         after.setInUse( true );
         List<DynamicRecord> dynamicRecords = singletonList( dynamicRecord(
                 0, false, true, -1L, LONG.intValue(), new byte[]{ 1, 2, 3, 4, 5, 6, 7, 8} ) );
@@ -206,14 +207,21 @@ class NodeCommandTest
         cmd.serialize( channel );
         Command.NodeCommand result = (Command.NodeCommand) commandReader.read( channel );
         // Then
-        assertThat( result, equalTo( cmd ) );
-        assertThat( result.getMode(), equalTo( cmd.getMode() ) );
-        assertThat( result.getBefore(), equalTo( cmd.getBefore() ) );
-        assertThat( result.getAfter(), equalTo( cmd.getAfter() ) );
+        assertThat( result ).isEqualTo( cmd );
+        assertThat( result.getMode() ).isEqualTo( cmd.getMode() );
+        assertThat( result.getBefore() ).isEqualTo( cmd.getBefore() );
+        assertThat( result.getAfter() ).isEqualTo( cmd.getAfter() );
         // And dynamic records should be the same
-        assertThat( result.getBefore().getDynamicLabelRecords(), equalTo( cmd.getBefore().getDynamicLabelRecords() ) );
+        assertThat( result.getBefore().getDynamicLabelRecords() ).isEqualTo( cmd.getBefore().getDynamicLabelRecords() );
         Collection<DynamicRecord> operand = emptyAndUnused( cmd.getAfter().getDynamicLabelRecords(), LONG.intValue() );
-        assertThat( result.getAfter().getDynamicLabelRecords(), equalTo( operand ) );
+        assertThat( result.getAfter().getDynamicLabelRecords() ).isEqualTo( operand );
+    }
+
+    private static DynamicRecord dynamicRecord( long id, boolean inUse, boolean isStartRecord, long nextBlock, int type, byte[] data )
+    {
+        DynamicRecord record = new DynamicRecord( id ).initialize( inUse, isStartRecord, nextBlock, type );
+        record.setData( data );
+        return record;
     }
 
     private void assertSerializationWorksFor( Command.NodeCommand cmd )
@@ -223,35 +231,35 @@ class NodeCommandTest
         cmd.serialize( channel );
         Command.NodeCommand result = (Command.NodeCommand) commandReader.read( channel );
         // Then
-        assertThat( result, equalTo( cmd ) );
-        assertThat( result.getMode(), equalTo( cmd.getMode() ) );
-        assertThat( result.getBefore(), equalTo( cmd.getBefore() ) );
-        assertThat( result.getAfter(), equalTo( cmd.getAfter() ) );
+        assertThat( result ).isEqualTo( cmd );
+        assertThat( result.getMode() ).isEqualTo( cmd.getMode() );
+        assertThat( result.getBefore() ).isEqualTo( cmd.getBefore() );
+        assertThat( result.getAfter() ).isEqualTo( cmd.getAfter() );
         // And created and dense flags should be the same
-        assertThat( result.getBefore().isCreated(), equalTo( cmd.getBefore().isCreated() ) );
-        assertThat( result.getAfter().isCreated(), equalTo( cmd.getAfter().isCreated() ) );
-        assertThat( result.getBefore().isDense(), equalTo( cmd.getBefore().isDense() ) );
-        assertThat( result.getAfter().isDense(), equalTo( cmd.getAfter().isDense()) );
+        assertThat( result.getBefore().isCreated() ).isEqualTo( cmd.getBefore().isCreated() );
+        assertThat( result.getAfter().isCreated() ).isEqualTo( cmd.getAfter().isCreated() );
+        assertThat( result.getBefore().isDense() ).isEqualTo( cmd.getBefore().isDense() );
+        assertThat( result.getAfter().isDense() ).isEqualTo( cmd.getAfter().isDense() );
         // And labels should be the same
-        assertThat( labels( result.getBefore() ), equalTo( labels( cmd.getBefore() ) ) );
-        assertThat( labels( result.getAfter() ), equalTo( labels( cmd.getAfter() ) ) );
+        assertThat( labels( result.getBefore() ) ).isEqualTo( labels( cmd.getBefore() ) );
+        assertThat( labels( result.getAfter() ) ).isEqualTo( labels( cmd.getAfter() ) );
         // And dynamic records should be the same
-        assertThat( result.getBefore().getDynamicLabelRecords(), equalTo( cmd.getBefore().getDynamicLabelRecords() ) );
-        assertThat( result.getAfter().getDynamicLabelRecords(), equalTo( cmd.getAfter().getDynamicLabelRecords() ) );
+        assertThat( result.getBefore().getDynamicLabelRecords() ).isEqualTo( cmd.getBefore().getDynamicLabelRecords() );
+        assertThat( result.getAfter().getDynamicLabelRecords() ).isEqualTo( cmd.getAfter().getDynamicLabelRecords() );
         // And the secondary unit information should be the same
         // Before
-        assertThat( result.getBefore().requiresSecondaryUnit(), equalTo( cmd.getBefore().requiresSecondaryUnit() ) );
-        assertThat( result.getBefore().hasSecondaryUnitId(), equalTo( cmd.getBefore().hasSecondaryUnitId() ) );
-        assertThat( result.getBefore().getSecondaryUnitId(), equalTo( cmd.getBefore().getSecondaryUnitId() ) );
+        assertThat( result.getBefore().requiresSecondaryUnit() ).isEqualTo( cmd.getBefore().requiresSecondaryUnit() );
+        assertThat( result.getBefore().hasSecondaryUnitId() ).isEqualTo( cmd.getBefore().hasSecondaryUnitId() );
+        assertThat( result.getBefore().getSecondaryUnitId() ).isEqualTo( cmd.getBefore().getSecondaryUnitId() );
         // and after
-        assertThat( result.getAfter().requiresSecondaryUnit(), equalTo( cmd.getAfter().requiresSecondaryUnit() ) );
-        assertThat( result.getAfter().hasSecondaryUnitId(), equalTo( cmd.getAfter().hasSecondaryUnitId() ) );
-        assertThat( result.getAfter().getSecondaryUnitId(), equalTo( cmd.getAfter().getSecondaryUnitId() ) );
+        assertThat( result.getAfter().requiresSecondaryUnit() ).isEqualTo( cmd.getAfter().requiresSecondaryUnit() );
+        assertThat( result.getAfter().hasSecondaryUnitId() ).isEqualTo( cmd.getAfter().hasSecondaryUnitId() );
+        assertThat( result.getAfter().getSecondaryUnitId() ).isEqualTo( cmd.getAfter().getSecondaryUnitId() );
     }
 
     private Set<Integer> labels( NodeRecord record )
     {
-        long[] rawLabels = parseLabelsField( record ).get( nodeStore );
+        long[] rawLabels = parseLabelsField( record ).get( nodeStore, NULL );
         Set<Integer> labels = new HashSet<>( rawLabels.length );
         for ( long label : rawLabels )
         {

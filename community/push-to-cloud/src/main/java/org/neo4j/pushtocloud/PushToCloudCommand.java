@@ -40,7 +40,11 @@ import org.neo4j.io.layout.Neo4jLayout;
 
 import static java.lang.String.format;
 import static java.lang.System.currentTimeMillis;
+<<<<<<< HEAD
 import static org.apache.commons.lang3.StringUtils.isEmpty;
+=======
+import static org.apache.commons.lang3.StringUtils.isBlank;
+>>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 
 @Command(
@@ -96,6 +100,7 @@ public class PushToCloudCommand extends AbstractCommand
     {
         try
         {
+<<<<<<< HEAD
             if ( (database == null || isEmpty( database.name() )) && (dump == null || isEmpty( dump.toString() )) )
             {
                 database = new NormalizedDatabaseName( DEFAULT_DATABASE_NAME );
@@ -103,12 +108,25 @@ public class PushToCloudCommand extends AbstractCommand
             if ( isEmpty( username ) )
             {
                 if ( (username = cons.readLine( "%s", "Neo4j aura username (default: neo4j):" )) == null )
+=======
+            if ( (database == null || isBlank( database.name() )) && (dump == null || isBlank( dump.toString() )) )
+            {
+                database = new NormalizedDatabaseName( DEFAULT_DATABASE_NAME );
+            }
+            if ( isBlank( username ) )
+            {
+                if ( isBlank( username = cons.readLine( "%s", "Neo4j aura username (default: neo4j):" ) ) )
+>>>>>>> neo4j/4.1
                 {
                     username = "neo4j";
                 }
             }
             char[] pass;
+<<<<<<< HEAD
             if ( isEmpty( password ) )
+=======
+            if ( isBlank( password ) )
+>>>>>>> neo4j/4.1
             {
                 if ( (pass = cons.readPassword( "Neo4j aura password for %s:", username )).length == 0 )
                 {

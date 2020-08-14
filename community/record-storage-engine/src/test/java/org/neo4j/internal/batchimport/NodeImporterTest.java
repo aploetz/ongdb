@@ -25,11 +25,20 @@ import java.io.IOException;
 
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.batchimport.cache.idmapping.IdMapper;
+<<<<<<< HEAD
+=======
+import org.neo4j.internal.batchimport.cache.idmapping.IdMappers;
+>>>>>>> neo4j/4.1
 import org.neo4j.internal.batchimport.store.BatchingNeoStores;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+<<<<<<< HEAD
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+=======
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.format.standard.Standard;
@@ -43,8 +52,17 @@ import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 
+<<<<<<< HEAD
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+=======
+import static org.apache.commons.lang3.RandomStringUtils.randomAscii;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+>>>>>>> neo4j/4.1
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -66,15 +84,25 @@ class NodeImporterTest
         IdMapper idMapper = mock( IdMapper.class );
         JobScheduler scheduler = new ThreadPoolJobScheduler();
         try ( Lifespan life = new Lifespan( scheduler );
+<<<<<<< HEAD
               BatchingNeoStores stores = BatchingNeoStores.batchingNeoStoresWithExternalPageCache( fs, pageCache, PageCacheTracer.NULL, layout,
                       Standard.LATEST_RECORD_FORMATS, Configuration.DEFAULT, NullLogService.getInstance(), AdditionalInitialIds.EMPTY, Config.defaults() ) )
+=======
+              BatchingNeoStores stores = BatchingNeoStores.batchingNeoStoresWithExternalPageCache( fs, pageCache, NULL, layout,
+                      Standard.LATEST_RECORD_FORMATS, Configuration.DEFAULT, NullLogService.getInstance(), AdditionalInitialIds.EMPTY, Config.defaults(),
+                      INSTANCE ) )
+>>>>>>> neo4j/4.1
         {
             stores.createNew();
 
             // when
             int numberOfLabels = 50;
             long nodeId = 0;
+<<<<<<< HEAD
             try ( NodeImporter importer = new NodeImporter( stores, idMapper, new DataImporter.Monitor() ) )
+=======
+            try ( NodeImporter importer = new NodeImporter( stores, idMapper, new DataImporter.Monitor(), NULL, INSTANCE ) )
+>>>>>>> neo4j/4.1
             {
                 importer.id( nodeId );
                 String[] labels = new String[numberOfLabels];
@@ -88,9 +116,58 @@ class NodeImporterTest
 
             // then
             NodeStore nodeStore = stores.getNodeStore();
+<<<<<<< HEAD
             NodeRecord record = nodeStore.getRecord( nodeId, nodeStore.newRecord(), RecordLoad.NORMAL );
             long[] labels = NodeLabelsField.parseLabelsField( record ).get( nodeStore );
             assertEquals( numberOfLabels, labels.length );
         }
     }
+=======
+            NodeRecord record = nodeStore.getRecord( nodeId, nodeStore.newRecord(), RecordLoad.NORMAL, PageCursorTracer.NULL );
+            long[] labels = NodeLabelsField.parseLabelsField( record ).get( nodeStore, PageCursorTracer.NULL );
+            assertEquals( numberOfLabels, labels.length );
+        }
+    }
+
+    @Test
+    void tracePageCacheAccessOnNodeImport() throws IOException
+    {
+        JobScheduler scheduler = new ThreadPoolJobScheduler();
+        try ( Lifespan life = new Lifespan( scheduler );
+                BatchingNeoStores stores = BatchingNeoStores.batchingNeoStoresWithExternalPageCache( fs, pageCache, NULL, layout,
+                        Standard.LATEST_RECORD_FORMATS, Configuration.DEFAULT, NullLogService.getInstance(), AdditionalInitialIds.EMPTY, Config.defaults(),
+                        INSTANCE ) )
+        {
+            stores.createNew();
+
+            int numberOfLabels = 50;
+            long nodeId = 0;
+            var cacheTracer = new DefaultPageCacheTracer();
+            try ( NodeImporter importer = new NodeImporter( stores, IdMappers.actual(), new DataImporter.Monitor(), cacheTracer, INSTANCE ) )
+            {
+                importer.id( nodeId );
+                String[] labels = new String[numberOfLabels];
+                for ( int i = 0; i < labels.length; i++ )
+                {
+                    labels[i] = "Label" + i;
+                }
+                importer.labels( labels );
+                importer.property( "a", randomAscii( 10 ) );
+                importer.property( "b", randomAscii( 100 ) );
+                importer.property( "c", randomAscii( 1000 ) );
+                importer.endOfEntity();
+            }
+
+            NodeStore nodeStore = stores.getNodeStore();
+            NodeRecord record = nodeStore.getRecord( nodeId, nodeStore.newRecord(), RecordLoad.NORMAL, PageCursorTracer.NULL );
+            long[] labels = NodeLabelsField.parseLabelsField( record ).get( nodeStore, PageCursorTracer.NULL );
+            assertEquals( numberOfLabels, labels.length );
+
+            assertThat( cacheTracer.faults() ).isEqualTo( 2 );
+            assertThat( cacheTracer.pins() ).isEqualTo( 13 );
+            assertThat( cacheTracer.unpins() ).isEqualTo( 13 );
+            assertThat( cacheTracer.hits() ).isEqualTo( 11 );
+        }
+    }
+>>>>>>> neo4j/4.1
 }

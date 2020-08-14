@@ -47,12 +47,12 @@ import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifespan;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.test.extension.DbmsExtension;
 import org.neo4j.test.extension.Inject;
 
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.io.ByteUnit.kibiBytes;
@@ -69,14 +69,16 @@ class VersionAwareLogEntryReaderIT
     @Inject
     private DatabaseManagementService managementService;
     private DatabaseLayout databaseLayout;
-    private final VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader();
+    private VersionAwareLogEntryReader entryReader;
 
     @BeforeEach
     void setUp()
     {
         GraphDatabaseService database = managementService.database( DEFAULT_DATABASE_NAME );
         createNode( database );
-        databaseLayout = ((GraphDatabaseAPI) database).databaseLayout();
+        GraphDatabaseAPI dbApi = (GraphDatabaseAPI) database;
+        databaseLayout = dbApi.databaseLayout();
+        entryReader = new VersionAwareLogEntryReader( dbApi.getDependencyResolver().resolveDependency( StorageEngineFactory.class ).commandReaderFactory() );
         managementService.shutdown();
     }
 
@@ -154,20 +156,20 @@ class VersionAwareLogEntryReaderIT
             try ( StoreChannel storeChannel = fs.write( logFiles.getLogFileForVersion( 1 ) ) )
             {
                 storeChannel.position( CURRENT_FORMAT_LOG_HEADER_SIZE );
-                storeChannel.write( ByteBuffer.wrap( new byte[]{0} ) );
+                storeChannel.writeAll( ByteBuffer.wrap( new byte[]{0} ) );
             }
 
             try ( ReadableLogChannel logChannel = logFiles.getLogFile().getReader( new LogPosition( 0, initialPosition ) ) )
             {
                 LogEntry logEntry = entryReader.readLogEntry( logChannel );
                 // we reading expected checkpoint records
-                assertThat( logEntry, instanceOf( CheckPoint.class ) );
+                assertThat( logEntry ).isInstanceOf( CheckPoint.class );
                 CheckPoint checkPoint = (CheckPoint) logEntry;
                 LogPosition logPosition = checkPoint.getLogPosition();
                 assertEquals( 4, logPosition.getLogVersion() );
                 assertEquals( 5, logPosition.getByteOffset() );
 
-                // set positon to the end of the buffer to cause channel switch on next byte read
+                // set position to the end of the buffer to cause channel switch on next byte read
                 ((PositionableChannel) logChannel).setCurrentPosition( checkpointsEndDataOffset );
 
                 while ( entryReader.readLogEntry( logChannel ) != null )

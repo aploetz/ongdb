@@ -32,13 +32,14 @@ import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogVersionedStoreChannel;
 import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
@@ -62,11 +63,11 @@ class TransactionLogsInSeparateLocationIT
                 .set( transaction_logs_root_path, txDirectory.toPath().toAbsolutePath() )
                 .build();
         DatabaseLayout layout = DatabaseLayout.of( config );
-        performTransactions( txDirectory.toPath().toAbsolutePath(), layout.databaseDirectory() );
-        verifyTransactionLogs( layout.getTransactionLogsDirectory(), layout.databaseDirectory() );
+        StorageEngineFactory storageEngineFactory = performTransactions( txDirectory.toPath().toAbsolutePath(), layout.databaseDirectory() );
+        verifyTransactionLogs( layout.getTransactionLogsDirectory(), layout.databaseDirectory(), storageEngineFactory );
     }
 
-    private static void performTransactions( Path txPath, File storeDir )
+    private static StorageEngineFactory performTransactions( Path txPath, File storeDir )
     {
         DatabaseManagementService managementService =
                 new TestDatabaseManagementServiceBuilder( storeDir )
@@ -83,20 +84,25 @@ class TransactionLogsInSeparateLocationIT
                 transaction.commit();
             }
         }
+        StorageEngineFactory storageEngineFactory = ((GraphDatabaseAPI) database).getDependencyResolver().resolveDependency( StorageEngineFactory.class );
         managementService.shutdown();
+        return storageEngineFactory;
     }
 
-    private void verifyTransactionLogs( File txDirectory, File storeDir ) throws IOException
+    private void verifyTransactionLogs( File txDirectory, File storeDir, StorageEngineFactory storageEngineFactory ) throws IOException
     {
-        LogFiles storeDirLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( storeDir, fileSystem ).build();
+        LogFiles storeDirLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( storeDir, fileSystem )
+                .withCommandReaderFactory( storageEngineFactory.commandReaderFactory() )
+                .build();
         assertFalse( storeDirLogs.versionExists( 0 ) );
 
-        LogFiles txDirectoryLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( txDirectory, fileSystem ).build();
+        LogFiles txDirectoryLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( txDirectory, fileSystem )
+                .withCommandReaderFactory( storageEngineFactory.commandReaderFactory() )
+                .build();
         assertTrue( txDirectoryLogs.versionExists( 0 ) );
         try ( PhysicalLogVersionedStoreChannel physicalLogVersionedStoreChannel = txDirectoryLogs.openForVersion( 0 ) )
         {
-            assertThat( physicalLogVersionedStoreChannel.size(), greaterThan( 0L ) );
+            assertThat( physicalLogVersionedStoreChannel.size() ).isGreaterThan( 0L );
         }
     }
-
 }

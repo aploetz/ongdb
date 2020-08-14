@@ -20,10 +20,23 @@
 package org.neo4j.cypher.internal.runtime.interpreted
 
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.runtime._
+import org.neo4j.cypher.internal.runtime.ExpressionCursors
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.MemoryTrackingController
+import org.neo4j.cypher.internal.runtime.ParameterMapping
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryIndexes
+import org.neo4j.cypher.internal.runtime.QueryMemoryTracker
+import org.neo4j.cypher.internal.runtime.createParameterArray
 import org.neo4j.cypher.internal.runtime.interpreted.load_csv.LoadCsvPeriodicCommitObserver
-import org.neo4j.cypher.internal.runtime.interpreted.pipes._
-import org.neo4j.cypher.result.{QueryProfile, RuntimeResult}
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExternalCSVResource
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.LinenumberPipeDecorator
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NullPipeDecorator
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.Pipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.PipeDecorator
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.result.QueryProfile
+import org.neo4j.cypher.result.RuntimeResult
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.MapValue
@@ -41,7 +54,8 @@ abstract class BaseExecutionResultBuilderFactory(pipe: Pipe,
     protected def createQueryState(params: MapValue,
                                    prePopulateResults: Boolean,
                                    input: InputDataStream,
-                                   subscriber: QuerySubscriber): QueryState
+                                   subscriber: QuerySubscriber,
+                                   doProfile: Boolean): QueryState
 
     def queryContext: QueryContext
 
@@ -54,13 +68,8 @@ abstract class BaseExecutionResultBuilderFactory(pipe: Pipe,
       case _ => pipeDecorator = profileDecorator
     }
 
-    override def build(params: MapValue,
-                       readOnly: Boolean,
-                       queryProfile: QueryProfile,
-                       prePopulateResults: Boolean,
-                       input: InputDataStream,
-                       subscriber: QuerySubscriber): RuntimeResult = {
-      val state = createQueryState(params, prePopulateResults, input, subscriber)
+    override def build(params: MapValue, readOnly: Boolean, queryProfile: QueryProfile, prePopulateResults: Boolean, input: InputDataStream, subscriber: QuerySubscriber, doProfile: Boolean): RuntimeResult = {
+      val state = createQueryState(params, prePopulateResults, input, subscriber, doProfile)
       new PipeExecutionResult(pipe, columns.toArray, state, queryProfile, subscriber)
     }
   }
@@ -82,9 +91,11 @@ case class InterpretedExecutionResultBuilderFactory(pipe: Pipe,
   override def create(queryContext: QueryContext): ExecutionResultBuilder = InterpretedExecutionResultBuilder(queryContext: QueryContext)
 
   case class InterpretedExecutionResultBuilder(queryContext: QueryContext) extends BaseExecutionResultBuilder {
-    override def createQueryState(params: MapValue, prePopulateResults: Boolean, input: InputDataStream, subscriber: QuerySubscriber): QueryState = {
-      val cursors = new ExpressionCursors(queryContext.transactionalContext.cursors)
+    override def createQueryState(params: MapValue, prePopulateResults: Boolean, input: InputDataStream, subscriber: QuerySubscriber, doProfile: Boolean): QueryState = {
+      val transactionMemoryTracker = queryContext.transactionalContext.transaction.memoryTracker()
+      val cursors = new ExpressionCursors(queryContext.transactionalContext.cursors, queryContext.transactionalContext.transaction.pageCursorTracer(), transactionMemoryTracker)
       queryContext.resources.trace(cursors)
+
       new QueryState(queryContext,
                      externalResource,
                      createParameterArray(params, parameterMapping),
@@ -92,7 +103,7 @@ case class InterpretedExecutionResultBuilderFactory(pipe: Pipe,
                      queryIndexes.initiateLabelAndSchemaIndexes(queryContext),
                      new Array[AnyValue](nExpressionSlots),
                      subscriber,
-                     QueryMemoryTracker(memoryTrackingController.memoryTracking),
+                     QueryMemoryTracker(memoryTrackingController.memoryTracking(doProfile), transactionMemoryTracker),
                      pipeDecorator,
                      lenientCreateRelationship = lenientCreateRelationship,
                      prePopulateResults = prePopulateResults,

@@ -19,12 +19,15 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.ImplicitValueConversion._
-import org.neo4j.cypher.internal.runtime.interpreted.{QueryStateHelper, TestableIterator}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
+import org.neo4j.cypher.internal.runtime.ImplicitValueConversion.toNodeValue
+import org.neo4j.cypher.internal.runtime.interpreted.TestableIterator
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.graphdb.Node
 import org.neo4j.values.AnyValue
 
@@ -88,7 +91,7 @@ class NodeHashJoinPipeTest extends CypherFunSuite {
     lhsIterator.fetched should equal(0)
   }
 
-  private def row(values: (String, AnyValue)*) = ExecutionContext.from(values: _*)
+  private def row(values: (String, AnyValue)*) = CypherRow.from(values: _*)
 
   private def newMockedNode(id: Int) = {
     val node = mock[Node]

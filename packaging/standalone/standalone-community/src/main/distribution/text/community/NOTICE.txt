@@ -47,7 +47,6 @@ Apache Software License, Version 2.0
   Apache Commons BeanUtils
   Apache Commons Collections
   Apache Commons Compress
-  Apache Commons Configuration
   Apache Commons IO
   Apache Commons Lang
   Apache Commons Logging
@@ -63,11 +62,9 @@ Apache Software License, Version 2.0
   Apache Shiro :: Lang
   ascli
   aws-sign2
-  Bean Validation API
   bytebuffer
   Caffeine cache
   caseless
-  Commons Lang
   detect-libc
   disposables
   fastinfoset
@@ -80,6 +77,8 @@ Apache Software License, Version 2.0
   jackson-databind
   Jackson-JAXRS-base
   Jackson-JAXRS-JSON
+  Jakarta Bean Validation API
+  Java Agent for Memory Measurements
   Java Concurrency Tools Core Library
   Javassist
   jersey-container-servlet
@@ -89,6 +88,7 @@ Apache Software License, Version 2.0
   jersey-core-server
   jersey-inject-hk2
   jersey-media-jaxb
+  Jettison
   Jetty :: Http Utility
   Jetty :: IO Utility
   Jetty :: Security
@@ -100,12 +100,13 @@ Apache Software License, Version 2.0
   jPowerShell
   jProcesses
   long
-  Lucene codecs
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
   neo4j-driver
   Netty/All-in-One
+  Non-Blocking Reactive Foundation for the JVM
   oauth-sign
   parboiled-core
   parboiled-scala
@@ -113,6 +114,7 @@ Apache Software License, Version 2.0
   protobufjs
   request
   rxjs
+  Scala Compiler
   tslib
   tunnel-agent
   WMI4Java
@@ -140,7 +142,6 @@ BSD License
   qs
   react-dnd
   react-dnd-html5-backend
-  Scala Compiler
   sntp
   tough-cookie
   Zstandard
@@ -160,6 +161,9 @@ Common Development and Distribution License Version 1.0
 Common Development and Distribution License Version 1.1
   Java Servlet API
   jaxb-api
+
+Creative Commons 0
+  reactive-streams
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API
@@ -185,7 +189,8 @@ Eclipse Public License - v 1.0
 Eclipse Public License v2.0
   HK2 API module
   HK2 Implementation Utilities
-  jakarta.annotation API
+  Jakarta Annotations API
+  jakarta.ws.rs-api
   javax.inject:1 as OSGi bundle
   javax.ws.rs-api
   jersey-container-servlet

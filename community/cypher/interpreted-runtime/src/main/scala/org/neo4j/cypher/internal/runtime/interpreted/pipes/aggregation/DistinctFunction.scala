@@ -19,18 +19,22 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.kernel.impl.util.collection.DistinctSet
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 
-class DistinctFunction(value: Expression, inner: AggregationFunction) extends AggregationFunction {
-  private val seen = scala.collection.mutable.Set[AnyValue]()
+class DistinctFunction(value: Expression, inner: AggregationFunction, memoryTracker: MemoryTracker) extends AggregationFunction {
+  private var seen: DistinctSet[AnyValue] = _
 
-  override def apply(ctx: ExecutionContext, state: QueryState): Unit = {
+  override def apply(ctx: ReadableRow, state: QueryState): Unit = {
     val data = value(ctx, state)
+    if (seen == null) {
+      seen = DistinctSet.createDistinctSet[AnyValue](memoryTracker)
+    }
     if (seen.add(data)) {
-      state.memoryTracker.allocated(data)
       inner(ctx, state)
     }
   }

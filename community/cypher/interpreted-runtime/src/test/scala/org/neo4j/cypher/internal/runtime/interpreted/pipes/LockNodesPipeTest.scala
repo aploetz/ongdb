@@ -19,8 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, MapExecutionContext, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.MapCypherRow
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
@@ -30,7 +34,6 @@ import scala.collection.mutable
 
 class LockNodesPipeTest extends CypherFunSuite {
 
-  import org.mockito.Mockito._
 
   test("should handle NoValue input") {
     // given
@@ -76,11 +79,11 @@ class LockNodesPipeTest extends CypherFunSuite {
     }
   }
 
-  private def iteratorWithValues(values: AnyValue*): Iterator[ExecutionContext] = {
+  private def iteratorWithValues(values: AnyValue*): Iterator[CypherRow] = {
     values.map(rowWithValue).iterator
   }
 
   private def rowWithValue(value: AnyValue) = {
-    new MapExecutionContext(mutable.Map("x" -> value), mutable.Map.empty)
+    new MapCypherRow(mutable.Map("x" -> value), mutable.Map.empty)
   }
 }

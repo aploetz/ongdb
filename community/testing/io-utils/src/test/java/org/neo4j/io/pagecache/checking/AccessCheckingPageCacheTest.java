@@ -28,9 +28,9 @@ import java.io.IOException;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -49,11 +49,11 @@ class AccessCheckingPageCacheTest
         PageCache mockedPageCache = mock( PageCache.class );
         PagedFile mockedPagedFile = mock( PagedFile.class );
         PageCursor mockedCursor = mock( PageCursor.class );
-        when( mockedPagedFile.io( anyLong(), anyInt() ) ).thenReturn( mockedCursor );
+        when( mockedPagedFile.io( anyLong(), anyInt(), any() ) ).thenReturn( mockedCursor );
         when( mockedPageCache.map( any( File.class ), any(), anyInt(), any() ) ).thenReturn( mockedPagedFile );
         pageCache = new AccessCheckingPageCache( mockedPageCache );
         PagedFile file = pageCache.map( new File( "some file" ), 512 );
-        cursor = file.io( 0, PagedFile.PF_SHARED_READ_LOCK );
+        cursor = file.io( 0, PagedFile.PF_SHARED_READ_LOCK, PageCursorTracer.NULL );
     }
 
     @Test
@@ -147,7 +147,7 @@ class AccessCheckingPageCacheTest
         cursor.getByte();
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.close() );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 
     @Test
@@ -157,7 +157,7 @@ class AccessCheckingPageCacheTest
         cursor.getByte( 0 );
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.next() );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 
     @Test
@@ -167,7 +167,7 @@ class AccessCheckingPageCacheTest
         cursor.getShort();
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.next( 1 ) );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 
     @Test
@@ -179,7 +179,7 @@ class AccessCheckingPageCacheTest
         cursor.getInt();
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.close() );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 
     @Test
@@ -191,7 +191,7 @@ class AccessCheckingPageCacheTest
         cursor.getLong();
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.next() );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 
     @Test
@@ -203,6 +203,6 @@ class AccessCheckingPageCacheTest
         cursor.getBytes( new byte[2] );
 
         AssertionError assertionError = assertThrows( AssertionError.class, () -> cursor.next( 1 ) );
-        assertThat( assertionError.getMessage(), containsString( "shouldRetry" ) );
+        assertThat( assertionError.getMessage() ).contains( "shouldRetry" );
     }
 }

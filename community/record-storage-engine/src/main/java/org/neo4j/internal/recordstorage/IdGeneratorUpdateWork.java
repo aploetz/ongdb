@@ -24,14 +24,18 @@ import java.util.List;
 
 import org.neo4j.internal.id.IdGenerator;
 import org.neo4j.internal.id.IdGenerator.Marker;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.util.concurrent.Work;
 
 public class IdGeneratorUpdateWork implements Work<IdGenerator,IdGeneratorUpdateWork>
 {
+    public static final String ID_GENERATOR_BATCH_APPLIER_TAG = "idGeneratorBatchApplier";
     private final List<ChangedIds> changeList = new ArrayList<>();
+    private final PageCacheTracer cacheTracer;
 
-    IdGeneratorUpdateWork( ChangedIds changes )
+    IdGeneratorUpdateWork( ChangedIds changes, PageCacheTracer cacheTracer )
     {
+        this.cacheTracer = cacheTracer;
         this.changeList.add( changes );
     }
 
@@ -45,7 +49,8 @@ public class IdGeneratorUpdateWork implements Work<IdGenerator,IdGeneratorUpdate
     @Override
     public void apply( IdGenerator idGenerator )
     {
-        try ( Marker marker = idGenerator.marker() )
+        try ( var cursorTracer = cacheTracer.createPageCursorTracer( ID_GENERATOR_BATCH_APPLIER_TAG );
+             Marker marker = idGenerator.marker( cursorTracer ) )
         {
             for ( ChangedIds changes : this.changeList )
             {

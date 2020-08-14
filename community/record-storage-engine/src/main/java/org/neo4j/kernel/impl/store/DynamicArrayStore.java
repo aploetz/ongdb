@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
@@ -34,13 +36,15 @@ import org.neo4j.configuration.Config;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.id.IdType;
-import org.neo4j.io.memory.ByteBuffers;
+import org.neo4j.io.memory.HeapScopedBuffer;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.RecordStorageCapability;
 import org.neo4j.kernel.impl.store.format.UnsupportedFormatCapabilityException;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.format.Capability;
 import org.neo4j.util.Bits;
 import org.neo4j.values.storable.CRSTable;
@@ -73,7 +77,7 @@ import static java.lang.System.arraycopy;
  *             <li>Byte 0: PropertyType.STRING</li>
  *             <li>Bytes 1 to 4: 32bit Int length of string array</li>
  *         </ul>
- *         This is followed by a byte[] composed of a 4 byte header containing the length of the byte[] representstion of the string, and then those bytes.
+ *         This is followed by a byte[] composed of a 4 byte header containing the length of the byte[] representation of the string, and then those bytes.
  *     </li>
  *     <li>
  *         Arrays of Geometries starting with a 6 byte header:
@@ -112,7 +116,7 @@ public class DynamicArrayStore extends AbstractDynamicStore
             LogProvider logProvider,
             int dataSizeFromConfiguration,
             RecordFormats recordFormats,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, configuration, idType, idGeneratorFactory, pageCache,
                 logProvider, TYPE_DESCRIPTOR, dataSizeFromConfiguration, recordFormats.dynamic(), recordFormats.storeVersion(), openOptions );
@@ -121,10 +125,10 @@ public class DynamicArrayStore extends AbstractDynamicStore
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( RecordStore.Processor<FAILURE> processor, DynamicRecord record )
+    public <FAILURE extends Exception> void accept( RecordStore.Processor<FAILURE> processor, DynamicRecord record, PageCursorTracer cursorTracer )
             throws FAILURE
     {
-        processor.processArray( this, record );
+        processor.processArray( this, record, cursorTracer );
     }
 
     public static byte[] encodeFromNumbers( Object array, int offsetBytes )
@@ -178,7 +182,7 @@ public class DynamicArrayStore extends AbstractDynamicStore
     {
         int arrayLength = Array.getLength( array );
         byte[] bytes = new byte[NUMBER_HEADER_SIZE + arrayLength + offsetBytes];
-        bytes[offsetBytes + 0] = (byte) type.intValue();
+        bytes[offsetBytes] = (byte) type.intValue();
         bytes[offsetBytes + 1] = (byte) bitsUsedInLastByte;
         bytes[offsetBytes + 2] = (byte) requiredBits;
         if ( isPrimitiveByteArray )
@@ -201,18 +205,18 @@ public class DynamicArrayStore extends AbstractDynamicStore
         int arrayLength = Array.getLength( array );
         int bytesPerElement = type.maxBits / 8;
         byte[] bytes = new byte[NUMBER_HEADER_SIZE + bytesPerElement * arrayLength + offsetBytes];
-        bytes[offsetBytes + 0] = (byte) type.intValue();
+        bytes[offsetBytes] = (byte) type.intValue();
         bytes[offsetBytes + 1] = (byte) 8;
         bytes[offsetBytes + 2] = (byte) type.maxBits;
         type.writeAll( array, bytes, NUMBER_HEADER_SIZE + offsetBytes );
         return bytes;
     }
 
-    public static void allocateFromNumbers( Collection<DynamicRecord> target, Object array,
-            DynamicRecordAllocator recordAllocator )
+    public static void allocateFromNumbers( Collection<DynamicRecord> target, Object array, DynamicRecordAllocator recordAllocator,
+            PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         byte[] bytes = encodeFromNumbers( array, 0 );
-        allocateRecordsFromBytes( target, bytes, recordAllocator );
+        allocateRecordsFromBytes( target, bytes, recordAllocator, cursorTracer, memoryTracker );
     }
 
     private static void allocateFromCompositeType(
@@ -220,11 +224,12 @@ public class DynamicArrayStore extends AbstractDynamicStore
             byte[] bytes,
             DynamicRecordAllocator recordAllocator,
             boolean allowsStorage,
-            Capability storageCapability )
+            Capability storageCapability, PageCursorTracer cursorTracer,
+            MemoryTracker memoryTracker )
     {
         if ( allowsStorage )
         {
-            allocateRecordsFromBytes( target, bytes, recordAllocator );
+            allocateRecordsFromBytes( target, bytes, recordAllocator, cursorTracer, memoryTracker );
         }
         else
         {
@@ -233,7 +238,7 @@ public class DynamicArrayStore extends AbstractDynamicStore
     }
 
     private static void allocateFromString( Collection<DynamicRecord> target, String[] array,
-            DynamicRecordAllocator recordAllocator )
+            DynamicRecordAllocator recordAllocator, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         byte[][] stringsAsBytes = new byte[array.length][];
         int totalBytesRequired = STRING_HEADER_SIZE; // 1b type + 4b array length
@@ -245,24 +250,27 @@ public class DynamicArrayStore extends AbstractDynamicStore
             totalBytesRequired += 4/*byte[].length*/ + bytes.length;
         }
 
-        ByteBuffer buf = ByteBuffers.allocate( totalBytesRequired );
-        buf.put( PropertyType.STRING.byteValue() );
-        buf.putInt( array.length );
-        for ( byte[] stringAsBytes : stringsAsBytes )
+        try ( var scopedBuffer = new HeapScopedBuffer( totalBytesRequired, memoryTracker ) )
         {
-            buf.putInt( stringAsBytes.length );
-            buf.put( stringAsBytes );
+            var buffer = scopedBuffer.getBuffer();
+            buffer.put( PropertyType.STRING.byteValue() );
+            buffer.putInt( array.length );
+            for ( byte[] stringAsBytes : stringsAsBytes )
+            {
+                buffer.putInt( stringAsBytes.length );
+                buffer.put( stringAsBytes );
+            }
+            allocateRecordsFromBytes( target, buffer.array(), recordAllocator, cursorTracer, memoryTracker );
         }
-        allocateRecordsFromBytes( target, buf.array(), recordAllocator );
     }
 
-    public void allocateRecords( Collection<DynamicRecord> target, Object array )
+    public void allocateRecords( Collection<DynamicRecord> target, Object array, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        allocateRecords( target, array, this, allowStorePointsAndTemporal );
+        allocateRecords( target, array, this, allowStorePointsAndTemporal, cursorTracer, memoryTracker );
     }
 
     public static void allocateRecords( Collection<DynamicRecord> target, Object array,
-            DynamicRecordAllocator recordAllocator, boolean allowStorePointsAndTemporal )
+            DynamicRecordAllocator recordAllocator, boolean allowStorePointsAndTemporal, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         if ( !array.getClass().isArray() )
         {
@@ -272,46 +280,46 @@ public class DynamicArrayStore extends AbstractDynamicStore
         Class<?> type = array.getClass().getComponentType();
         if ( type.equals( String.class ) )
         {
-            allocateFromString( target, (String[]) array, recordAllocator );
+            allocateFromString( target, (String[]) array, recordAllocator, cursorTracer, memoryTracker );
         }
         else if ( type.equals( PointValue.class ) )
         {
             allocateFromCompositeType( target,GeometryType.encodePointArray( (PointValue[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.POINT_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.POINT_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( LocalDate.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeDateArray( (LocalDate[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( LocalTime.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeLocalTimeArray( (LocalTime[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( LocalDateTime.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeLocalDateTimeArray( (LocalDateTime[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( OffsetTime.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeTimeArray( (OffsetTime[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( ZonedDateTime.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeDateTimeArray( (ZonedDateTime[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else if ( type.equals( DurationValue.class ) )
         {
             allocateFromCompositeType( target, TemporalType.encodeDurationArray( (DurationValue[]) array ),
-                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES );
+                    recordAllocator, allowStorePointsAndTemporal, RecordStorageCapability.TEMPORAL_PROPERTIES, cursorTracer, memoryTracker );
         }
         else
         {
-            allocateFromNumbers( target, array, recordAllocator );
+            allocateFromNumbers( target, array, recordAllocator, cursorTracer, memoryTracker );
         }
     }
 
@@ -368,8 +376,8 @@ public class DynamicArrayStore extends AbstractDynamicStore
         }
     }
 
-    public Object getArrayFor( Iterable<DynamicRecord> records )
+    public Object getArrayFor( Iterable<DynamicRecord> records, PageCursorTracer cursorTracer )
     {
-        return getRightArray( readFullByteArray( records, PropertyType.ARRAY ) ).asObject();
+        return getRightArray( readFullByteArray( records, PropertyType.ARRAY , cursorTracer ) ).asObject();
     }
 }

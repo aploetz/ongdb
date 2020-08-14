@@ -20,7 +20,6 @@
 package org.neo4j.kernel.api.impl.schema;
 
 import org.apache.lucene.index.CorruptIndexException;
-import org.hamcrest.CoreMatchers;
 import org.junit.jupiter.api.Test;
 
 import java.io.EOFException;
@@ -47,16 +46,14 @@ import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.sameInstance;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesByProvider;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @EphemeralTestDirectoryExtension
 class LuceneSchemaIndexCorruptionTest
@@ -80,11 +77,11 @@ class LuceneSchemaIndexCorruptionTest
         // When
         IndexDescriptor descriptor = forSchema( forLabel( 1, 1 ), provider.getProviderDescriptor() )
                 .withName( "index_" + faultyIndexId ).materialise( faultyIndexId );
-        InternalIndexState initialState = provider.getInitialState( descriptor );
+        InternalIndexState initialState = provider.getInitialState( descriptor, NULL );
 
         // Then
-        assertThat( initialState, equalTo(InternalIndexState.POPULATING) );
-        logProvider.assertAtLeastOnce( loggedException( error ) );
+        assertThat( initialState ).isEqualTo( InternalIndexState.POPULATING );
+        assertThat( logProvider ).containsException( error );
     }
 
     @Test
@@ -99,11 +96,11 @@ class LuceneSchemaIndexCorruptionTest
         // When
         IndexDescriptor descriptor = forSchema( forLabel( 1, 1 ), provider.getProviderDescriptor() )
                 .withName( "index_" + faultyIndexId ).materialise( faultyIndexId );
-        InternalIndexState initialState = provider.getInitialState( descriptor );
+        InternalIndexState initialState = provider.getInitialState( descriptor, NULL );
 
         // Then
-        assertThat( initialState, equalTo(InternalIndexState.POPULATING) );
-        logProvider.assertAtLeastOnce( loggedException( error ) );
+        assertThat( initialState ).isEqualTo( InternalIndexState.POPULATING );
+        assertThat( logProvider ).containsException( error );
     }
 
     @Test
@@ -118,11 +115,11 @@ class LuceneSchemaIndexCorruptionTest
         // When
         IndexDescriptor descriptor = forSchema( forLabel( 1, 1 ), provider.getProviderDescriptor() )
                 .withName( "index_" + faultyIndexId ).materialise( faultyIndexId );
-        InternalIndexState initialState = provider.getInitialState( descriptor );
+        InternalIndexState initialState = provider.getInitialState( descriptor, NULL );
 
         // Then
-        assertThat( initialState, equalTo(InternalIndexState.POPULATING) );
-        logProvider.assertAtLeastOnce( loggedException( error ) );
+        assertThat( initialState ).isEqualTo( InternalIndexState.POPULATING );
+        assertThat( logProvider ).containsException( error );
     }
 
     private LuceneIndexProvider newFaultyIndexProvider( long faultyIndexId, Exception error )
@@ -177,11 +174,5 @@ class LuceneSchemaIndexCorruptionTest
                 throw new UncheckedIOException( e );
             }
         }
-    }
-
-    private static AssertableLogProvider.LogMatcher loggedException( Throwable exception )
-    {
-        return inLog( CoreMatchers.any( String.class ) )
-                .warn( CoreMatchers.any( String.class ), sameInstance( exception ) );
     }
 }

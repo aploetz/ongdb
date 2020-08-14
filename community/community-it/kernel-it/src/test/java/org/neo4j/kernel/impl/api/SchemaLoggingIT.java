@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import org.hamcrest.BaseMatcher;
-import org.hamcrest.Description;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
@@ -28,28 +26,28 @@ import java.util.concurrent.TimeUnit;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.kernel.api.index.IndexProvider;
-import org.neo4j.kernel.impl.api.index.IndexPopulationJob;
 import org.neo4j.kernel.impl.api.index.IndexProviderMap;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.AssertableLogProvider;
-import org.neo4j.logging.AssertableLogProvider.LogMatcherBuilder;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.ExtensionCallback;
 import org.neo4j.test.extension.ImpermanentDbmsExtension;
 import org.neo4j.test.extension.Inject;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
-import static org.neo4j.test.assertion.Assert.assertEventually;
+import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @ImpermanentDbmsExtension( configurationCallback = "configure" )
 class SchemaLoggingIT
 {
+    private static final String CREATION_FINISHED = "Index creation finished for index [%s].";
     private final AssertableLogProvider logProvider = new AssertableLogProvider();
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private IndexProviderMap indexProviderMap;
 
     @ExtensionCallback
     void configure( TestDatabaseManagementServiceBuilder builder )
@@ -58,7 +56,7 @@ class SchemaLoggingIT
     }
 
     @Test
-    void shouldLogUserReadableLabelAndPropertyNames() throws Exception
+    void shouldLogUserReadableLabelAndPropertyNames()
     {
         String labelName = "User";
         String property = "name";
@@ -67,14 +65,14 @@ class SchemaLoggingIT
         createIndex( db, labelName, property );
 
         // then
-        LogMatcherBuilder match = inLog( IndexPopulationJob.class );
-        IndexProviderMap indexProviderMap = db.getDependencyResolver().resolveDependency( IndexProviderMap.class );
         IndexProvider defaultProvider = indexProviderMap.getDefaultProvider();
         IndexProviderDescriptor providerDescriptor = defaultProvider.getProviderDescriptor();
-        logProvider.assertAtLeastOnce( match.info( containsString( "Index population started: [%s]" ),
-                ":User(name) [provider: {key=" + providerDescriptor.getKey() + ", version=" + providerDescriptor.getVersion() + "}]" ) );
+        String indexName =
+                "Index( id=1, name='index_a908f819', type='GENERAL BTREE', schema=(:User {name}), indexProvider='" + providerDescriptor.name() + "' )";
 
-        assertEventually( () -> null, new LogMessageMatcher( match, providerDescriptor ), 1, TimeUnit.MINUTES );
+        assertThat( logProvider ).forLevel( INFO )
+                .containsMessageWithArguments( "Index population started: [%s]", indexName )
+                .containsMessageWithArguments( CREATION_FINISHED, indexName );
     }
 
     private static void createIndex( GraphDatabaseAPI db, String labelName, String property )
@@ -91,6 +89,7 @@ class SchemaLoggingIT
             tx.commit();
         }
     }
+<<<<<<< HEAD
 
     private class LogMessageMatcher extends BaseMatcher<Object>
     {
@@ -118,4 +117,6 @@ class SchemaLoggingIT
                     .appendText( "', but not found. Messages was: '" ).appendText( logProvider.serialize() ).appendText( "." );
         }
     }
+=======
+>>>>>>> neo4j/4.1
 }

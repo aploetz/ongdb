@@ -9,10 +9,17 @@
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <groupId>org.graphfoundation.ongdb.app</groupId>
     <artifactId>ongdb-server</artifactId>
     <name>ONgDB - Server</name>
     <description>Standalone Neo4j server application.</description>
+=======
+    <groupId>org.neo4j.app</groupId>
+    <artifactId>neo4j-server</artifactId>
+    <name>Neo4j - Server</name>
+    <description>Neo4j web server.</description>
+>>>>>>> neo4j/4.1
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
     <packaging>jar</packaging>
@@ -20,14 +27,16 @@
     <properties>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
         <licensing.prepend.text>licensing/notice-gpl-prefix.txt</licensing.prepend.text>
-
         <neo4j.version>${project.version}</neo4j.version>
+<<<<<<< HEAD
 
         <neo4j-server.mainClass>org.neo4j.server.CommunityEntryPoint</neo4j-server.mainClass>
 
         <test.runner.jvm.settings.additional>
             -Dorg.neo4j.kernel.impl.api.KernelStatement.trackStatements=false
         </test.runner.jvm.settings.additional>
+=======
+>>>>>>> neo4j/4.1
         <moduleName>org.neo4j.server</moduleName>
     </properties>
 
@@ -57,31 +66,12 @@
         </license>
     </licenses>
 
-    <build>
-        <plugins>
-            <plugin>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <configuration>
-                            <archive>
-                                <manifest>
-                                    <!-- TODO: Does the server jar need to be executable? -->
-                                    <mainClass>${neo4j-server.mainClass}</mainClass>
-                                </manifest>
-                            </archive>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-
     <dependencies>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>annotations</artifactId>
         </dependency>
+<<<<<<< HEAD
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb</artifactId>
@@ -96,6 +86,8 @@
             <artifactId>ongdb</artifactId>
             <version>${project.version}</version>
         </dependency>
+=======
+>>>>>>> neo4j/4.1
 
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
@@ -104,6 +96,7 @@
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-dbms</artifactId>
             <version>${project.version}</version>
@@ -117,6 +110,9 @@
 
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
+=======
+            <groupId>org.neo4j</groupId>
+>>>>>>> neo4j/4.1
             <artifactId>server-api</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -126,16 +122,25 @@
             <artifactId>ongdb-cypher</artifactId>
             <version>${project.version}</version>
         </dependency>
-
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-exceptions</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-ssl</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-bolt</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-exceptions</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
@@ -172,10 +177,6 @@
         <dependency>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>commons-configuration</groupId>
-            <artifactId>commons-configuration</artifactId>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>
@@ -220,6 +221,7 @@
             <artifactId>jaxb-api</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- Test dependencies -->
         <dependency>
             <groupId>org.graphfoundation.ongdb.community</groupId>
@@ -242,6 +244,8 @@
             <scope>test</scope>
         </dependency>
 
+=======
+>>>>>>> neo4j/4.1
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-security</artifactId>
@@ -269,6 +273,7 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+<<<<<<< HEAD
 
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
@@ -277,6 +282,8 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+=======
+>>>>>>> neo4j/4.1
         <dependency>
             <groupId>org.junit.vintage</groupId>
             <artifactId>junit-vintage-engine</artifactId>
@@ -292,12 +299,6 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>20190722</version>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

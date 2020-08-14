@@ -19,12 +19,15 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, Literal, NumericHelper, Variable}
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NumericHelper.asDouble
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.kernel.impl.util.ValueUtils
+import org.neo4j.memory.EmptyMemoryTracker
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values.doubleValue
 
@@ -36,14 +39,14 @@ trait PercentileTest {
   def getPercentile(percentile: Double, values: List[Any]): AnyValue = {
     val func = createAggregator(Variable("x"), Literal(percentile))
     values.foreach(value => {
-      func(ExecutionContext.from("x" -> ValueUtils.of(value)), QueryStateHelper.empty)
+      func(CypherRow.from("x" -> ValueUtils.of(value)), QueryStateHelper.empty)
     })
     func.result(state)
   }
 }
 
 class PercentileDiscTest extends CypherFunSuite with PercentileTest {
-  def createAggregator(inner: Expression, perc: Expression) = new PercentileDiscFunction(inner, perc)
+  def createAggregator(inner: Expression, perc: Expression) = new PercentileDiscFunction(inner, perc, EmptyMemoryTracker.INSTANCE)
 
   test("singleOne") {
     val values = List(1.0)
@@ -123,7 +126,7 @@ class PercentileDiscTest extends CypherFunSuite with PercentileTest {
 }
 
 class PercentileContTest extends CypherFunSuite with PercentileTest {
-  def createAggregator(inner: Expression, perc:Expression) = new PercentileContFunction(inner, perc)
+  def createAggregator(inner: Expression, perc:Expression) = new PercentileContFunction(inner, perc, EmptyMemoryTracker.INSTANCE)
 
   test("singleOne") {
     val values = List(1.0)

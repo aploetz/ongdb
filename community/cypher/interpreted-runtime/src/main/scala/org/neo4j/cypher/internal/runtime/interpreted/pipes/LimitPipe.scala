@@ -19,9 +19,10 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, NumericHelper}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NumericHelper
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.InvalidArgumentException
 import org.neo4j.values.storable.FloatingPointValue
 
@@ -32,10 +33,8 @@ case class LimitPipe(source: Pipe, exp: Expression)
                     (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  exp.registerOwningPipe(this)
-
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    val limitNumber = NumericHelper.asNumber(exp(state.newExecutionContext(executionContextFactory), state))
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val limitNumber = NumericHelper.evaluateStaticallyKnownNumber(exp, state)
     if (limitNumber.isInstanceOf[FloatingPointValue]) {
       val limit = limitNumber.doubleValue()
       throw new InvalidArgumentException(s"LIMIT: Invalid input. '$limit' is not a valid value. Must be a non-negative integer.")
@@ -48,12 +47,12 @@ case class LimitPipe(source: Pipe, exp: Expression)
 
     if (limit == 0 || input.isEmpty) return empty
 
-    new AbstractIterator[ExecutionContext] {
+    new AbstractIterator[CypherRow] {
       private var remaining = limit
 
       def hasNext: Boolean = remaining > 0 && input.hasNext
 
-      def next(): ExecutionContext =
+      def next(): CypherRow =
         if (remaining > 0L) {
           remaining -= 1L
           input.next()

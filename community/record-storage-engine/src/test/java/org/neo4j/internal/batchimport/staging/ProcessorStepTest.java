@@ -28,18 +28,23 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.neo4j.internal.batchimport.Configuration;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.test.OtherThreadExecutor.WorkerCommand;
 import org.neo4j.test.rule.OtherThreadRule;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 
 class ProcessorStepTest
 {
-    private OtherThreadRule<Void> t2 = new OtherThreadRule<>();
+    private final OtherThreadRule<Void> t2 = new OtherThreadRule<>();
 
     @BeforeEach
     void setUp()
@@ -75,6 +80,30 @@ class ProcessorStepTest
             // THEN
             assertEquals( batches, step.nextExpected.get() );
         }
+    }
+
+    @Test
+    void tracePageCacheAccessOnProcess() throws Exception
+    {
+        StageControl control = mock( StageControl.class );
+        var cacheTracer = new DefaultPageCacheTracer();
+        int batches = 10;
+        try ( MyProcessorStep step = new MyProcessorStep( control, 0, cacheTracer ) )
+        {
+            step.start( Step.ORDER_SEND_DOWNSTREAM );
+
+            for ( int i = 0; i < batches; i++ )
+            {
+                step.receive( i, i );
+            }
+            step.endOfUpstream();
+            step.awaitCompleted();
+
+            assertEquals( batches, step.nextExpected.get() );
+        }
+
+        assertThat( cacheTracer.pins() ).isEqualTo( batches );
+        assertThat( cacheTracer.unpins() ).isEqualTo( batches );
     }
 
     @Test
@@ -144,12 +173,12 @@ class ProcessorStepTest
         BlockingProcessorStep( StageControl control, Configuration configuration,
                 int maxProcessors, CountDownLatch latch )
         {
-            super( control, "test", configuration, maxProcessors );
+            super( control, "test", configuration, maxProcessors, NULL );
             this.latch = latch;
         }
 
         @Override
-        protected void process( Void batch, BatchSender sender ) throws Throwable
+        protected void process( Void batch, BatchSender sender, PageCursorTracer cursorTracer ) throws Throwable
         {
             latch.await();
         }
@@ -161,12 +190,20 @@ class ProcessorStepTest
 
         private MyProcessorStep( StageControl control, int maxProcessors )
         {
-            super( control, "test", Configuration.DEFAULT, maxProcessors );
+            this( control, maxProcessors, NULL );
+        }
+
+        private MyProcessorStep( StageControl control, int maxProcessors, PageCacheTracer pageCacheTracer )
+        {
+            super( control, "test", Configuration.DEFAULT, maxProcessors, pageCacheTracer );
         }
 
         @Override
-        protected void process( Integer batch, BatchSender sender )
-        {   // No processing in this test
+        protected void process( Integer batch, BatchSender sender, PageCursorTracer cursorTracer )
+        {
+            var pinEvent = cursorTracer.beginPin( false, 1, null );
+            pinEvent.hit();
+            pinEvent.done();
             nextExpected.incrementAndGet();
         }
     }

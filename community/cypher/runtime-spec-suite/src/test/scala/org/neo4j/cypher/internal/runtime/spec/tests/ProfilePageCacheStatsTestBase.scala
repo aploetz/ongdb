@@ -20,9 +20,14 @@
 package org.neo4j.cypher.internal.runtime.spec.tests
 
 import org.neo4j.configuration.GraphDatabaseSettings
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.createNode
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RecordingRuntimeResult
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 
 abstract class ProfilePageCacheStatsTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT],
                                                                         runtime: CypherRuntime[CONTEXT]
@@ -58,6 +63,29 @@ abstract class ProfilePageCacheStatsTestBase[CONTEXT <: RuntimeContext](edition:
     )
   }
 
+  test("should profile page cache stats of create with new label") {
+    given {
+      uniqueIndex("M", "prop")
+      nodePropertyGraph(SIZE, {
+        case i => Map("prop" -> i)
+      },"N", "M")
+      () // This makes sure we don't reattach the nodes to the new transaction, since that would create additional page cache hits/misses
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a") // Populates results, thus can have page cache hits & misses
+      .create(createNode("a", "A"))
+      .nodeIndexOperator("m:M(prop > 0)", argumentIds = Set("a"))
+      .build()
+
+    val runtimeResult: RecordingRuntimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    checkProfilerStatsMakeSense(runtimeResult, 3)
+  }
+
   test("should profile page cache stats of branched plan") {
     given {
       index("M", "prop")
@@ -75,7 +103,7 @@ abstract class ProfilePageCacheStatsTestBase[CONTEXT <: RuntimeContext](edition:
       .|.|.aggregation(Seq("n AS n"), Seq("count(*) AS c"))
       .|.|.argument("n")
       .|.nodeIndexOperator("n:M(prop = 1)")
-      .nodeByLabelScan("n", "N")
+      .nodeByLabelScan("n", "N", IndexOrderNone)
       .build()
 
     val runtimeResult = profile(logicalQuery, runtime)

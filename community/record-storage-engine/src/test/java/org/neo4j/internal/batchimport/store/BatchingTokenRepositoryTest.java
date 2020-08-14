@@ -30,6 +30,7 @@ import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.StoreFactory;
@@ -51,6 +52,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -115,35 +117,32 @@ class BatchingTokenRepositoryTest
     @Test
     void shouldFlushNewTokens()
     {
-        // given
-
         try ( NeoStores stores = new StoreFactory( databaseLayout, Config.defaults(),
-                new DefaultIdGeneratorFactory( fileSystem, immediate() ), pageCache, fileSystem, NullLogProvider.getInstance() ).openNeoStores( true,
-                StoreType.PROPERTY_KEY_TOKEN, StoreType.PROPERTY_KEY_TOKEN_NAME ) )
+                new DefaultIdGeneratorFactory( fileSystem, immediate() ), pageCache, fileSystem, NullLogProvider.getInstance(), PageCacheTracer.NULL )
+                .openNeoStores( true, StoreType.PROPERTY_KEY_TOKEN, StoreType.PROPERTY_KEY_TOKEN_NAME ) )
         {
             TokenStore<PropertyKeyTokenRecord> tokenStore = stores.getPropertyKeyTokenStore();
             int rounds = 3;
             int tokensPerRound = 4;
-            try ( BatchingPropertyKeyTokenRepository repo = new BatchingPropertyKeyTokenRepository( tokenStore ) )
+            BatchingPropertyKeyTokenRepository repo = new BatchingPropertyKeyTokenRepository( tokenStore );
+            // when first creating some tokens
+            int expectedId = 0;
+            int tokenNameAsInt = 0;
+            for ( int round = 0; round < rounds; round++ )
             {
-                // when first creating some tokens
-                int expectedId = 0;
-                int tokenNameAsInt = 0;
-                for ( int round = 0; round < rounds; round++ )
+                for ( int i = 0; i < tokensPerRound; i++ )
                 {
-                    for ( int i = 0; i < tokensPerRound; i++ )
-                    {
-                        int tokenId = repo.getOrCreateId( String.valueOf( tokenNameAsInt++ ) );
-                        assertEquals( expectedId + i, tokenId );
-                    }
-                    assertEquals( expectedId, tokenStore.getHighId() );
-                    repo.flush();
-                    assertEquals( expectedId + tokensPerRound, tokenStore.getHighId() );
-                    expectedId += tokensPerRound;
+                    int tokenId = repo.getOrCreateId( String.valueOf( tokenNameAsInt++ ) );
+                    assertEquals( expectedId + i, tokenId );
                 }
+                assertEquals( expectedId, tokenStore.getHighId() );
+                repo.flush( NULL );
+                assertEquals( expectedId + tokensPerRound, tokenStore.getHighId() );
+                expectedId += tokensPerRound;
             }
+            repo.flush( NULL );
 
-            List<NamedToken> tokens = tokenStore.getTokens();
+            List<NamedToken> tokens = tokenStore.getTokens( NULL );
             assertEquals( tokensPerRound * rounds, tokens.size() );
             for ( NamedToken token : tokens )
             {

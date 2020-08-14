@@ -24,12 +24,15 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.util.function.IntPredicate;
 import java.util.function.LongFunction;
 
+import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.PopulationProgress;
-import org.neo4j.io.IOUtils;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.index.MultipleIndexPopulator;
 import org.neo4j.kernel.impl.api.index.PhaseTracker;
 import org.neo4j.kernel.impl.api.index.StoreScan;
 import org.neo4j.lock.Lock;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.StorageEntityScanCursor;
@@ -37,6 +40,18 @@ import org.neo4j.storageengine.api.StoragePropertyCursor;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.values.storable.Value;
 
+import static org.neo4j.io.IOUtils.closeAllUnchecked;
+
+/**
+ * Scan store with the view given by iterator created by {@link #getEntityIdIterator()}. This might be a full scan of the store
+ * or a partial scan backed by {@link LabelScanStore} or {@link RelationshipTypeScanStore}.
+ *
+ * The {@link #entityCursor cursor} is placed on each record and then {@link #process(StorageEntityScanCursor) processed},
+ * this is where we extract updates for indexes that we are populating.
+ *
+ * @param <CURSOR> the type of cursor used to read the records.
+ * @param <FAILURE> on failure during processing.
+ */
 public abstract class PropertyAwareEntityStoreScan<CURSOR extends StorageEntityScanCursor, FAILURE extends Exception> implements StoreScan<FAILURE>
 {
     final CURSOR entityCursor;
@@ -44,24 +59,24 @@ public abstract class PropertyAwareEntityStoreScan<CURSOR extends StorageEntityS
     private final StorageReader storageReader;
     private volatile boolean continueScanning;
     private long count;
-    private long totalCount;
+    private final long totalCount;
     private final IntPredicate propertyKeyIdFilter;
     private final LongFunction<Lock> lockFunction;
     private PhaseTracker phaseTracker;
 
     protected PropertyAwareEntityStoreScan( StorageReader storageReader, long totalEntityCount, IntPredicate propertyKeyIdFilter,
-            LongFunction<Lock> lockFunction )
+            LongFunction<Lock> lockFunction, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         this.storageReader = storageReader;
-        this.entityCursor = allocateCursor( storageReader );
-        this.propertyCursor = storageReader.allocatePropertyCursor();
+        this.entityCursor = allocateCursor( storageReader, cursorTracer );
+        this.propertyCursor = storageReader.allocatePropertyCursor( cursorTracer, memoryTracker );
         this.propertyKeyIdFilter = propertyKeyIdFilter;
         this.lockFunction = lockFunction;
         this.totalCount = totalEntityCount;
         this.phaseTracker = PhaseTracker.nullInstance;
     }
 
-    protected abstract CURSOR allocateCursor( StorageReader storageReader );
+    protected abstract CURSOR allocateCursor( StorageReader storageReader, PageCursorTracer cursorTracer );
 
     static boolean containsAnyEntityToken( int[] entityTokenFilter, long... entityTokens )
     {
@@ -123,7 +138,7 @@ public abstract class PropertyAwareEntityStoreScan<CURSOR extends StorageEntityS
         }
         finally
         {
-            IOUtils.closeAllUnchecked( propertyCursor, entityCursor, storageReader );
+            closeAllUnchecked( propertyCursor, entityCursor, storageReader );
         }
     }
 

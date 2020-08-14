@@ -23,6 +23,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -47,7 +48,6 @@ import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.linear.LinearHistoryPageCacheTracerTest;
 import org.neo4j.io.pagecache.tracing.linear.LinearTracers;
@@ -81,9 +81,8 @@ public class RandomPageCacheTestHarness implements Closeable
     private int filePageCount;
     private int filePageSize;
     private PageCacheTracer tracer;
-    private PageCursorTracerSupplier cursorTracerSupplier;
     private int commandCount;
-    private double[] commandProbabilityFactors;
+    private final double[] commandProbabilityFactors;
     private long randomSeed;
     private boolean fixedRandomSeed;
     private FileSystemAbstraction fs;
@@ -104,7 +103,6 @@ public class RandomPageCacheTestHarness implements Closeable
         cachePageCount = 20;
         filePageCount = cachePageCount * 10;
         tracer = PageCacheTracer.NULL;
-        cursorTracerSupplier = PageCursorTracerSupplier.NULL;
         commandCount = 1000;
 
         Command[] commands = Command.values();
@@ -161,14 +159,6 @@ public class RandomPageCacheTestHarness implements Closeable
     public void setTracer( PageCacheTracer tracer )
     {
         this.tracer = tracer;
-    }
-
-    /**
-     * Set the page cursor tracers supplier.
-     */
-    public void setCursorTracerSupplier( PageCursorTracerSupplier cursorTracerSupplier )
-    {
-        this.cursorTracerSupplier = cursorTracerSupplier;
     }
 
     /**
@@ -391,11 +381,9 @@ public class RandomPageCacheTestHarness implements Closeable
             fs = new AdversarialFileSystemAbstraction( adversary, fs );
         }
 
-        PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory();
-        swapperFactory.open( fs );
+        PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory( fs );
         JobScheduler jobScheduler = new ThreadPoolJobScheduler();
-        MuninnPageCache cache = new MuninnPageCache( swapperFactory, cachePageCount, tracer,
-                cursorTracerSupplier, EmptyVersionContextSupplier.EMPTY, jobScheduler );
+        MuninnPageCache cache = new MuninnPageCache( swapperFactory, cachePageCount, tracer, EmptyVersionContextSupplier.EMPTY, jobScheduler );
         if ( filePageSize == 0 )
         {
             filePageSize = cache.pageSize();
@@ -460,7 +448,7 @@ public class RandomPageCacheTestHarness implements Closeable
                 {
                     future.cancel( true );
                 }
-                e.printStackTrace();
+                throw new RuntimeException( e );
             }
 
             try
@@ -484,17 +472,25 @@ public class RandomPageCacheTestHarness implements Closeable
             }
             catch ( IOException e )
             {
-                e.printStackTrace();
+                throw new UncheckedIOException( e );
             }
         }
     }
 
     private void runVerificationPhase( MuninnPageCache cache ) throws Exception
     {
-        if ( verification != null )
+        try
         {
-            cache.flushAndForce(); // Clears any stray evictor exceptions
-            verification.run( cache, this.fs, plan.getFilesTouched() );
+            if ( verification != null )
+            {
+                cache.flushAndForce(); // Clears any stray evictor exceptions
+                verification.run( cache, this.fs, plan.getFilesTouched() );
+            }
+        }
+        catch ( Throwable t )
+        {
+            plan.print( System.err );
+            throw t;
         }
     }
 

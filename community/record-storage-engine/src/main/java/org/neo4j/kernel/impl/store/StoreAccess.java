@@ -19,15 +19,13 @@
  */
 package org.neo4j.kernel.impl.store;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
-import org.neo4j.internal.id.IdGenerator;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
@@ -68,17 +66,16 @@ public class StoreAccess
     // internal state
     private boolean closeable;
     private final NeoStores neoStores;
-    private List<IdGenerator> idGenerators = new ArrayList<>();
 
     public StoreAccess( NeoStores store )
     {
         this.neoStores = store;
     }
 
-    public StoreAccess( FileSystemAbstraction fileSystem, PageCache pageCache, DatabaseLayout directoryStructure, Config config )
+    public StoreAccess( FileSystemAbstraction fileSystem, PageCache pageCache, DatabaseLayout directoryStructure, Config config, PageCacheTracer cacheTracer )
     {
         this( new StoreFactory( directoryStructure, config, new DefaultIdGeneratorFactory( fileSystem, immediate() ), pageCache,
-                fileSystem, NullLogProvider.getInstance() ).openAllNeoStores() );
+                fileSystem, NullLogProvider.getInstance(), cacheTracer ).openAllNeoStores() );
         this.closeable = true;
     }
 
@@ -191,10 +188,10 @@ public class StoreAccess
         return new RecordStore.Delegator<>( store )
         {
             @Override
-            public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, DynamicRecord record )
+            public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, DynamicRecord record, PageCursorTracer cursorTracer )
                     throws FAILURE
             {
-                processor.processLabelArrayWithOwner( this, record );
+                processor.processLabelArrayWithOwner( this, record, cursorTracer );
             }
         };
     }
@@ -202,13 +199,6 @@ public class StoreAccess
     protected <R extends AbstractBaseRecord> RecordStore<R> wrapStore( RecordStore<R> store )
     {
         return store;
-    }
-
-    @SuppressWarnings( "unchecked" )
-    protected <FAILURE extends Exception> void apply( RecordStore.Processor<FAILURE> processor, RecordStore<?> store )
-            throws FAILURE
-    {
-        processor.applyFiltered( store );
     }
 
     public synchronized void close()

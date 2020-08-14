@@ -19,7 +19,7 @@
  */
 package org.neo4j.test.scheduler;
 
-import java.util.concurrent.Executor;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -27,10 +27,13 @@ import java.util.stream.Stream;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.resources.Profiler;
 import org.neo4j.scheduler.ActiveGroup;
+import org.neo4j.scheduler.CallableExecutor;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.scheduler.SchedulerThreadFactoryFactory;
+
+import static org.neo4j.scheduler.JobHandle.EMPTY;
 
 public class JobSchedulerAdapter extends LifecycleAdapter implements JobScheduler
 {
@@ -50,7 +53,7 @@ public class JobSchedulerAdapter extends LifecycleAdapter implements JobSchedule
     }
 
     @Override
-    public Executor executor( Group group )
+    public CallableExecutor executor( Group group )
     {
         return null;
     }
@@ -62,30 +65,36 @@ public class JobSchedulerAdapter extends LifecycleAdapter implements JobSchedule
     }
 
     @Override
-    public JobHandle schedule( Group group, Runnable job )
+    public <T> JobHandle<T> schedule( Group group, Callable<T> job )
     {
-        return null;
+        return (JobHandle<T>) EMPTY;
     }
 
     @Override
-    public JobHandle schedule( Group group, Runnable runnable, long initialDelay,
+    public JobHandle<?> schedule( Group group, Runnable job )
+    {
+        return EMPTY;
+    }
+
+    @Override
+    public JobHandle<?> schedule( Group group, Runnable runnable, long initialDelay,
             TimeUnit timeUnit )
     {
-        return null;
+        return EMPTY;
     }
 
     @Override
-    public JobHandle scheduleRecurring( Group group, Runnable runnable, long period,
+    public JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long period,
             TimeUnit timeUnit )
     {
-        return null;
+        return EMPTY;
     }
 
     @Override
-    public JobHandle scheduleRecurring( Group group, Runnable runnable, long initialDelay,
+    public JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long initialDelay,
             long period, TimeUnit timeUnit )
     {
-        return null;
+        return EMPTY;
     }
 
     @Override

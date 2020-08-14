@@ -19,42 +19,86 @@
  */
 package org.neo4j.cypher.internal.compiler.planner
 
-import org.neo4j.cypher.internal.compiler.phases.CompilationPhases._
-import org.neo4j.cypher.internal.compiler.phases._
-import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.{CardinalityModel, QueryGraphCardinalityModel, QueryGraphSolverInput}
-import org.neo4j.cypher.internal.compiler.planner.logical._
+import org.neo4j.cypher.internal.ast.AstConstructionTestSupport
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
+import org.neo4j.cypher.internal.compiler.Neo4jCypherExceptionFactory
+import org.neo4j.cypher.internal.compiler.NotImplementedPlanContext
+import org.neo4j.cypher.internal.compiler.StatsDivergenceCalculator
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.ParsingConfig
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.parsing
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.planPipeLine
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.prepareForCaching
+import org.neo4j.cypher.internal.compiler.phases.LogicalPlanState
+import org.neo4j.cypher.internal.compiler.phases.PlannerContext
+import org.neo4j.cypher.internal.compiler.planner.logical.ExpressionEvaluator
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.CardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphCardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.compiler.planner.logical.MetricsFactory
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryGraphSolver
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryPlanner
 import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.QueryGraphCardinalityModel
-import org.neo4j.cypher.internal.compiler.planner.logical.idp._
-import org.neo4j.cypher.internal.compiler.planner.logical.steps.{LogicalPlanProducer, devNullListener}
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.DefaultIDPSolverConfig
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.IDPQueryGraphSolver
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.IDPQueryGraphSolverMonitor
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.IDPSolverConfig
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.SingleComponentPlanner
+import org.neo4j.cypher.internal.compiler.planner.logical.idp.cartesianProductsOrValueJoins
+import org.neo4j.cypher.internal.compiler.planner.logical.steps.LogicalPlanProducer
+import org.neo4j.cypher.internal.compiler.planner.logical.steps.devNullListener
 import org.neo4j.cypher.internal.compiler.test_helpers.ContextHelper
-import org.neo4j.cypher.internal.compiler.{CypherPlannerConfiguration, Neo4jCypherExceptionFactory, NotImplementedPlanContext, StatsDivergenceCalculator}
-import org.neo4j.cypher.internal.ir.{PeriodicCommit, ProvidedOrder, QueryGraph, SinglePlannerQuery}
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.{OrderCapability, ValueCapability}
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.{Cardinalities, ProvidedOrders, Solveds}
-import org.neo4j.cypher.internal.planner.spi._
-import org.neo4j.cypher.internal.v4_0.ast._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.PatternExpression
-import org.neo4j.cypher.internal.v4_0.frontend.phases._
-import org.neo4j.cypher.internal.v4_0.parser.CypherParser
-import org.neo4j.cypher.internal.v4_0.rewriting.RewriterStepSequencer.newPlain
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters._
-import org.neo4j.cypher.internal.v4_0.rewriting.{RewriterStepSequencer, ValidatingRewriterStepSequencer}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Attribute
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.{CypherFunSuite, CypherTestSupport}
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, Cost, PropertyKeyId}
+import org.neo4j.cypher.internal.expressions.PatternExpression
+import org.neo4j.cypher.internal.frontend.phases.ASTRewriter
+import org.neo4j.cypher.internal.frontend.phases.BaseState
+import org.neo4j.cypher.internal.frontend.phases.InitialState
+import org.neo4j.cypher.internal.frontend.phases.Transformer
+import org.neo4j.cypher.internal.frontend.phases.devNullLogger
+import org.neo4j.cypher.internal.ir.PeriodicCommit
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.ProvidedOrder
+import org.neo4j.cypher.internal.logical.plans.CanGetValue
+import org.neo4j.cypher.internal.logical.plans.DoNotGetValue
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.ProduceResult
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.parser.CypherParser
+import org.neo4j.cypher.internal.planner.spi.GraphStatistics
+import org.neo4j.cypher.internal.planner.spi.IDPPlannerName
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.OrderCapability
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.ValueCapability
+import org.neo4j.cypher.internal.planner.spi.InstrumentedGraphStatistics
+import org.neo4j.cypher.internal.planner.spi.MutableGraphStatisticsSnapshot
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
+import org.neo4j.cypher.internal.rewriting.RewriterStepSequencer
+import org.neo4j.cypher.internal.rewriting.RewriterStepSequencer.newPlain
+import org.neo4j.cypher.internal.rewriting.ValidatingRewriterStepSequencer
+import org.neo4j.cypher.internal.rewriting.rewriters.GeneratingNamer
+import org.neo4j.cypher.internal.rewriting.rewriters.Never
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Cost
+import org.neo4j.cypher.internal.util.Foldable.FoldableAny
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.attribution.Attribute
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherTestSupport
 import org.neo4j.internal.helpers.collection.Visitable
 import org.neo4j.kernel.impl.util.dbstructure.DbStructureVisitor
-import org.scalatest.matchers.{BeMatcher, MatchResult}
+import org.scalatest.matchers.BeMatcher
+import org.scalatest.matchers.MatchResult
 
-import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
 trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstructionTestSupport with LogicalPlanConstructionTestSupport {
   self: CypherFunSuite =>
 
   val pushdownPropertyReads: Boolean = true
+  val readPropertiesFromCursor: Boolean = false
 
   val parser = new CypherParser
   val rewriterSequencer: String => ValidatingRewriterStepSequencer = RewriterStepSequencer.newValidating
@@ -73,7 +117,8 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
     legacyCsvQuoteEscaping = false,
     csvBufferSize = 4 * 1024 * 1024,
     nonIndexedLabelWarningThreshold = 10000,
-    planSystemCommands = false
+    planSystemCommands = false,
+    readPropertiesFromCursor = false
   )
   val realConfig = RealLogicalPlanningConfiguration(cypherCompilerConfig)
 
@@ -84,9 +129,10 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
   def createInitState(queryString: String): BaseState = InitialState(queryString, None, IDPPlannerName)
 
   def pipeLine(): Transformer[PlannerContext, BaseState, LogicalPlanState] = {
-    parsing(newPlain, innerVariableNamer, literalExtraction = Never) andThen
+    // if you ever want to have parameters in here, fix the map
+    parsing(ParsingConfig(newPlain, innerVariableNamer, literalExtraction = Never, parameterTypeMapping = Map.empty)) andThen
       prepareForCaching andThen
-      planPipeLine(newPlain, pushdownPropertyReads)
+      planPipeLine(newPlain, pushdownPropertyReads = pushdownPropertyReads, readPropertiesFromCursor = readPropertiesFromCursor)
   }
 
   implicit class LogicalPlanningEnvironment[C <: LogicalPlanningConfiguration](config: C) {
@@ -173,7 +219,11 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
     def getLogicalPlanFor(queryString: String,
                           config:CypherPlannerConfiguration = cypherCompilerConfig,
                           queryGraphSolver: QueryGraphSolver = queryGraphSolver,
+<<<<<<< HEAD
                           stripProduceResults: Boolean = true): (Option[PeriodicCommit], LogicalPlan, SemanticTable, Solveds, Cardinalities) = {
+=======
+                          stripProduceResults: Boolean = true): (Option[PeriodicCommit], LogicalPlan, SemanticTable, PlanningAttributes) = {
+>>>>>>> neo4j/4.1
       val exceptionFactory = Neo4jCypherExceptionFactory(queryString, Some(pos))
       val metrics = metricsFactory.newMetrics(planContext.statistics, mock[ExpressionEvaluator], config)
       def context = ContextHelper.create(planContext = planContext,
@@ -190,7 +240,7 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
         case p:ProduceResult if stripProduceResults => p.source
         case p => p
       }
-      (output.maybePeriodicCommit.flatten, logicalPlan, output.semanticTable(), output.planningAttributes.solveds, output.planningAttributes.cardinalities)
+      (output.maybePeriodicCommit.flatten, logicalPlan, output.semanticTable(), output.planningAttributes)
     }
 
     def estimate(qg: QueryGraph, input: QueryGraphSolverInput = QueryGraphSolverInput.empty): Cardinality =
@@ -200,10 +250,7 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
 
     def withLogicalPlanningContext[T](f: (C, LogicalPlanningContext) => T): T = {
       val metrics = metricsFactory.newMetrics(config.graphStatistics, mock[ExpressionEvaluator], cypherCompilerConfig)
-      val solveds = new Solveds
-      val cardinalities = new Cardinalities
-      val providedOrders = new ProvidedOrders
-      val planningAttributes = new PlanningAttributes(solveds, cardinalities, providedOrders)
+      val planningAttributes = PlanningAttributes.newAttributes
       val logicalPlanProducer = LogicalPlanProducer(metrics.cardinality, planningAttributes, idGen)
       val ctx = LogicalPlanningContext(
         planContext = planContext,
@@ -224,10 +271,7 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
 
     def withLogicalPlanningContextWithFakeAttributes[T](f: (C, LogicalPlanningContext) => T): T = {
       val metrics = metricsFactory.newMetrics(config.graphStatistics, mock[ExpressionEvaluator], cypherCompilerConfig)
-      val solveds = new StubSolveds
-      val cardinalities = new StubCardinalities
-      val providedOrders = new StubProvidedOrders
-      val planningAttributes = new PlanningAttributes(solveds, cardinalities, providedOrders)
+      val planningAttributes = newStubbedPlanningAttributes
       val logicalPlanProducer = LogicalPlanProducer(metrics.cardinality, planningAttributes, idGen)
       val ctx = LogicalPlanningContext(
         planContext = planContext,
@@ -269,7 +313,7 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
   def planFor(queryString: String,
               config:CypherPlannerConfiguration = cypherCompilerConfig,
               queryGraphSolver: QueryGraphSolver = queryGraphSolver,
-              stripProduceResults: Boolean = true): (Option[PeriodicCommit], LogicalPlan, SemanticTable, Solveds, Cardinalities) =
+              stripProduceResults: Boolean = true): (Option[PeriodicCommit], LogicalPlan, SemanticTable, PlanningAttributes) =
     new given().getLogicalPlanFor(queryString, config, queryGraphSolver, stripProduceResults)
 
   class given extends StubbedLogicalPlanningConfiguration(realConfig)
@@ -284,7 +328,6 @@ trait LogicalPlanningTestSupport2 extends CypherTestSupport with AstConstruction
     semanticTable.resolvedPropertyKeyNames(label)
 
   def using[T <: LogicalPlan](implicit tag: ClassTag[T]): BeMatcher[LogicalPlan] = new BeMatcher[LogicalPlan] {
-    import org.neo4j.cypher.internal.v4_0.util.Foldable._
     override def apply(actual: LogicalPlan): MatchResult = {
       val matches = actual.treeFold(false) {
         case lp if tag.runtimeClass.isInstance(lp) => acc => (true, None)

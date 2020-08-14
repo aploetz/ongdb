@@ -19,16 +19,10 @@
  */
 package org.neo4j.kernel.api.query;
 
-import org.hamcrest.CoreMatchers;
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
-import org.hamcrest.TypeSafeMatcher;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZonedDateTime;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -39,27 +33,23 @@ import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.lock.LockWaitEvent;
 import org.neo4j.lock.ResourceType;
 import org.neo4j.lock.WaitStrategy;
+import org.neo4j.memory.OptionalMemoryTracker;
 import org.neo4j.test.FakeCpuClock;
 import org.neo4j.test.FakeMemoryTracker;
 import org.neo4j.time.Clocks;
 import org.neo4j.time.FakeClock;
-import org.neo4j.values.AnyValue;
 import org.neo4j.values.virtual.MapValue;
 
 import static java.util.Collections.emptyList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasEntry;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.graphdb.QueryExecutionType.QueryType.READ_ONLY;
-import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
 import static org.neo4j.kernel.database.TestDatabaseIdRepository.randomNamedDatabaseId;
-import static org.neo4j.values.storable.Values.stringValue;
 import static org.neo4j.values.virtual.VirtualValues.EMPTY_MAP;
-import static org.neo4j.values.virtual.VirtualValues.map;
 
 class ExecutingQueryTest
 {
@@ -85,6 +75,12 @@ class ExecutingQueryTest
     void shouldTransitionBetweenStates()
     {
         // initial
+        assertEquals( "parsing", query.snapshot().status() );
+
+        // when
+        query.onObfuscatorReady( null );
+
+        // then
         assertEquals( "planning", query.snapshot().status() );
 
         // when
@@ -116,6 +112,7 @@ class ExecutingQueryTest
         clock.forward( 124, TimeUnit.MICROSECONDS );
 
         // then
+        query.onObfuscatorReady( null );
         QuerySnapshot snapshot = query.snapshot();
         assertEquals( snapshot.compilationTimeMicros(), snapshot.elapsedTimeMicros() );
 
@@ -134,6 +131,10 @@ class ExecutingQueryTest
     void shouldReportWaitTime()
     {
         // given
+<<<<<<< HEAD
+=======
+        query.onObfuscatorReady( null );
+>>>>>>> neo4j/4.1
         query.onCompilationCompleted( new CompilerInfo( "the-planner", "the-runtime", emptyList() ), READ_ONLY, null );
         query.onExecutionStarted( new FakeMemoryTracker() );
 
@@ -149,10 +150,9 @@ class ExecutingQueryTest
             // then
             QuerySnapshot snapshot = query.snapshot();
             assertEquals( "waiting", snapshot.status() );
-            assertThat( snapshot.resourceInformation(), CoreMatchers.<Map<String,Object>>allOf(
-                    hasEntry( "waitTimeMillis", 5_000L ),
-                    hasEntry( "resourceType", "NODE" ),
-                    hasEntry( equalTo( "resourceIds" ), longArray( 17 ) ) ) );
+            assertThat( snapshot.resourceInformation() ).containsEntry( "waitTimeMillis", 5_000L ).
+                    containsEntry( "resourceType", "NODE" ).
+                    containsEntry( "resourceIds", new long[]{ 17 } );
             assertEquals( 5_000_000, snapshot.waitTimeMicros() );
         }
         {
@@ -170,10 +170,9 @@ class ExecutingQueryTest
             // then
             QuerySnapshot snapshot = query.snapshot();
             assertEquals( "waiting", snapshot.status() );
-            assertThat( snapshot.resourceInformation(), CoreMatchers.<Map<String,Object>>allOf(
-                    hasEntry( "waitTimeMillis", 1_000L ),
-                    hasEntry( "resourceType", "RELATIONSHIP" ),
-                    hasEntry( equalTo( "resourceIds" ), longArray( 612 ) ) ) );
+            assertThat( snapshot.resourceInformation() ).containsEntry( "waitTimeMillis", 1_000L ).
+                    containsEntry( "resourceType", "RELATIONSHIP" ).
+                    containsEntry( "resourceIds", new long[]{612} );
             assertEquals( 6_000_000, snapshot.waitTimeMicros() );
         }
         {
@@ -208,7 +207,8 @@ class ExecutingQueryTest
                 Thread.currentThread().getId(),
                 Thread.currentThread().getName(),
                 clock,
-                FakeCpuClock.NOT_AVAILABLE );
+                FakeCpuClock.NOT_AVAILABLE,
+                true );
 
         // when
         QuerySnapshot snapshot = query.snapshot();
@@ -219,26 +219,51 @@ class ExecutingQueryTest
     }
 
     @Test
-    void shouldNotReportHeapAllocationIfUnavailable()
+    void shouldNotReportHeapAllocationIfNotTracked()
     {
         // given
         ExecutingQuery query = new ExecutingQuery( 17,
-                ClientConnectionInfo.EMBEDDED_CONNECTION, randomNamedDatabaseId(), "neo4j", "hello world",
-                EMPTY_MAP,
-                Collections.emptyMap(),
-                () -> lockCount,
-                () -> 0,
-                () -> 1,
-                Thread.currentThread().getId(),
-                Thread.currentThread().getName(),
-                clock,
-                FakeCpuClock.NOT_AVAILABLE );
+                                                   ClientConnectionInfo.EMBEDDED_CONNECTION, randomNamedDatabaseId(), "neo4j", "hello world",
+                                                   EMPTY_MAP,
+                                                   Collections.emptyMap(),
+                                                   () -> lockCount,
+                                                   () -> 0,
+                                                   () -> 1,
+                                                   Thread.currentThread().getId(),
+                                                   Thread.currentThread().getName(),
+                                                   clock,
+                                                   FakeCpuClock.NOT_AVAILABLE,
+                                                   false );
 
         // when
         QuerySnapshot snapshot = query.snapshot();
 
         // then
-        assertTrue( snapshot.allocatedBytes().isEmpty() );
+        assertEquals( OptionalMemoryTracker.ALLOCATIONS_NOT_TRACKED, snapshot.allocatedBytes() );
+    }
+
+    @Test
+    void shouldReportZeroHeapAllocationIfTracked()
+    {
+        // given
+        ExecutingQuery query = new ExecutingQuery( 17,
+                                                   ClientConnectionInfo.EMBEDDED_CONNECTION, randomNamedDatabaseId(), "neo4j", "hello world",
+                                                   EMPTY_MAP,
+                                                   Collections.emptyMap(),
+                                                   () -> lockCount,
+                                                   () -> 0,
+                                                   () -> 1,
+                                                   Thread.currentThread().getId(),
+                                                   Thread.currentThread().getName(),
+                                                   clock,
+                                                   FakeCpuClock.NOT_AVAILABLE,
+                                                   true );
+
+        // when
+        QuerySnapshot snapshot = query.snapshot();
+
+        // then
+        assertEquals( 0L, snapshot.allocatedBytes() );
     }
 
     @Test
@@ -289,8 +314,9 @@ class ExecutingQueryTest
     }
 
     @Test
-    void shouldObfuscateCreateUser()
+    void shouldNotAllowCompletingCompilationMultipleTimes()
     {
+<<<<<<< HEAD
         testPasswordObfuscation( "create USER foo SET PaSsWoRd " );
     }
 
@@ -310,28 +336,43 @@ class ExecutingQueryTest
     void shouldObfuscateAlterUser()
     {
         testPasswordObfuscation( "alter USER foo SET PaSsWoRd " );
+=======
+        query.onObfuscatorReady( null );
+        query.onCompilationCompleted( null, null, null );
+        assertThatIllegalStateException().isThrownBy( () -> query.onCompilationCompleted( null, null, null ) );
     }
 
     @Test
-    void shouldObfuscateAlterCurrentUser()
+    void shouldNotAllowStartingExecutionWithoutCompilation()
     {
-        var queryPart = "alter CuRRenT USER foo SET PaSsWoRd FROM ";
-        var exeQuery = createExecutingQuery( 1, queryPart + "'bar' TO 'baz'", page, clock, cpuClock, NAMED_SYSTEM_DATABASE_ID, EMPTY_MAP );
-        assertThat( exeQuery.queryText(), equalTo( queryPart + "'******' TO '******'" ) );
-        assertThat( exeQuery.queryParameters().size(), equalTo( 0 ) );
+        assertThatIllegalStateException().isThrownBy( () -> query.onExecutionStarted( null ) );
+>>>>>>> neo4j/4.1
+    }
 
-        MapValue params2 = map( new String[]{"old", "new"}, new AnyValue[]{stringValue( "bar" ), stringValue( "baz" )} );
-        MapValue obfuscatedParams2 = map( new String[]{"old", "new"}, new AnyValue[]{stringValue( "******" ), stringValue( "******" )} );
-        var exeQuery2 = createExecutingQuery( 1, queryPart + "$old TO $new", page, clock, cpuClock, NAMED_SYSTEM_DATABASE_ID, params2 );
-        assertThat( exeQuery2.queryText(), equalTo( queryPart + "$old TO $new" ) );
-        assertThat( exeQuery2.queryParameters(), equalTo( obfuscatedParams2 ) );
+    @Test
+    void shouldAllowRetryingAfterStartingExecutiong()
+    {
+        assertEquals( "parsing", query.snapshot().status() );
 
-        MapValue params3 = map( new String[]{"old"}, new AnyValue[]{stringValue( "bar" )} );
-        MapValue obfuscatedParams3 = map( new String[]{"old"}, new AnyValue[]{stringValue( "******" )} );
-        var exeQuery3 = createExecutingQuery( 1, queryPart + "$old TO 'baz'", page, clock, cpuClock, NAMED_SYSTEM_DATABASE_ID, params3 );
-        assertThat( exeQuery3.queryText(), equalTo( queryPart + "$old TO '******'" ) );
-        assertThat( exeQuery3.queryParameters(), equalTo( obfuscatedParams3 ) );
+        query.onObfuscatorReady( null );
+        assertEquals( "planning", query.snapshot().status() );
 
+        query.onCompilationCompleted( null, null, null );
+        assertEquals( "planned", query.snapshot().status() );
+
+        query.onExecutionStarted( new FakeMemoryTracker() );
+        assertEquals( "running", query.snapshot().status() );
+
+        query.onRetryAttempted();
+        assertEquals( "parsing", query.snapshot().status() );
+    }
+
+    @Test
+    void shouldNotAllowRetryingWithoutStartingExecuting()
+    {
+        query.onObfuscatorReady(null );
+        query.onCompilationCompleted( null, null, null );
+        assertThatIllegalStateException().isThrownBy( query::onRetryAttempted );
     }
 
     @Test
@@ -417,25 +458,6 @@ class ExecutingQueryTest
         };
     }
 
-    @SuppressWarnings( "unchecked" )
-    private static Matcher<Object> longArray( long... expected )
-    {
-        return (Matcher) new TypeSafeMatcher<long[]>()
-        {
-            @Override
-            protected boolean matchesSafely( long[] item )
-            {
-                return Arrays.equals( expected, item );
-            }
-
-            @Override
-            public void describeTo( Description description )
-            {
-                description.appendValue( expected );
-            }
-        };
-    }
-
     @SuppressWarnings( "SameParameterValue" )
     private static long randomLong( long bound )
     {
@@ -453,7 +475,7 @@ class ExecutingQueryTest
     {
         return new ExecutingQuery( queryId, ClientConnectionInfo.EMBEDDED_CONNECTION, dbID, "neo4j", hello_world,
                 params, Collections.emptyMap(), () -> lockCount, page::hits, page::faults, Thread.currentThread().getId(),
-                Thread.currentThread().getName(), clock, cpuClock );
+                Thread.currentThread().getName(), clock, cpuClock, true );
     }
 
     private static class PageCursorCountersStub implements PageCursorCounters

@@ -26,10 +26,8 @@ import java.util.Arrays;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.values.AnyValue;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.values.storable.Values.NO_VALUE;
 import static org.neo4j.values.storable.Values.numberValue;
 import static org.neo4j.values.storable.Values.stringValue;
 import static org.neo4j.values.virtual.VirtualValues.EMPTY_MAP;
@@ -102,6 +100,34 @@ class MapValueTest
         // Then
         assertMapValueEquals( updated, mapValue( "k1", stringValue( "v1" ), "k2", stringValue( "v2" ),
                 "k3", stringValue( "version3" ) ) );
+    }
+
+    @Test
+    void shouldUpdateWithExistingKeyAndNoValue()
+    {
+        // Given
+        MapValue base = mapValue( "k1", stringValue( "v1" ), "k2", stringValue( "v2" ), "k3", NO_VALUE );
+
+        // When
+        MapValue updated = base.updatedWith( "k3", stringValue( "version3" ) );
+
+        // Then
+        assertMapValueEquals( updated, mapValue( "k1", stringValue( "v1" ), "k2", stringValue( "v2" ),
+                "k3", stringValue( "version3" ) ) );
+    }
+
+    @Test
+    void shouldUpdateWithNonExistingKeyAndNoValue()
+    {
+        // Given
+        MapValue base = mapValue( "k1", stringValue( "v1" ), "k2", stringValue( "v2" ) );
+
+        // When
+        MapValue updated = base.updatedWith( "k3", NO_VALUE );
+
+        // Then
+        assertMapValueEquals( updated, mapValue( "k1", stringValue( "v1" ), "k2", stringValue( "v2" ),
+                "k3", NO_VALUE ) );
     }
 
     @Test
@@ -182,26 +208,26 @@ class MapValueTest
     void shouldCompareTwoCombinedMapValues()
     {
         // Given
-        MapValue a = mapValue("note", stringValue("test"), "Id", numberValue( 8 ) );
-        MapValue b = mapValue("note", stringValue("test"), "Id", numberValue( 14 ) );
+        MapValue a = mapValue( "note", stringValue( "test" ), "Id", numberValue( 8 ) );
+        MapValue b = mapValue( "note", stringValue( "test" ), "Id", numberValue( 14 ) );
 
         // When
         MapValue x = mapValue().updatedWith( a );
         MapValue y = mapValue().updatedWith( b );
 
-        assertThat("Two simple maps should be different", a, not( equalTo( b ) ));
-        assertThat("Two combined maps should be different", x, not( equalTo( y ) ));
+        assertThat( a ).as( "Two simple maps should be different" ).isNotEqualTo( b );
+        assertThat( x ).as( "Two combined maps should be different" ).isNotEqualTo( y );
     }
 
     private void assertMapValueEquals( MapValue a, MapValue b )
     {
-        assertThat( a, equalTo( b ) );
-        assertThat( a.size(), equalTo( b.size() ) );
-        assertThat( a.hashCode(), equalTo( b.hashCode() ) );
-        assertThat( a.keySet(), containsInAnyOrder( Iterables.asArray( String.class, b.keySet() ) ) );
-        assertThat( Arrays.asList( a.keys().asArray() ), containsInAnyOrder( b.keys().asArray() ) );
-        a.foreach( ( k, v ) -> assertThat( b.get( k ), equalTo( v ) ) );
-        b.foreach( ( k, v ) -> assertThat( a.get( k ), equalTo( v ) ) );
+        assertThat( a ).isEqualTo( b );
+        assertThat( a.size() ).isEqualTo( b.size() );
+        assertThat( a.hashCode() ).isEqualTo( b.hashCode() );
+        assertThat( a.keySet() ).contains( Iterables.asArray( String.class, b.keySet() ) );
+        assertThat( Arrays.asList( a.keys().asArray() ) ).contains( b.keys().asArray() );
+        a.foreach( ( k, v ) -> assertThat( b.get( k ) ).isEqualTo( v ) );
+        b.foreach( ( k, v ) -> assertThat( a.get( k ) ).isEqualTo( v ) );
     }
 
     private MapValue mapValue( Object... kv )

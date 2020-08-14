@@ -11,7 +11,11 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-runtime-util</artifactId>
     <packaging>jar</packaging>
+<<<<<<< HEAD
     <name>ONgDB - Cypher Runtime Utilities</name>
+=======
+    <name>Neo4j - Cypher Runtime Utilities</name>
+>>>>>>> neo4j/4.1
 
     <description>Cypher runtime utilities</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -25,6 +29,9 @@
     <properties>
         <moduleName>org.neo4j.cypher.internal.runtime.util</moduleName>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
+        <test.runner.jvm.settings.additional>
+            -javaagent:${settings.localRepository}/com/github/jbellis/jamm/${jamm.version}/jamm-${jamm.version}.jar
+        </test.runner.jvm.settings.additional>
     </properties>
 
     <licenses>
@@ -96,6 +103,19 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-cypher-macros</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>kernel-api-test-utils</artifactId>
+            <scope>test</scope>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- scala -->
 
         <dependency>
@@ -131,27 +151,47 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.github.jbellis</groupId>
+            <artifactId>jamm</artifactId>
+        </dependency>
+
         <!-- test dependencies -->
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-util-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-util</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-expressions-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-expressions</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-ast-4.0</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-ast</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -162,6 +202,13 @@
             <artifactId>ongdb-kernel</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-random-values</artifactId>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
 

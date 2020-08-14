@@ -116,6 +116,7 @@ public final class IndexDescriptor implements IndexRef<IndexDescriptor>, SchemaR
     /**
      * @return The name of this index.
      */
+    @Override
     public String getName()
     {
         return name;
@@ -135,6 +136,7 @@ public final class IndexDescriptor implements IndexRef<IndexDescriptor>, SchemaR
     /**
      * @return the {@link IndexConfig}
      */
+    @Override
     public IndexConfig getIndexConfig()
     {
         return indexConfig;
@@ -145,6 +147,7 @@ public final class IndexDescriptor implements IndexRef<IndexDescriptor>, SchemaR
      * @param indexConfig The index config of the new index descriptor.
      * @return A new index descriptor with the given index config.
      */
+    @Override
     public IndexDescriptor withIndexConfig( IndexConfig indexConfig )
     {
         return new IndexDescriptor( id, name, schema, isUnique, indexProvider, owningConstraintId, capability, indexType, indexConfig );
@@ -161,15 +164,7 @@ public final class IndexDescriptor implements IndexRef<IndexDescriptor>, SchemaR
     @Override
     public String userDescription( TokenNameLookup tokenNameLookup )
     {
-        return "Index( " + id + ", '" + name + "', " + (isUnique ? "UNIQUE" : "GENERAL") + " " + indexType + ", " +
-                schema().userDescription( tokenNameLookup ) + ", " +
-                getIndexProvider().name() + " )";
-    }
-
-    @Override
-    public String toString()
-    {
-        return userDescription( TokenNameLookup.idTokenNameLookup );
+        return SchemaUserDescription.forIndex( tokenNameLookup, id, name, isUnique, indexType, schema(), getIndexProvider() );
     }
 
     @Override
@@ -276,13 +271,7 @@ public final class IndexDescriptor implements IndexRef<IndexDescriptor>, SchemaR
     @Override
     public int hashCode()
     {
-        int result = (int) (id ^ (id >>> 32));
-        result = 31 * result + name.hashCode();
-        result = 31 * result + schema.hashCode();
-        result = 31 * result + Boolean.hashCode( isUnique );
-        result = 31 * result + indexType.hashCode();
-        result = 31 * result + indexProvider.hashCode();
-        return result;
+        return Long.hashCode( id );
     }
 
     /**

@@ -26,11 +26,12 @@ import java.util.Map;
 
 import org.neo4j.internal.kernel.api.DefaultCloseListenable;
 import org.neo4j.internal.kernel.api.KernelReadTracer;
-import org.neo4j.internal.kernel.api.LabelSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
+import org.neo4j.internal.kernel.api.TokenSet;
+import org.neo4j.storageengine.api.Degrees;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.values.storable.Value;
 
 public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
@@ -91,13 +92,23 @@ public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
     }
 
     @Override
-    public LabelSet labels()
+    public TokenSet labels()
     {
-        return offset >= 0 && offset < nodes.size() ? nodes.get( offset ).labelSet() : LabelSet.NONE;
+        return offset >= 0 && offset < nodes.size() ? nodes.get( offset ).labelSet() : TokenSet.NONE;
     }
 
     @Override
+<<<<<<< HEAD
     public LabelSet labelsIgnoringTxStateSetRemove()
+    {
+        return labels();
+    }
+
+    @Override
+    public boolean hasLabel( int label )
+=======
+    public TokenSet labelsIgnoringTxStateSetRemove()
+>>>>>>> neo4j/4.1
     {
         return labels();
     }
@@ -109,15 +120,9 @@ public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
     }
 
     @Override
-    public void relationships( RelationshipGroupCursor cursor )
+    public void relationships( RelationshipTraversalCursor relationships, RelationshipSelection selection )
     {
-        ((StubGroupCursor) cursor).rewind();
-    }
-
-    @Override
-    public void allRelationships( RelationshipTraversalCursor relationships )
-    {
-        ((StubRelationshipCursor) relationships).rewind();
+        ((StubRelationshipCursor) relationships).rewind( nodeReference(), selection );
     }
 
     @Override
@@ -127,13 +132,7 @@ public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
     }
 
     @Override
-    public long relationshipGroupReference()
-    {
-        throw new UnsupportedOperationException( "not implemented" );
-    }
-
-    @Override
-    public long allRelationshipsReference()
+    public long relationshipsReference()
     {
         throw new UnsupportedOperationException( "not implemented" );
     }
@@ -153,9 +152,27 @@ public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
     }
 
     @Override
-    public boolean isDense()
+    public boolean supportsFastDegreeLookup()
     {
         return dense;
+    }
+
+    @Override
+    public int[] relationshipTypes()
+    {
+        throw new UnsupportedOperationException( "Not implemented yet" );
+    }
+
+    @Override
+    public Degrees degrees( RelationshipSelection selection )
+    {
+        throw new UnsupportedOperationException( "Not implemented yet" );
+    }
+
+    @Override
+    public int degree( RelationshipSelection selection )
+    {
+        throw new UnsupportedOperationException( "Not implemented yet" );
     }
 
     @Override

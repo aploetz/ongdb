@@ -27,7 +27,7 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
-import org.neo4j.kernel.api.index.IndexDropper;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
@@ -37,23 +37,29 @@ import static org.neo4j.internal.helpers.collection.Iterators.emptyResourceItera
 
 public class FailedIndexProxy extends AbstractSwallowingIndexProxy
 {
-    private final IndexDropper indexDropper;
+    private final MinimalIndexAccessor minimalIndexAccessor;
     private final String indexUserDescription;
     private final IndexStatisticsStore indexStatisticsStore;
     private final Log log;
 
     FailedIndexProxy( IndexDescriptor descriptor,
             String indexUserDescription,
-            IndexDropper indexDropper,
+            MinimalIndexAccessor minimalIndexAccessor,
             IndexPopulationFailure populationFailure,
             IndexStatisticsStore indexStatisticsStore,
             LogProvider logProvider )
     {
         super( descriptor, populationFailure );
-        this.indexDropper = indexDropper;
+        this.minimalIndexAccessor = minimalIndexAccessor;
         this.indexUserDescription = indexUserDescription;
         this.indexStatisticsStore = indexStatisticsStore;
         this.log = logProvider.getLog( getClass() );
+    }
+
+    @Override
+    public void start()
+    {
+        // nothing to start
     }
 
     @Override
@@ -63,7 +69,7 @@ public class FailedIndexProxy extends AbstractSwallowingIndexProxy
         String message = "FailedIndexProxy#drop index on " + indexUserDescription + " dropped due to:\n" +
                      getPopulationFailure().asString();
         log.info( message );
-        indexDropper.drop();
+        minimalIndexAccessor.drop();
     }
 
     @Override
@@ -109,6 +115,6 @@ public class FailedIndexProxy extends AbstractSwallowingIndexProxy
     @Override
     public Map<String,Value> indexConfig()
     {
-        return indexDropper.indexConfig();
+        return minimalIndexAccessor.indexConfig();
     }
 }

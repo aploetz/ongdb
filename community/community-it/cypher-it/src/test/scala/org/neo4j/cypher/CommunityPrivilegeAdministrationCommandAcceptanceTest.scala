@@ -19,175 +19,116 @@
  */
 package org.neo4j.cypher
 
-import org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME
+import org.neo4j.configuration.GraphDatabaseSettings
+import org.neo4j.graphdb.config.Setting
 
 class CommunityPrivilegeAdministrationCommandAcceptanceTest extends CommunityAdministrationCommandAcceptanceTestBase {
+
+  override def databaseConfig(): Map[Setting[_], Object] = super.databaseConfig() ++ Map(GraphDatabaseSettings.auth_enabled -> java.lang.Boolean.TRUE)
 
   // Tests for showing privileges
 
   test("should fail on showing privileges from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
     assertFailure("SHOW ALL PRIVILEGES", "Unsupported administration command: SHOW ALL PRIVILEGES")
   }
 
   test("should fail on showing role privileges from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
     assertFailure("SHOW ROLE reader PRIVILEGES", "Unsupported administration command: SHOW ROLE reader PRIVILEGES")
+    assertFailure("SHOW ROLE $role PRIVILEGES", "Unsupported administration command: SHOW ROLE $role PRIVILEGES")
   }
 
   test("should fail on showing user privileges for non-existing user with correct error message") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
     assertFailure("SHOW USER foo PRIVILEGES", "Unsupported administration command: SHOW USER foo PRIVILEGES")
+    assertFailure("SHOW USER $foo PRIVILEGES", "Unsupported administration command: SHOW USER $foo PRIVILEGES")
   }
 
-  // Tests for granting privileges
+  private val enterprisePrivileges = Seq(
+    // Graph privileges
+    "TRAVERSE ON GRAPH * NODES * (*)",
+    "READ {*} ON GRAPH * NODES * (*)",
+    "MATCH {*} ON GRAPH * NODES * (*)",
+    "WRITE ON GRAPH *",
+    "SET LABEL foo ON GRAPH *",
+    "REMOVE LABEL foo ON GRAPH *",
+    "CREATE ON GRAPH * NODE A",
+    "DELETE ON GRAPH * RELATIONSHIP B",
+    "SET PROPERTY {prop} ON GRAPH *",
+    "ALL GRAPH PRIVILEGES ON GRAPH *",
 
-  test("should fail on granting traverse privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
+    // Database privileges
+    "ACCESS ON DATABASE *",
+    "START ON DATABASE $foo",
+    "STOP ON DATABASE *",
+    "CREATE INDEX ON DATABASE *",
+    "DROP INDEX ON DATABASE $foo",
+    "INDEX MANAGEMENT ON DATABASE *",
+    "CREATE CONSTRAINT ON DATABASE *",
+    "DROP CONSTRAINT ON DATABASE *",
+    "CONSTRAINT MANAGEMENT ON DATABASE $foo",
+    "CREATE NEW NODE LABEL ON DATABASE *",
+    "CREATE NEW RELATIONSHIP TYPE ON DATABASE $foo",
+    "CREATE NEW PROPERTY NAME ON DATABASE *",
+    "NAME MANAGEMENT ON DATABASE *",
+    "ALL DATABASE PRIVILEGES ON DATABASE *",
+    "SHOW TRANSACTION (*) ON DATABASE *",
+    "TERMINATE TRANSACTION ($user) ON DATABASE $foo",
+    "TRANSACTION MANAGEMENT ON DATABASE *",
 
-    // THEN
-    assertFailure("GRANT TRAVERSE ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: GRANT TRAVERSE ON GRAPH * NODES * (*) TO custom")
+    // Dbms privileges
+    "ROLE MANAGEMENT ON DBMS",
+    "CREATE ROLE ON DBMS",
+    "DROP ROLE ON DBMS",
+    "ASSIGN ROLE ON DBMS",
+    "REMOVE ROLE ON DBMS",
+    "SHOW ROLE ON DBMS",
+    "USER MANAGEMENT ON DBMS",
+    "CREATE USER ON DBMS",
+    "DROP USER ON DBMS",
+    "SET USER STATUS ON DBMS",
+    "SET PASSWORDS ON DBMS",
+    "ALTER USER ON DBMS",
+    "SHOW USER ON DBMS",
+    "DATABASE MANAGEMENT ON DBMS",
+    "CREATE DATABASE ON DBMS",
+    "DROP DATABASE ON DBMS",
+    "PRIVILEGE MANAGEMENT ON DBMS",
+    "SHOW PRIVILEGE ON DBMS",
+    "ASSIGN PRIVILEGE ON DBMS",
+    "REMOVE PRIVILEGE ON DBMS",
+    "ALL ON DBMS",
+    "ALL PRIVILEGES ON DBMS",
+    "ALL DBMS PRIVILEGES ON DBMS"
+  )
+
+  private val grantPrivilegeTypes = Seq(
+    ("GRANT", "TO"),
+    ("REVOKE", "FROM"),
+    ("REVOKE GRANT", "FROM"),
+
+  )
+
+  private val denyPrivilegeTypes = Seq(
+    ("DENY", "TO"),
+    ("REVOKE DENY", "FROM")
+  )
+
+  enterprisePrivileges.foreach {
+    privilege =>
+      (grantPrivilegeTypes ++ denyPrivilegeTypes).foreach {
+        case (privilegeType, preposition) =>
+          test(s"should fail on $privilegeType $privilege from community") {
+            val command = s"$privilegeType $privilege $preposition custom"
+            assertFailure(command, s"Unsupported administration command: $command")
+          }
+      }
   }
 
-  test("should fail on granting read privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("GRANT READ {*} ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: GRANT READ {*} ON GRAPH * NODES * (*) TO custom")
-  }
-
-  test("should fail on granting MATCH privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("GRANT MATCH {*} ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: GRANT MATCH {*} ON GRAPH * NODES * (*) TO custom")
-  }
-
-  // Tests for denying privileges
-
-  test("should fail on denying traverse privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("DENY TRAVERSE ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: DENY TRAVERSE ON GRAPH * NODES * (*) TO custom")
-  }
-
-  test("should fail on denying read privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("DENY READ {*} ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: DENY READ {*} ON GRAPH * NODES * (*) TO custom")
-  }
-
-  test("should fail on denying MATCH privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("DENY MATCH {*} ON GRAPH * NODES * (*) TO custom", "Unsupported administration command: DENY MATCH {*} ON GRAPH * NODES * (*) TO custom")
-  }
-
-  // Tests for revoking grant privileges
-
-  test("should fail on revoking grant traverse privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE GRANT TRAVERSE ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE GRANT TRAVERSE ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking grant read privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE GRANT READ {*} ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE GRANT READ {*} ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking grant MATCH privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailureWithPartialMessage("REVOKE GRANT MATCH {*} ON GRAPH * NODES * (*) FROM custom",
-      "REVOKE GRANT MATCH is not a valid command, use REVOKE GRANT READ and REVOKE GRANT TRAVERSE instead.")
-  }
-  
-  // Tests for revoking deny privileges
-  test("should fail on revoking deny traverse privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE DENY TRAVERSE ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE DENY TRAVERSE ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking deny read privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE DENY READ {*} ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE DENY READ {*} ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking deny MATCH privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailureWithPartialMessage("REVOKE DENY MATCH {*} ON GRAPH * NODES * (*) FROM custom",
-      "REVOKE DENY MATCH is not a valid command, use REVOKE DENY READ and REVOKE DENY TRAVERSE instead.")
-  }
-
-  // Tests for revoking privileges
-  test("should fail on revoking traverse privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE TRAVERSE ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE TRAVERSE ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking read privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailure("REVOKE READ {*} ON GRAPH * NODES * (*) FROM custom", "Unsupported administration command: REVOKE READ {*} ON GRAPH * NODES * (*) FROM custom")
-  }
-
-  test("should fail on revoking MATCH privilege from community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
-    // THEN
-    assertFailureWithPartialMessage("REVOKE MATCH {*} ON GRAPH * NODES * (*) FROM custom",
-      "REVOKE MATCH is not a valid command, use REVOKE READ and REVOKE TRAVERSE instead.")
-  }
-
-  def assertFailureWithPartialMessage(command: String, errorMsg: String): Unit = {
-    // WHEN
-    val exception = the[Exception] thrownBy {
-      execute(command)
-    }
-
-    // THEN
-    exception.getMessage should include(errorMsg)
+  (grantPrivilegeTypes).foreach {
+    case (privilegeType, preposition) =>
+      test(s"should fail on $privilegeType MERGE {*} ON GRAPH * from community") {
+        val command = s"$privilegeType MERGE {*} ON GRAPH * $preposition custom"
+        assertFailure(command, s"Unsupported administration command: $command")
+      }
   }
 
 }

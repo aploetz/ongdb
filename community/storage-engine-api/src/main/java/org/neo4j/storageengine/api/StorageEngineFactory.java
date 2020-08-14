@@ -35,9 +35,12 @@ import org.neo4j.internal.schema.SchemaState;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.lock.LockService;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.monitoring.DatabaseHealth;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.service.Services;
@@ -57,7 +60,8 @@ public interface StorageEngineFactory
      * and means of checking upgradability between them.
      * @return StoreVersionCheck to check store version as well as upgradability to other versions.
      */
-    StoreVersionCheck versionCheck( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config, PageCache pageCache, LogService logService );
+    StoreVersionCheck versionCheck( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config, PageCache pageCache, LogService logService,
+            PageCacheTracer pageCacheTracer );
 
     StoreVersion versionInformation( String storeVersion );
 
@@ -66,7 +70,7 @@ public interface StorageEngineFactory
      * @return StoreMigrationParticipant for migration.
      */
     List<StoreMigrationParticipant> migrationParticipants( FileSystemAbstraction fs, Config config, PageCache pageCache,
-            JobScheduler jobScheduler, LogService logService );
+            JobScheduler jobScheduler, LogService logService, PageCacheTracer cacheTracer, MemoryTracker memoryTracker );
 
     /**
      * Instantiates a {@link StorageEngine} where all dependencies can be retrieved from the supplied {@code dependencyResolver}.
@@ -76,7 +80,8 @@ public interface StorageEngineFactory
     StorageEngine instantiate( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config, PageCache pageCache, TokenHolders tokenHolders,
             SchemaState schemaState, ConstraintRuleAccessor constraintSemantics, IndexConfigCompleter indexConfigCompleter, LockService lockService,
             IdGeneratorFactory idGeneratorFactory, IdController idController, DatabaseHealth databaseHealth,
-            LogProvider logProvider, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, boolean createStoreIfNotExists );
+            LogProvider logProvider, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, PageCacheTracer cacheTracer, boolean createStoreIfNotExists,
+            MemoryTracker memoryTracker );
 
     /**
      * Lists files of a specific storage location.
@@ -101,14 +106,15 @@ public interface StorageEngineFactory
      * @return the read-only {@link TransactionIdStore}.
      * @throws IOException on I/O error or if the store doesn't exist.
      */
-    TransactionIdStore readOnlyTransactionIdStore( FileSystemAbstraction filySystem, DatabaseLayout databaseLayout, PageCache pageCache ) throws IOException;
+    TransactionIdStore readOnlyTransactionIdStore( FileSystemAbstraction filySystem, DatabaseLayout databaseLayout,
+            PageCache pageCache, PageCursorTracer pageCursorTracer ) throws IOException;
 
     /**
      * Instantiates a read-only {@link LogVersionRepository} to be used outside of a {@link StorageEngine}.
      * @return the read-only {@link LogVersionRepository}.
      * @throws IOException on I/O error or if the store doesn't exist.
      */
-    LogVersionRepository readOnlyLogVersionRepository( DatabaseLayout databaseLayout, PageCache pageCache ) throws IOException;
+    LogVersionRepository readOnlyLogVersionRepository( DatabaseLayout databaseLayout, PageCache pageCache, PageCursorTracer cursorTracer ) throws IOException;
 
     /**
      * Instantiates a fully functional {@link TransactionMetaDataStore}, which is a union of {@link TransactionIdStore}
@@ -116,13 +122,47 @@ public interface StorageEngineFactory
      * @return a fully functional {@link TransactionMetaDataStore}.
      * @throws IOException on I/O error or if the store doesn't exist.
      */
-    TransactionMetaDataStore transactionMetaDataStore( FileSystemAbstraction fs, DatabaseLayout databaseLayout,
-            Config config, PageCache pageCache ) throws IOException;
+    TransactionMetaDataStore transactionMetaDataStore( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config, PageCache pageCache,
+            PageCacheTracer cacheTracer ) throws IOException;
 
-    StoreId storeId( DatabaseLayout databaseLayout, PageCache pageCache ) throws IOException;
+    StoreId storeId( DatabaseLayout databaseLayout, PageCache pageCache, PageCursorTracer cursorTracer ) throws IOException;
 
     SchemaRuleMigrationAccess schemaRuleMigrationAccess( FileSystemAbstraction fs, PageCache pageCache, Config config, DatabaseLayout databaseLayout,
-            LogService logService, String recordFormats );
+            LogService logService, String recordFormats, PageCacheTracer cacheTracer, PageCursorTracer cursorTracer, MemoryTracker memoryTracker );
+
+    /**
+     * Asks this storage engine about the state of a specific store before opening it. If this specific store is missing optional or
+     * even perhaps mandatory files in order to properly open it, this is the place to report that.
+     *
+     * @param fs {@link FileSystemAbstraction} to use for file operations.
+     * @param databaseLayout {@link DatabaseLayout} for the location of the database in the file system.
+     * @param pageCache {@link PageCache} for any data reading needs.
+     * @return the state of the storage files.
+     */
+    StorageFilesState checkRecoveryRequired( FileSystemAbstraction fs, DatabaseLayout databaseLayout, PageCache pageCache );
+
+    /**
+     * @return a {@link CommandReaderFactory} capable of handing out {@link CommandReader} for specific versions. Generally kernel will take care
+     * of most of the log entry parsing, i.e. the START, COMMIT, CHECKPOINT commands and their contents (they may be versioned). For COMMAND log entries
+     * this returned factory will be used to parse the actual command contents, which are storage-specific. For maximum flexibility the structure should
+     * be something like this:
+     * <ol>
+     *     <li>1B log entry version - managed by kernel</li>
+     *     <li>1B log entry type - managed by kernel</li>
+     *     <li>For COMMAND log entries: 1B command version - managed by storage</li>
+     *     <li>For COMMAND log entries: 1B command type - managed by storage</li>
+     *     <li>For COMMAND log entries: command data... - managed by storage</li>
+     * </ol>
+     *
+     * Although currently it's more like this:
+     *
+     * <ol>
+     *     <li>1B log entry version - dictating both log entry version AND command version</li>
+     *     <li>1B log entry type - managed by kernel</li>
+     *     <li>For COMMAND log entries: command data... - managed by storage, although versioned the same as log entry version</li>
+     * </ol>
+     */
+    CommandReaderFactory commandReaderFactory();
 
     /**
      * Selects a {@link StorageEngineFactory} among the candidates. How it's done or which it selects isn't important a.t.m.

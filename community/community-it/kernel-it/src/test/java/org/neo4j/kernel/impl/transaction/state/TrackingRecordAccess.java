@@ -19,8 +19,10 @@
  */
 package org.neo4j.kernel.impl.transaction.state;
 
-import org.neo4j.internal.helpers.collection.IterableWrapper;
+import java.util.Collection;
+
 import org.neo4j.internal.recordstorage.RecordAccess;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.transaction.state.RelationshipCreatorTest.Tracker;
 
 public class TrackingRecordAccess<RECORD, ADDITIONAL> implements RecordAccess<RECORD, ADDITIONAL>
@@ -35,21 +37,15 @@ public class TrackingRecordAccess<RECORD, ADDITIONAL> implements RecordAccess<RE
     }
 
     @Override
-    public RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData )
+    public RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
-        return new TrackingRecordProxy<>( delegate.getOrLoad( key, additionalData ), false, tracker );
+        return new TrackingRecordProxy<>( delegate.getOrLoad( key, additionalData, cursorTracer ), false, tracker );
     }
 
     @Override
-    public RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData )
+    public RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
-        return new TrackingRecordProxy<>( delegate.create( key, additionalData ), true, tracker );
-    }
-
-    @Override
-    public void close()
-    {
-        delegate.close();
+        return new TrackingRecordProxy<>( delegate.create( key, additionalData, cursorTracer ), true, tracker );
     }
 
     @Override
@@ -60,15 +56,9 @@ public class TrackingRecordAccess<RECORD, ADDITIONAL> implements RecordAccess<RE
     }
 
     @Override
-    public void setTo( long key, RECORD newRecord, ADDITIONAL additionalData )
+    public RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData, PageCursorTracer cursorTracer )
     {
-        delegate.setTo( key, newRecord, additionalData );
-    }
-
-    @Override
-    public RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData )
-    {
-        return delegate.setRecord( key, record, additionalData );
+        return delegate.setRecord( key, record, additionalData, cursorTracer );
     }
 
     @Override
@@ -78,17 +68,8 @@ public class TrackingRecordAccess<RECORD, ADDITIONAL> implements RecordAccess<RE
     }
 
     @Override
-    public Iterable<RecordProxy<RECORD,ADDITIONAL>> changes()
+    public Collection<? extends RecordProxy<RECORD,ADDITIONAL>> changes()
     {
-        return new IterableWrapper<RecordProxy<RECORD,ADDITIONAL>,RecordProxy<RECORD,ADDITIONAL>>(
-                delegate.changes() )
-        {
-            @Override
-            protected RecordProxy<RECORD,ADDITIONAL> underlyingObjectToObject(
-                    RecordProxy<RECORD,ADDITIONAL> actual )
-            {
-                return new TrackingRecordProxy<>( actual, false, tracker );
-            }
-        };
+        return delegate.changes();
     }
 }

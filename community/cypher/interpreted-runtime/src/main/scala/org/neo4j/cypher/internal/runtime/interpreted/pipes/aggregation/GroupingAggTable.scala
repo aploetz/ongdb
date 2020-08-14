@@ -19,46 +19,51 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.{AggregatingCol, AggregationTable, AggregationTableFactory}
+import org.eclipse.collections.api.block.function.Function2
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregatingCol
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTable
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTableFactory
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.computeNewAggregatorsFunction
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.DistinctPipe.GroupingCol
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{AggregationPipe, ExecutionContextFactory, Pipe, QueryState}
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExecutionContextFactory
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.kernel.impl.util.collection.HeapTrackingOrderedAppendMap
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 
-import scala.collection.JavaConverters._
-
 /**
-  * This table must be used when we have grouping columns, and there is no provided order for at least one grouping column.
-  *
-  * @param groupingColumns  all grouping columns
-  * @param groupingFunction a precomputed function to calculate the grouping key of a row
-  * @param aggregations     all aggregation columns
-  */
+ * This table must be used when we have grouping columns, and there is no provided order for at least one grouping column.
+ *
+ * @param groupingColumns  all grouping columns
+ * @param groupingFunction a precomputed function to calculate the grouping key of a row
+ * @param aggregations     all aggregation columns
+ */
 class GroupingAggTable(groupingColumns: Array[GroupingCol],
-                       groupingFunction: (ExecutionContext, QueryState) => AnyValue,
+                       groupingFunction: (CypherRow, QueryState) => AnyValue,
                        aggregations: Array[AggregatingCol],
                        state: QueryState,
-                       executionContextFactory: ExecutionContextFactory) extends AggregationTable {
+                       executionContextFactory: ExecutionContextFactory,
+                       operatorId: Id) extends AggregationTable {
 
-  protected var resultMap: java.util.LinkedHashMap[AnyValue, Array[AggregationFunction]] = _
-  protected val addKeys: (ExecutionContext, AnyValue) => Unit = AggregationPipe.computeAddKeysToResultRowFunction(groupingColumns)
+  private[this] var resultMap: HeapTrackingOrderedAppendMap[AnyValue, Array[AggregationFunction]] = _
+  private[this] val addKeys: (CypherRow, AnyValue) => Unit = AggregationPipe.computeAddKeysToResultRowFunction(groupingColumns)
+  private[this] val memoryTracker = state.memoryTracker.memoryTrackerForOperator(operatorId.x)
+  private[this] val newAggregators: Function2[AnyValue, MemoryTracker, Array[AggregationFunction]] =
+    computeNewAggregatorsFunction(aggregations.map(_.expression))
 
   override def clear(): Unit = {
-    resultMap = new java.util.LinkedHashMap[AnyValue, Array[AggregationFunction]]()
+    if (resultMap != null) {
+      resultMap.close()
+    }
+    resultMap = HeapTrackingOrderedAppendMap.createOrderedMap[AnyValue, Array[AggregationFunction]](memoryTracker)
   }
 
-  override def processRow(row: ExecutionContext): Unit = {
+  override def processRow(row: CypherRow): Unit = {
     val groupingValue: AnyValue = groupingFunction(row, state)
-    val aggregationFunctions = resultMap.computeIfAbsent(groupingValue, _ => {
-      state.memoryTracker.allocated(groupingValue)
-      val functions = new Array[AggregationFunction](aggregations.length)
-      var i = 0
-      while (i < aggregations.length) {
-        functions(i) = aggregations(i).expression.createAggregationFunction
-        i += 1
-      }
-      functions
-    })
+    val aggregationFunctions = resultMap.getIfAbsentPutWithMemoryTracker2(groupingValue, newAggregators)
     var i = 0
     while (i < aggregationFunctions.length) {
       aggregationFunctions(i)(row, state)
@@ -66,16 +71,16 @@ class GroupingAggTable(groupingColumns: Array[GroupingCol],
     }
   }
 
-  override def result(): Iterator[ExecutionContext] = {
-    val innerIterator = resultMap.entrySet().iterator()
-    new Iterator[ExecutionContext] {
+  override def result(): Iterator[CypherRow] = {
+    val innerIterator = resultMap.autoClosingEntryIterator()
+    new Iterator[CypherRow] {
       override def hasNext: Boolean = innerIterator.hasNext
 
-      override def next(): ExecutionContext = {
-        val entry = innerIterator.next()
+      override def next(): CypherRow = {
+        val entry = innerIterator.next() // NOTE: This entry is transient and only valid until we call next() again
         val unorderedGroupingValue = entry.getKey
         val aggregateFunctions = entry.getValue
-        val row = executionContextFactory.newExecutionContext()
+        val row = state.newExecutionContext(executionContextFactory)
         addKeys(row, unorderedGroupingValue)
         var i = 0
         while (i < aggregateFunctions.length) {
@@ -93,15 +98,10 @@ class GroupingAggTable(groupingColumns: Array[GroupingCol],
 object GroupingAggTable {
 
   case class Factory(groupingColumns: Array[GroupingCol],
-                     groupingFunction: (ExecutionContext, QueryState) => AnyValue,
+                     groupingFunction: (CypherRow, QueryState) => AnyValue,
                      aggregations: Array[AggregatingCol]) extends AggregationTableFactory {
-    override def table(state: QueryState, executionContextFactory: ExecutionContextFactory): AggregationTable =
-      new GroupingAggTable(groupingColumns, groupingFunction, aggregations, state, executionContextFactory)
-
-    override def registerOwningPipe(pipe: Pipe): Unit = {
-      aggregations.foreach(_.expression.registerOwningPipe(pipe))
-      groupingColumns.foreach(_.expression.registerOwningPipe(pipe))
-    }
+    override def table(state: QueryState, executionContextFactory: ExecutionContextFactory, operatorId: Id): AggregationTable =
+      new GroupingAggTable(groupingColumns, groupingFunction, aggregations, state, executionContextFactory, operatorId)
   }
 
 }

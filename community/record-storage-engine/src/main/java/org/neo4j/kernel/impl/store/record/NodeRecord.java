@@ -21,15 +21,16 @@ package org.neo4j.kernel.impl.store.record;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Objects;
 
 import static java.util.Collections.emptyList;
 import static org.neo4j.internal.helpers.collection.Iterables.filter;
 import static org.neo4j.kernel.impl.store.NodeLabelsField.parseLabelsField;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 
 public class NodeRecord extends PrimitiveRecord
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( NodeRecord.class );
     private long nextRel;
     private long labels;
     private Collection<DynamicRecord> dynamicLabelRecords;
@@ -41,6 +42,27 @@ public class NodeRecord extends PrimitiveRecord
         super( id );
     }
 
+    public NodeRecord( NodeRecord other )
+    {
+        super( other );
+        this.nextRel = other.nextRel;
+        this.labels = other.labels;
+        if ( other.dynamicLabelRecords.isEmpty() )
+        {
+            this.dynamicLabelRecords = emptyList();
+        }
+        else
+        {
+            this.dynamicLabelRecords = new ArrayList<>( other.dynamicLabelRecords.size() );
+            for ( DynamicRecord labelRecord : other.dynamicLabelRecords )
+            {
+                this.dynamicLabelRecords.add( new DynamicRecord( labelRecord ) );
+            }
+        }
+        this.isLight = other.isLight;
+        this.dense = other.dense;
+    }
+
     public NodeRecord initialize( boolean inUse, long nextProp, boolean dense, long nextRel, long labels )
     {
         super.initialize( inUse, nextProp );
@@ -50,29 +72,6 @@ public class NodeRecord extends PrimitiveRecord
         this.dynamicLabelRecords = emptyList();
         this.isLight = true;
         return this;
-    }
-
-    @Deprecated
-    public NodeRecord( long id, boolean dense, long nextRel, long nextProp )
-    {
-        this( id, false, dense, nextRel, nextProp, 0 );
-    }
-
-    @Deprecated
-    public NodeRecord( long id, boolean inUse, boolean dense, long nextRel, long nextProp, long labels )
-    {
-        super( id, nextProp );
-        this.nextRel = nextRel;
-        this.dense = dense;
-        this.labels = labels;
-        setInUse( inUse );
-    }
-
-    @Deprecated
-    public NodeRecord( long id, boolean dense, long nextRel, long nextProp, boolean inUse )
-    {
-        this( id, dense, nextRel, nextProp );
-        setInUse( inUse );
     }
 
     @Override
@@ -165,23 +164,13 @@ public class NodeRecord extends PrimitiveRecord
     }
 
     @Override
+<<<<<<< HEAD
     public NodeRecord clone()
+=======
+    public NodeRecord copy()
+>>>>>>> neo4j/4.1
     {
-        NodeRecord clone = (NodeRecord) super.clone();
-        if ( !dynamicLabelRecords.isEmpty() )
-        {
-            List<DynamicRecord> clonedLabelRecords = new ArrayList<>( dynamicLabelRecords.size() );
-            for ( DynamicRecord labelRecord : dynamicLabelRecords )
-            {
-                clonedLabelRecords.add( labelRecord.clone() );
-            }
-            clone.dynamicLabelRecords = clonedLabelRecords;
-        }
-        else
-        {
-            clone.dynamicLabelRecords = emptyList();
-        }
-        return clone;
+        return new NodeRecord( this );
     }
 
     @Override

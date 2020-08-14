@@ -21,30 +21,28 @@ package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import java.util.Comparator
 
-import org.neo4j.cypher.internal.DefaultComparatorTopTable
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, NumericHelper}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.collection.DefaultComparatorTopTable
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NumericHelper
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.InvalidArgumentException
+import org.neo4j.memory.ScopedMemoryTracker
 import org.neo4j.values.storable.FloatingPointValue
 
 import scala.collection.Iterator.empty
-import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 /*
  * TopPipe is used when a query does a ORDER BY ... LIMIT query. Instead of ordering the whole result set and then
  * returning the matching top results, we only keep the top results in heap, which allows us to release memory earlier
  */
-case class TopNPipe(source: Pipe, countExpression: Expression, comparator: Comparator[ExecutionContext])
+case class TopNPipe(source: Pipe, countExpression: Expression, comparator: Comparator[ReadableRow])
                    (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  countExpression.registerOwningPipe(this)
-
-  private val initialFallbackSortArraySize = Int.MaxValue / 8 // This should not be too big so as to risk out-of-memory on the first allocation
-
-  protected override def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    val limitNumber = NumericHelper.asNumber(countExpression(state.newExecutionContext(executionContextFactory), state))
+  protected override def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val limitNumber = NumericHelper.evaluateStaticallyKnownNumber(countExpression, state)
     if (limitNumber.isInstanceOf[FloatingPointValue]) {
       val limit = limitNumber.doubleValue()
       throw new InvalidArgumentException(s"LIMIT: Invalid input. '$limit' is not a valid value. Must be a non-negative integer.")
@@ -57,41 +55,24 @@ case class TopNPipe(source: Pipe, countExpression: Expression, comparator: Compa
 
     if (limit == 0 || input.isEmpty) return empty
 
-    if (limit > Int.MaxValue) {
-      // For count values larger than the maximum 32-bit integer we fallback on a full sort instead of allocating a huge top table
-      // (Instead of throw new IllegalArgumentException(s"ORDER BY + LIMIT $longCount exceeds the maximum value of ${Int.MaxValue}"))
-      // NOTE: If the _input size_ is larger than Int.MaxValue this will still fail, since an array cannot hold that many elements
-      val buffer = new mutable.ArrayBuffer[ExecutionContext](initialFallbackSortArraySize)
-      while (input.hasNext) {
-        val row = input.next()
-        buffer += row
-        state.memoryTracker.allocated(row)
+    val scopedMemoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x).getScopedMemoryTracker
+    val topTable = new DefaultComparatorTopTable[CypherRow](comparator, limit, scopedMemoryTracker)
+
+    var i = 1L
+    while (input.hasNext) {
+      val row = input.next()
+      val evictedRow = topTable.addAndGetEvicted(row)
+      if (row ne evictedRow) {
+        scopedMemoryTracker.allocateHeap(row.estimatedHeapUsage())
+        if (evictedRow != null)
+          scopedMemoryTracker.releaseHeap(evictedRow.estimatedHeapUsage())
       }
-      val array = buffer.toArray
-      java.util.Arrays.sort(array, comparator)
-      var c: Long = 0 // Counter to be used inside of stream
-      array.toStream.takeWhile { _ => c = c + 1; c <= limit }.iterator
+      i += 1
     }
-    else {
-      // The main case: allocate a table of size count to hold the top rows
-      val count = limit.toInt
-      val topTable = new DefaultComparatorTopTable(comparator, count)
 
-      var i = 1
-      while (input.hasNext) {
-        val row = input.next()
-        topTable.add(row)
-        if (i < count) {
-          // This makes the assumption that rows have more or less the same size, since we don't know which ones are actually kept in the TopTable here.
-          state.memoryTracker.allocated(row)
-        }
-        i += 1
-      }
+    topTable.sort()
 
-      topTable.sort()
-
-      topTable.iterator.asScala
-    }
+    topTable.autoClosingIterator(scopedMemoryTracker).asScala
   }
 }
 
@@ -99,11 +80,11 @@ case class TopNPipe(source: Pipe, countExpression: Expression, comparator: Compa
  * Special case for when we only have one element, in this case it is no idea to store
  * an array, instead just store a single value.
  */
-case class Top1Pipe(source: Pipe, comparator: Comparator[ExecutionContext])
+case class Top1Pipe(source: Pipe, comparator: Comparator[ReadableRow])
                    (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: Iterator[CypherRow],
+                                               state: QueryState): Iterator[CypherRow] = {
     if (input.isEmpty) Iterator.empty
     else {
 
@@ -124,17 +105,17 @@ case class Top1Pipe(source: Pipe, comparator: Comparator[ExecutionContext])
 /*
  * Special case for when we only want one element, and all others that have the same value (tied for first place)
  */
-case class Top1WithTiesPipe(source: Pipe, comparator: Comparator[ExecutionContext])
+case class Top1WithTiesPipe(source: Pipe, comparator: Comparator[ReadableRow])
                            (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: Iterator[CypherRow],
+                                               state: QueryState): Iterator[CypherRow] = {
     if (input.isEmpty)
       Iterator.empty
     else {
       val first = input.next()
       var best = first
-      var matchingRows = init(best)
+      val matchingRows = init(best)
 
       while (input.hasNext) {
         val ctx = input.next()
@@ -154,8 +135,8 @@ case class Top1WithTiesPipe(source: Pipe, comparator: Comparator[ExecutionContex
   }
 
   @inline
-  private def init(first: ExecutionContext) = {
-    val builder = Vector.newBuilder[ExecutionContext]
+  private def init(first: CypherRow) = {
+    val builder = Vector.newBuilder[CypherRow]
     builder += first
     builder
   }

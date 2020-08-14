@@ -23,16 +23,18 @@ import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.api.index.sampling.IndexSamplingController;
 import org.neo4j.kernel.impl.api.index.sampling.IndexSamplingControllerFactory;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 
 /**
  * Factory to create {@link IndexingService}
  */
-public class IndexingServiceFactory
+public final class IndexingServiceFactory
 {
     private IndexingServiceFactory()
     {
@@ -49,19 +51,20 @@ public class IndexingServiceFactory
                                           IndexingService.Monitor monitor,
                                           SchemaState schemaState,
                                           IndexStatisticsStore indexStatisticsStore,
+                                          PageCacheTracer pageCacheTracer,
+                                          MemoryTracker memoryTracker,
                                           boolean readOnly )
     {
         IndexSamplingConfig samplingConfig = new IndexSamplingConfig( config );
-        MultiPopulatorFactory multiPopulatorFactory = MultiPopulatorFactory.forConfig( config );
         IndexMapReference indexMapRef = new IndexMapReference();
         IndexSamplingControllerFactory factory =
-                new IndexSamplingControllerFactory( samplingConfig, indexStatisticsStore, scheduler, tokenNameLookup, internalLogProvider );
+                new IndexSamplingControllerFactory( samplingConfig, indexStatisticsStore, scheduler, tokenNameLookup, internalLogProvider, pageCacheTracer );
         IndexSamplingController indexSamplingController = factory.create( indexMapRef );
         IndexProxyCreator proxySetup =
                 new IndexProxyCreator( samplingConfig, indexStatisticsStore, providerMap, tokenNameLookup, internalLogProvider );
 
         return new IndexingService( proxySetup, providerMap, indexMapRef, storeView, indexRules,
                 indexSamplingController, tokenNameLookup, scheduler, schemaState,
-                multiPopulatorFactory, internalLogProvider, userLogProvider, monitor, indexStatisticsStore, readOnly );
+                internalLogProvider, userLogProvider, monitor, indexStatisticsStore, pageCacheTracer, memoryTracker, readOnly );
     }
 }

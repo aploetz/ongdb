@@ -38,10 +38,8 @@ import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.String.format;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.collections.impl.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -70,7 +68,7 @@ class DatabasePageCacheTest
     {
         globalPageCache = mock( PageCache.class );
         pagedFileMapper = new PagedFileAnswer();
-        when( globalPageCache.map( any( File.class ), any(), eq( PAGE_SIZE ) ) ).then( pagedFileMapper );
+        when( globalPageCache.map( any( File.class ), any(), eq( PAGE_SIZE ), any() ) ).then( pagedFileMapper );
         databasePageCache = new DatabasePageCache( globalPageCache, EMPTY );
     }
 
@@ -87,10 +85,10 @@ class DatabasePageCacheTest
     void mapDatabaseFile() throws IOException
     {
         File mapFile = testDirectory.createFile( "mapFile" );
-        PagedFile pagedFile = databasePageCache.map( mapFile, EMPTY, PAGE_SIZE );
+        PagedFile pagedFile = databasePageCache.map( mapFile, EMPTY, PAGE_SIZE, immutable.empty() );
 
         assertNotNull( pagedFile );
-        verify( globalPageCache ).map( mapFile, EMPTY, PAGE_SIZE );
+        verify( globalPageCache ).map( mapFile, EMPTY, PAGE_SIZE, immutable.empty() );
     }
 
     @Test
@@ -102,9 +100,9 @@ class DatabasePageCacheTest
         PagedFile pagedFile2 = databasePageCache.map( mapFile2, PAGE_SIZE );
 
         List<PagedFile> pagedFiles = databasePageCache.listExistingMappings();
-        assertThat( pagedFiles, hasSize( 2 ) );
-        assertThat( pagedFiles, hasItem( pagedFile ) );
-        assertThat( pagedFiles, hasItem( pagedFile2 ) );
+        assertThat( pagedFiles ).hasSize( 2 );
+        assertThat( pagedFiles ).contains( pagedFile );
+        assertThat( pagedFiles ).contains( pagedFile2 );
     }
 
     @Test
@@ -122,12 +120,12 @@ class DatabasePageCacheTest
             PagedFile pagedFile4 = anotherDatabaseCache.map( mapFile4, PAGE_SIZE );
 
             List<PagedFile> pagedFiles = databasePageCache.listExistingMappings();
-            assertThat( pagedFiles, hasSize( 2 ) );
-            assertThat( pagedFiles, hasItems( pagedFile, pagedFile2 ) );
+            assertThat( pagedFiles ).hasSize( 2 );
+            assertThat( pagedFiles ).contains( pagedFile, pagedFile2 );
 
             List<PagedFile> anotherPagedFiles = anotherDatabaseCache.listExistingMappings();
-            assertThat( anotherPagedFiles, hasSize( 2 ) );
-            assertThat( anotherPagedFiles, hasItems( pagedFile3, pagedFile4 ) );
+            assertThat( anotherPagedFiles ).hasSize( 2 );
+            assertThat( anotherPagedFiles ).contains( pagedFile3, pagedFile4 );
         }
     }
 

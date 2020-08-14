@@ -19,16 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
 import org.neo4j.cypher.operations.CypherMath
-import org.neo4j.values._
+import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
 case class Add(a: Expression, b: Expression) extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = (a(ctx, state), b(ctx, state)) match {
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = (a(row, state), b(row, state)) match {
     case (x, y) if (x eq Values.NO_VALUE) || (y eq Values.NO_VALUE) => Values.NO_VALUE
     case (x, y) => CypherMath.add(x, y)
   }

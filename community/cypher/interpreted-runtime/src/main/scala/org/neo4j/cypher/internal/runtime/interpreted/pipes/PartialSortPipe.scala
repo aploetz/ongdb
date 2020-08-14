@@ -21,33 +21,56 @@ package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import java.util.Comparator
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.collection.trackable.HeapTrackingArrayList
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.util.attribution.Id
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 case class PartialSortPipe(source: Pipe,
-                           prefixComparator: Comparator[ExecutionContext],
-                           suffixComparator: Comparator[ExecutionContext])
+                           prefixComparator: Comparator[ReadableRow],
+                           suffixComparator: Comparator[ReadableRow])
                           (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) with OrderedInputPipe {
 
   class PartialSortReceiver(state: QueryState) extends OrderedChunkReceiver {
+<<<<<<< HEAD
     private val buffer = new java.util.ArrayList[ExecutionContext]()
 
     override def clear(): Unit = {
       buffer.forEach(x => state.memoryTracker.deallocated(x))
       buffer.clear()
     }
+=======
+    private val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
+    private val rowsMemoryTracker = memoryTracker.getScopedMemoryTracker
+    private val buffer = HeapTrackingArrayList.newArrayList[CypherRow](16, memoryTracker)
 
-    override def isSameChunk(first: ExecutionContext, current: ExecutionContext): Boolean = prefixComparator.compare(first, current) == 0
+    override def clear(): Unit = {
+      rowsMemoryTracker.reset()
+      buffer.clear()
+    }
 
+    override def close(): Unit = {
+      buffer.close()
+      rowsMemoryTracker.close()
+    }
+>>>>>>> neo4j/4.1
+
+    override def isSameChunk(first: CypherRow, current: CypherRow): Boolean = prefixComparator.compare(first, current) == 0
+
+<<<<<<< HEAD
     override def processRow(row: ExecutionContext): Unit = {
       state.memoryTracker.allocated(row)
+=======
+    override def processRow(row: CypherRow): Unit = {
+      rowsMemoryTracker.allocateHeap(row.estimatedHeapUsage)
+>>>>>>> neo4j/4.1
       buffer.add(row)
     }
 
-    override def result(): Iterator[ExecutionContext] = {
+    override def result(): Iterator[CypherRow] = {
       if (buffer.size() > 1) {
         // Sort this chunk
         buffer.sort(suffixComparator)

@@ -19,6 +19,8 @@
  */
 package org.neo4j.dbms.database;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.OpenOption;
@@ -32,6 +34,7 @@ import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 
 import static java.util.Objects.requireNonNull;
@@ -58,7 +61,7 @@ public class DatabasePageCache implements PageCache
     }
 
     @Override
-    public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize, OpenOption... openOptions ) throws IOException
+    public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize, ImmutableSet<OpenOption> openOptions ) throws IOException
     {
         PagedFile pagedFile = globalPageCache.map( file, versionContextSupplier, pageSize, openOptions );
         DatabasePageFile databasePageFile = new DatabasePageFile( pagedFile, databasePagedFiles );
@@ -126,12 +129,6 @@ public class DatabasePageCache implements PageCache
     }
 
     @Override
-    public void reportEvents()
-    {
-        globalPageCache.reportEvents();
-    }
-
-    @Override
     public VersionContextSupplier versionContextSupplier()
     {
         return versionContextSupplier;
@@ -149,9 +146,9 @@ public class DatabasePageCache implements PageCache
         }
 
         @Override
-        public PageCursor io( long pageId, int pf_flags ) throws IOException
+        public PageCursor io( long pageId, int pf_flags, PageCursorTracer tracer ) throws IOException
         {
-            return delegate.io( pageId, pf_flags );
+            return delegate.io( pageId, pf_flags, tracer );
         }
 
         @Override

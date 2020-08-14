@@ -22,7 +22,7 @@ package org.neo4j.kernel.impl.index.schema;
 import org.junit.jupiter.api.Test;
 
 import org.neo4j.memory.LocalMemoryTracker;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -32,15 +32,15 @@ class UnsafeDirectByteBufferFactoryTest
     void shouldAllocateBuffer()
     {
         // given
-        MemoryAllocationTracker tracker = new LocalMemoryTracker();
-        try ( UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator( tracker ) )
+        MemoryTracker tracker = new LocalMemoryTracker();
+        try ( UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator() )
         {
             // when
             int bufferSize = 128;
-            factory.allocate( bufferSize );
+            factory.allocate( bufferSize, tracker );
 
             // then
-            assertEquals( bufferSize, tracker.usedDirectMemory() );
+            assertEquals( bufferSize, tracker.usedNativeMemory() );
         }
     }
 
@@ -48,45 +48,46 @@ class UnsafeDirectByteBufferFactoryTest
     void shouldFreeOnClose()
     {
         // given
-        MemoryAllocationTracker tracker = new LocalMemoryTracker();
-        try ( UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator( tracker ) )
+        MemoryTracker tracker = new LocalMemoryTracker();
+        try ( UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator() )
         {
             // when
-            factory.allocate( 256 );
+            factory.allocate( 256, tracker );
         }
 
         // then
-        assertEquals( 0, tracker.usedDirectMemory() );
+        assertEquals( 0, tracker.usedNativeMemory() );
     }
 
     @Test
     void shouldHandleMultipleClose()
     {
         // given
-        MemoryAllocationTracker tracker = new LocalMemoryTracker();
-        UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator( tracker );
+        MemoryTracker tracker = new LocalMemoryTracker();
+        UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator();
 
         // when
-        factory.allocate( 256 );
+        factory.allocate( 256, tracker );
         factory.close();
 
         // then
-        assertEquals( 0, tracker.usedDirectMemory() );
+        assertEquals( 0, tracker.usedNativeMemory() );
         factory.close();
-        assertEquals( 0, tracker.usedDirectMemory() );
+        assertEquals( 0, tracker.usedNativeMemory() );
     }
 
     @Test
     void shouldNotAllocateAfterClosed()
     {
         // given
-        UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator( new LocalMemoryTracker() );
+        var localMemoryTracker = new LocalMemoryTracker();
+        UnsafeDirectByteBufferAllocator factory = new UnsafeDirectByteBufferAllocator();
         factory.close();
 
         // when
         try
         {
-            factory.allocate( 8 );
+            factory.allocate( 8, localMemoryTracker );
         }
         catch ( IllegalStateException e )
         {

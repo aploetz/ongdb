@@ -32,24 +32,27 @@ import org.neo4j.values.storable.LongValue;
 import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.Values;
 import org.neo4j.values.virtual.ListValue;
+import org.neo4j.values.virtual.ListValueBuilder;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.MapValueBuilder;
-import org.neo4j.values.virtual.VirtualValues;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.neo4j.procedure.builtin.routing.Role.READ;
 import static org.neo4j.procedure.builtin.routing.Role.ROUTE;
 import static org.neo4j.procedure.builtin.routing.Role.WRITE;
 import static org.neo4j.values.storable.Values.longValue;
-import static org.neo4j.values.storable.Values.stringValue;
+import static org.neo4j.values.storable.Values.utf8Value;
 
 /**
  * The result format of GetServersV1 and GetServersV2 procedures.
  */
-public class RoutingResultFormat
+public final class RoutingResultFormat
 {
     private static final String ROLE_KEY = "role";
     private static final String ADDRESSES_KEY = "addresses";
+    private static final TextValue READ_NAME = utf8Value( READ.name() );
+    private static final TextValue WRTE_NAME = utf8Value( WRITE.name() );
+    private static final TextValue ROUTE_NAME = utf8Value( ROUTE.name() );
 
     private RoutingResultFormat()
     {
@@ -57,44 +60,44 @@ public class RoutingResultFormat
 
     public static AnyValue[] build( RoutingResult result )
     {
-        AnyValue[] routers = asValues( result.routeEndpoints() );
-        AnyValue[] readers = asValues( result.readEndpoints() );
-        AnyValue[] writers = asValues( result.writeEndpoints() );
+        ListValue routers = asValues( result.routeEndpoints() );
+        ListValue readers = asValues( result.readEndpoints() );
+        ListValue writers = asValues( result.writeEndpoints() );
 
-        List<AnyValue> servers = new ArrayList<>();
+        ListValueBuilder servers = ListValueBuilder.newListBuilder();
 
-        if ( writers.length > 0 )
+        if ( writers.size() > 0 )
         {
             MapValueBuilder builder = new MapValueBuilder();
 
-            builder.add( ROLE_KEY, stringValue( WRITE.name() ) );
-            builder.add( ADDRESSES_KEY, VirtualValues.list( writers ) );
+            builder.add( ROLE_KEY, WRTE_NAME );
+            builder.add( ADDRESSES_KEY, writers );
 
             servers.add( builder.build() );
         }
 
-        if ( readers.length > 0 )
+        if ( readers.size() > 0 )
         {
             MapValueBuilder builder = new MapValueBuilder();
 
-            builder.add( ROLE_KEY, stringValue( READ.name() ) );
-            builder.add( ADDRESSES_KEY, VirtualValues.list( readers ) );
+            builder.add( ROLE_KEY, READ_NAME );
+            builder.add( ADDRESSES_KEY, readers );
 
             servers.add( builder.build() );
         }
 
-        if ( routers.length > 0 )
+        if ( routers.size() > 0 )
         {
             MapValueBuilder builder = new MapValueBuilder();
 
-            builder.add( ROLE_KEY, stringValue( ROUTE.name() ) );
-            builder.add( ADDRESSES_KEY, VirtualValues.list( routers ) );
+            builder.add( ROLE_KEY, ROUTE_NAME );
+            builder.add( ADDRESSES_KEY, routers );
 
             servers.add( builder.build() );
         }
 
         LongValue timeToLiveSeconds = longValue( MILLISECONDS.toSeconds( result.ttlMillis() ) );
-        return new AnyValue[]{timeToLiveSeconds, VirtualValues.fromList( servers )};
+        return new AnyValue[]{timeToLiveSeconds, servers.build()};
     }
 
     public static RoutingResult parse( AnyValue[] record )
@@ -151,11 +154,11 @@ public class RoutingResultFormat
         return new SocketAddress( split[0], Integer.parseInt( split[1] ) );
     }
 
-    private static AnyValue[] asValues( List<SocketAddress> addresses )
+    private static ListValue asValues( List<SocketAddress> addresses )
     {
         return addresses.stream()
                 .map( SocketAddress::toString )
-                .map( Values::stringValue )
-                .toArray( AnyValue[]::new );
+                .map( Values::utf8Value )
+                .collect( ListValueBuilder.collector() );
     }
 }

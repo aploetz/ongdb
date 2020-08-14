@@ -26,6 +26,8 @@ import org.neo4j.internal.batchimport.input.InputEntityVisitor;
 import org.neo4j.internal.batchimport.store.BatchingNeoStores;
 import org.neo4j.internal.batchimport.store.BatchingTokenRepository;
 import org.neo4j.internal.id.IdGenerator.Marker;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.CommonAbstractStore;
 import org.neo4j.kernel.impl.store.DynamicRecordAllocator;
 import org.neo4j.kernel.impl.store.PropertyStore;
@@ -35,6 +37,7 @@ import org.neo4j.kernel.impl.store.record.PrimitiveRecord;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
 import org.neo4j.kernel.impl.store.record.Record;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
@@ -45,6 +48,7 @@ import static org.neo4j.kernel.impl.store.IdUpdateListener.IGNORE;
  */
 abstract class EntityImporter extends InputEntityVisitor.Adapter
 {
+    private static final String ENTITY_IMPORTER_TAG = "entityImporter";
     private final BatchingTokenRepository.BatchingPropertyKeyTokenRepository propertyKeyTokenRepository;
     private final PropertyStore propertyStore;
     private final PropertyRecord propertyRecord;
@@ -54,18 +58,22 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
     private final BatchingIdGetter stringPropertyIds;
     private final BatchingIdGetter arrayPropertyIds;
     protected final Monitor monitor;
+    protected final MemoryTracker memoryTracker;
     private long propertyCount;
     protected int entityPropertyCount; // just for the current entity
     private boolean hasPropertyId;
     private long propertyId;
     private final DynamicRecordAllocator dynamicStringRecordAllocator;
     private final DynamicRecordAllocator dynamicArrayRecordAllocator;
+    protected final PageCursorTracer cursorTracer;
 
-    EntityImporter( BatchingNeoStores stores, Monitor monitor )
+    EntityImporter( BatchingNeoStores stores, Monitor monitor, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
+        this.cursorTracer = pageCacheTracer.createPageCursorTracer( ENTITY_IMPORTER_TAG );
         this.propertyStore = stores.getPropertyStore();
         this.propertyKeyTokenRepository = stores.getPropertyKeyRepository();
         this.monitor = monitor;
+        this.memoryTracker = memoryTracker;
         for ( int i = 0; i < propertyBlocks.length; i++ )
         {
             propertyBlocks[i] = new PropertyBlock();
@@ -128,10 +136,11 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
     private void encodeProperty( PropertyBlock block, int key, Object property )
     {
         Value value = property instanceof Value ? (Value) property : Values.of( property );
-        PropertyStore.encodeValue( block, key, value, dynamicStringRecordAllocator, dynamicArrayRecordAllocator, propertyStore.allowStorePointsAndTemporal() );
+        PropertyStore.encodeValue( block, key, value, dynamicStringRecordAllocator, dynamicArrayRecordAllocator, propertyStore.allowStorePointsAndTemporal(),
+                cursorTracer, memoryTracker );
     }
 
-    long createAndWritePropertyChain()
+    long createAndWritePropertyChain( PageCursorTracer cursorTracer )
     {
         if ( hasPropertyId )
         {
@@ -143,7 +152,7 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
             return Record.NO_NEXT_PROPERTY.longValue();
         }
 
-        PropertyRecord currentRecord = propertyRecord( propertyIds.next() );
+        PropertyRecord currentRecord = propertyRecord( propertyIds.nextId( cursorTracer ) );
         long firstRecordId = currentRecord.getId();
         for ( int i = 0; i < propertyBlocksCursor; i++ )
         {
@@ -151,10 +160,10 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
             if ( currentRecord.size() + block.getSize() > PropertyType.getPayloadSize() )
             {
                 // This record is full or couldn't fit this block, write it to property store
-                long nextPropertyId = propertyIds.next();
+                long nextPropertyId = propertyIds.nextId( cursorTracer );
                 long prevId = currentRecord.getId();
                 currentRecord.setNextProp( nextPropertyId );
-                propertyStore.updateRecord( currentRecord, IGNORE );
+                propertyStore.updateRecord( currentRecord, IGNORE, cursorTracer );
                 currentRecord = propertyRecord( nextPropertyId );
                 currentRecord.setPrevProp( prevId );
             }
@@ -165,7 +174,7 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
 
         if ( currentRecord.size() > 0 )
         {
-            propertyStore.updateRecord( currentRecord, IGNORE );
+            propertyStore.updateRecord( currentRecord, IGNORE, cursorTracer );
         }
 
         return firstRecordId;
@@ -191,17 +200,17 @@ abstract class EntityImporter extends InputEntityVisitor.Adapter
 
     void freeUnusedIds()
     {
-        freeUnusedIds( propertyStore, propertyIds );
-        freeUnusedIds( propertyStore.getStringStore(), stringPropertyIds );
-        freeUnusedIds( propertyStore.getArrayStore(), arrayPropertyIds );
+        freeUnusedIds( propertyStore, propertyIds, cursorTracer );
+        freeUnusedIds( propertyStore.getStringStore(), stringPropertyIds, cursorTracer );
+        freeUnusedIds( propertyStore.getArrayStore(), arrayPropertyIds, cursorTracer );
     }
 
-    static void freeUnusedIds( CommonAbstractStore<?,?> store, BatchingIdGetter idBatch )
+    static void freeUnusedIds( CommonAbstractStore<?,?> store, BatchingIdGetter idBatch, PageCursorTracer cursorTracer )
     {
         // Free unused property ids still in the last pre-allocated batch
-        try ( Marker marker = store.getIdGenerator().marker() )
+        try ( Marker marker = store.getIdGenerator().marker( cursorTracer ) )
         {
-            idBatch.visitUnused( marker::markDeleted );
+            idBatch.visitUnused( marker::markDeleted, cursorTracer );
         }
     }
 }

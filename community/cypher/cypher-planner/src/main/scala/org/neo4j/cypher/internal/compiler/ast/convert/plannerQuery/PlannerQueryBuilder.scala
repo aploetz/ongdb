@@ -19,12 +19,23 @@
  */
 package org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery
 
+import org.neo4j.cypher.internal.ast.RelationshipStartItem
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
 import org.neo4j.cypher.internal.compiler.helpers.ListSupport
-import org.neo4j.cypher.internal.v4_0.ast.RelationshipStartItem
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.v4_0.util.UnNamedNameGenerator
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.ir.CallSubqueryHorizon
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.PlannerQueryPart
+import org.neo4j.cypher.internal.ir.Predicate
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.QueryHorizon
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.util.NonEmptyList.IterableConverter
+import org.neo4j.cypher.internal.util.UnNamedNameGenerator
 
 import scala.collection.mutable
 
@@ -37,8 +48,8 @@ case class PlannerQueryBuilder(private val q: SinglePlannerQuery, semanticTable:
   def withHorizon(horizon: QueryHorizon): PlannerQueryBuilder =
     copy(q = q.updateTailOrSelf(_.withHorizon(horizon)))
 
-  def withCallSubquery(subquery: PlannerQueryPart): PlannerQueryBuilder = {
-    withHorizon(CallSubqueryHorizon(subquery)).withTail(SinglePlannerQuery.empty)
+  def withCallSubquery(subquery: PlannerQueryPart, correlated: Boolean): PlannerQueryBuilder = {
+    withHorizon(CallSubqueryHorizon(subquery, correlated)).withTail(SinglePlannerQuery.empty)
   }
 
   def withTail(newTail: SinglePlannerQuery): PlannerQueryBuilder = {
@@ -144,7 +155,6 @@ case class PlannerQueryBuilder(private val q: SinglePlannerQuery, semanticTable:
     }
 
     def groupInequalities(plannerQuery: SinglePlannerQuery): SinglePlannerQuery = {
-      import org.neo4j.cypher.internal.v4_0.util.NonEmptyList._
 
       plannerQuery
         .amendQueryGraph(_.mapSelections {
@@ -155,7 +165,7 @@ case class PlannerQueryBuilder(private val q: SinglePlannerQuery, semanticTable:
             }.getOrElse(predicates)
             Selections(newPredicates)
         })
-      .updateTail(groupInequalities)
+        .updateTail(groupInequalities)
     }
 
     val withFixedOptionalMatchArgumentIds = fixArgumentIdsOnOptionalMatch(fixedArgumentIds)
@@ -166,5 +176,8 @@ case class PlannerQueryBuilder(private val q: SinglePlannerQuery, semanticTable:
 }
 
 object PlannerQueryBuilder {
-  def apply(semanticTable: SemanticTable) = new PlannerQueryBuilder(SinglePlannerQuery.empty, semanticTable)
+  def apply(semanticTable: SemanticTable): PlannerQueryBuilder =
+    PlannerQueryBuilder(SinglePlannerQuery.empty, semanticTable)
+  def apply(semanticTable: SemanticTable, argumentIds: Set[String]): PlannerQueryBuilder =
+    PlannerQueryBuilder(RegularSinglePlannerQuery(queryGraph = QueryGraph(argumentIds = argumentIds)), semanticTable)
 }

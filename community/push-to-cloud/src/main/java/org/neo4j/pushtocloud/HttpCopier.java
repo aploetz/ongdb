@@ -121,7 +121,11 @@ public class HttpCopier implements PushToCloudCommand.Copier
 
     private static String base64Encode( String username, char[] password )
     {
+<<<<<<< HEAD
         String plainToken = new StringBuilder( username ).append( ":" ).append( password ).toString();
+=======
+        String plainToken = new StringBuilder( username ).append( ':' ).append( password ).toString();
+>>>>>>> neo4j/4.1
         return Base64.getEncoder().encodeToString( plainToken.getBytes() );
     }
 

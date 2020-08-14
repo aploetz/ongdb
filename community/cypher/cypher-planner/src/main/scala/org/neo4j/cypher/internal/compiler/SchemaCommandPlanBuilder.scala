@@ -19,19 +19,34 @@
  */
 package org.neo4j.cypher.internal.compiler
 
-import org.neo4j.cypher.internal.compiler.phases.{LogicalPlanState, PlannerContext}
+import org.neo4j.cypher.internal.ast.CreateIndex
+import org.neo4j.cypher.internal.ast.CreateIndexNewSyntax
+import org.neo4j.cypher.internal.ast.CreateNodeKeyConstraint
+import org.neo4j.cypher.internal.ast.CreateNodePropertyExistenceConstraint
+import org.neo4j.cypher.internal.ast.CreateRelationshipPropertyExistenceConstraint
+import org.neo4j.cypher.internal.ast.CreateUniquePropertyConstraint
+import org.neo4j.cypher.internal.ast.DropConstraintOnName
+import org.neo4j.cypher.internal.ast.DropIndex
+import org.neo4j.cypher.internal.ast.DropIndexOnName
+import org.neo4j.cypher.internal.ast.DropNodeKeyConstraint
+import org.neo4j.cypher.internal.ast.DropNodePropertyExistenceConstraint
+import org.neo4j.cypher.internal.ast.DropRelationshipPropertyExistenceConstraint
+import org.neo4j.cypher.internal.ast.DropUniquePropertyConstraint
+import org.neo4j.cypher.internal.compiler.phases.LogicalPlanState
+import org.neo4j.cypher.internal.compiler.phases.PlannerContext
+import org.neo4j.cypher.internal.frontend.phases.BaseState
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer.CompilationPhase
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer.CompilationPhase.PIPE_BUILDING
+import org.neo4j.cypher.internal.frontend.phases.Condition
+import org.neo4j.cypher.internal.frontend.phases.Phase
 import org.neo4j.cypher.internal.logical.plans
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 import org.neo4j.cypher.internal.planner.spi.AdministrationPlannerName
-import org.neo4j.cypher.internal.v4_0.ast._
-import org.neo4j.cypher.internal.v4_0.frontend.phases.CompilationPhaseTracer.CompilationPhase
-import org.neo4j.cypher.internal.v4_0.frontend.phases.CompilationPhaseTracer.CompilationPhase.PIPE_BUILDING
-import org.neo4j.cypher.internal.v4_0.frontend.phases.{BaseState, Condition, Phase}
-import org.neo4j.cypher.internal.v4_0.util.attribution.SequentialIdGen
+import org.neo4j.cypher.internal.util.attribution.SequentialIdGen
 
 /**
-  * This planner takes on queries that requires no planning such as schema commands
-  */
+ * This planner takes on queries that requires no planning such as schema commands
+ */
 case object SchemaCommandPlanBuilder extends Phase[PlannerContext, BaseState, LogicalPlanState] {
 
   override def phase: CompilationPhase = PIPE_BUILDING
@@ -44,58 +59,58 @@ case object SchemaCommandPlanBuilder extends Phase[PlannerContext, BaseState, Lo
     implicit val idGen = new SequentialIdGen()
     val maybeLogicalPlan: Option[LogicalPlan] = from.statement() match {
       // CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY
-      case CreateNodeKeyConstraint(node, label, props, name) =>
+      case CreateNodeKeyConstraint(node, label, props, name, _) =>
         Some(plans.CreateNodeKeyConstraint(node.name, label, props, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY
-      case DropNodeKeyConstraint(_, label, props) =>
+      case DropNodeKeyConstraint(_, label, props, _) =>
         Some(plans.DropNodeKeyConstraint(label, props))
 
       // CREATE CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE
       // CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE
-      case CreateUniquePropertyConstraint(node, label, props, name) =>
+      case CreateUniquePropertyConstraint(node, label, props, name, _) =>
         Some(plans.CreateUniquePropertyConstraint(node.name, label, props, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE
       // DROP CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE
-      case DropUniquePropertyConstraint(_, label, props) =>
+      case DropUniquePropertyConstraint(_, label, props, _) =>
         Some(plans.DropUniquePropertyConstraint(label, props))
 
       // CREATE CONSTRAINT ON (node:Label) ASSERT node.prop EXISTS
-      case CreateNodePropertyExistenceConstraint(_, label, prop, name) =>
+      case CreateNodePropertyExistenceConstraint(_, label, prop, name, _) =>
         Some(plans.CreateNodePropertyExistenceConstraint(label, prop, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT node.prop EXISTS
-      case DropNodePropertyExistenceConstraint(_, label, prop) =>
+      case DropNodePropertyExistenceConstraint(_, label, prop, _) =>
         Some(plans.DropNodePropertyExistenceConstraint(label, prop))
 
       // CREATE CONSTRAINT ON ()-[r:R]-() ASSERT r.prop EXISTS
-      case CreateRelationshipPropertyExistenceConstraint(_, relType, prop, name) =>
+      case CreateRelationshipPropertyExistenceConstraint(_, relType, prop, name, _) =>
         Some(plans.CreateRelationshipPropertyExistenceConstraint(relType, prop, name))
 
       // DROP CONSTRAINT ON ()-[r:R]-() ASSERT r.prop EXISTS
-      case DropRelationshipPropertyExistenceConstraint(_, relType, prop) =>
+      case DropRelationshipPropertyExistenceConstraint(_, relType, prop, _) =>
         Some(plans.DropRelationshipPropertyExistenceConstraint(relType, prop))
 
       // DROP CONSTRAINT name
-      case DropConstraintOnName(name) =>
+      case DropConstraintOnName(name, _) =>
         Some(plans.DropConstraintOnName(name))
 
       // CREATE INDEX ON :LABEL(prop)
-      case CreateIndex(label, props) =>
+      case CreateIndex(label, props, _) =>
         Some(plans.CreateIndex(label, props, None))
 
       // CREATE INDEX FOR (n:LABEL) ON (n.prop)
       // CREATE INDEX name FOR (n:LABEL) ON (n.prop)
-      case CreateIndexNewSyntax(_, label, props, name) =>
+      case CreateIndexNewSyntax(_, label, props, name, _) =>
         Some(plans.CreateIndex(label, props.map(_.propertyKey), name))
 
       // DROP INDEX ON :LABEL(prop)
-      case DropIndex(label, props) =>
+      case DropIndex(label, props, _) =>
         Some(plans.DropIndex(label, props))
 
       // DROP INDEX name
-      case DropIndexOnName(name) =>
+      case DropIndexOnName(name, _) =>
         Some(plans.DropIndexOnName(name))
 
       case _ => None

@@ -27,6 +27,7 @@ import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 class OffloadStoreTest
 {
@@ -45,7 +46,7 @@ class OffloadStoreTest
     {
         cursor = new PageAwareByteArrayCursor( PAGE_SIZE );
         idProvider = new SimpleIdProvider( cursor::duplicate );
-        pcFactory = ( id, flags ) -> cursor.duplicate( id );
+        pcFactory = ( id, flags, cursorTracer ) -> cursor.duplicate( id );
         idValidator = OffloadIdValidator.ALWAYS_TRUE;
     }
 
@@ -58,24 +59,24 @@ class OffloadStoreTest
         RawBytes value = layout.newValue();
         key.bytes = new byte[200];
         value.bytes = new byte[offloadStore.maxEntrySize() - layout.keySize( key )];
-        long offloadId = offloadStore.writeKeyValue( key, value, STABLE_GENERATION, UNSTABLE_GENERATION );
+        long offloadId = offloadStore.writeKeyValue( key, value, STABLE_GENERATION, UNSTABLE_GENERATION, NULL );
 
         {
             RawBytes into = layout.newKey();
-            offloadStore.readKey( offloadId, into );
+            offloadStore.readKey( offloadId, into, NULL );
             assertEquals( 0, layout.compare( key, into ) );
         }
 
         {
             RawBytes into = layout.newKey();
-            offloadStore.readValue( offloadId, into );
+            offloadStore.readValue( offloadId, into, NULL );
             assertEquals( 0, layout.compare( value, into ) );
         }
 
         {
             RawBytes intoKey = layout.newKey();
             RawBytes intoValue = layout.newValue();
-            offloadStore.readKeyValue( offloadId, intoKey, intoValue );
+            offloadStore.readKeyValue( offloadId, intoKey, intoValue, NULL );
             assertEquals( 0, layout.compare( key, intoKey ) );
             assertEquals( 0, layout.compare( value, intoValue ) );
         }
@@ -88,7 +89,7 @@ class OffloadStoreTest
 
         RawBytes key = layout.newKey();
         key.bytes = new byte[200];
-        long offloadId = offloadStore.writeKey( key, STABLE_GENERATION, UNSTABLE_GENERATION );
+        long offloadId = offloadStore.writeKey( key, STABLE_GENERATION, UNSTABLE_GENERATION, NULL );
 
         cursor.next( offloadId );
         assertEquals( TreeNode.NODE_TYPE_OFFLOAD, TreeNode.nodeType( cursor ) );
@@ -102,20 +103,20 @@ class OffloadStoreTest
 
         {
             RawBytes key = layout.newKey();
-            IOException exception = assertThrows( IOException.class, () -> offloadStore.readKey( 0, key ) );
+            IOException exception = assertThrows( IOException.class, () -> offloadStore.readKey( 0, key, NULL ) );
             assertTrue( exception.getMessage().contains( expectedMessage ) );
         }
 
         {
             RawBytes value = layout.newValue();
-            IOException exception = assertThrows( IOException.class, () -> offloadStore.readValue( 0, value ) );
+            IOException exception = assertThrows( IOException.class, () -> offloadStore.readValue( 0, value, NULL ) );
             assertTrue( exception.getMessage().contains( expectedMessage ) );
         }
 
         {
             RawBytes key = layout.newKey();
             RawBytes value = layout.newValue();
-            IOException exception = assertThrows( IOException.class, () -> offloadStore.readKeyValue( 0, key, value ) );
+            IOException exception = assertThrows( IOException.class, () -> offloadStore.readKeyValue( 0, key, value, NULL ) );
             assertTrue( exception.getMessage().contains( expectedMessage ) );
         }
     }

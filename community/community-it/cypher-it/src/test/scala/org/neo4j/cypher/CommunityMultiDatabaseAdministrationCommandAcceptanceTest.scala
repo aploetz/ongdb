@@ -22,16 +22,22 @@ package org.neo4j.cypher
 import java.io.File
 
 import org.neo4j.configuration.Config
-import org.neo4j.configuration.GraphDatabaseSettings.{DEFAULT_DATABASE_NAME, SYSTEM_DATABASE_NAME, default_database}
+import org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME
+import org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME
+import org.neo4j.configuration.GraphDatabaseSettings.default_database
 import org.neo4j.cypher.internal.DatabaseStatus
 import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
-import org.neo4j.cypher.internal.security.SecureHasher
-import org.neo4j.dbms.database.{DatabaseContext, DatabaseManager, DefaultSystemGraphInitializer}
+import org.neo4j.dbms.database.DatabaseContext
+import org.neo4j.dbms.database.DatabaseManager
+import org.neo4j.dbms.database.DefaultSystemGraphComponent
+import org.neo4j.dbms.database.DefaultSystemGraphInitializer
+import org.neo4j.dbms.database.SystemGraphComponents
 import org.neo4j.exceptions.DatabaseAdministrationException
-import org.neo4j.graphdb.config.Setting
+import org.neo4j.exceptions.SyntaxException
 import org.neo4j.logging.Log
 import org.neo4j.server.security.auth.InMemoryUserRepository
-import org.neo4j.server.security.systemgraph.UserSecurityGraphInitializer
+import org.neo4j.server.security.systemgraph.SystemGraphRealmHelper
+import org.neo4j.server.security.systemgraph.UserSecurityGraphComponent
 import org.scalatest.enablers.Messaging.messagingNatureOfThrowable
 
 import scala.collection.Map
@@ -49,43 +55,43 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
       // WHEN
       Config.defaults(default_database, "")
       // THEN
-    } should have message startOfError + "The provided database name is empty."
+    } should have message startOfError + "Failed to validate '' for 'dbms.default_database': The provided database name is empty."
 
     // Starting on invalid character
     the[IllegalArgumentException] thrownBy {
       // WHEN
       Config.defaults(default_database, "_default")
       // THEN
-    } should have message startOfError + "Database name '_default' is not starting with an ASCII alphabetic character."
+    } should have message startOfError + "Failed to validate '_default' for 'dbms.default_database': Database name '_default' is not starting with an ASCII alphabetic character."
 
     // Has prefix 'system'
     the[IllegalArgumentException] thrownBy {
       // WHEN
       Config.defaults(default_database, "system-mine")
       // THEN
-    } should have message startOfError + "Database name 'system-mine' is invalid, due to the prefix 'system'."
+    } should have message startOfError + "Failed to validate 'system-mine' for 'dbms.default_database': Database name 'system-mine' is invalid, due to the prefix 'system'."
 
     // Contains invalid characters
     the[IllegalArgumentException] thrownBy {
       // WHEN
       Config.defaults(default_database, "mydbwith_and%")
       // THEN
-    } should have message startOfError + "Database name 'mydbwith_and%' contains illegal characters. Use simple ascii characters, numbers, dots and dashes."
+    } should have message startOfError + "Failed to validate 'mydbwith_and%' for 'dbms.default_database': Database name 'mydbwith_and%' contains illegal characters. Use simple ascii characters, numbers, dots and dashes."
 
     // Too short name
     the[IllegalArgumentException] thrownBy {
       // WHEN
       Config.defaults(default_database, "me")
       // THEN
-    } should have message startOfError + "The provided database name must have a length between 3 and 63 characters."
+    } should have message startOfError + "Failed to validate 'me' for 'dbms.default_database': The provided database name must have a length between 3 and 63 characters."
 
     // Too long name
-    val name = "ihaveallooootoflettersclearlymorethenishould-ihaveallooootoflettersclearlymorethenishould"
+    val name = "ihaveallooootoflettersclearlymorethanishould-ihaveallooootoflettersclearlymorethanishould"
     the[IllegalArgumentException] thrownBy {
       // WHEN
       Config.defaults(default_database, name)
       // THEN
-    } should have message startOfError + "The provided database name must have a length between 3 and 63 characters."
+    } should have message startOfError + "Failed to validate '" + name + "' for 'dbms.default_database': The provided database name must have a length between 3 and 63 characters."
   }
 
   // Tests for showing databases
@@ -101,10 +107,20 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
     result.toList should be(List(db(DEFAULT_DATABASE_NAME, default = true)))
   }
 
+  test(s"should show database $DEFAULT_DATABASE_NAME with params") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASE $db", Map("db" -> DEFAULT_DATABASE_NAME))
+
+    // THEN
+    result.toList should be(List(db(DEFAULT_DATABASE_NAME, default = true)))
+  }
+
   test("should give nothing when showing a non-existing database") {
     // GIVEN
     setup(defaultConfig)
-    selectDatabase(SYSTEM_DATABASE_NAME)
 
     // WHEN
     val result = execute("SHOW DATABASE foo")
@@ -216,11 +232,180 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
       "This is an administration command and it should be executed against the system database: SHOW DEFAULT DATABASE"
   }
 
+  test("should show database with yield") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASE $db YIELD name, address, role", Map("db" -> DEFAULT_DATABASE_NAME))
+
+    // THEN
+    result.toList should be(List(Map("name" -> "neo4j",
+      "address" -> "localhost:7687",
+      "role" -> "standalone")))
+  }
+
+  test("should show database with yield and where") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASE $db YIELD name, address, role WHERE name = 'neo4j'", Map("db" -> DEFAULT_DATABASE_NAME))
+
+    // THEN
+    result.toList should be(List(Map("name" -> "neo4j",
+      "address" -> "localhost:7687",
+      "role" -> "standalone")))
+  }
+
+  test("should show database with yield and where 2") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASES YIELD name, address, role WHERE name = 'neo4j'")
+
+    // THEN
+    result.toList should be(List(Map("name" -> "neo4j",
+      "address" -> "localhost:7687",
+      "role" -> "standalone")))
+  }
+
+  test("should show database with yield and skip") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASES YIELD name ORDER BY name SKIP 1")
+
+    // THEN
+    result.toList should be(List(Map("name" -> "system")))
+  }
+
+  test("should show database with yield and limit") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASES YIELD name ORDER BY name LIMIT 1")
+
+    // THEN
+    result.toList should be(List(Map("name" -> "neo4j")))
+  }
+
+  test("should show database with yield and order by asc") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASES YIELD name ORDER BY name ASC")
+
+    // THEN
+    result.toList should be(List(Map("name" -> "neo4j"),Map("name" -> "system")))
+  }
+
+  test("should show database with yield and order by desc") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val result = execute("SHOW DATABASES YIELD name ORDER BY name DESC")
+
+    // THEN
+    result.toList should be(List(Map("name" -> "system"),Map("name" -> "neo4j")))
+  }
+
+  test("should not show database with invalid yield") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DATABASE $db YIELD foo, bar, baz", Map("db" -> DEFAULT_DATABASE_NAME))
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 25 (offset: 24))")
+
+  }
+
+  test("should not show database with invalid where") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DATABASE $db WHERE foo = 'bar'", Map("db" -> DEFAULT_DATABASE_NAME))
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 25 (offset: 24))")
+  }
+
+  test("should not show database with yield and invalid where") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DATABASE $db YIELD name, address, role WHERE foo = 'bar'", Map("db" -> DEFAULT_DATABASE_NAME))
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 51 (offset: 50))")
+  }
+
+  test("should not show database with yield and invalid skip") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DATABASES YIELD name ORDER BY name SKIP -1")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Invalid input. '-1' is not a valid value. Must be a non-negative integer")
+    exception.getMessage should include("(line 1, column 46 (offset: 45))")
+  }
+
+  test("should not show database with yield and invalid limit") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DATABASES YIELD name ORDER BY name LIMIT -1")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Invalid input. '-1' is not a valid value. Must be a non-negative integer")
+    exception.getMessage should include("(line 1, column 47 (offset: 46))")
+  }
+
+  test("should not show database with invalid order by") {
+    // GIVEN
+    setup(defaultConfig)
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW DEFAULT DATABASE YIELD name ORDER BY bar")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `bar` not defined")
+    exception.getMessage should include("(line 1, column 43 (offset: 42))")
+  }
+
   // Test for non-valid community commands
 
   test("should fail on creating database from community") {
     setup( defaultConfig )
     assertFailure("CREATE DATABASE foo", "Unsupported administration command: CREATE DATABASE foo")
+    assertFailure("CREATE DATABASE $foo", "Unsupported administration command: CREATE DATABASE $foo")
     assertFailure(s"CREATE DATABASE $DEFAULT_DATABASE_NAME IF NOT EXISTS",
       s"Unsupported administration command: CREATE DATABASE $DEFAULT_DATABASE_NAME IF NOT EXISTS")
     assertFailure(s"CREATE OR REPLACE DATABASE $DEFAULT_DATABASE_NAME",
@@ -239,6 +424,9 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
     assertFailure(s"DROP DATABASE $DEFAULT_DATABASE_NAME",
       s"Unsupported administration command: DROP DATABASE $DEFAULT_DATABASE_NAME")
 
+    assertFailure("DROP DATABASE $foo",
+      "Unsupported administration command: DROP DATABASE $foo")
+
     assertFailure(s"DROP DATABASE $DEFAULT_DATABASE_NAME IF EXISTS",
       s"Unsupported administration command: DROP DATABASE $DEFAULT_DATABASE_NAME IF EXISTS")
   }
@@ -252,6 +440,8 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
     setup( defaultConfig )
     assertFailure(s"START DATABASE $DEFAULT_DATABASE_NAME",
       s"Unsupported administration command: START DATABASE $DEFAULT_DATABASE_NAME")
+    assertFailure("START DATABASE $foo",
+      "Unsupported administration command: START DATABASE $foo")
   }
 
   test("should fail on starting non-existing database with correct error message") {
@@ -263,6 +453,8 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
     setup( defaultConfig )
     assertFailure(s"STOP DATABASE $DEFAULT_DATABASE_NAME",
       s"Unsupported administration command: STOP DATABASE $DEFAULT_DATABASE_NAME")
+    assertFailure("STOP DATABASE $foo",
+      "Unsupported administration command: STOP DATABASE $foo")
   }
 
   test("should fail on stopping non-existing database with correct error message") {
@@ -299,19 +491,15 @@ class CommunityMultiDatabaseAdministrationCommandAcceptanceTest extends Communit
   }
 
   private def initSystemGraph(config: Config): Unit = {
-    val databaseManager = graph.getDependencyResolver.resolveDependency(classOf[DatabaseManager[DatabaseContext]])
-    val securityGraphInitializer = new UserSecurityGraphInitializer(
-      databaseManager,
-      new DefaultSystemGraphInitializer(databaseManager, config),
-      mock[Log],
-      new InMemoryUserRepository,
-      new InMemoryUserRepository,
-      new SecureHasher())
+    val systemGraphComponents = new SystemGraphComponents()
+    systemGraphComponents.register(new DefaultSystemGraphComponent(config))
+    systemGraphComponents.register(new UserSecurityGraphComponent( mock[Log], new InMemoryUserRepository, new InMemoryUserRepository, config ))
 
-    securityGraphInitializer.initializeSecurityGraph()
+    val databaseManager = graph.getDependencyResolver.resolveDependency(classOf[DatabaseManager[DatabaseContext]])
+    val systemSupplier = SystemGraphRealmHelper.makeSystemSupplier(databaseManager)
+    val systemGraphInitializer = new DefaultSystemGraphInitializer(systemSupplier, systemGraphComponents)
+    systemGraphInitializer.start()
+
     selectDatabase(SYSTEM_DATABASE_NAME)
   }
-
-  // Use the default value instead of the new value in CommunityDDLAcceptanceTestBase
-  override def databaseConfig(): Map[Setting[_], Object] = Map()
 }

@@ -22,26 +22,33 @@ package org.neo4j.cypher
 import java.util
 import java.util.Collections
 
-import org.neo4j.configuration.GraphDatabaseSettings.{DEFAULT_DATABASE_NAME, SYSTEM_DATABASE_NAME}
-import org.neo4j.exceptions._
+import org.neo4j.configuration.GraphDatabaseSettings
+import org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME
+import org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME
+import org.neo4j.exceptions.DatabaseAdministrationException
+import org.neo4j.exceptions.InvalidArgumentException
+import org.neo4j.exceptions.ParameterNotFoundException
+import org.neo4j.exceptions.ParameterWrongTypeException
+import org.neo4j.exceptions.SyntaxException
+import org.neo4j.graphdb.QueryExecutionException
+import org.neo4j.graphdb.Result
+import org.neo4j.graphdb.config.Setting
 import org.neo4j.graphdb.security.AuthorizationViolationException
-import org.neo4j.graphdb.{QueryExecutionException, Result}
 import org.neo4j.internal.kernel.api.security.AuthenticationResult
 import org.neo4j.kernel.api.KernelTransaction.Type
 import org.neo4j.kernel.api.exceptions.InvalidArgumentsException
 import org.neo4j.server.security.auth.SecurityTestUtils
 import org.scalatest.enablers.Messaging.messagingNatureOfThrowable
 
-import scala.collection.Map
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdministrationCommandAcceptanceTestBase {
+
+  override def databaseConfig(): Map[Setting[_], Object] = super.databaseConfig() ++ Map(GraphDatabaseSettings.auth_enabled -> java.lang.Boolean.TRUE)
 
   // Tests for showing users
 
   test("should show default user") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
     // WHEN
     val result = execute("SHOW USERS")
 
@@ -56,7 +63,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     // Bar   :
     // Baz   :
     // Zet   :
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER Bar SET PASSWORD 'neo'")
     execute("CREATE USER Baz SET PASSWORD 'NEO'")
     execute("CREATE USER Zet SET PASSWORD 'NeX'")
@@ -68,7 +74,158 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     result.toSet shouldBe Set(user("neo4j"), user("Bar"), user("Baz"), user("Zet"))
   }
 
+  test("should show users with yield") {
+    // WHEN
+    val result = execute("SHOW USERS YIELD user, passwordChangeRequired")
+
+    // THEN
+    result.toSet should be(Set(Map("user"->"neo4j", "passwordChangeRequired"-> true)))
+  }
+
+  test("should show users with yield and where") {
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user, passwordChangeRequired WHERE user = 'neo4j'")
+
+    // THEN
+    result.toSet should be(Set(Map("user"->"neo4j", "passwordChangeRequired"-> true )))
+  }
+
+  test("should show users with yield and where 2") {
+    // GIVEN
+    execute("CREATE USER bar SET PASSWORD 'password'")
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user, passwordChangeRequired WHERE user = 'bar'")
+
+    // THEN
+    result.toList should be(List(Map("user"->"bar", "passwordChangeRequired" -> true )))
+  }
+
+  test("should show users with yield and skip") {
+    // GIVEN
+    execute("CREATE USER foo SET PASSWORD 'password'")
+    execute("CREATE USER bar SET PASSWORD 'password'")
+    execute("CREATE USER zoo SET PASSWORD 'password'")
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user ORDER BY user SKIP 2")
+
+    // THEN
+    result.toList should be(List(Map("user" -> "neo4j"), Map("user" -> "zoo")))
+  }
+
+  test("should show users with yield and limit") {
+    // GIVEN
+    execute("CREATE USER foo SET PASSWORD 'password'")
+    execute("CREATE USER bar SET PASSWORD 'password'")
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user ORDER BY user LIMIT 1")
+
+    // THEN
+    result.toList should be(List(Map("user" -> "bar")))
+  }
+
+  test("should show users with yield and order by asc") {
+    // GIVEN
+    execute("CREATE USER foo SET PASSWORD 'password'")
+    execute("CREATE USER bar SET PASSWORD 'password'")
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user ORDER BY user ASC")
+
+    // THEN
+    result.toList should be(List(Map("user" -> "bar"),Map("user" -> "foo"),Map("user" -> "neo4j")))
+  }
+
+  test("should show users with yield and order by desc") {
+    // GIVEN
+    execute("CREATE USER foo SET PASSWORD 'password'")
+    execute("CREATE USER bar SET PASSWORD 'password'")
+
+    // WHEN
+    val result = execute("SHOW USERS YIELD user ORDER BY user DESC")
+
+    // THEN
+    result.toList should be(List(Map("user" -> "neo4j"),Map("user" -> "foo"),Map("user" -> "bar")))
+  }
+
+  test("should not show users with invalid yield") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS YIELD foo, bar, baz")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 18 (offset: 17))")
+
+  }
+
+  test("should not show users with invalid where") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS WHERE foo = 'bar'")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 18 (offset: 17))")
+  }
+
+  test("should not show users with yield and invalid where") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS YIELD user WHERE foo = 'bar'")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `foo` not defined")
+    exception.getMessage should include("(line 1, column 29 (offset: 28))")
+  }
+
+  test("should not show users with yield and invalid skip") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS YIELD user ORDER BY user SKIP -1")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Invalid input. '-1' is not a valid value. Must be a non-negative integer")
+    exception.getMessage should include("(line 1, column 42 (offset: 41))")
+  }
+
+  test("should not show users with yield and invalid limit") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS YIELD user ORDER BY user LIMIT -2")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Invalid input. '-2' is not a valid value. Must be a non-negative integer")
+    exception.getMessage should include("(line 1, column 43 (offset: 42))")
+  }
+
+  test("should not show users with invalid order by") {
+
+    // WHEN
+    val exception = the[SyntaxException] thrownBy {
+      execute("SHOW USERS YIELD user ORDER BY bar")
+    }
+
+    // THEN
+    exception.getMessage should startWith("Variable `bar` not defined")
+    exception.getMessage should include("(line 1, column 32 (offset: 31))")
+  }
+
   test("should fail when showing users when not on system database") {
+    selectDatabase(DEFAULT_DATABASE_NAME)
     the[DatabaseAdministrationException] thrownBy {
       // WHEN
       execute("SHOW USERS")
@@ -80,10 +237,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   // Tests for creating users
 
   test("should create user with password as string") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
-
     // WHEN
     execute("CREATE USER bar SET PASSWORD 'password'")
 
@@ -93,11 +246,17 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     testUserLogin("bar", "password", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
   }
 
-  test("should create user using if not exists") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
+  test("should create user with parameter") {
+    // WHEN
+    execute("CREATE USER $user SET PASSWORD 'password'", Map("user" -> "bar"))
 
+    // THEN
+    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("bar"))
+    testUserLogin("bar", "wrong", AuthenticationResult.FAILURE)
+    testUserLogin("bar", "password", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+  }
+
+  test("should create user using if not exists") {
     // WHEN
     execute("CREATE USER bar IF NOT EXISTS SET PASSWORD 'password'")
 
@@ -108,10 +267,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should create user with mixed password") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
-
     // WHEN
     execute("CREATE USER bar SET PASSWORD 'p4s5W*rd'")
 
@@ -123,10 +278,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when creating user with empty password") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[InvalidArgumentsException] thrownBy {
       // WHEN
       execute("CREATE USER foo SET PASSWORD ''")
@@ -137,10 +288,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should create user with password as parameter") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     // WHEN
     execute("CREATE USER foo SET PASSWORD $password CHANGE REQUIRED", Map("password" -> "bar"))
 
@@ -151,10 +298,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when creating user with numeric password as parameter") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[ParameterWrongTypeException] thrownBy {
       // WHEN
       execute("CREATE USER foo SET PASSWORD $password CHANGE REQUIRED", Map("password" -> 123))
@@ -165,10 +308,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when creating user with password as missing parameter") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[ParameterNotFoundException] thrownBy {
       // WHEN
       execute("CREATE USER foo SET PASSWORD $password CHANGE REQUIRED")
@@ -179,10 +318,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when creating user with password as null parameter") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[ParameterNotFoundException] thrownBy {
       // WHEN
       execute("CREATE USER foo SET PASSWORD $password CHANGE REQUIRED", Map("password" -> null))
@@ -193,10 +328,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should create user with password change not required") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     // WHEN
     execute("CREATE USER foo SET PASSWORD 'password' CHANGE NOT REQUIRED")
 
@@ -207,10 +338,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should not be able to create user with explicit status active in community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     // WHEN
     assertFailure("CREATE USER foo SET PASSWORD 'password' SET STATUS ACTIVE",
       "Failed to create the specified user 'foo': 'SET STATUS' is not available in community edition.")
@@ -220,10 +347,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should not be able to create user with status suspended in community") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     // WHEN
     assertFailure("CREATE USER foo SET PASSWORD 'password' SET STATUS SUSPENDED",
       "Failed to create the specified user 'foo': 'SET STATUS' is not available in community edition.")
@@ -233,13 +356,15 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when creating already existing user") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[InvalidArgumentsException] thrownBy {
       // WHEN
       execute("CREATE USER neo4j SET PASSWORD 'password'")
+      // THEN
+    } should have message "Failed to create the specified user 'neo4j': User already exists."
+
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("CREATE USER $user SET PASSWORD 'password'", Map("user" -> "neo4j"))
       // THEN
     } should have message "Failed to create the specified user 'neo4j': User already exists."
 
@@ -248,26 +373,23 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should do nothing when creating already existing user using if not exists") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    val existingUser = user("neo4j")
-    execute("SHOW USERS").toSet shouldBe Set(existingUser)
-
     // WHEN
     execute("CREATE USER neo4j IF NOT EXISTS SET PASSWORD 'password' CHANGE NOT REQUIRED")
 
     // THEN
-    execute("SHOW USERS").toSet shouldBe Set(existingUser)
+    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
   }
 
   test("should fail when creating user with illegal username") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"))
-
     the[InvalidArgumentException] thrownBy {
       // WHEN
       execute("CREATE USER `` SET PASSWORD 'password' SET PASSWORD CHANGE REQUIRED")
+      // THEN
+    } should have message "The provided username is empty."
+
+    the[InvalidArgumentException] thrownBy {
+      // WHEN
+      execute("CREATE USER $user SET PASSWORD 'password' SET PASSWORD CHANGE REQUIRED", Map("user" -> ""))
       // THEN
     } should have message "The provided username is empty."
 
@@ -277,6 +399,14 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     the[InvalidArgumentException] thrownBy {
       // WHEN
       execute("CREATE USER `neo:4j` SET PASSWORD 'password' SET PASSWORD CHANGE REQUIRED")
+      // THEN
+    } should have message
+      """Username 'neo:4j' contains illegal characters.
+        |Use ascii characters that are not ',', ':' or whitespaces.""".stripMargin
+
+    the[InvalidArgumentException] thrownBy {
+      // WHEN
+      execute("CREATE USER $user SET PASSWORD 'password' SET PASSWORD CHANGE REQUIRED", Map("user" -> "neo:4j"))
       // THEN
     } should have message
       """Username 'neo:4j' contains illegal characters.
@@ -298,10 +428,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should replace existing user") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
-
     // WHEN: creation
     execute("CREATE OR REPLACE USER bar SET PASSWORD 'firstPassword'")
 
@@ -321,15 +447,20 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when replacing current user") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     executeOnSystem("neo4j", "neo4j", "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO 'bar'")
     execute("SHOW USERS").toSet should be(Set(user("neo4j", passwordChangeRequired = false)))
 
-    the[InvalidArgumentsException] thrownBy {
+    the[QueryExecutionException] thrownBy {
       // WHEN
       executeOnSystem("neo4j", "bar", "CREATE OR REPLACE USER neo4j SET PASSWORD 'baz'")
       // THEN
-    } should have message "Failed to delete the specified user 'neo4j': Deleting yourself is not allowed."
+    } should have message "Failed to replace the specified user 'neo4j': Deleting yourself is not allowed."
+
+    the[QueryExecutionException] thrownBy {
+      // WHEN
+      executeOnSystem("neo4j", "bar", "CREATE OR REPLACE USER $user SET PASSWORD 'baz'", Map[String, Object]("user" -> "neo4j").asJava)
+      // THEN
+    } should have message "Failed to replace the specified user 'neo4j': Deleting yourself is not allowed."
 
     // THEN
     execute("SHOW USERS").toSet shouldBe Set(user("neo4j", passwordChangeRequired = false))
@@ -338,17 +469,22 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should get syntax exception when using both replace and if not exists") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     // WHEN
     val exception = the[SyntaxException] thrownBy {
       execute("CREATE OR REPLACE USER foo IF NOT EXISTS SET PASSWORD 'pass'")
     }
     // THEN
     exception.getMessage should include("Failed to create the specified user 'foo': cannot have both `OR REPLACE` and `IF NOT EXISTS`.")
+    // WHEN
+    val exception2 = the[SyntaxException] thrownBy {
+      execute("CREATE OR REPLACE USER $user IF NOT EXISTS SET PASSWORD 'pass'", Map("user" -> "foo"))
+    }
+    // THEN
+    exception2.getMessage should include("Failed to create the specified user '$user': cannot have both `OR REPLACE` and `IF NOT EXISTS`.")
   }
 
   test("should fail when creating user when not on system database") {
+    selectDatabase(DEFAULT_DATABASE_NAME)
     the[DatabaseAdministrationException] thrownBy {
       // WHEN
       execute("CREATE USER foo SET PASSWORD 'bar'")
@@ -360,7 +496,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should drop user") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     prepareUser("foo", "bar")
 
     // WHEN
@@ -370,9 +505,19 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     execute("SHOW USERS").toSet should be(Set(user("neo4j")))
   }
 
+  test("should drop user with parameter") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("DROP USER $user", Map("user" -> "foo"))
+
+    // THEN
+    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
+  }
+
   test("should drop existing user using if exists") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     prepareUser("foo", "bar")
 
     // WHEN
@@ -384,7 +529,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should re-create dropped user") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     prepareUser("foo", "bar")
     execute("DROP USER foo")
     execute("SHOW USERS").toSet should be(Set(user("neo4j")))
@@ -398,7 +542,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should be able to drop the user that created you") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER alice SET PASSWORD 'abc' CHANGE NOT REQUIRED")
 
     // WHEN
@@ -412,7 +555,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     ))
 
     // WHEN
-    executeOnSystem("bob", "bar",  "DROP USER alice")
+    executeOnSystem("bob", "bar", "DROP USER alice")
 
     // THEN
     execute("SHOW USERS").toSet should be(Set(user("neo4j"), user("bob", passwordChangeRequired = false)))
@@ -420,20 +563,18 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when dropping current user") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
-    the[InvalidArgumentsException] thrownBy {
+    the[QueryExecutionException] thrownBy {
       // WHEN
-      executeOnSystem("foo", "bar", "DROP USER foo")
+      executeOnSystem("foo", "bar", "DROP USER $user", Map[String, Object]("user" -> "foo").asJava)
       // THEN
     } should have message "Failed to delete the specified user 'foo': Deleting yourself is not allowed."
 
     // THEN
     execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
-    the[InvalidArgumentsException] thrownBy {
+    the[QueryExecutionException] thrownBy {
       // WHEN
       executeOnSystem("foo", "bar", "DROP USER foo IF EXISTS")
       // THEN
@@ -444,13 +585,16 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when dropping non-existing user") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
-
     the[InvalidArgumentsException] thrownBy {
       // WHEN
       execute("DROP USER foo")
+      // THEN
+    } should have message "Failed to delete the specified user 'foo': User does not exist."
+
+    // using parameter
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("DROP USER $user", Map("user" -> "foo"))
       // THEN
     } should have message "Failed to delete the specified user 'foo': User does not exist."
 
@@ -464,15 +608,18 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
       // THEN
     } should have message "Failed to delete the specified user ':foo': User does not exist."
 
+    // and an invalid (non-existing) one using parameter
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("DROP USER $user", Map("user" -> ":foo"))
+      // THEN
+    } should have message "Failed to delete the specified user ':foo': User does not exist."
+
     // THEN
     execute("SHOW USERS").toSet should be(Set(user("neo4j")))
   }
 
   test("should do nothing when dropping non-existing user using if exists") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-    execute("SHOW USERS").toSet should be(Set(user("neo4j")))
-
     // WHEN
     execute("DROP USER foo IF EXISTS")
 
@@ -489,6 +636,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   }
 
   test("should fail when dropping user when not on system database") {
+    selectDatabase(DEFAULT_DATABASE_NAME)
     the[DatabaseAdministrationException] thrownBy {
       // WHEN
       execute("DROP USER foo")
@@ -496,31 +644,152 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     } should have message "This is an administration command and it should be executed against the system database: DROP USER"
   }
 
-  // Tests for altering users (not supported in community)
+  // Tests for altering users
 
-  test("should fail on altering user from community") {
+  test("should alter user password") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD 'baz'")
 
     // THEN
-    assertFailure("ALTER USER neo4j SET PASSWORD 'xxx'", "Unsupported administration command: ALTER USER neo4j SET PASSWORD 'xxx'")
+    testUserLogin("foo", "baz", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+    testUserLogin("foo", "bar", AuthenticationResult.FAILURE)
   }
 
-  test("should fail on altering non-existing user with correct error message") {
+  test("should alter user password as parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD $password", Map("password" -> "baz"))
 
     // THEN
-    assertFailure("ALTER USER foo SET PASSWORD 'xxx'", "Unsupported administration command: ALTER USER foo SET PASSWORD 'xxx'")
+    testUserLogin("foo", "baz", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+    testUserLogin("foo", "bar", AuthenticationResult.FAILURE)
+  }
+
+  test("should fail when alter user with invalid password") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("ALTER USER foo SET PASSWORD ''")
+      // THEN
+    } should have message "A password cannot be empty."
+
+    testUserLogin("foo", "bar", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+  }
+
+  test("should fail when alter user with empty password parameter") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("ALTER USER $user SET PASSWORD $password", Map("user" -> "foo", "password" -> ""))
+      // THEN
+    } should have message "A password cannot be empty."
+
+    testUserLogin("foo", "bar", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+  }
+
+  test("should fail when alter user with current password parameter") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("ALTER USER foo SET PASSWORD $password", Map("password" -> "bar"))
+      // THEN
+    } should have message "Failed to alter the specified user 'foo': Old password and new password cannot be the same."
+
+    testUserLogin("foo", "bar", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+  }
+
+  test("should fail when alter user password as list parameter") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    the[ParameterWrongTypeException] thrownBy {
+      // WHEN
+      execute("ALTER USER foo SET PASSWORD $password", Map("password" -> Seq("baz", "boo")))
+      // THEN
+    } should have message "Only string values are accepted as password, got: List"
+  }
+
+  test("should alter user password mode") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD CHANGE NOT REQUIRED")
+
+    // THEN
+    testUserLogin("foo", "bar", AuthenticationResult.SUCCESS)
+  }
+
+  test("should alter user password mode to change required") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD CHANGE REQUIRED")
+
+    // THEN
+    testUserLogin("foo", "bar", AuthenticationResult.PASSWORD_CHANGE_REQUIRED)
+  }
+
+  test("should alter user password and mode") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD 'baz' CHANGE NOT REQUIRED")
+
+    // THEN
+    testUserLogin("foo", "bar", AuthenticationResult.FAILURE)
+    testUserLogin("foo", "baz", AuthenticationResult.SUCCESS)
+  }
+
+  test("should alter user password as parameter and password mode") {
+    // GIVEN
+    prepareUser("foo", "bar")
+
+    // WHEN
+    execute("ALTER USER foo SET PASSWORD $password CHANGE NOT REQUIRED", Map("password" -> "baz"))
+
+    // THEN
+    testUserLogin("foo", "bar", AuthenticationResult.FAILURE)
+    testUserLogin("foo", "baz", AuthenticationResult.SUCCESS)
+  }
+
+  test("should fail when altering a non-existing user") {
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("ALTER USER foo SET PASSWORD 'baz'")
+      // THEN
+    } should have message "Failed to alter the specified user 'foo': User does not exist."
+
+    the[InvalidArgumentsException] thrownBy {
+      // WHEN
+      execute("ALTER USER $user SET PASSWORD 'baz'", Map("user" -> "foo"))
+      // THEN
+    } should have message "Failed to alter the specified user 'foo': User does not exist."
+  }
+
+  test("should fail on altering user status from community") {
+    assertFailure("ALTER USER neo4j SET STATUS ACTIVE", "Failed to alter the specified user 'neo4j': 'SET STATUS' is not available in community edition.")
+    assertFailure("ALTER USER neo4j SET PASSWORD 'xxx' SET STATUS SUSPENDED", "Failed to alter the specified user 'neo4j': 'SET STATUS' is not available in community edition.")
   }
 
   // Tests for changing own password
 
   test("should change own password") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     // WHEN
     executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO 'baz'")
@@ -532,10 +801,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should change own password when password change is required") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"),
-      user("foo", passwordChangeRequired = true))
 
     // WHEN
     executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO 'baz'")
@@ -549,9 +815,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail on changing own password from wrong password") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     the[QueryExecutionException] thrownBy { // the InvalidArgumentsException exception gets wrapped in this code path
       // WHEN
@@ -566,11 +830,9 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password to invalid password") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
-    the[InvalidArgumentsException] thrownBy {
+    the[QueryExecutionException] thrownBy {
       // WHEN
       executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO ''")
       // THEN
@@ -582,7 +844,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     val parameter = new util.HashMap[String, Object]()
     parameter.put("password", "bar")
 
-    the[QueryExecutionException] thrownBy { // the InvalidArgumentsException exception gets wrapped in this code path
+    the[QueryExecutionException] thrownBy {
       // WHEN
       executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO $password", parameter)
       // THEN
@@ -592,11 +854,32 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
     testUserLogin("foo", "bar", AuthenticationResult.SUCCESS)
   }
 
+  test("should fail when changing own password to existing password and then succeed with a new password") {
+    // GIVEN
+    execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
+
+    val parameter = new util.HashMap[String, Object]()
+    parameter.put("password", "bar")
+
+    the[QueryExecutionException] thrownBy {
+      executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO $password", parameter)
+    } should have message "User 'foo' failed to alter their own password: Old password and new password cannot be the same."
+
+    testUserLogin("foo", "bar", AuthenticationResult.SUCCESS)
+
+    val parameter2 = new util.HashMap[String, Object]()
+    parameter2.put("password", "badger")
+
+    // WHEN
+    executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM 'bar' TO $password", parameter2)
+
+    // THEN
+    testUserLogin("foo", "badger", AuthenticationResult.SUCCESS)
+  }
+
   test("should change own password to parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     val parameter = new util.HashMap[String, Object]()
     parameter.put("password", "baz")
@@ -611,9 +894,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password to missing parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     the[QueryExecutionException] thrownBy { // the ParameterNotFoundException exception gets wrapped in this code path
       // WHEN
@@ -627,7 +908,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should change own password from parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
     execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
@@ -644,7 +924,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password from integer parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD '123' CHANGE NOT REQUIRED")
     execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
@@ -663,9 +942,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should change own password from parameter to parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     val parameter = new util.HashMap[String, Object]()
     parameter.put("currentPassword", "bar")
@@ -681,9 +958,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password from existing parameter to missing parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     val parameter = new util.HashMap[String, Object]()
     parameter.put("currentPassword", "bar")
@@ -700,9 +975,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password from missing parameter to existing parameter") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     val parameter = new util.HashMap[String, Object]()
     parameter.put("newPassword", "baz")
@@ -719,25 +992,20 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password from parameter to parameter when both are missing") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     val e = the[QueryExecutionException] thrownBy { // the ParameterNotFoundException exception gets wrapped in this code path
       // WHEN
       executeOnSystem("foo", "bar", "ALTER CURRENT USER SET PASSWORD FROM $currentPassword TO $newPassword")
     }
     // THEN
-    e.getMessage should (be("Expected parameter(s): newPassword") or be("Expected parameter(s): currentPassword"))
+    e.getMessage should (be("Expected parameter(s): newPassword, currentPassword"))
 
     // THEN
     testUserLogin("foo", "bar", AuthenticationResult.SUCCESS)
   }
 
   test("should fail when changing own password when AUTH DISABLED") {
-    // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
-
     the[IllegalStateException] thrownBy {
       // WHEN
       execute("ALTER CURRENT USER SET PASSWORD FROM 'old' TO 'new'")
@@ -747,9 +1015,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should fail when changing own password when not on system database") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE NOT REQUIRED")
-    execute("SHOW USERS").toSet shouldBe Set(user("neo4j"), user("foo", passwordChangeRequired = false))
 
     the[QueryExecutionException] thrownBy { // the DatabaseManagementException gets wrapped twice in this code path
       // WHEN
@@ -761,7 +1027,6 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should not be able to run administration commands with password change required") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE REQUIRED")
 
     // WHEN
@@ -775,12 +1040,11 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
 
   test("should not be able to run database queries with password change required") {
     // GIVEN
-    selectDatabase(SYSTEM_DATABASE_NAME)
     execute("CREATE USER foo SET PASSWORD 'bar' CHANGE REQUIRED")
 
     // WHEN
     val e = the[AuthorizationViolationException] thrownBy {
-      executeOn( DEFAULT_DATABASE_NAME, "foo", "bar", "MATCH (n) RETURN n")
+      executeOn(DEFAULT_DATABASE_NAME, "foo", "bar", "MATCH (n) RETURN n")
     }
 
     // THEN
@@ -790,7 +1054,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
   // helper methods
 
   private def user(username: String, passwordChangeRequired: Boolean = true): Map[String, Any] = {
-    Map("user" -> username, "passwordChangeRequired" -> passwordChangeRequired)
+    Map("user" -> username, "roles" -> null, "passwordChangeRequired" -> passwordChangeRequired, "suspended" -> null)
   }
 
   private def testUserLogin(username: String, password: String, expected: AuthenticationResult): Unit = {
@@ -817,7 +1081,7 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
                         resultHandler: (Result.ResultRow, Int) => Unit = (_, _) => {}): Int = {
     selectDatabase(database)
     val login = authManager.login(SecurityTestUtils.authToken(username, password))
-    val tx = graph.beginTransaction(Type.explicit, login)
+    val tx = graph.beginTransaction(Type.EXPLICIT, login)
     try {
       var count = 0
       val result: Result = tx.execute(query, params)
@@ -832,5 +1096,4 @@ class CommunityUserAdministrationCommandAcceptanceTest extends CommunityAdminist
       tx.close()
     }
   }
-
 }

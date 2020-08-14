@@ -30,7 +30,12 @@ import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.ByteBufferFactory;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.kernel.api.impl.index.DroppableIndex;
+import org.neo4j.kernel.api.impl.index.DroppableLuceneIndex;
 import org.neo4j.kernel.api.impl.index.IndexWriterConfigs;
+import org.neo4j.kernel.api.impl.index.LuceneMinimalIndexAccessor;
+import org.neo4j.kernel.api.impl.index.partition.ReadOnlyIndexPartitionFactory;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
 import org.neo4j.kernel.api.impl.index.storage.IndexStorageFactory;
 import org.neo4j.kernel.api.impl.index.storage.PartitionedIndexStorage;
@@ -40,7 +45,10 @@ import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.migration.SchemaIndexMigrator;
 import org.neo4j.storageengine.migration.StoreMigrationParticipant;
@@ -77,7 +85,17 @@ public class LuceneIndexProvider extends IndexProvider
     }
 
     @Override
-    public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory )
+    public MinimalIndexAccessor getMinimalIndexAccessor( IndexDescriptor descriptor )
+    {
+        PartitionedIndexStorage indexStorage = indexStorageFactory.indexStorageOf( descriptor.getId() );
+        DroppableIndex<IndexReader> index =
+                new DroppableIndex<>( new DroppableLuceneIndex<>( indexStorage, new ReadOnlyIndexPartitionFactory(), descriptor ) );
+        return new LuceneMinimalIndexAccessor<>( descriptor, index, true );
+    }
+
+    @Override
+    public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory,
+            MemoryTracker memoryTracker )
     {
         SchemaIndex luceneIndex = LuceneSchemaIndexBuilder.create( descriptor, config )
                                         .withFileSystem( fileSystem )
@@ -108,7 +126,7 @@ public class LuceneIndexProvider extends IndexProvider
     }
 
     @Override
-    public InternalIndexState getInitialState( IndexDescriptor descriptor )
+    public InternalIndexState getInitialState( IndexDescriptor descriptor, PageCursorTracer cursorTracer )
     {
         PartitionedIndexStorage indexStorage = getIndexStorage( descriptor.getId() );
         String failure = indexStorage.getStoredIndexFailure();
@@ -134,7 +152,7 @@ public class LuceneIndexProvider extends IndexProvider
     }
 
     @Override
-    public String getPopulationFailure( IndexDescriptor descriptor ) throws IllegalStateException
+    public String getPopulationFailure( IndexDescriptor descriptor, PageCursorTracer cursorTracer ) throws IllegalStateException
     {
         return defaultIfEmpty( getIndexStorage( descriptor.getId() ).getStoredIndexFailure(), StringUtils.EMPTY );
     }

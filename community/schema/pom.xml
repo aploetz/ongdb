@@ -16,7 +16,11 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-schema</artifactId>
+=======
+    <artifactId>neo4j-schema</artifactId>
+>>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Schema</name>
@@ -76,8 +80,17 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-collections</artifactId>
+=======
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-collections</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>

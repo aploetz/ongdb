@@ -28,6 +28,7 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
@@ -37,9 +38,7 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.core.Is.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 
@@ -61,8 +60,8 @@ class GraphDatabaseInternalLogIT
         File internalLog = new File( testDir.directory( "logs" ), INTERNAL_LOG_FILE );
 
         // Then
-        assertThat( internalLog.isFile(), is( true ) );
-        assertThat( internalLog.length(), greaterThan( 0L ) );
+        assertThat( internalLog.isFile() ).isEqualTo( true );
+        assertThat( internalLog.length() ).isGreaterThan( 0L );
 
         assertEquals( 1, countOccurrences( internalLog, "Database " + DEFAULT_DATABASE_NAME + " is ready." ) );
         assertEquals( 2, countOccurrences( internalLog, "Database " + DEFAULT_DATABASE_NAME + " is unavailable." ) );
@@ -85,8 +84,8 @@ class GraphDatabaseInternalLogIT
         File internalLog = new File( testDir.directory( "logs" ), INTERNAL_LOG_FILE );
 
         // Then
-        assertThat( internalLog.isFile(), is( true ) );
-        assertThat( internalLog.length(), greaterThan( 0L ) );
+        assertThat( internalLog.isFile() ).isEqualTo( true );
+        assertThat( internalLog.length() ).isGreaterThan( 0L );
 
         assertEquals( 0, countOccurrences( internalLog, "A debug entry" ) );
     }
@@ -96,7 +95,7 @@ class GraphDatabaseInternalLogIT
     {
         // Given
         DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( testDir.homeDir() )
-                .setConfig( GraphDatabaseSettings.store_internal_debug_contexts, List.of( getClass().getName(), "java.io" ) )
+                .setConfig( GraphDatabaseInternalSettings.store_internal_debug_contexts, List.of( getClass().getName(), "java.io" ) )
                 .setConfig( GraphDatabaseSettings.logs_directory, testDir.directory("logs").toPath().toAbsolutePath() )
                 .build();
         GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
@@ -111,8 +110,8 @@ class GraphDatabaseInternalLogIT
         File internalLog = new File( testDir.directory( "logs" ), INTERNAL_LOG_FILE );
 
         // Then
-        assertThat( internalLog.isFile(), is( true ) );
-        assertThat( internalLog.length(), greaterThan( 0L ) );
+        assertThat( internalLog.isFile() ).isEqualTo( true );
+        assertThat( internalLog.length() ).isGreaterThan( 0L );
 
         assertEquals( 1, countOccurrences( internalLog, "A debug entry" ) );
         assertEquals( 0, countOccurrences( internalLog, "A GDS debug entry" ) );

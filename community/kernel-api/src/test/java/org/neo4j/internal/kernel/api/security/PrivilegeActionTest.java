@@ -31,10 +31,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ACCESS;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ADMIN;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ADMIN_PROCEDURE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ALTER_USER;
+<<<<<<< HEAD
+=======
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ASSIGN_PRIVILEGE;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ASSIGN_ROLE;
+>>>>>>> neo4j/4.1
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CONSTRAINT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_CONSTRAINT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_DATABASE;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_ELEMENT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_INDEX;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_LABEL;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_PROPERTYKEY;
@@ -43,12 +50,14 @@ import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_ROLE
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.CREATE_USER;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DATABASE_ACTIONS;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DATABASE_MANAGEMENT;
-import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DENY_PRIVILEGE;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DBMS_ACTIONS;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DELETE_ELEMENT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DROP_CONSTRAINT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DROP_DATABASE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DROP_INDEX;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DROP_ROLE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.DROP_USER;
+<<<<<<< HEAD
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.EXECUTE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.GRANT_PRIVILEGE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ASSIGN_ROLE;
@@ -59,9 +68,22 @@ import static org.neo4j.internal.kernel.api.security.PrivilegeAction.KILL_TRANSA
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.PRIVILEGE_MANAGEMENT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.READ;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.REVOKE_PRIVILEGE;
+=======
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.GRAPH_ACTIONS;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.INDEX;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.MATCH;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.MERGE;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.PRIVILEGE_MANAGEMENT;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.READ;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.REMOVE_LABEL;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.REMOVE_PRIVILEGE;
+>>>>>>> neo4j/4.1
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.REMOVE_ROLE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.ROLE_MANAGEMENT;
-import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SCHEMA;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SET_LABEL;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SET_PASSWORDS;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SET_PROPERTY;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SET_USER_STATUS;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SHOW_CONNECTION;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SHOW_PRIVILEGE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SHOW_ROLE;
@@ -69,6 +91,8 @@ import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SHOW_TRANSA
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.SHOW_USER;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.START_DATABASE;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.STOP_DATABASE;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.TERMINATE_CONNECTION;
+import static org.neo4j.internal.kernel.api.security.PrivilegeAction.TERMINATE_TRANSACTION;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.TOKEN;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.TRANSACTION_MANAGEMENT;
 import static org.neo4j.internal.kernel.api.security.PrivilegeAction.TRAVERSE;
@@ -77,10 +101,11 @@ import static org.neo4j.internal.kernel.api.security.PrivilegeAction.WRITE;
 
 class PrivilegeActionTest
 {
-    private static Map<PrivilegeAction,Set<PrivilegeAction>> expected = new HashMap<>();
+    private static final Map<PrivilegeAction,Set<PrivilegeAction>> expected = new HashMap<>();
 
     static
     {
+<<<<<<< HEAD
         expected.put( ADMIN, Set.of( DATABASE_MANAGEMENT, TRANSACTION_MANAGEMENT, ROLE_MANAGEMENT, USER_MANAGEMENT, PRIVILEGE_MANAGEMENT ) );
         expected.put( DATABASE_MANAGEMENT, Set.of( START_DATABASE, STOP_DATABASE, CREATE_DATABASE, DROP_DATABASE ) );
         expected.put( TRANSACTION_MANAGEMENT, Set.of( SHOW_TRANSACTION, KILL_TRANSACTION, SHOW_CONNECTION, KILL_CONNECTION ) );
@@ -93,7 +118,24 @@ class PrivilegeActionTest
         expected.put( INDEX, Set.of( CREATE_INDEX, DROP_INDEX ) );
         expected.put( CONSTRAINT, Set.of( CREATE_CONSTRAINT, DROP_CONSTRAINT ) );
         expected.put( SCHEMA, Set.of( INDEX, CREATE_INDEX, DROP_INDEX, CONSTRAINT, CREATE_CONSTRAINT, DROP_CONSTRAINT ) );
+=======
+        expected.put( ADMIN, Set.of( DBMS_ACTIONS, TRANSACTION_MANAGEMENT, START_DATABASE, STOP_DATABASE ) );
+        expected.put( TRANSACTION_MANAGEMENT, Set.of( SHOW_TRANSACTION, TERMINATE_TRANSACTION, SHOW_CONNECTION, TERMINATE_CONNECTION ) );
+        expected.put( ROLE_MANAGEMENT, Set.of( SHOW_ROLE, CREATE_ROLE, DROP_ROLE, ASSIGN_ROLE, REMOVE_ROLE ) );
+        expected.put( USER_MANAGEMENT, Set.of( SHOW_USER, CREATE_USER, DROP_USER, ALTER_USER ) );
+        expected.put( ALTER_USER, Set.of( SET_USER_STATUS, SET_PASSWORDS ) );
+        expected.put( DATABASE_MANAGEMENT, Set.of( CREATE_DATABASE, DROP_DATABASE ) );
+        expected.put( PRIVILEGE_MANAGEMENT, Set.of( SHOW_PRIVILEGE, ASSIGN_PRIVILEGE, REMOVE_PRIVILEGE ) );
+        expected.put( WRITE, Set.of( SET_LABEL, REMOVE_LABEL, CREATE_ELEMENT, DELETE_ELEMENT, SET_PROPERTY ) );
+        expected.put( GRAPH_ACTIONS, Set.of( TRAVERSE, READ, WRITE, MATCH ) );
+        expected.put( MERGE, Set.of( MATCH, TRAVERSE, READ, CREATE_ELEMENT, SET_PROPERTY  ) );
+        expected.put( MATCH, Set.of( TRAVERSE, READ ) );
+        expected.put( INDEX, Set.of( CREATE_INDEX, DROP_INDEX ) );
+        expected.put( CONSTRAINT, Set.of( CREATE_CONSTRAINT, DROP_CONSTRAINT ) );
+>>>>>>> neo4j/4.1
         expected.put( TOKEN, Set.of( CREATE_LABEL, CREATE_RELTYPE, CREATE_PROPERTYKEY ) );
+        expected.put( DATABASE_ACTIONS, Set.of( INDEX, CONSTRAINT, TOKEN, ACCESS ) );
+        expected.put( DBMS_ACTIONS, Set.of( ROLE_MANAGEMENT, USER_MANAGEMENT, DATABASE_MANAGEMENT, PRIVILEGE_MANAGEMENT, ADMIN_PROCEDURE ) );
     }
 
     @Test
@@ -122,7 +164,7 @@ class PrivilegeActionTest
             {
                 assertGroupSatisfies( group, expected.get( action ) );
             }
-            assertTrue( group.satisfies( action ) );
+            assertTrue( group.satisfies( action ), String.format( "%s should satisfy %s", group, action ) );
         }
     }
 
@@ -145,7 +187,7 @@ class PrivilegeActionTest
         return notChildren;
     }
 
-    private void removeChildren( PrivilegeAction action, HashSet<PrivilegeAction> notChildren )
+    private void removeChildren( PrivilegeAction action, Set<PrivilegeAction> notChildren )
     {
         notChildren.remove( action );
         if ( expected.containsKey( action ) )

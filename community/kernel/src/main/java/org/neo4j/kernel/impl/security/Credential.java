@@ -21,6 +21,8 @@ package org.neo4j.kernel.impl.security;
 
 public interface Credential
 {
+    String CREDENTIAL_SEPARATOR = ",";
+
     boolean matchesPassword( byte[] password );
 
     /**

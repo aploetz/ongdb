@@ -29,7 +29,6 @@ import java.util.function.BiConsumer;
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementException;
 import org.neo4j.graphdb.factory.module.GlobalModule;
 import org.neo4j.graphdb.factory.module.ModularDatabaseCreationContext;
@@ -54,6 +53,7 @@ import org.neo4j.monitoring.Monitors;
 
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableNavigableMap;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.snapshot_query;
 
 public abstract class AbstractDatabaseManager<DB extends DatabaseContext> extends LifecycleAdapter implements DatabaseManager<DB>
 {
@@ -143,7 +143,7 @@ public abstract class AbstractDatabaseManager<DB extends DatabaseContext> extend
             Monitors parentMonitors )
     {
         EditionDatabaseComponents editionDatabaseComponents = edition.createDatabaseComponents( namedDatabaseId );
-        GlobalProcedures globalProcedures = edition.getGlobalProcedures();
+        var globalProcedures = parentDependencies.resolveDependency( GlobalProcedures.class );
         var databaseConfig = new DatabaseConfig( config, namedDatabaseId );
 
         return new ModularDatabaseCreationContext( namedDatabaseId, globalModule, parentDependencies, parentMonitors,
@@ -216,7 +216,7 @@ public abstract class AbstractDatabaseManager<DB extends DatabaseContext> extend
         }
         else
         {
-            return databaseConfig.get( GraphDatabaseSettings.snapshot_query ) ? new TransactionVersionContextSupplier() : EmptyVersionContextSupplier.EMPTY;
+            return databaseConfig.get( snapshot_query ) ? new TransactionVersionContextSupplier() : EmptyVersionContextSupplier.EMPTY;
         }
     }
 }

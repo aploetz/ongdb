@@ -23,6 +23,7 @@ import java.io.IOException;
 
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.StoreHeader;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
@@ -40,12 +41,12 @@ public interface RecordFormat<RECORD extends AbstractBaseRecord>
     int NO_RECORD_SIZE = 1;
 
     /**
-     * Instantiates a new record to use in {@link #read(AbstractBaseRecord, PageCursor, RecordLoad, int)}
-     * and {@link #write(AbstractBaseRecord, PageCursor, int)}. Records may be reused, which is why the instantiation
+     * Instantiates a new record to use in {@link #read(AbstractBaseRecord, PageCursor, RecordLoad, int, int)}
+     * and {@link #write(AbstractBaseRecord, PageCursor, int, int)}. Records may be reused, which is why the instantiation
      * is separated from reading and writing.
      *
-     * @return a new record instance, usable in {@link #read(AbstractBaseRecord, PageCursor, RecordLoad, int)}
-     * and {@link #write(AbstractBaseRecord, PageCursor, int)}.
+     * @return a new record instance, usable in {@link #read(AbstractBaseRecord, PageCursor, RecordLoad, int, int)}
+     * and {@link #write(AbstractBaseRecord, PageCursor, int, int)}.
      */
     RECORD newRecord();
 
@@ -82,12 +83,12 @@ public interface RecordFormat<RECORD extends AbstractBaseRecord>
      * @param record to put read data into, replacing any existing data in that record object.
      * @param cursor {@link PageCursor} to read data from.
      * @param mode {@link RecordLoad} mode of reading.
-     * See {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad)} for more information.
+     * See {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)} for more information.
      * @param recordSize size of records of this format. This is passed in like this since not all formats
      * know the record size in advance, but may be read from store header when opening the store.
      * @throws IOException on error reading.
      */
-    void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize ) throws IOException;
+    void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage ) throws IOException;
 
     /**
      * Called when all changes about a record has been gathered
@@ -102,8 +103,9 @@ public interface RecordFormat<RECORD extends AbstractBaseRecord>
      * into a command.
      * @param recordSize size of each record.
      * @param idSequence source of new ids if such are required be generated.
+     * @param cursorTracer underlying page cursor tracer
      */
-    void prepare( RECORD record, int recordSize, IdSequence idSequence );
+    void prepare( RECORD record, int recordSize, IdSequence idSequence, PageCursorTracer cursorTracer );
 
     /**
      * Writes record contents to the {@code cursor} in the format specified by this implementation.
@@ -112,9 +114,10 @@ public interface RecordFormat<RECORD extends AbstractBaseRecord>
      * @param cursor {@link PageCursor} to write the record data into.
      * @param recordSize size of records of this format. This is passed in like this since not all formats
      * know the record size in advance, but may be read from store header when opening the store.
+     * @param recordsPerPage number of records per page. All stores know in advance how many records of particular format can fit on a page.
      * @throws IOException on error writing.
      */
-    void write( RECORD record, PageCursor cursor, int recordSize ) throws IOException;
+    void write( RECORD record, PageCursor cursor, int recordSize, int recordsPerPage ) throws IOException;
 
     /**
      * @param record to obtain "next" reference from.
@@ -144,4 +147,12 @@ public interface RecordFormat<RECORD extends AbstractBaseRecord>
      * @return maximum possible id
      */
     long getMaxId();
+
+    /**
+     * Page size of store file represented by current record format
+     * @param pageCachePageSize page cache page size
+     * @param recordSize store format record size
+     * @return page size for file
+     */
+    int getPageSize( int pageCachePageSize, int recordSize );
 }

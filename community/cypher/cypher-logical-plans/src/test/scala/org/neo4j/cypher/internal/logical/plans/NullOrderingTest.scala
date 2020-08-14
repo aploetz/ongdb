@@ -19,11 +19,10 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import MinMaxOrdering.NullOrdering
 
 class NullOrderingTest extends CypherFunSuite {
-
-  import MinMaxOrdering._
 
   val orderingForStrings: Ordering[String] = Ordering.String
 

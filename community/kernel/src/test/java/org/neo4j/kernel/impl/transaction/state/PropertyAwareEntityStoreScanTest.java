@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import java.util.function.Supplier;
 
 import org.neo4j.internal.kernel.api.PopulationProgress;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.index.StoreScan;
 import org.neo4j.kernel.impl.transaction.state.storeview.PropertyAwareEntityStoreScan;
 import org.neo4j.lock.LockService;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class PropertyAwareEntityStoreScanTest
 {
@@ -56,8 +58,8 @@ class PropertyAwareEntityStoreScanTest
         MutableInt read = new MutableInt();
         final PercentageSupplier percentageSupplier = new PercentageSupplier();
         final PropertyAwareEntityStoreScan<StorageNodeCursor,RuntimeException> scan =
-                new PropertyAwareEntityStoreScan<StorageNodeCursor,RuntimeException>( cursors, total, IntPredicates.alwaysTrue(),
-                        id -> locks.acquireNodeLock( id, LockService.LockType.READ_LOCK ) )
+                new PropertyAwareEntityStoreScan<>( cursors, total, IntPredicates.alwaysTrue(),
+                        id -> locks.acquireNodeLock( id, LockService.LockType.READ_LOCK ), PageCursorTracer.NULL, INSTANCE )
                 {
                     @Override
                     public boolean process( StorageNodeCursor node )
@@ -71,9 +73,9 @@ class PropertyAwareEntityStoreScanTest
                     }
 
                     @Override
-                    protected StorageNodeCursor allocateCursor( StorageReader storageReader )
+                    protected StorageNodeCursor allocateCursor( StorageReader storageReader, PageCursorTracer cursorTracer )
                     {
-                        return storageReader.allocateNodeCursor();
+                        return storageReader.allocateNodeCursor( cursorTracer );
                     }
                 };
         percentageSupplier.setStoreScan( scan );

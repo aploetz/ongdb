@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.index.internal.gbptree.SimpleLongLayout;
 import org.neo4j.io.fs.FileSystemAbstraction;
+import org.neo4j.io.memory.HeapScopedBuffer;
 import org.neo4j.test.Barrier;
 import org.neo4j.test.OtherThreadExecutor;
 import org.neo4j.test.extension.Inject;
@@ -48,18 +49,16 @@ import org.neo4j.test.rule.TestDirectory;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static java.util.Comparator.comparingLong;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.lessThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.neo4j.io.memory.ByteBufferFactory.HEAP_ALLOCATOR;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.kernel.impl.index.schema.BlockStorage.Cancellation.NOT_CANCELLABLE;
 import static org.neo4j.kernel.impl.index.schema.BlockStorage.Monitor.NO_MONITOR;
-import static org.neo4j.kernel.impl.index.schema.BlockStorage.NOT_CANCELLABLE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.OtherThreadExecutor.command;
 
 @TestDirectoryExtension
@@ -91,7 +90,8 @@ class BlockStorageTest
     {
         // given
         assertFalse( fileSystem.fileExists( file ) );
-        try ( BlockStorage<MutableLong,MutableLong> ignored = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, NO_MONITOR ) )
+        try ( BlockStorage<MutableLong,MutableLong> ignored = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file,
+                NO_MONITOR, INSTANCE ) )
         {
             // then
             assertTrue( fileSystem.fileExists( file ) );
@@ -106,7 +106,8 @@ class BlockStorageTest
         int blockSize = 100;
         MutableLong key = new MutableLong( 10 );
         MutableLong value = new MutableLong( 20 );
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             // when
             storage.add( key, value );
@@ -117,7 +118,7 @@ class BlockStorageTest
             assertEquals( 1, monitor.lastKeyCount );
             assertEquals( BlockStorage.BLOCK_HEADER_SIZE + monitor.totalEntrySize, monitor.lastNumberOfBytes );
             assertEquals( blockSize, monitor.lastPositionAfterFlush );
-            assertThat( monitor.lastNumberOfBytes, lessThan( blockSize ) );
+            assertThat( monitor.lastNumberOfBytes ).isLessThan( blockSize );
             assertContents( layout, storage, singletonList( singletonList( new BlockEntry<>( key, value ) ) ) );
         }
     }
@@ -129,7 +130,8 @@ class BlockStorageTest
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
         List<BlockEntry<MutableLong,MutableLong>> expected = new ArrayList<>();
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             // when
             for ( int i = 0; i < 10; i++ )
@@ -154,7 +156,8 @@ class BlockStorageTest
         // given
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             // when
             List<List<BlockEntry<MutableLong,MutableLong>>> expectedBlocks = addACoupleOfBlocksOfEntries( monitor, storage, 3 );
@@ -170,7 +173,8 @@ class BlockStorageTest
         // given
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             // when
             storage.merge( randomMergeFactor(), NOT_CANCELLABLE );
@@ -187,7 +191,8 @@ class BlockStorageTest
         // given
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             List<List<BlockEntry<MutableLong,MutableLong>>> expectedBlocks = singletonList( addEntries( storage, 4 ) );
             storage.doneAdding();
@@ -207,7 +212,8 @@ class BlockStorageTest
         // given
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             int numberOfBlocks = random.nextInt( 100 ) + 2;
             List<List<BlockEntry<MutableLong,MutableLong>>> expectedBlocks = addACoupleOfBlocksOfEntries( monitor, storage, numberOfBlocks );
@@ -218,7 +224,7 @@ class BlockStorageTest
 
             // then
             assertContents( layout, storage, asOneBigBlock( expectedBlocks ) );
-            assertThat( monitor.totalEntriesToMerge, greaterThanOrEqualTo( monitor.entryAddedCallCount ) );
+            assertThat( monitor.totalEntriesToMerge ).isGreaterThanOrEqualTo( monitor.entryAddedCallCount );
             assertEquals( monitor.totalEntriesToMerge, monitor.entriesMerged );
         }
     }
@@ -228,7 +234,8 @@ class BlockStorageTest
     {
         TrackingMonitor monitor = new TrackingMonitor();
         int blockSize = 1_000;
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( blockSize ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             int numberOfBlocks = random.nextInt( 100 ) + 2;
             addACoupleOfBlocksOfEntries( monitor, storage, numberOfBlocks );
@@ -247,7 +254,8 @@ class BlockStorageTest
     void shouldNotAcceptAddedEntriesAfterDoneAdding() throws IOException
     {
         // given
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, NO_MONITOR ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file,
+                NO_MONITOR, INSTANCE ) )
         {
             // when
             storage.doneAdding();
@@ -262,7 +270,8 @@ class BlockStorageTest
     {
         // given
         TrackingMonitor monitor = new TrackingMonitor();
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, monitor ) )
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, monitor,
+                INSTANCE ) )
         {
             // when
             storage.doneAdding();
@@ -290,7 +299,8 @@ class BlockStorageTest
         int mergeFactor = 2;
         MutableLongSet uniqueKeys = new LongHashSet();
         AtomicBoolean cancelled = new AtomicBoolean();
-        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, monitor );
+        try ( BlockStorage<MutableLong,MutableLong> storage = new BlockStorage<>( layout, heapBufferFactory( 100 ), fileSystem, file, monitor,
+                INSTANCE );
               OtherThreadExecutor<Void> t2 = new OtherThreadExecutor<>( "T2", null ) )
         {
             while ( monitor.blockFlushedCallCount < blocks )
@@ -415,7 +425,7 @@ class BlockStorageTest
         {
             for ( List<BlockEntry<MutableLong,MutableLong>> expectedBlock : expectedBlocks )
             {
-                try ( BlockEntryReader<MutableLong,MutableLong> block = reader.nextBlock( HEAP_ALLOCATOR.allocate( 1024 ) ) )
+                try ( BlockEntryReader<MutableLong,MutableLong> block = reader.nextBlock( new HeapScopedBuffer( 1024, INSTANCE ) ) )
                 {
                     assertNotNull( block );
                     assertEquals( expectedBlock.size(), block.entryCount() );

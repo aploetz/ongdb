@@ -47,10 +47,10 @@ import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.test.extension.DbmsExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
+import org.neo4j.test.extension.SuppressOutputExtension;
 import org.neo4j.test.rule.RandomRule;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.logs_directory;
@@ -61,7 +61,7 @@ import static org.neo4j.test.TestLabels.LABEL_THREE;
 import static org.neo4j.test.TestLabels.LABEL_TWO;
 
 @DbmsExtension
-@ExtendWith( RandomExtension.class )
+@ExtendWith( {RandomExtension.class, SuppressOutputExtension.class} )
 class AllNodesInStoreExistInLabelIndexTest
 {
     @Inject
@@ -70,6 +70,10 @@ class AllNodesInStoreExistInLabelIndexTest
     private DatabaseManagementService managementService;
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private Database database;
+    @Inject
+    private CheckPointer checkPointer;
     @Inject
     private RandomRule random;
 
@@ -99,7 +103,7 @@ class AllNodesInStoreExistInLabelIndexTest
     {
         DatabaseLayout databaseLayout = db.databaseLayout();
         someData();
-        db.getDependencyResolver().resolveDependency( CheckPointer.class ).forceCheckPoint( new SimpleTriggerInfo( "forcedCheckpoint" ) );
+        checkPointer.forceCheckPoint( new SimpleTriggerInfo( "forcedCheckpoint" ) );
         File labelIndexFileCopy = databaseLayout.file( "label_index_copy" );
         copyFile( databaseLayout.labelScanStore(), labelIndexFileCopy );
 
@@ -115,7 +119,8 @@ class AllNodesInStoreExistInLabelIndexTest
 
         ConsistencyCheckService.Result result = fullConsistencyCheck();
         assertFalse( result.isSuccessful(), "Expected consistency check to fail" );
-        assertThat( readReport( result ), containsString("WARN : Label index was not properly shutdown and rebuild is required.") );
+        assertThat( readReport( result ) ).contains(
+                "WARN : Index was dirty on startup which means it was not shutdown correctly and need to be cleaned up with a successful recovery." );
     }
 
     @Test
@@ -123,7 +128,7 @@ class AllNodesInStoreExistInLabelIndexTest
     {
         DatabaseLayout databaseLayout = db.databaseLayout();
         someData();
-        db.getDependencyResolver().resolveDependency( CheckPointer.class ).forceCheckPoint( new SimpleTriggerInfo( "forcedCheckpoint" ) );
+        checkPointer.forceCheckPoint( new SimpleTriggerInfo( "forcedCheckpoint" ) );
         File labelIndexFileCopy = databaseLayout.file( "label_index_copy" );
         copyFile( databaseLayout.labelScanStore(), labelIndexFileCopy );
 
@@ -133,7 +138,8 @@ class AllNodesInStoreExistInLabelIndexTest
 
         ConsistencyCheckService.Result result = fullConsistencyCheck();
         assertTrue( result.isSuccessful(), "Expected consistency check to fail" );
-        assertThat( readReport( result ), containsString("WARN : Label index was not properly shutdown and rebuild is required.") );
+        assertThat( readReport( result ) ).contains(
+                "WARN : Index was dirty on startup which means it was not shutdown correctly and need to be cleaned up with a successful recovery." );
     }
 
     @Test
@@ -279,7 +285,6 @@ class AllNodesInStoreExistInLabelIndexTest
     {
         DatabaseLayout databaseLayout = db.databaseLayout();
         File labelIndexFileCopy = databaseLayout.file( "label_index_copy" );
-        var database = db.getDependencyResolver().resolveDependency( Database.class );
         database.stop();
         fs.copyFile( databaseLayout.labelScanStore(), labelIndexFileCopy );
         database.start();

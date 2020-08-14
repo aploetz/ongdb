@@ -22,6 +22,8 @@ package org.neo4j.internal.collector;
 import java.util.function.Supplier;
 
 import org.neo4j.graphdb.ExecutionPlanDescription;
+import org.neo4j.kernel.database.NamedDatabaseId;
+import org.neo4j.memory.HeapEstimator;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.SequenceValue;
 import org.neo4j.values.ValueMapper;
@@ -37,6 +39,7 @@ import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.TimeValue;
 import org.neo4j.values.storable.Values;
 import org.neo4j.values.virtual.MapValue;
+import org.neo4j.values.virtual.MapValueBuilder;
 import org.neo4j.values.virtual.NodeValue;
 import org.neo4j.values.virtual.PathValue;
 import org.neo4j.values.virtual.RelationshipValue;
@@ -51,22 +54,29 @@ import org.neo4j.values.virtual.VirtualValues;
  */
 class TruncatedQuerySnapshot
 {
+    final NamedDatabaseId databaseId;
     final int fullQueryTextHash;
     final String queryText;
     final Supplier<ExecutionPlanDescription> queryPlanSupplier;
     final MapValue queryParameters;
-    final Long elapsedTimeMicros;
-    final Long compilationTimeMicros;
-    final Long startTimestampMillis;
+    final long elapsedTimeMicros;
+    final long compilationTimeMicros;
+    final long startTimestampMillis;
+    final long estimatedHeap;
 
-    TruncatedQuerySnapshot( String fullQueryText,
+    static final long SHALLOW_SIZE = HeapEstimator.shallowSizeOfInstance( TruncatedQuerySnapshot.class ) +
+                                     HeapEstimator.shallowSizeOfInstance( Supplier.class );
+
+    TruncatedQuerySnapshot( NamedDatabaseId databaseId,
+                            String fullQueryText,
                             Supplier<ExecutionPlanDescription> queryPlanSupplier,
                             MapValue queryParameters,
-                            Long elapsedTimeMicros,
-                            Long compilationTimeMicros,
-                            Long startTimestampMillis,
+                            long elapsedTimeMicros,
+                            long compilationTimeMicros,
+                            long startTimestampMillis,
                             int maxQueryTextLength )
     {
+        this.databaseId = databaseId;
         this.fullQueryTextHash = fullQueryText.hashCode();
         this.queryText = truncateQueryText( fullQueryText, maxQueryTextLength );
         this.queryPlanSupplier = queryPlanSupplier;
@@ -74,6 +84,7 @@ class TruncatedQuerySnapshot
         this.elapsedTimeMicros = elapsedTimeMicros;
         this.compilationTimeMicros = compilationTimeMicros;
         this.startTimestampMillis = startTimestampMillis;
+        this.estimatedHeap = SHALLOW_SIZE + HeapEstimator.sizeOf( this.queryText ) + this.queryParameters.estimatedHeapUsage();
     }
 
     private static String truncateQueryText( String queryText, int maxLength )
@@ -83,18 +94,22 @@ class TruncatedQuerySnapshot
 
     private static MapValue truncateParameters( MapValue parameters )
     {
-        String[] keys = new String[parameters.size()];
-        AnyValue[] values = new AnyValue[keys.length];
-
-        int i = 0;
-        for ( String key : parameters.keySet() )
+        int size = parameters.size();
+        if ( size == 0 )
         {
-            keys[i] = key.length() <= MAX_PARAMETER_KEY_LENGTH ? key : key.substring( 0, MAX_PARAMETER_KEY_LENGTH );
-            values[i] = parameters.get( key ).map( VALUE_TRUNCATER );
-            i++;
+            return VirtualValues.EMPTY_MAP;
         }
+        MapValueBuilder mapValueBuilder = new MapValueBuilder( size );
 
-        return VirtualValues.map( keys, values );
+        parameters.foreach( ( key, value ) ->
+        {
+            mapValueBuilder.add(
+                    key.length() <= MAX_PARAMETER_KEY_LENGTH ? key : key.substring( 0, MAX_PARAMETER_KEY_LENGTH ),
+                    value.map( VALUE_TRUNCATER )
+            );
+        } );
+
+        return mapValueBuilder.build();
     }
 
     private static final ValueTruncater VALUE_TRUNCATER = new ValueTruncater();

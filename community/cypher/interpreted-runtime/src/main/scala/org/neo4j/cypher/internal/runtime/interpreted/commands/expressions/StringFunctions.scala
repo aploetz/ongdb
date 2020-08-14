@@ -19,15 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.util.symbols.CypherType
+import org.neo4j.cypher.internal.util.symbols.CTString
 import org.neo4j.cypher.operations.CypherFunctions
 import org.neo4j.exceptions.CypherTypeException
-import org.neo4j.values._
+import org.neo4j.values.AnyValue
+import org.neo4j.values.storable.TextValue
 import org.neo4j.values.storable.Values.NO_VALUE
-import org.neo4j.values.storable._
 
 abstract class StringFunction(arg: Expression) extends NullInNullOutExpression(arg) {
 
@@ -54,8 +55,8 @@ case object asString extends (AnyValue => String) {
 
 case class ToStringFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
-    CypherFunctions.toString(argument(m, state))
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
+    CypherFunctions.toString(argument(ctx, state))
 
   override def rewrite(f: Expression => Expression): Expression = f(ToStringFunction(argument.rewrite(f)))
 
@@ -64,7 +65,7 @@ case class ToStringFunction(argument: Expression) extends StringFunction(argumen
 
 case class ToLowerFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = CypherFunctions.toLower(value)
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = CypherFunctions.toLower(value)
 
   override def rewrite(f: Expression => Expression): Expression = f(ToLowerFunction(argument.rewrite(f)))
 
@@ -73,7 +74,7 @@ case class ToLowerFunction(argument: Expression) extends StringFunction(argument
 
 case class ToUpperFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = CypherFunctions.toUpper(value)
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = CypherFunctions.toUpper(value)
 
   override def rewrite(f: Expression => Expression): Expression = f(ToUpperFunction(argument.rewrite(f)))
 
@@ -82,7 +83,7 @@ case class ToUpperFunction(argument: Expression) extends StringFunction(argument
 
 case class LTrimFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
     CypherFunctions.ltrim(value)
 
   override def rewrite(f: Expression => Expression): Expression = f(LTrimFunction(argument.rewrite(f)))
@@ -92,7 +93,7 @@ case class LTrimFunction(argument: Expression) extends StringFunction(argument) 
 
 case class RTrimFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
     CypherFunctions.rtrim(value)
 
   override def rewrite(f: Expression => Expression): Expression = f(RTrimFunction(argument.rewrite(f)))
@@ -102,7 +103,7 @@ case class RTrimFunction(argument: Expression) extends StringFunction(argument) 
 
 case class TrimFunction(argument: Expression) extends StringFunction(argument) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
     CypherFunctions.trim(value)
 
   override def rewrite(f: Expression => Expression): Expression = f(TrimFunction(argument.rewrite(f)))
@@ -113,9 +114,9 @@ case class TrimFunction(argument: Expression) extends StringFunction(argument) {
 case class SubstringFunction(orig: Expression, start: Expression, length: Option[Expression])
   extends NullInNullOutExpression(orig) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = length match {
-    case None => CypherFunctions.substring(value, start(m, state))
-    case Some(func) => CypherFunctions.substring(value, start(m, state), func(m, state))
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = length match {
+    case None => CypherFunctions.substring(value, start(ctx, state))
+    case Some(func) => CypherFunctions.substring(value, start(ctx, state), func(ctx, state))
   }
 
   override def arguments: Seq[Expression] = Seq(orig, start) ++ length
@@ -130,9 +131,9 @@ case class SubstringFunction(orig: Expression, start: Expression, length: Option
 case class ReplaceFunction(orig: Expression, search: Expression, replaceWith: Expression)
   extends NullInNullOutExpression(orig) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = {
-      val searchVal = search(m, state)
-      val replaceWithVal = replaceWith(m, state)
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = {
+      val searchVal = search(ctx, state)
+      val replaceWithVal = replaceWith(ctx, state)
       if ((searchVal eq NO_VALUE) || (replaceWithVal eq NO_VALUE)) NO_VALUE
       else CypherFunctions.replace(value, searchVal, replaceWithVal)
   }
@@ -149,8 +150,8 @@ case class ReplaceFunction(orig: Expression, search: Expression, replaceWith: Ex
 case class SplitFunction(orig: Expression, separator: Expression)
   extends NullInNullOutExpression(orig) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = {
-    val sep = separator(m, state)
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = {
+    val sep = separator(ctx, state)
     if (sep eq NO_VALUE) NO_VALUE else CypherFunctions.split(value, sep)
   }
 
@@ -164,8 +165,8 @@ case class SplitFunction(orig: Expression, separator: Expression)
 case class LeftFunction(orig: Expression, length: Expression)
   extends NullInNullOutExpression(orig) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
-    CypherFunctions.left(value, length(m, state))
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
+    CypherFunctions.left(value, length(ctx, state))
 
   override def arguments: Seq[Expression] = Seq(orig, length)
 
@@ -178,8 +179,8 @@ case class LeftFunction(orig: Expression, length: Expression)
 case class RightFunction(orig: Expression, length: Expression)
   extends NullInNullOutExpression(orig) {
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue =
-    CypherFunctions.right(value, length(m, state))
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue =
+    CypherFunctions.right(value, length(ctx, state))
 
   override def arguments: Seq[Expression] = Seq(orig, length)
 

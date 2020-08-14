@@ -102,8 +102,7 @@ class DefaultRelationshipScanCursor extends DefaultRelationshipCursor<StorageRel
         while ( storeCursor.next() )
         {
             boolean skip = hasChanges && read.txState().relationshipIsDeletedInThisTx( storeCursor.entityReference() );
-            AccessMode mode = read.ktx.securityContext().mode();
-            if ( !skip && mode.allowsTraverseRelType( storeCursor.type() ) && allowedToSeeEndNode( mode ) )
+            if ( !skip && allowed() )
             {
                 if ( tracer != null )
                 {
@@ -115,7 +114,13 @@ class DefaultRelationshipScanCursor extends DefaultRelationshipCursor<StorageRel
         return false;
     }
 
-    protected boolean allowedToSeeEndNode( AccessMode mode )
+    boolean allowed()
+    {
+        AccessMode mode = read.ktx.securityContext().mode();
+        return mode.allowsTraverseRelType( storeCursor.type() ) && allowedToSeeEndNode( mode );
+    }
+
+    private boolean allowedToSeeEndNode( AccessMode mode )
     {
         if ( mode.allowsTraverseAllLabels() )
         {
@@ -160,7 +165,7 @@ class DefaultRelationshipScanCursor extends DefaultRelationshipCursor<StorageRel
             return "RelationshipScanCursor[id=" + storeCursor.entityReference() +
                     ", open state with: single=" + single +
                     ", type=" + type +
-                    ", " + storeCursor.toString() + "]";
+                    ", " + storeCursor + "]";
         }
     }
 

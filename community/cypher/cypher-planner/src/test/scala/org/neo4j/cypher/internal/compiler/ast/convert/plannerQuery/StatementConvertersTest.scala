@@ -19,15 +19,49 @@
  */
 package org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery
 
-import org.neo4j.cypher.internal.compiler.planner.{LogicalPlanningTestSupport, ProcedureCallProjection}
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.logical.plans.{FieldSignature, ProcedureReadOnlyAccess, ProcedureSignature, QualifiedName}
-import org.neo4j.cypher.internal.v4_0.ast.Union.UnionMapping
-import org.neo4j.cypher.internal.v4_0.ast.{Hint, UsingIndexHint}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{BOTH, INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.symbols._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.ast.Hint
+import org.neo4j.cypher.internal.ast.Union.UnionMapping
+import org.neo4j.cypher.internal.ast.UsingIndexHint
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
+import org.neo4j.cypher.internal.compiler.planner.ProcedureCallProjection
+import org.neo4j.cypher.internal.expressions.CountStar
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.GetDegree
+import org.neo4j.cypher.internal.expressions.NilPathStep
+import org.neo4j.cypher.internal.expressions.NodePathStep
+import org.neo4j.cypher.internal.expressions.NodePattern
+import org.neo4j.cypher.internal.expressions.PathExpression
+import org.neo4j.cypher.internal.expressions.PatternExpression
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.RelTypeName
+import org.neo4j.cypher.internal.expressions.RelationshipChain
+import org.neo4j.cypher.internal.expressions.RelationshipPattern
+import org.neo4j.cypher.internal.expressions.RelationshipsPattern
+import org.neo4j.cypher.internal.expressions.SemanticDirection.BOTH
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.CallSubqueryHorizon
+import org.neo4j.cypher.internal.ir.DistinctQueryProjection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.Predicate
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.QueryPagination
+import org.neo4j.cypher.internal.ir.RegularQueryProjection
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.ShortestPathPattern
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.ir.UnionQuery
+import org.neo4j.cypher.internal.ir.UnwindProjection
+import org.neo4j.cypher.internal.ir.VarPatternLength
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.FieldSignature
+import org.neo4j.cypher.internal.logical.plans.ProcedureReadOnlyAccess
+import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSupport {
 
@@ -37,7 +71,7 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
   test("CALL around single query") {
     val query = buildSinglePlannerQuery("CALL { RETURN 1 as x } RETURN 2 as y")
     query.horizon should equal(CallSubqueryHorizon(RegularSinglePlannerQuery(
-      horizon = RegularQueryProjection(Map("x" -> literalInt(1))))))
+      horizon = RegularQueryProjection(Map("x" -> literalInt(1)))), correlated = false))
 
     query.tail should not be empty
 
@@ -45,10 +79,31 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
     nextQuery.horizon should equal(RegularQueryProjection(Map("y" -> literalInt(2))))
   }
 
+  test("CALL around single correlated query") {
+    val query = buildSinglePlannerQuery("WITH 1 AS x CALL { WITH x RETURN x as y } RETURN y")
+
+    query.horizon should equal(RegularQueryProjection(Map("x" -> literalInt(1))))
+
+    query.tail should not be empty
+    val subQuery = query.tail.get
+
+    subQuery.horizon should equal(
+      CallSubqueryHorizon(
+        correlated = true,
+        callSubquery = RegularSinglePlannerQuery(
+          queryGraph = QueryGraph(argumentIds = Set("x")),
+          horizon = RegularQueryProjection(Map("y" -> varFor("x"))))))
+
+    subQuery.tail should not be empty
+    val nextQuery = subQuery.tail.get
+
+    nextQuery.horizon should equal(RegularQueryProjection(Map("y" -> varFor("y"))))
+  }
+
   test("CALL around single query - using returned var in outer query") {
     val query = buildSinglePlannerQuery("CALL { RETURN 1 as x } RETURN x")
     query.horizon should equal(CallSubqueryHorizon(RegularSinglePlannerQuery(
-      horizon = RegularQueryProjection(Map("x" -> literalInt(1))))))
+      horizon = RegularQueryProjection(Map("x" -> literalInt(1)))), correlated = false))
 
     query.tail should not be empty
 
@@ -66,12 +121,38 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
           horizon = RegularQueryProjection(Map("  x@39" -> literalInt(2)))),
         distinct = true,
         List(UnionMapping(varFor("  x@21"),varFor("  x@19"),varFor("  x@39")))
-      )))
+      ), correlated = false))
 
     query.tail should not be empty
 
     val nextQuery = query.tail.get
     nextQuery.horizon should equal(RegularQueryProjection(Map("y" -> literalInt(3))))
+  }
+
+  test("CALL around correlated union query") {
+    val query = buildSinglePlannerQuery("WITH 1 AS x, 2 AS n CALL { WITH x RETURN x as y UNION RETURN 2 as y } RETURN y")
+
+    query.horizon should equal(RegularQueryProjection(Map("x" -> literalInt(1), "n" -> literalInt(2))))
+
+    query.tail should not be empty
+
+    val subquery = query.tail.get
+    subquery.horizon should equal(CallSubqueryHorizon(
+      correlated = true,
+      callSubquery = UnionQuery(
+        RegularSinglePlannerQuery(
+          queryGraph = QueryGraph(argumentIds = Set("x")),
+          horizon = RegularQueryProjection(Map("  y@46" -> varFor("x")))),
+        RegularSinglePlannerQuery(
+          horizon = RegularQueryProjection(Map("  y@66" -> literalInt(2)))),
+        distinct = true,
+        List(UnionMapping(varFor("  y@48"),varFor("  y@46"),varFor("  y@66")))
+      )))
+
+    subquery.tail should not be empty
+
+    val nextQuery = subquery.tail.get
+    nextQuery.horizon should equal(RegularQueryProjection(Map("  y@48" -> varFor("  y@48"))))
   }
 
   test("CALL around union query - using returned var in outer query") {
@@ -84,7 +165,7 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
           horizon = RegularQueryProjection(Map("  x@39" -> literalInt(2)))),
         distinct = true,
         List(UnionMapping(varFor("  x@21"),varFor("  x@19"),varFor("  x@39")))
-      )))
+      ), correlated = false))
 
     query.tail should not be empty
 
@@ -831,7 +912,11 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
         groupingExpressions = Map("  owner@20" -> varFor("  owner@7")),
         aggregationExpressions = Map("collected" -> CountStar()(pos)),
         selections = Selections(Set(Predicate(Set("  owner@20", "  REL62", "  NODE64"),
+<<<<<<< HEAD
                                               exists(patternExpression))))),
+=======
+          exists(patternExpression))))),
+>>>>>>> neo4j/4.1
       tail = Some(RegularSinglePlannerQuery(
         queryGraph = QueryGraph(argumentIds = Set("collected", "  owner@20")),
         horizon = RegularQueryProjection(projections = Map("  owner@20" -> varFor("  owner@20")))

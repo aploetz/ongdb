@@ -19,41 +19,57 @@
  */
 package org.neo4j.cypher.internal.compiler
 
-import java.time.{ZoneId, ZoneOffset}
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 
 import org.neo4j.cypher.ExecutionEngineFunSuite
-import org.neo4j.values.storable._
+import org.neo4j.values.storable.CoordinateReferenceSystem
+import org.neo4j.values.storable.DateTimeValue
+import org.neo4j.values.storable.DateValue
+import org.neo4j.values.storable.DoubleValue
+import org.neo4j.values.storable.DurationValue
+import org.neo4j.values.storable.LocalDateTimeValue
+import org.neo4j.values.storable.LocalTimeValue
+import org.neo4j.values.storable.LongValue
+import org.neo4j.values.storable.PointValue
+import org.neo4j.values.storable.TextValue
+import org.neo4j.values.storable.TimeValue
+import org.neo4j.values.storable.Value
+import org.neo4j.values.storable.Values
 import org.neo4j.values.utils.TemporalUtil
 import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.{Gen, Shrink}
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.scalacheck.Gen
+import org.scalacheck.Shrink
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 import org.scalatest.prop.PropertyChecks
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters.asScalaSetConverter
+import scala.collection.JavaConverters.iterableAsScalaIterableConverter
 
 /**
-  * After a failure, do this to reproduce with the actual values that caused the error:
-  *
-  * place a single call to testOperator after the for-loop. As an example
-  * {{{
-  * testOperator("=", ValueSetup[DateTimeValue]("dateTimes", Gen.oneOf(Seq(
-  *     DateTimeValue.parse("1901-12-13T20:45:52Z", null),
-  *     DateTimeValue.parse("1901-12-13T20:45:52Z[Europe/Brussels]", null)
-  * )), x => x.sub(oneDay), x => x.add(oneDay)))
-  * }}}
-  *
-  */
+ * After a failure, do this to reproduce with the actual values that caused the error:
+ *
+ * place a single call to testOperator after the for-loop. As an example
+ * {{{
+ * testOperator("=", ValueSetup[DateTimeValue]("dateTimes", Gen.oneOf(Seq(
+ *     DateTimeValue.parse("1901-12-13T20:45:52Z", null),
+ *     DateTimeValue.parse("1901-12-13T20:45:52Z[Europe/Brussels]", null)
+ * )), x => x.sub(oneDay), x => x.add(oneDay)))
+ * }}}
+ *
+ */
 class SemanticIndexAcceptanceTest extends ExecutionEngineFunSuite with PropertyChecks {
 
   //we don't want scala check to shrink strings since it hides the actual error
   implicit val dontShrink: Shrink[String] = Shrink(s => Stream.empty)
 
-  private val allNonGeographicCRS: Map[Int, Array[CoordinateReferenceSystem]] = CoordinateReferenceSystem.all().filterNot(crs => crs.isGeographic).toArray.groupBy(_.getDimension)
+  private val allNonGeographicCRS: Map[Int, Array[CoordinateReferenceSystem]] = CoordinateReferenceSystem.all().asScala.filterNot(crs => crs.isGeographic).toArray.groupBy(_.getDimension)
   private val allNonGeographicCRSDimensions = allNonGeographicCRS.keys.toArray
   private val oneDay = DurationValue.duration(0, 1, 0, 0)
   private val oneSecond = DurationValue.duration(0, 0, 1, 0)
-  private val timeZones:Seq[ZoneId] = ZoneId.getAvailableZoneIds.toSeq.map(ZoneId.of)
+  private val timeZones:Seq[ZoneId] = ZoneId.getAvailableZoneIds.asScala.toSeq.map(ZoneId.of)
   private val MAX_NANOS_PER_DAY = 86399999999999L
 
   // ----------------
@@ -89,9 +105,9 @@ class SemanticIndexAcceptanceTest extends ExecutionEngineFunSuite with PropertyC
   }
 
   /**
-    * Value distribution to test. Allow value generation. Can also provide a slightly smaller
-    * or larger version of a value, which allows testing around a property bound.
-    */
+   * Value distribution to test. Allow value generation. Can also provide a slightly smaller
+   * or larger version of a value, which allows testing around a property bound.
+   */
   case class ValueSetup[T <: Value](name: String, generator: Gen[T], lessThan: T => T, moreThan: T => T)
 
   // GENERATORS
@@ -161,8 +177,8 @@ class SemanticIndexAcceptanceTest extends ExecutionEngineFunSuite with PropertyC
     Gen.chooseNum(-18*60, 18*60).map(minute => ZoneOffset.ofTotalSeconds(minute * 60))
 
   /**
-    * Test a single value setup and operator
-    */
+   * Test a single value setup and operator
+   */
   private def testOperator[T <: Value](operator: String, setup: ValueSetup[T]): Unit = {
 
     val queryNotUsingIndex = s"MATCH (n:Label) WHERE n.nonIndexed $operator $$prop RETURN n, n.nonIndexed AS prop ORDER BY id(n)"

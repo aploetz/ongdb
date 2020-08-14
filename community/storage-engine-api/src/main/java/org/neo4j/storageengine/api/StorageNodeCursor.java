@@ -35,17 +35,21 @@ public interface StorageNodeCursor extends StorageEntityScanCursor<AllNodeScan>
     boolean hasLabel( int label );
 
     /**
-     * NOTE the fact that this method is here means physical details about underlying storage leaks into this API.
-     * However this method has to exist as long as the kernel API also exposes this. This needs to change at some point.
-     *
-     * @return reference for reading relationship groups, i.e. relationships split up by direction/type of the node this cursor currently is placed at.
-     */
-    long relationshipGroupReference();
-
-    /**
      * @return reference for reading all relationships of the node this cursor currently is placed at.
      */
-    long allRelationshipsReference();
+    long relationshipsReference();
+
+    void relationships( StorageRelationshipTraversalCursor traversalCursor, RelationshipSelection selection );
+
+    int[] relationshipTypes();
+
+    /**
+     * Visits degrees, i.e. number of relationships, for relationships of the given {@code selection} and gives those degrees to the {@code mutator}.
+     * @param selection {@link RelationshipSelection} to get degrees for.
+     * @param mutator to given the degrees to.
+     * @param allowFastDegreeLookup set to false if there's a need to do security checks, which require the lookup to be done with traversal.
+     */
+    void degrees( RelationshipSelection selection, Degrees.Mutator mutator, boolean allowFastDegreeLookup );
 
     /**
      * NOTE the fact that this method is here means physical details about underlying storage leaks into this API.
@@ -53,5 +57,5 @@ public interface StorageNodeCursor extends StorageEntityScanCursor<AllNodeScan>
      *
      * @return whether or not this node is dense.
      */
-    boolean isDense();
+    boolean supportsFastDegreeLookup();
 }

@@ -19,10 +19,13 @@
  */
 package org.neo4j.kernel.impl.store;
 
-import java.util.function.ToIntFunction;
+import java.util.function.ToIntBiFunction;
 
+import org.neo4j.internal.batchimport.input.PropertySizeCalculator;
 import org.neo4j.internal.id.BatchingIdSequence;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Value;
 
 import static java.lang.Math.toIntExact;
@@ -32,7 +35,7 @@ import static java.lang.Math.toIntExact;
  * Contains state and is designed for multiple uses from a single thread only.
  * Does actual encoding of property values, dry-run style.
  */
-public class PropertyValueRecordSizeCalculator implements ToIntFunction<Value[]>
+public class PropertyValueRecordSizeCalculator implements PropertySizeCalculator
 {
     private final BatchingIdSequence stringRecordIds = new BatchingIdSequence();
     private final DynamicRecordAllocator stringRecordCounter;
@@ -62,7 +65,7 @@ public class PropertyValueRecordSizeCalculator implements ToIntFunction<Value[]>
     }
 
     @Override
-    public int applyAsInt( Value[] values )
+    public int calculateSize( Value[] values, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         stringRecordIds.reset();
         arrayRecordIds.reset();
@@ -72,7 +75,8 @@ public class PropertyValueRecordSizeCalculator implements ToIntFunction<Value[]>
         for ( Value value : values )
         {
             PropertyBlock block = new PropertyBlock();
-            PropertyStore.encodeValue( block, 0 /*doesn't matter*/, value, stringRecordCounter, arrayRecordCounter, true );
+            PropertyStore.encodeValue( block, 0 /*doesn't matter*/, value, stringRecordCounter, arrayRecordCounter, true,
+                    cursorTracer, memoryTracker );
             if ( block.getValueBlocks().length > freeBlocksInCurrentRecord )
             {
                 propertyRecordsUsed++;

@@ -37,6 +37,7 @@ import org.neo4j.internal.recordstorage.SchemaRuleAccess;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.fs.UncloseableDelegatingFileSystemAbstraction;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory;
 import org.neo4j.kernel.impl.api.index.sampling.IndexSamplingController;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -44,20 +45,19 @@ import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.AssertableLogProvider;
-import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.EphemeralFileSystemExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.token.TokenHolders;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.index_background_sampling_enabled;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.internal.helpers.ArrayUtil.single;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
-import static org.neo4j.register.Registers.newDoubleLongRegister;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.logging.AssertableLogProvider.Level.DEBUG;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @ExtendWith( EphemeralFileSystemExtension.class )
 class IndexStatisticsIT
@@ -80,14 +80,7 @@ class IndexStatisticsIT
     @AfterEach
     void after()
     {
-        try
-        {
-            managementService.shutdown();
-        }
-        finally
-        {
-            db = null;
-        }
+        managementService.shutdown();
     }
 
     @Test
@@ -103,7 +96,7 @@ class IndexStatisticsIT
         IndexDescriptor index = TestIndexDescriptorFactory.forLabel( labelId( ALIEN ), pkId( SPECIMEN ) );
         SchemaRuleAccess schemaRuleAccess =
                 SchemaRuleAccess.getSchemaRuleAccess( neoStores().getSchemaStore(), resolveDependency( TokenHolders.class ) );
-        long indexId = single( schemaRuleAccess.indexGetForSchema( index ) ).getId();
+        long indexId = single( schemaRuleAccess.indexGetForSchema( index, NULL ) ).getId();
 
         // for which we don't have index counts
         resetIndexCounts( indexId );
@@ -113,31 +106,20 @@ class IndexStatisticsIT
 
         // then we should have re-sampled the index
         IndexStatisticsStore indexStatisticsStore = indexStatistics();
-        assertEqualRegisters(
-                "Unexpected updates and size for the index",
-                newDoubleLongRegister( 0, 32 ),
-                indexStatisticsStore.indexUpdatesAndSize( indexId, newDoubleLongRegister() ) );
-        assertEqualRegisters(
-            "Unexpected sampling result",
-            newDoubleLongRegister( 16, 32 ),
-            indexStatisticsStore.indexSample( indexId, newDoubleLongRegister() )
-        );
-
+        var indexSample = indexStatisticsStore.indexSample( indexId );
+        assertEquals( 0, indexSample.updates() );
+        assertEquals( 32, indexSample.indexSize() );
+        assertEquals( 16, indexSample.uniqueValues() );
+        assertEquals( 32, indexSample.sampleSize() );
         // and also
-        assertLogExistsForRecoveryOn( ":Alien(specimen)" );
-    }
-
-    private void assertEqualRegisters( String message, DoubleLongRegister expected, DoubleLongRegister actual )
-    {
-        assertEquals( expected.readFirst(), actual.readFirst(), message + " (first part of register)" );
-        assertEquals( expected.readSecond(), actual.readSecond(), message + " (second part of register)" );
+        assertLogExistsForRecoveryOn( "(:Alien {specimen})" );
     }
 
     private void assertLogExistsForRecoveryOn( String labelAndProperty )
     {
-        logProvider.assertAtLeastOnce(
-                inLog( IndexSamplingController.class ).debug( containsString( "Recovering index sampling for index %s" ), labelAndProperty )
-        );
+        assertThat( logProvider ).forClass( IndexSamplingController.class )
+                .forLevel( DEBUG )
+                .containsMessages( "Recovering index sampling for index %s", labelAndProperty );
     }
 
     private int labelId( Label alien )
@@ -190,7 +172,7 @@ class IndexStatisticsIT
 
     private void resetIndexCounts( long indexId )
     {
-        indexStatistics().replaceStats( indexId, 0, 0, 0 );
+        indexStatistics().replaceStats( indexId, new IndexSample( 0, 0, 0 ) );
     }
 
     private <T> T resolveDependency( Class<T> clazz )

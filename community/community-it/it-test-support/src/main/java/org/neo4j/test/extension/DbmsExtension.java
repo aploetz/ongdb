@@ -35,7 +35,6 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
-import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 /**
@@ -63,7 +62,7 @@ import org.neo4j.test.rule.TestDirectory;
 @Inherited
 @Target( {ElementType.TYPE, ElementType.METHOD} )
 @Retention( RetentionPolicy.RUNTIME )
-@TestDirectoryExtension
+@Neo4jLayoutExtension
 @ExtendWith( DbmsSupportExtension.class )
 public @interface DbmsExtension
 {

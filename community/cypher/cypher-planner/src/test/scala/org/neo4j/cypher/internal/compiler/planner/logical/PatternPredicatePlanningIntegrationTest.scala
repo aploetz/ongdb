@@ -19,14 +19,79 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher._
-import org.neo4j.cypher.internal.compiler.planner._
-import org.neo4j.cypher.internal.ir.{QueryGraph, RegularSinglePlannerQuery}
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.OUTGOING
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.Extractors.{MapKeys, SetExtractor}
+import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher.beLike
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
+import org.neo4j.cypher.internal.expressions.Ands
+import org.neo4j.cypher.internal.expressions.ContainerIndex
+import org.neo4j.cypher.internal.expressions.Equals
+import org.neo4j.cypher.internal.expressions.ExtractScope
+import org.neo4j.cypher.internal.expressions.FilterScope
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.expressions.GetDegree
+import org.neo4j.cypher.internal.expressions.LabelName
+import org.neo4j.cypher.internal.expressions.ListComprehension
+import org.neo4j.cypher.internal.expressions.NoneIterablePredicate
+import org.neo4j.cypher.internal.expressions.Not
+import org.neo4j.cypher.internal.expressions.Property
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.ReduceExpression
+import org.neo4j.cypher.internal.expressions.RelTypeName
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
+import org.neo4j.cypher.internal.expressions.SignedDecimalIntegerLiteral
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.AntiConditionalApply
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Create
+import org.neo4j.cypher.internal.logical.plans.DeleteExpression
+import org.neo4j.cypher.internal.logical.plans.DeleteNode
+import org.neo4j.cypher.internal.logical.plans.DeleteRelationship
+import org.neo4j.cypher.internal.logical.plans.DirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Distinct
+import org.neo4j.cypher.internal.logical.plans.EmptyResult
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.FindShortestPaths
+import org.neo4j.cypher.internal.logical.plans.ForeachApply
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.LetSelectOrAntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.LetSelectOrSemiApply
+import org.neo4j.cypher.internal.logical.plans.LoadCSV
+import org.neo4j.cypher.internal.logical.plans.MergeCreateNode
+import org.neo4j.cypher.internal.logical.plans.MergeCreateRelationship
+import org.neo4j.cypher.internal.logical.plans.NestedPlanCollectExpression
+import org.neo4j.cypher.internal.logical.plans.NestedPlanExistsExpression
+import org.neo4j.cypher.internal.logical.plans.NestedPlanExpression
+import org.neo4j.cypher.internal.logical.plans.NodeByIdSeek
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexContainsScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexEndsWithScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexSeek
+import org.neo4j.cypher.internal.logical.plans.NodeUniqueIndexSeek
+import org.neo4j.cypher.internal.logical.plans.Optional
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.RollUpApply
+import org.neo4j.cypher.internal.logical.plans.SelectOrAntiSemiApply
+import org.neo4j.cypher.internal.logical.plans.SelectOrSemiApply
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.SetNodePropertiesFromMap
+import org.neo4j.cypher.internal.logical.plans.SetNodeProperty
+import org.neo4j.cypher.internal.logical.plans.SetProperty
+import org.neo4j.cypher.internal.logical.plans.SetRelationshipPropertiesFromMap
+import org.neo4j.cypher.internal.logical.plans.SetRelationshipProperty
+import org.neo4j.cypher.internal.logical.plans.Sort
+import org.neo4j.cypher.internal.logical.plans.UndirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.UnwindCollection
+import org.neo4j.cypher.internal.logical.plans.VarExpand
+import org.neo4j.cypher.internal.logical.plans.VariablePredicate
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.Extractors.MapKeys
+import org.neo4j.cypher.internal.util.test_helpers.Extractors.SetExtractor
 
 class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -44,7 +109,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
     plan match {
       case Projection(_, expressions) =>
         expressions("clowns") match {
-          case ListComprehension(ExtractScope(_, Some(NestedPlanExpression(nestedPlan, _)), _), _) =>
+          case ListComprehension(ExtractScope(_, Some(NestedPlanExistsExpression(nestedPlan)), _), _) =>
             nestedPlan should equal(
               Selection(
                 ands(hasLabels("  NODE116", "ComedyClub")),
@@ -69,6 +134,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         Sort(
           Projection(
             RollUpApply(
+<<<<<<< HEAD
               NodeByLabelScan("u", LabelName("User")(pos), Set.empty),
               Projection(
                 Selection(
@@ -83,6 +149,19 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
                       "r"
                     ),
                     Set(CachedProperty("u", Variable("u")(pos), PropertyKeyName("id")(pos), NODE_TYPE)(pos))
+=======
+              NodeByLabelScan("u", LabelName("User")(pos), Set.empty, IndexOrderNone),
+              Projection(
+                Selection(
+                  Seq(hasLabels("u2", "User")),
+                  Expand(
+                    Argument(Set("u")),
+                    "u",
+                    OUTGOING,
+                    Seq(RelTypeName("FOLLOWS")(pos)),
+                    "u2",
+                    "r"
+>>>>>>> neo4j/4.1
                   )
                 ),
                 Map("  FRESHID41" -> prop("u2", "id"))
@@ -95,7 +174,11 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
           ),
           Seq(Ascending(patternComprehensionExpressionKeyString))
         ),
+<<<<<<< HEAD
         Map("u.id" -> cachedNodeProp("u", "id"))
+=======
+        Map("u.id" -> prop("u", "id"))
+>>>>>>> neo4j/4.1
       )
     )
   }
@@ -337,7 +420,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         |WHERE n.prop = reduce(sum=0, x IN [(a)-->(b) | b.age] | sum + x)
         |RETURN n
       """.stripMargin
-    val (_, plan, _, _, _) = new given {
+    val (_, plan, _, _) = new given {
       indexOn("Label", "prop")
     } getLogicalPlanFor q
 
@@ -356,7 +439,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         |WHERE n.prop = reduce(sum=0, x IN [(a)-->(b) | b.age] | sum + x)
         |RETURN n
       """.stripMargin
-    val (_, plan, _, _, _) = new given {
+    val (_, plan, _, _) = new given {
       uniqueIndexOn("Label", "prop")
     } getLogicalPlanFor q
 
@@ -375,7 +458,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         |WHERE n.prop CONTAINS toString(reduce(sum=0, x IN [(a)-->(b) | b.age] | sum + x))
         |RETURN n
       """.stripMargin
-    val (_, plan, _, _, _) = new given {
+    val (_, plan, _, _) = new given {
       indexOn("Label", "prop")
     } getLogicalPlanFor q
 
@@ -394,7 +477,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         |WHERE n.prop ENDS WITH toString(reduce(sum=0, x IN [(a)-->(b) | b.age] | sum + x))
         |RETURN n
       """.stripMargin
-    val (_, plan, _, _, _) = new given {
+    val (_, plan, _, _) = new given {
       indexOn("Label", "prop")
     } getLogicalPlanFor q
 
@@ -660,7 +743,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
               ),
       MergeCreateNode(
                       RollUpApply(
-                        CacheProperties(Argument(SetExtractor()), _),
+                        Argument(SetExtractor()),
                       _/* <- This is the subQuery */, _, _, _), _,_ ,_ // Create part
                      ), _
       ) => ()
@@ -677,10 +760,8 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
       case AntiConditionalApply(
       Optional(
                Selection(_,
-                    CacheProperties(
-                         RollUpApply(
-                                     Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _) // Match part
-                    , _)
+                       RollUpApply(
+                          Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _) // Match part
                ), _
               ),
       MergeCreateRelationship(
@@ -701,7 +782,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
 
     planFor(q)._2 should beLike {
       case EmptyResult(
-        DeleteNode(_, ContainerIndex(Variable("nodes"), ReduceExpression(_, _, NestedPlanExpression(_, _))))
+        DeleteNode(_, ContainerIndex(Variable("nodes"), ReduceExpression(_, _, NestedPlanCollectExpression(_, _))))
       ) => ()
     }
   }
@@ -716,7 +797,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
 
     planFor(q)._2 should beLike {
       case EmptyResult(
-        DeleteRelationship(_, ContainerIndex(Variable("rels"), ReduceExpression(_, _, NestedPlanExpression(_, _))))
+        DeleteRelationship(_, ContainerIndex(Variable("rels"), ReduceExpression(_, _, NestedPlanCollectExpression(_, _))))
       ) => ()
     }
   }
@@ -732,7 +813,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
     planFor(q)._2 should beLike {
       case EmptyResult(
         Apply(_,
-          DeleteExpression(_, ContainerIndex(Variable("rels"), FunctionInvocation(_, _, _, Vector(ReduceExpression(_, _, NestedPlanExpression(_, _))))
+          DeleteExpression(_, ContainerIndex(Variable("rels"), FunctionInvocation(_, _, _, Vector(ReduceExpression(_, _, NestedPlanCollectExpression(_, _))))
       )))) => ()
     }
   }
@@ -773,7 +854,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
 
     planFor(q)._2 should beLike {
       case SetRelationshipProperty(
-      RollUpApply(Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _),
+      RollUpApply(Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _),
       _, _, _
       ) => ()
     }
@@ -787,7 +868,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
 
     planFor(q)._2 should beLike {
       case SetRelationshipPropertiesFromMap(
-      RollUpApply(Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _),
+      RollUpApply(Expand(AllNodesScan(_, SetExtractor()), _, _, _, _, _, _, _), _/* <- This is the subQuery */, _, _, _),
       _, _, _
       ) => ()
     }

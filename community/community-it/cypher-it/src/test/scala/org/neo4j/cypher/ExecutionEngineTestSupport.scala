@@ -22,30 +22,46 @@ package org.neo4j.cypher
 import java.util
 import java.util.concurrent.TimeUnit
 
+import org.neo4j.cypher.ExecutionEngineHelper.asJavaMapDeep
 import org.neo4j.cypher.ExecutionEngineHelper.createEngine
-import org.neo4j.cypher.internal._
+import org.neo4j.cypher.internal.ExecutionEngine
+import org.neo4j.cypher.internal.FullyParsedQuery
+import org.neo4j.cypher.internal.RewindableExecutionResult
 import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.runtime.ResourceManager
+=======
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.ResourceManager
+import org.neo4j.cypher.internal.runtime.RuntimeJavaValueConverter
+import org.neo4j.cypher.internal.runtime.RuntimeScalaValueConverter
+import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext
+>>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.IndexSearchMonitor
-import org.neo4j.cypher.internal.runtime.interpreted.{TransactionBoundQueryContext, TransactionalContextWrapper}
-import org.neo4j.cypher.internal.runtime.{InputDataStream, QueryContext, RuntimeJavaValueConverter, RuntimeScalaValueConverter}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.{CypherFunSuite, CypherTestSupport}
-import org.neo4j.graphdb.{GraphDatabaseService, Result}
+import org.neo4j.cypher.internal.runtime.interpreted.TransactionalContextWrapper
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherTestSupport
+import org.neo4j.graphdb.GraphDatabaseService
+import org.neo4j.graphdb.Result
 import org.neo4j.internal.schema.IndexDescriptor
 import org.neo4j.kernel.GraphDatabaseQueryService
+import org.neo4j.kernel.api.query.ExecutingQuery
 import org.neo4j.kernel.impl.coreapi.InternalTransaction
-import org.neo4j.kernel.impl.query.{QueryExecutionEngine, RecordingQuerySubscriber}
+import org.neo4j.kernel.impl.query.QueryExecutionEngine
+import org.neo4j.kernel.impl.query.QueryExecutionMonitor
+import org.neo4j.kernel.impl.query.RecordingQuerySubscriber
 import org.neo4j.kernel.impl.util.ValueUtils
-import org.neo4j.logging.{LogProvider, NullLogProvider}
-import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.Values
-import org.neo4j.values.virtual.{MapValue, VirtualValues}
+import org.neo4j.logging.LogProvider
+import org.neo4j.logging.NullLogProvider
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asJavaIterable
+import scala.collection.JavaConverters.asScalaIteratorConverter
+import scala.collection.JavaConverters.mapAsJavaMap
 import scala.collection.Map
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
 
 trait ExecutionEngineTestSupport extends CypherTestSupport with ExecutionEngineHelper {
   self: CypherFunSuite with GraphDatabaseTestSupport =>
@@ -91,30 +107,17 @@ object ExecutionEngineHelper {
     resolver.resolveDependency(classOf[QueryExecutionEngine]).asInstanceOf[org.neo4j.cypher.internal.javacompat.ExecutionEngine].getCypherExecutionEngine
   }
 
-  def asMapValue(map: Map[String, Any]): MapValue = {
-    val keys = map.keys.toArray
-    val values = map.values.map(asValue).toArray
-    VirtualValues.map(keys, values)
+  def asJavaMapDeep(map: Map[String, Any]): java.util.Map[String, AnyRef] = {
+    mapAsJavaMap(map.mapValues(asJavaValueDeep))
   }
 
-  def asMap(map: MapValue, context: QueryContext): java.util.Map[String, AnyRef] = {
-    val out = new util.HashMap[String, AnyRef]()
-    map.foreach((key: String, value: AnyValue) => {
-      out.put(key, context.asObject(value))
-    })
-    out
-  }
-
-  def asValue(any: Any): AnyValue =
+  def asJavaValueDeep(any: Any): AnyRef =
     any match {
-      case map: Map[String, Any] => asMapValue(map)
-      case array: Array[AnyRef] =>
-        val value = Values.unsafeOf(array, false)
-        if (value == null) VirtualValues.list(array.map(asValue):_*)
-        else value
-      case iterable: Iterable[_] => VirtualValues.list(iterable.map(asValue).toArray:_*)
-      case traversable: TraversableOnce[_] => VirtualValues.list(traversable.map(asValue).toArray:_*)
-      case x => ValueUtils.of(x)
+      case map: Map[String, Any] => asJavaMapDeep(map)
+      case array: Array[Any] => array.map(asJavaValueDeep)
+      case iterable: Iterable[_] => asJavaIterable(iterable.map(asJavaValueDeep))
+      case traversable: TraversableOnce[_] => asJavaIterable(traversable.map(asJavaValueDeep).toList)
+      case x => x.asInstanceOf[AnyRef]
     }
 
   private def scalar[T](input: List[Map[String, Any]]): T = input match {
@@ -157,7 +160,7 @@ trait ExecutionEngineHelper {
     val context = graph.transactionalContext(tx, query = q -> params.toMap)
     val tbqc = new TransactionBoundQueryContext(TransactionalContextWrapper(context), new ResourceManager)
     RewindableExecutionResult(eengine.execute(q,
-      ExecutionEngineHelper.asMapValue(params),
+      ValueUtils.asParameterMapValue(asJavaMapDeep(params)),
       context,
       profile = false,
       prePopulate = false,
@@ -174,10 +177,11 @@ trait ExecutionEngineHelper {
       RewindableExecutionResult(
         eengine.execute(
           query = fpq,
-          params = ExecutionEngineHelper.asMapValue(params),
+          params = ValueUtils.asParameterMapValue(asJavaMapDeep(params)),
           context = context,
           prePopulate = false,
           input = input,
+          queryMonitor = DummyQueryExecutionMonitor,
           subscriber = subscriber
         ),
         tbqc,
@@ -201,4 +205,12 @@ case object DummyIndexSearchMonitor extends IndexSearchMonitor {
   override def indexSeek(index: IndexDescriptor, values: Seq[Any]): Unit = {}
 
   override def lockingUniqueIndexSeek(index: IndexDescriptor, values: Seq[Any]): Unit = {}
+}
+
+case object DummyQueryExecutionMonitor extends QueryExecutionMonitor {
+  override def startProcessing(query: ExecutingQuery): Unit = {}
+  override def startExecution(query: ExecutingQuery): Unit = {}
+  override def endFailure(query: ExecutingQuery, failure: Throwable): Unit = {}
+  override def endFailure(query: ExecutingQuery, reason: String): Unit = {}
+  override def endSuccess(query: ExecutingQuery): Unit = {}
 }

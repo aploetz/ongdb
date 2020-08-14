@@ -13,8 +13,13 @@
   <modelVersion>4.0.0</modelVersion>
   <artifactId>ongdb-cypher-runtime-spec-suite</artifactId>
   <packaging>jar</packaging>
+<<<<<<< HEAD
   <name>ONgDB - Cypher Runtime Acceptance</name>
   <description>ONgDB - Cypher Runtime Specification Suite</description>
+=======
+  <name>Neo4j - Cypher Runtime Acceptance</name>
+  <description>Neo4j - Cypher Runtime Specification Suite</description>
+>>>>>>> neo4j/4.1
   <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
   <scm>
@@ -98,8 +103,13 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-ast-4.0</artifactId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-ast</artifactId>
+>>>>>>> neo4j/4.1
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -111,8 +121,13 @@
     <!-- neo4j testing -->
 
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-cypher-logical-query-builder</artifactId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-cypher-logical-plan-builder</artifactId>
+>>>>>>> neo4j/4.1
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
@@ -124,14 +139,36 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb.community</groupId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-cypher-logical-plan-generator</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-cypher</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j.community</groupId>
+>>>>>>> neo4j/4.1
       <artifactId>it-test-support</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-util-4.0</artifactId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-util</artifactId>
+>>>>>>> neo4j/4.1
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
@@ -171,15 +208,25 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-ast-4.0</artifactId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-ast</artifactId>
+>>>>>>> neo4j/4.1
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-random-values</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-random-values</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>

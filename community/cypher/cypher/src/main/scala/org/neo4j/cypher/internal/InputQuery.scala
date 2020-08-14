@@ -19,34 +19,39 @@
  */
 package org.neo4j.cypher.internal
 
-import org.neo4j.cypher.{internal, _}
-import org.neo4j.cypher.internal.v4_0.ast.Statement
-import org.neo4j.cypher.internal.v4_0.ast.prettifier.{ExpressionStringifier, Prettifier}
-import org.neo4j.cypher.internal.v4_0.frontend.phases.BaseState
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
+import org.neo4j.cypher.CypherExecutionMode
+import org.neo4j.cypher.CypherExpressionEngineOption
+import org.neo4j.cypher.CypherInterpretedPipesFallbackOption
+import org.neo4j.cypher.CypherOperatorEngineOption
+import org.neo4j.cypher.CypherOption
+import org.neo4j.cypher.CypherPlannerOption
+import org.neo4j.cypher.CypherReplanOption
+import org.neo4j.cypher.CypherRuntimeOption
+import org.neo4j.cypher.CypherUpdateStrategy
+import org.neo4j.cypher.CypherVersion
+import org.neo4j.cypher.internal.frontend.phases.BaseState
+import org.neo4j.cypher.internal.util.InputPosition
 
 /**
-  * Input to query execution
-  */
+ * Input to query execution
+ */
 sealed trait InputQuery {
   def options: QueryOptions
 
   def description: String
 
-  def cacheKey: AnyRef
+  def cacheKey: String
 
   def withRecompilationLimitReached: InputQuery
 }
 
 /**
-  * Query execution input as a pre-parsed Cypher query.
-  */
+ * Query execution input as a pre-parsed Cypher query.
+ */
 case class PreParsedQuery(statement: String, rawStatement: String, options: QueryOptions) extends InputQuery {
 
-  val statementWithVersionAndPlanner: String = {
-    val f = options.cacheKey
-    s"CYPHER ${f.version} ${f.plannerInfo} ${f.runtimeInfo} ${f.updateStrategyInfo} ${f.expressionEngineInfo} ${f.operatorEngineInfo} ${f.debugFlags} $statement"
-  }
+  val statementWithVersionAndPlanner: String =
+    s"${options.cacheKey.render} $statement"
 
   override def cacheKey: String = statementWithVersionAndPlanner
 
@@ -58,31 +63,21 @@ case class PreParsedQuery(statement: String, rawStatement: String, options: Quer
 }
 
 /**
-  * Query execution input as a fully parsed Cypher query.
-  */
+ * Query execution input as a fully parsed Cypher query.
+ */
 case class FullyParsedQuery(state: BaseState, options: QueryOptions) extends InputQuery {
 
-  override lazy val description: String = FullyParsedQuery.prettify(this)
+  override lazy val description: String = state.queryText
 
   override def withRecompilationLimitReached: FullyParsedQuery = copy(options = options.withRecompilationLimitReached)
 
-  override def cacheKey: FullyParsedQuery.CacheKey = FullyParsedQuery.CacheKey(statement = state.statement(), fields = options.cacheKey)
+  override val cacheKey: String = s"${options.cacheKey.render} ${state.queryText}"
 
-}
-
-object FullyParsedQuery {
-
-  case class CacheKey(statement: Statement, fields: QueryOptions.CacheKey)
-
-  private val prettifier = Prettifier(ExpressionStringifier())
-
-  private def prettify(query: FullyParsedQuery): String =
-    "/* FullyParsedQuery */ " + prettifier.asString(query.state.statement())
 }
 
 /**
-  * Query execution options
-  */
+ * Query execution options
+ */
 case class QueryOptions(offset: InputPosition,
                         isPeriodicCommit: Boolean,
                         version: CypherVersion,
@@ -93,6 +88,7 @@ case class QueryOptions(offset: InputPosition,
                         expressionEngine: CypherExpressionEngineOption,
                         operatorEngine: CypherOperatorEngineOption,
                         interpretedPipesFallback: CypherInterpretedPipesFallbackOption,
+                        replan: CypherReplanOption,
                         debugOptions: Set[String],
                         recompilationLimitReached: Boolean = false,
                         materializedEntitiesMode: Boolean = false) {
@@ -133,6 +129,31 @@ case class QueryOptions(offset: InputPosition,
     debugFlags = debugOptions.map(flag => s"debug=$flag").mkString(" ")
   )
 
+  def render: Option[String] = {
+    def arg(value: CypherOption, ignoredValue: CypherOption) =
+      if (value == ignoredValue) Seq()
+      else Seq(value.name)
+
+    def option(key: String, value: CypherOption, ignoredValue: CypherOption) =
+      if (value == ignoredValue) Seq()
+      else Seq(s"$key=${value.name}")
+
+    val parts = Seq(
+      arg(version, CypherVersion.default),
+      option("planner", planner, CypherPlannerOption.default),
+      option("runtime", runtime, CypherRuntimeOption.default),
+      option("updateStrategy", updateStrategy, CypherUpdateStrategy.default),
+      option("expressionEngine", expressionEngine, CypherExpressionEngineOption.default),
+      option("operatorEngine", operatorEngine, CypherOperatorEngineOption.default),
+      option("interpretedPipesFallback", interpretedPipesFallback, CypherInterpretedPipesFallbackOption.default),
+      option("replan", replan, CypherReplanOption.default),
+      debugOptions.map(flag => s"debug=$flag"),
+    ).flatten
+
+    if (parts.nonEmpty) Some(s"CYPHER ${parts.mkString(" ")}")
+    else None
+  }
+
 }
 
 object QueryOptions {
@@ -143,10 +164,13 @@ object QueryOptions {
                       expressionEngineInfo: String,
                       operatorEngineInfo: String,
                       interpretedPipesFallbackInfo: String,
-                      debugFlags: String)
+                      debugFlags: String) {
+    def render: String =
+      s"CYPHER $version $plannerInfo $runtimeInfo $updateStrategyInfo $expressionEngineInfo $operatorEngineInfo $interpretedPipesFallbackInfo $debugFlags"
+  }
 
   val default: QueryOptions = QueryOptions(InputPosition.NONE,
-    false,
+    isPeriodicCommit = false,
     CypherVersion.default,
     CypherExecutionMode.default,
     CypherPlannerOption.default,
@@ -155,5 +179,6 @@ object QueryOptions {
     CypherExpressionEngineOption.default,
     CypherOperatorEngineOption.default,
     CypherInterpretedPipesFallbackOption.default,
+    CypherReplanOption.default,
     Set())
 }

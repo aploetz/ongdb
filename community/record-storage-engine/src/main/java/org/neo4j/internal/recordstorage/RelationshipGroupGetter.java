@@ -21,6 +21,7 @@ package org.neo4j.internal.recordstorage;
 
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.internal.recordstorage.RecordAccess.RecordProxy;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
@@ -28,10 +29,12 @@ import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 public class RelationshipGroupGetter
 {
     private final IdSequence idGenerator;
+    private final PageCursorTracer cursorTracer;
 
-    public RelationshipGroupGetter( IdSequence idGenerator )
+    public RelationshipGroupGetter( IdSequence idGenerator, PageCursorTracer cursorTracer )
     {
         this.idGenerator = idGenerator;
+        this.cursorTracer = cursorTracer;
     }
 
     public RelationshipGroupPosition getRelationshipGroup( NodeRecord node, int type,
@@ -43,7 +46,7 @@ public class RelationshipGroupGetter
         RecordProxy<RelationshipGroupRecord, Integer> current;
         while ( groupId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
-            current = relGroupRecords.getOrLoad( groupId, null );
+            current = relGroupRecords.getOrLoad( groupId, null, cursorTracer );
             RelationshipGroupRecord record = current.forReadingData();
             record.setPrev( previousGroupId ); // not persistent so not a "change"
             if ( record.getType() == type )
@@ -63,15 +66,15 @@ public class RelationshipGroupGetter
     }
 
     public RecordProxy<RelationshipGroupRecord, Integer> getOrCreateRelationshipGroup(
-            NodeRecord node, int type, RecordAccess<RelationshipGroupRecord, Integer> relGroupRecords  )
+            NodeRecord node, int type, RecordAccess<RelationshipGroupRecord, Integer> relGroupRecords )
     {
         RelationshipGroupPosition existingGroup = getRelationshipGroup( node, type, relGroupRecords );
         RecordProxy<RelationshipGroupRecord, Integer> change = existingGroup.group();
         if ( change == null )
         {
             assert node.isDense() : "Node " + node + " should have been dense at this point";
-            long id = idGenerator.nextId();
-            change = relGroupRecords.create( id, type );
+            long id = idGenerator.nextId( cursorTracer );
+            change = relGroupRecords.create( id, type, cursorTracer );
             RelationshipGroupRecord record = change.forChangingData();
             record.setInUse( true );
             record.setCreated();
@@ -91,8 +94,7 @@ public class RelationshipGroupGetter
                 long firstGroupId = node.getNextRel();
                 if ( firstGroupId != Record.NO_NEXT_RELATIONSHIP.intValue() )
                 {   // There are others, make way for this new group
-                    RelationshipGroupRecord previousFirstRecord =
-                            relGroupRecords.getOrLoad( firstGroupId, type ).forReadingData();
+                    RelationshipGroupRecord previousFirstRecord = relGroupRecords.getOrLoad( firstGroupId, type, cursorTracer ).forReadingData();
                     record.setNext( previousFirstRecord.getId() );
                     previousFirstRecord.setPrev( id );
                 }

@@ -35,6 +35,9 @@ import org.neo4j.io.pagecache.tracing.PinEvent;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContext;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
+import org.neo4j.scheduler.JobHandle;
+import org.neo4j.util.Preconditions;
+import org.neo4j.util.VisibleForTesting;
 
 import static org.neo4j.io.pagecache.PagedFile.PF_EAGER_FLUSH;
 import static org.neo4j.io.pagecache.PagedFile.PF_NO_FAULT;
@@ -51,6 +54,7 @@ public abstract class MuninnPageCursor extends PageCursor
 
     private static final int BYTE_ARRAY_BASE_OFFSET = UnsafeUtil.arrayBaseOffset( byte[].class );
     private static final int BYTE_ARRAY_INDEX_SCALE = UnsafeUtil.arrayIndexScale( byte[].class );
+    private static final long CURRENT_PAGE_ID = UnsafeUtil.getFieldOffset( MuninnPageCursor.class, "currentPageId" );
 
     // Size of the respective primitive types in bytes.
     private static final int SIZE_OF_BYTE = Byte.BYTES;
@@ -59,7 +63,7 @@ public abstract class MuninnPageCursor extends PageCursor
     private static final int SIZE_OF_LONG = Long.BYTES;
 
     private final long victimPage;
-    private final PageCursorTracer tracer;
+    protected final PageCursorTracer tracer;
     protected MuninnPagedFile pagedFile;
     protected PageSwapper swapper;
     protected int swapperId;
@@ -70,9 +74,11 @@ public abstract class MuninnPageCursor extends PageCursor
     protected boolean eagerFlush;
     protected boolean noFault;
     protected boolean noGrow;
-    protected long currentPageId;
+    @SuppressWarnings( "unused" ) // This field is accessed via Unsafe.
+    private long currentPageId;
     protected long nextPageId;
     protected MuninnPageCursor linkedCursor;
+    protected JobHandle<?> preFetcher;
     private long pointer;
     private int pageSize;
     private int filePageSize;
@@ -80,7 +86,6 @@ public abstract class MuninnPageCursor extends PageCursor
     private int offset;
     private int mark;
     private boolean outOfBounds;
-    private boolean isLinkedCursor;
     // This is a String with the exception message if usePreciseCursorErrorStackTraces is false, otherwise it is a
     // CursorExceptionWithPreciseStackTrace with the message and stack trace pointing more or less directly at the
     // offending code.
@@ -112,11 +117,26 @@ public abstract class MuninnPageCursor extends PageCursor
         return (flagSet & flag) == flag;
     }
 
+    long loadPlainCurrentPageId()
+    {
+        return currentPageId;
+    }
+
+    long loadVolatileCurrentPageId()
+    {
+        return UnsafeUtil.getLongVolatile( this, CURRENT_PAGE_ID );
+    }
+
+    void storeCurrentPageId( long pageId )
+    {
+        UnsafeUtil.putOrderedLong( this, CURRENT_PAGE_ID, pageId );
+    }
+
     @Override
     public final void rewind()
     {
         nextPageId = pageId;
-        currentPageId = UNBOUND_PAGE_ID;
+        storeCurrentPageId( UNBOUND_PAGE_ID );
     }
 
     public final void reset( long pageRef )
@@ -131,7 +151,7 @@ public abstract class MuninnPageCursor extends PageCursor
     @Override
     public final boolean next( long pageId ) throws IOException
     {
-        if ( currentPageId == pageId )
+        if ( loadPlainCurrentPageId() == pageId )
         {
             verifyContext();
             return true;
@@ -155,16 +175,18 @@ public abstract class MuninnPageCursor extends PageCursor
     }
 
     /**
-     * We reading potentially dirty data in case if our page last modification version is higher then
+     * When reading potentially dirty data in case if our page last modification version is higher than
      * requested lastClosedTransactionId; or for this page file we already evict some page with version that is higher
-     * then requested lastClosedTransactionId. In this case we can't be sure that data of current page satisfying
-     * visibility requirements and we pessimistically will assume that we reading dirty data.
+     * than requested lastClosedTransactionId. In this case we can't be sure that the data of the current page is satisfying
+     * the visibility requirements, and we pessimistically will assume that we are reading dirty data.
      * @param lastClosedTransactionId last closed transaction id
      * @return true in case if we reading potentially dirty data for requested lastClosedTransactionId.
      */
     private boolean isPotentiallyReadingDirtyData( long lastClosedTransactionId )
     {
-        return pagedFile.getLastModifiedTxId( pinnedPageRef ) > lastClosedTransactionId ||
+        long pageRef = pinnedPageRef;
+        Preconditions.checkState( pageRef != 0, "Cursor is closed." );
+        return pagedFile.getLastModifiedTxId( pageRef ) > lastClosedTransactionId ||
                 pagedFile.getHighestEvictedTransactionId() > lastClosedTransactionId;
     }
 
@@ -186,6 +208,13 @@ public abstract class MuninnPageCursor extends PageCursor
             // We null out the pagedFile field to allow it and its (potentially big) translation table to be garbage
             // collected when the file is unmapped, since the cursors can stick around in thread local caches, etc.
             cursor.pagedFile = null;
+            // Signal to any pre-fetchers that the cursor is closed.
+            cursor.storeCurrentPageId( UNBOUND_PAGE_ID );
+            if ( preFetcher != null )
+            {
+                preFetcher.cancel();
+                preFetcher = null;
+            }
             cursor = cursor.linkedCursor;
         }
     }
@@ -215,8 +244,7 @@ public abstract class MuninnPageCursor extends PageCursor
         }
         else
         {
-            linkedCursor = (MuninnPageCursor) pf.io( pageId, pf_flags );
-            linkedCursor.isLinkedCursor = true;
+            linkedCursor = (MuninnPageCursor) pf.io( pageId, pf_flags, tracer );
         }
         return linkedCursor;
     }
@@ -229,7 +257,6 @@ public abstract class MuninnPageCursor extends PageCursor
         // We don't need to clear the pointer field, because setting the page size to 0 will make all future accesses
         // go out of bounds, which in turn imply that they will always end up accessing the victim page anyway.
         clearPageReference();
-        currentPageId = UNBOUND_PAGE_ID;
         cursorException = null;
     }
 
@@ -244,30 +271,28 @@ public abstract class MuninnPageCursor extends PageCursor
     @Override
     public final long getCurrentPageId()
     {
-        return currentPageId;
+        return loadPlainCurrentPageId();
     }
 
     @Override
     public final int getCurrentPageSize()
     {
-        return currentPageId == UNBOUND_PAGE_ID ? UNBOUND_PAGE_SIZE : pagedFile.pageSize();
+        return loadPlainCurrentPageId() == UNBOUND_PAGE_ID ? UNBOUND_PAGE_SIZE : pagedFile.pageSize();
     }
 
     @Override
     public final File getCurrentFile()
     {
-        return currentPageId == UNBOUND_PAGE_ID ? null : pagedFile.file();
+        return loadPlainCurrentPageId() == UNBOUND_PAGE_ID ? null : pagedFile.file();
     }
 
     /**
      * Pin the desired file page to this cursor, page faulting it into memory if it isn't there already.
      * @param filePageId The file page id we want to pin this cursor to.
-     * @param writeLock 'true' if we will be taking a write lock on the page as part of the pin.
      * @throws IOException if anything goes wrong with the pin, most likely during a page fault.
      */
-    protected void pin( long filePageId, boolean writeLock ) throws IOException
+    protected void pin( long filePageId ) throws IOException
     {
-        pinEvent = tracer.beginPin( writeLock, filePageId, swapper );
         int chunkId = MuninnPagedFile.computeChunkId( filePageId );
         // The chunkOffset is the addressing offset into the chunk array object for the relevant array slot. Using
         // this, we can access the array slot with Unsafe.
@@ -327,7 +352,7 @@ public abstract class MuninnPageCursor extends PageCursor
         if ( noFault )
         {
             // The only page state that needs to be cleared is the currentPageId, since it was set prior to pin.
-            currentPageId = UNBOUND_PAGE_ID;
+            storeCurrentPageId( UNBOUND_PAGE_ID );
             return true;
         }
         // Looks like there's no mapping, so we'd like to do a page fault.
@@ -380,7 +405,7 @@ public abstract class MuninnPageCursor extends PageCursor
         }
         catch ( Throwable throwable )
         {
-            // Make sure to unstuck the page fault latch.
+            // Make sure to release the page fault latch.
             abortPageFault( throwable, chunk, chunkOffset, latch, faultEvent );
             throw throwable;
         }
@@ -398,7 +423,7 @@ public abstract class MuninnPageCursor extends PageCursor
         {
             // Make sure to unlock the page, so the eviction thread can pick up our trash.
             pagedFile.unlockExclusive( pageRef );
-            // Make sure to unstuck the page fault latch.
+            // Make sure to release the page fault latch.
             abortPageFault( throwable, chunk, chunkOffset, latch, faultEvent );
             throw throwable;
         }
@@ -1079,8 +1104,11 @@ public abstract class MuninnPageCursor extends PageCursor
         return isFlagRaised( pf_flags, PF_SHARED_WRITE_LOCK );
     }
 
+    @VisibleForTesting
     public long lastTxModifierId()
     {
-        return pagedFile.getLastModifiedTxId( pinnedPageRef );
+        long pageRef = pinnedPageRef;
+        Preconditions.checkState( pageRef != 0, "Cursor is closed." );
+        return pagedFile.getLastModifiedTxId( pageRef );
     }
 }

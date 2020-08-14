@@ -25,24 +25,24 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.function.Predicate;
 
+import org.neo4j.kernel.impl.util.diffsets.MutableDiffSets;
 import org.neo4j.kernel.impl.util.diffsets.MutableDiffSetsImpl;
+import org.neo4j.memory.EmptyMemoryTracker;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.IsIterableContaining.hasItems;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.internal.helpers.collection.Iterators.asCollection;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
-import static org.neo4j.internal.helpers.collection.Iterators.iterator;
 
 class MutableDiffSetsImplTest
 {
     private static final Predicate<Long> ODD_FILTER = item -> item % 2 != 0;
 
-    private final MutableDiffSetsImpl<Long> diffSets = new MutableDiffSetsImpl<>();
+    private final MutableDiffSets<Long> diffSets = MutableDiffSetsImpl.newMutableDiffSets( EmptyMemoryTracker.INSTANCE );
 
     @Test
     void testAdd()
@@ -107,33 +107,6 @@ class MutableDiffSetsImplTest
     }
 
     @Test
-    void testAddRemoveAll()
-    {
-        // WHEN
-        diffSets.addAll( iterator( 1L, 2L ) );
-        diffSets.removeAll( iterator( 2L, 3L ) );
-
-        // THEN
-        assertEquals( asSet( 1L ), diffSets.getAdded() );
-        assertEquals( asSet( 3L ), diffSets.getRemoved() );
-    }
-
-    @Test
-    void testFilterAdded()
-    {
-        // GIVEN
-        diffSets.addAll( iterator( 1L, 2L ) );
-        diffSets.removeAll( iterator( 3L, 4L ) );
-
-        // WHEN
-        MutableDiffSetsImpl<Long> filtered = diffSets.filterAdded( ODD_FILTER );
-
-        // THEN
-        assertEquals( asSet( 1L ), filtered.getAdded() );
-        assertEquals( asSet( 3L, 4L ), filtered.getRemoved() );
-    }
-
-    @Test
     void testReturnSourceFromApplyWithEmptyDiffSets()
     {
         // WHEN
@@ -186,6 +159,6 @@ class MutableDiffSetsImplTest
         // THEN
         Collection<Long> collectedResult = asCollection( result );
         assertEquals( 3, collectedResult.size() );
-        assertThat( collectedResult, hasItems( 43L, 42L, 44L ) );
+        assertThat( collectedResult ).contains( 43L, 42L, 44L );
     }
 }

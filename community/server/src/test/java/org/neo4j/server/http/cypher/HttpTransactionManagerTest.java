@@ -19,101 +19,100 @@
  */
 package org.neo4j.server.http.cypher;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Answers;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.dbms.api.DatabaseNotFoundException;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobScheduler;
-import org.neo4j.server.database.DatabaseService;
 import org.neo4j.time.Clocks;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class HttpTransactionManagerTest
+class HttpTransactionManagerTest
 {
     @Test
-    public void shouldSetupJobScheduler()
+    void shouldSetupJobScheduler()
     {
-        DatabaseService database = mock( DatabaseService.class );
+        var managementService = mock( DatabaseManagementService.class );
         JobScheduler jobScheduler = mock( JobScheduler.class );
         AssertableLogProvider logProvider = new AssertableLogProvider( true );
 
-        new HttpTransactionManager( database, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
+        new HttpTransactionManager( managementService, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
 
         long runEvery = Math.round( Duration.ofMinutes( 1 ).toMillis() / 2.0 );
         verify( jobScheduler ).scheduleRecurring( eq( Group.SERVER_TRANSACTION_TIMEOUT ), any(), eq( runEvery ), eq( TimeUnit.MILLISECONDS ) );
     }
 
     @Test
-    public void shouldCreateTransactionHandleRegistry()
+    void shouldCreateTransactionHandleRegistry()
     {
-        DatabaseService database = mock( DatabaseService.class );
+        var managementService = mock( DatabaseManagementService.class );
         JobScheduler jobScheduler = mock( JobScheduler.class );
         AssertableLogProvider logProvider = new AssertableLogProvider( true );
 
         HttpTransactionManager manager =
-                new HttpTransactionManager( database, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
+                new HttpTransactionManager( managementService, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
 
         assertNotNull( manager.getTransactionHandleRegistry() );
     }
 
     @Test
-    public void shouldGetEmptyTransactionFacadeOfDatabaseData()
+    void shouldGetEmptyTransactionFacadeOfDatabaseData()
     {
-        DatabaseService database = mock( DatabaseService.class );
-        HttpTransactionManager manager = newTransactionManager( database );
-        final Optional<GraphDatabaseFacade> graphDatabaseFacade = manager.getGraphDatabaseFacade( "data" );
+        DatabaseManagementService managementService = mock( DatabaseManagementService.class );
+        HttpTransactionManager manager = newTransactionManager( managementService );
+        var graphDatabaseFacade = manager.getGraphDatabaseAPI( "data" );
 
         assertFalse( graphDatabaseFacade.isPresent() );
 
-        verify( database ).getDatabase( "data" );
+        verify( managementService ).database( "data" );
     }
 
     @Test
-    public void shouldGetTransactionFacadeOfDatabaseWithSpecifiedName()
+    void shouldGetTransactionFacadeOfDatabaseWithSpecifiedName()
     {
-        DatabaseService database = mock( DatabaseService.class );
-        HttpTransactionManager manager = newTransactionManager( database );
-        Optional<GraphDatabaseFacade> transactionFacade = manager.getGraphDatabaseFacade( "neo4j" );
+        DatabaseManagementService managementService = mock( DatabaseManagementService.class );
+        HttpTransactionManager manager = newTransactionManager( managementService );
+        var transactionFacade = manager.getGraphDatabaseAPI( "neo4j" );
 
         assertTrue( transactionFacade.isPresent() );
 
-        verify( database ).getDatabase( "neo4j" );
+        verify( managementService ).database( "neo4j" );
     }
 
     @Test
-    public void shouldGetEmptyTransactionFacadeForUnknownDatabase()
+    void shouldGetEmptyTransactionFacadeForUnknownDatabase()
     {
-        DatabaseService database = mock( DatabaseService.class );
-        HttpTransactionManager manager = newTransactionManager( database );
-        Optional<GraphDatabaseFacade> transactionFacade = manager.getGraphDatabaseFacade( "foo" );
+        DatabaseManagementService managementService = mock( DatabaseManagementService.class );
+        HttpTransactionManager manager = newTransactionManager( managementService );
+        var transactionFacade = manager.getGraphDatabaseAPI( "foo" );
 
         assertFalse( transactionFacade.isPresent() );
 
-        verify( database ).getDatabase( "foo" );
+        verify( managementService ).database( "foo" );
     }
 
-    private HttpTransactionManager newTransactionManager( DatabaseService database )
+    private HttpTransactionManager newTransactionManager( DatabaseManagementService managementService )
     {
         JobScheduler jobScheduler = mock( JobScheduler.class );
         AssertableLogProvider logProvider = new AssertableLogProvider( true );
         var defaultDatabase = "neo4j";
-        when( database.getDatabase( any( String.class ) ) ).thenAnswer( invocation -> {
+        when( managementService.database( any( String.class ) ) ).thenAnswer( invocation -> {
             Object[] args = invocation.getArguments();
             String db = (String) args[0];
 
@@ -127,7 +126,7 @@ public class HttpTransactionManagerTest
             }
 
         } );
-        return new HttpTransactionManager( database, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
+        return new HttpTransactionManager( managementService, jobScheduler, Clocks.systemClock(), Duration.ofMinutes( 1 ), logProvider );
     }
 
     private GraphDatabaseFacade graphWithName( String name )

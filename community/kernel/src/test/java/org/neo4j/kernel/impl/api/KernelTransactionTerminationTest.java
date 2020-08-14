@@ -34,13 +34,14 @@ import org.neo4j.collection.pool.Pool;
 import org.neo4j.configuration.Config;
 import org.neo4j.graphdb.TransactionTerminatedException;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.internal.schema.SchemaState;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.TestDatabaseIdRepository;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -51,11 +52,9 @@ import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.locking.NoOpClient;
 import org.neo4j.kernel.impl.locking.SimpleStatementLocks;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
-import org.neo4j.kernel.impl.transaction.tracing.TransactionTracer;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
-import org.neo4j.lock.LockTracer;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.test.Race;
 import org.neo4j.time.Clocks;
@@ -298,11 +297,17 @@ class KernelTransactionTerminationTest
             super( Config.defaults(), mock( DatabaseTransactionEventListeners.class ),
                     mock( ConstraintIndexCreator.class ), mock( GlobalProcedures.class ),
                     mock( TransactionCommitProcess.class ), monitor, mock( Pool.class ), Clocks.fakeClock(),
-                    new AtomicReference<>( CpuClock.NOT_AVAILABLE ), new AtomicReference<>( HeapAllocation.NOT_AVAILABLE ), TransactionTracer.NULL,
-                    LockTracer.NONE, PageCursorTracerSupplier.NULL, mock( StorageEngine.class, RETURNS_MOCKS ), new CanWrite(),
+                    new AtomicReference<>( CpuClock.NOT_AVAILABLE ),
+                    mock( DatabaseTracers.class, RETURNS_MOCKS ), mock( StorageEngine.class, RETURNS_MOCKS ), new CanWrite(),
                     EmptyVersionContextSupplier.EMPTY, ON_HEAP, new StandardConstraintSemantics(), mock( SchemaState.class ),
+<<<<<<< HEAD
                     mockedTokenHolders(), mock( IndexingService.class ), mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies,
                     new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES );
+=======
+                    mockedTokenHolders(), mock( IndexingService.class ), mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ),
+                    mock( IndexStatisticsStore.class ), dependencies, new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES,
+                    MemoryPools.NO_TRACKING );
+>>>>>>> neo4j/4.1
 
             this.monitor = monitor;
         }
@@ -316,7 +321,7 @@ class KernelTransactionTerminationTest
 
         TestKernelTransaction initialize()
         {
-            initialize( 42, 42, new SimpleStatementLocks( new NoOpClient() ), Type.implicit, AUTH_DISABLED, 0L, 1L, EMBEDDED_CONNECTION );
+            initialize( 42, 42, new SimpleStatementLocks( new NoOpClient() ), Type.IMPLICIT, AUTH_DISABLED, 0L, 1L, EMBEDDED_CONNECTION );
             monitor.reset();
             return this;
         }

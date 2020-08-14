@@ -39,12 +39,16 @@ public class RelationshipGroupRecordFormat extends BaseOneByteHeaderRecordFormat
 
     public RelationshipGroupRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT,
-                StandardFormatSettings.RELATIONSHIP_GROUP_MAXIMUM_ID_BITS );
+        this( false );
+    }
+
+    public RelationshipGroupRecordFormat( boolean pageAligned )
+    {
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, StandardFormatSettings.RELATIONSHIP_GROUP_MAXIMUM_ID_BITS, pageAligned );
     }
 
     @Override
-    public void read( RelationshipGroupRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( RelationshipGroupRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         // [    ,   x] in use
         // [    ,xxx ] high next id bits
@@ -80,7 +84,7 @@ public class RelationshipGroupRecordFormat extends BaseOneByteHeaderRecordFormat
     }
 
     @Override
-    public void write( RelationshipGroupRecord record, PageCursor cursor, int recordSize )
+    public void write( RelationshipGroupRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

@@ -21,10 +21,16 @@ package org.neo4j.cypher.internal.compiler.planner.logical.plans.rewriter
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
 import org.neo4j.cypher.internal.ir.NoHeaders
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.util.attribution.Attributes
-import org.neo4j.cypher.internal.v4_0.util.helpers.fixedPoint
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.logical.plans.DoNotIncludeTies
+import org.neo4j.cypher.internal.logical.plans.Eager
+import org.neo4j.cypher.internal.logical.plans.Limit
+import org.neo4j.cypher.internal.logical.plans.LoadCSV
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.UnwindCollection
+import org.neo4j.cypher.internal.util.attribution.Attributes
+import org.neo4j.cypher.internal.util.helpers.fixedPoint
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class cleanUpEagerTest extends CypherFunSuite with LogicalPlanningTestSupport {
   val DEFAULT_BUFFER_SIZE_4MB: Int = 4 * 1024 * 1024
@@ -107,7 +113,7 @@ class cleanUpEagerTest extends CypherFunSuite with LogicalPlanningTestSupport {
     val leaf = newMockedLogicalPlan()
     val eager = Eager(leaf)
     val loadCSV = LoadCSV(eager, literalString("file:///tmp/foo.csv"), "a", NoHeaders, None,
-                                                legacyCsvQuoteEscaping = false, DEFAULT_BUFFER_SIZE_4MB)
+      legacyCsvQuoteEscaping = false, DEFAULT_BUFFER_SIZE_4MB)
     val topPlan = Projection(loadCSV, Map.empty)
 
     rewrite(topPlan) should equal(topPlan)

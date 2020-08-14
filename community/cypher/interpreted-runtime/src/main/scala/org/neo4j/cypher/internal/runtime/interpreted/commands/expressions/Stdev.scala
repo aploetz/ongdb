@@ -20,11 +20,14 @@
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.AggregationFunction
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.StdevFunction
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.util.symbols.CTNumber
+import org.neo4j.cypher.internal.util.symbols.CypherType
+import org.neo4j.memory.MemoryTracker
 
 case class Stdev(anInner: Expression) extends AggregationWithInnerExpression(anInner) {
-  override def createAggregationFunction = new StdevFunction(anInner, false)
+  override def createAggregationFunction(memoryTracker: MemoryTracker): AggregationFunction = new StdevFunction(anInner, false, memoryTracker)
 
   override def expectedInnerType: CypherType = CTNumber
 
@@ -34,7 +37,7 @@ case class Stdev(anInner: Expression) extends AggregationWithInnerExpression(anI
 }
 
 case class StdevP(anInner: Expression) extends AggregationWithInnerExpression(anInner) {
-  override def createAggregationFunction = new StdevFunction(anInner, true)
+  override def createAggregationFunction(memoryTracker: MemoryTracker): AggregationFunction = new StdevFunction(anInner, true, memoryTracker)
 
   override def expectedInnerType: CypherType = CTNumber
 

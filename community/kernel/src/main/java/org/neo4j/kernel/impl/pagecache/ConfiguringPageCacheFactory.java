@@ -29,17 +29,17 @@ import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.logging.Log;
-import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryPools;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
-import org.neo4j.service.Services;
+import org.neo4j.time.SystemNanoClock;
 
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import static org.neo4j.configuration.GraphDatabaseSettings.pagecache_memory;
-import static org.neo4j.configuration.GraphDatabaseSettings.pagecache_swapper;
 import static org.neo4j.configuration.SettingValueParsers.BYTES;
+import static org.neo4j.io.mem.MemoryAllocator.createAllocator;
+import static org.neo4j.memory.MemoryGroup.PAGE_CACHE;
 
 public class ConfiguringPageCacheFactory
 {
@@ -50,38 +50,38 @@ public class ConfiguringPageCacheFactory
     private final Log log;
     private final VersionContextSupplier versionContextSupplier;
     private PageCache pageCache;
-    private final PageCursorTracerSupplier pageCursorTracerSupplier;
     private final JobScheduler scheduler;
+    private final SystemNanoClock clock;
+    private final MemoryPools memoryPools;
 
     /**
      * Construct configuring page cache factory
      * @param fs fileSystem file system that page cache will be based on
      * @param config page swapper configuration
      * @param pageCacheTracer global page cache tracer
-     * @param pageCursorTracerSupplier supplier of thread local (transaction local) page cursor tracer that will provide
-     * thread local page cache statistics
      * @param log page cache factory log
      * @param versionContextSupplier cursor context factory
      * @param scheduler job scheduler to execute page cache jobs
+     * @param clock the clock source used by the page cache.
      */
-    public ConfiguringPageCacheFactory( FileSystemAbstraction fs, Config config, PageCacheTracer pageCacheTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier, Log log,
-            VersionContextSupplier versionContextSupplier, JobScheduler scheduler )
+    public ConfiguringPageCacheFactory( FileSystemAbstraction fs, Config config, PageCacheTracer pageCacheTracer, Log log,
+            VersionContextSupplier versionContextSupplier, JobScheduler scheduler, SystemNanoClock clock, MemoryPools memoryPools )
     {
         this.fs = fs;
         this.versionContextSupplier = versionContextSupplier;
         this.config = config;
         this.pageCacheTracer = pageCacheTracer;
         this.log = log;
-        this.pageCursorTracerSupplier = pageCursorTracerSupplier;
         this.scheduler = scheduler;
+        this.clock = clock;
+        this.memoryPools = memoryPools;
     }
 
     public synchronized PageCache getOrCreatePageCache()
     {
         if ( pageCache == null )
         {
-            this.swapperFactory = createAndConfigureSwapperFactory( fs, config, log );
+            this.swapperFactory = createAndConfigureSwapperFactory( fs );
             this.pageCache = createPageCache();
         }
         return pageCache;
@@ -89,12 +89,19 @@ public class ConfiguringPageCacheFactory
 
     protected PageCache createPageCache()
     {
-        MemoryAllocator memoryAllocator = buildMemoryAllocator( config );
-        return new MuninnPageCache( swapperFactory, memoryAllocator, pageCacheTracer, pageCursorTracerSupplier,
-                versionContextSupplier, scheduler );
+        long pageCacheMaxMemory = getPageCacheMaxMemory( config );
+        var memoryPool = memoryPools.pool( PAGE_CACHE, pageCacheMaxMemory, false, null );
+        var memoryTracker = memoryPool.getPoolMemoryTracker();
+        MemoryAllocator memoryAllocator = buildMemoryAllocator( pageCacheMaxMemory, memoryTracker );
+        return new MuninnPageCache( swapperFactory, memoryAllocator, pageCacheTracer, versionContextSupplier, scheduler, clock, memoryTracker );
     }
 
-    private MemoryAllocator buildMemoryAllocator( Config config )
+    private MemoryAllocator buildMemoryAllocator( long pageCacheMaxMemory, MemoryTracker memoryTracker )
+    {
+        return createAllocator( pageCacheMaxMemory, memoryTracker );
+    }
+
+    private long getPageCacheMaxMemory( Config config )
     {
         String pageCacheMemorySetting = config.get( pagecache_memory );
         if ( pageCacheMemorySetting == null )
@@ -106,8 +113,7 @@ public class ConfiguringPageCacheFactory
                       "Run `neo4j-admin memrec` for memory configuration suggestions." );
             pageCacheMemorySetting = "" + heuristic;
         }
-
-        return MemoryAllocator.createAllocator( pageCacheMemorySetting, EmptyMemoryTracker.INSTANCE );
+        return ByteUnit.parse( pageCacheMemorySetting );
     }
 
     public static long defaultHeuristicPageCacheMemory()
@@ -170,24 +176,8 @@ public class ConfiguringPageCacheFactory
         log.info( msg );
     }
 
-    private static PageSwapperFactory createAndConfigureSwapperFactory( FileSystemAbstraction fs, Config config, Log log )
+    private static PageSwapperFactory createAndConfigureSwapperFactory( FileSystemAbstraction fs )
     {
-        PageSwapperFactory factory = getPageSwapperFactory( config, log );
-        factory.open( fs );
-        return factory;
-    }
-
-    private static PageSwapperFactory getPageSwapperFactory( Config config, Log log )
-    {
-        String desiredImplementation = config.get( pagecache_swapper );
-        if ( isNotBlank( desiredImplementation ) )
-        {
-
-            final PageSwapperFactory factory = Services.load( PageSwapperFactory.class, desiredImplementation )
-                    .orElseThrow( () -> new IllegalArgumentException( "Cannot find PageSwapperFactory: " + desiredImplementation ) );
-            log.info( "Configured " + pagecache_swapper.name() + ": " + desiredImplementation );
-            return factory;
-        }
-        return new SingleFilePageSwapperFactory();
+        return new SingleFilePageSwapperFactory( fs );
     }
 }

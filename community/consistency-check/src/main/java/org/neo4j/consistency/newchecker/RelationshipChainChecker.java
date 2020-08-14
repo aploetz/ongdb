@@ -22,7 +22,6 @@ package org.neo4j.consistency.newchecker;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.consistency.checking.cache.CacheAccess;
 import org.neo4j.consistency.checking.full.ConsistencyFlags;
@@ -31,14 +30,12 @@ import org.neo4j.consistency.report.ConsistencyReport;
 import org.neo4j.internal.helpers.collection.LongRange;
 import org.neo4j.internal.helpers.progress.ProgressListener;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.time.Stopwatch;
 
 import static java.lang.Math.max;
-import static java.lang.Math.min;
-import static java.lang.Math.toIntExact;
 import static org.neo4j.consistency.checking.cache.CacheSlots.RelationshipLink.NEXT;
 import static org.neo4j.consistency.checking.cache.CacheSlots.RelationshipLink.PREV;
 import static org.neo4j.consistency.checking.cache.CacheSlots.RelationshipLink.SLOT_FIRST_IN_CHAIN;
@@ -57,14 +54,15 @@ import static org.neo4j.consistency.newchecker.RelationshipLink.TARGET_NEXT;
 import static org.neo4j.consistency.newchecker.RelationshipLink.TARGET_PREV;
 import static org.neo4j.internal.helpers.Format.duration;
 import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 
 /**
  * Checks relationship chains, i.e. their internal pointers between relationship records.
  */
 class RelationshipChainChecker implements Checker
 {
-    private static final int REPORT_PAGE_ID_THRESHOLD = 1000;
-    private final int ioReadAheadSize;
+    private static final String RELATIONSHIP_CONSISTENCY_CHECKER_TAG = "relationshipConsistencyChecker";
+    private static final String SINGLE_RELATIONSHIP_CONSISTENCY_CHECKER_TAG = "simpleChainsRelationshipConsistencyChecker";
     private final ConsistencyReport.Reporter reporter;
     private final CheckerContext context;
     private final int numberOfChainCheckers;
@@ -76,12 +74,13 @@ class RelationshipChainChecker implements Checker
     {
         this.context = context;
         this.reporter = context.reporter;
-        // Because the last thread will be the one reading the relationships store and enqueuing to the checkers
+        // There will be two threads in addition to the relationship checkers:
+        // - Relationship store scanner
+        // - (Internal) thread helping pre-fetching the relationship store pages
         this.numberOfChainCheckers = max( 1, context.execution.getNumberOfThreads() - 2 );
         this.cacheAccess = context.cacheAccess;
         this.recordLoader = context.recordLoader;
         this.progress = context.progressReporter( this, "Relationship chains", context.neoStores.getRelationshipStore().getHighId() * 2 );
-        this.ioReadAheadSize = max( REPORT_PAGE_ID_THRESHOLD * 2, min( 100_000, toIntExact( context.pageCache.maxCachedPages() / 4 ) ) );
     }
 
     @Override
@@ -100,12 +99,11 @@ class RelationshipChainChecker implements Checker
         RelationshipStore relationshipStore = context.neoStores.getRelationshipStore();
         long highId = relationshipStore.getHighId();
         AtomicBoolean end = new AtomicBoolean();
-        int numberOfThreads = numberOfChainCheckers + 2;
+        int numberOfThreads = numberOfChainCheckers + 1;
         ThrowingRunnable[] workers = new ThrowingRunnable[numberOfThreads];
         ProgressListener localProgress = progress.threadLocalReporter();
         ArrayBlockingQueue<BatchedRelationshipRecords>[] threadQueues = new ArrayBlockingQueue[numberOfChainCheckers];
         BatchedRelationshipRecords[] threadBatches = new BatchedRelationshipRecords[numberOfChainCheckers];
-        AtomicLong currentWorkingPage = new AtomicLong( 0 );
         for ( int i = 0; i < numberOfChainCheckers; i++ )
         {
             threadQueues[i] = new ArrayBlockingQueue<>( 20 );
@@ -114,10 +112,11 @@ class RelationshipChainChecker implements Checker
         }
 
         // Record reader
-        workers[workers.length - 2] = () ->
+        workers[workers.length - 1] = () ->
         {
             RelationshipRecord relationship = relationshipStore.newRecord();
-            try ( PageCursor cursor = relationshipStore.openPageCursorForReading( 0 ) )
+            try ( var cursorTracer = context.pageCacheTracer.createPageCursorTracer( RELATIONSHIP_CONSISTENCY_CHECKER_TAG );
+                  var cursor = relationshipStore.openPageCursorForReadingWithPrefetching( 0, cursorTracer ) )
             {
                 int recordsPerPage = relationshipStore.getRecordsPerPage();
                 long id = direction.startingId( highId );
@@ -125,30 +124,17 @@ class RelationshipChainChecker implements Checker
                 {
                     for ( int i = 0; i < recordsPerPage && id >= 0 && id < highId; i++, id = direction.nextId( id ) )
                     {
-                        relationshipStore.getRecordByCursor( id, relationship, RecordLoad.CHECK, cursor );
+                        relationshipStore.getRecordByCursor( id, relationship, FORCE, cursor );
                         localProgress.add( 1 );
                         if ( relationship.inUse() )
                         {
                             queueRelationshipCheck( threadQueues, threadBatches, relationship );
                         }
                     }
-
-                    if ( cursor.getCurrentPageId() % REPORT_PAGE_ID_THRESHOLD == 0 )
-                    {
-                        currentWorkingPage.set( cursor.getCurrentPageId() );
-                    }
                 }
                 processLastRelationshipChecks( threadQueues, threadBatches, end );
                 localProgress.done();
             }
-        };
-
-        // I/O worker that paves the way for the record reader so that it won't have to spend time page faulting
-        workers[workers.length - 1] = () ->
-        {
-            StorePagePrefetcher prefetcher =
-                    new StorePagePrefetcher( relationshipStore, ioReadAheadSize, context::isCancelled, StorePagePrefetcher.NO_MONITOR );
-            prefetcher.prefetch( currentWorkingPage::get, direction == ScanDirection.FORWARD );
         };
 
         Stopwatch stopwatch = Stopwatch.start();
@@ -167,35 +153,38 @@ class RelationshipChainChecker implements Checker
     private void detectSingleRelationshipChainInconsistencies( LongRange nodeIdRange )
     {
         CacheAccess.Client client = cacheAccess.client();
-        for ( long nodeId = nodeIdRange.from(); nodeId < nodeIdRange.to(); nodeId++ )
+        try ( var cursorTracer = context.pageCacheTracer.createPageCursorTracer( SINGLE_RELATIONSHIP_CONSISTENCY_CHECKER_TAG ) )
         {
-            boolean inUse = client.getBooleanFromCache( nodeId, SLOT_IN_USE );
-            boolean hasMultipleRelationships = client.getBooleanFromCache( nodeId, SLOT_HAS_MULTIPLE_RELATIONSHIPS );
-            if ( inUse && !hasMultipleRelationships )
+            for ( long nodeId = nodeIdRange.from(); nodeId < nodeIdRange.to(); nodeId++ )
             {
-                long reference = client.getFromCache( nodeId, SLOT_REFERENCE );
-                long relationshipId = client.getFromCache( nodeId, SLOT_RELATIONSHIP_ID );
-                long sourceOrTarget = client.getFromCache( nodeId, SLOT_SOURCE_OR_TARGET );
-                long prevOrNext = client.getFromCache( nodeId, SLOT_PREV_OR_NEXT );
-                boolean isFirstInChain = client.getBooleanFromCache( nodeId, SLOT_FIRST_IN_CHAIN );
+                boolean inUse = client.getBooleanFromCache( nodeId, SLOT_IN_USE );
+                boolean hasMultipleRelationships = client.getBooleanFromCache( nodeId, SLOT_HAS_MULTIPLE_RELATIONSHIPS );
+                if ( inUse && !hasMultipleRelationships )
+                {
+                    long reference = client.getFromCache( nodeId, SLOT_REFERENCE );
+                    long relationshipId = client.getFromCache( nodeId, SLOT_RELATIONSHIP_ID );
+                    long sourceOrTarget = client.getFromCache( nodeId, SLOT_SOURCE_OR_TARGET );
+                    long prevOrNext = client.getFromCache( nodeId, SLOT_PREV_OR_NEXT );
+                    boolean isFirstInChain = client.getBooleanFromCache( nodeId, SLOT_FIRST_IN_CHAIN );
 
-                boolean consistent;
-                if ( prevOrNext == PREV )
-                {
-                    // 1 is the expected degree of a prev reference for a relationship that is first in chain of length 1
-                    consistent = reference == 1 && isFirstInChain;
-                }
-                else
-                {
-                    consistent = NULL_REFERENCE.is( reference );
-                }
+                    boolean consistent;
+                    if ( prevOrNext == PREV )
+                    {
+                        // 1 is the expected degree of a prev reference for a relationship that is first in chain of length 1
+                        consistent = reference == 1 && isFirstInChain;
+                    }
+                    else
+                    {
+                        consistent = NULL_REFERENCE.is( reference );
+                    }
 
-                if ( !consistent )
-                {
-                    RelationshipStore relationshipStore = context.neoStores.getRelationshipStore();
-                    RelationshipRecord relationship = relationshipStore.getRecord( relationshipId, relationshipStore.newRecord(), RecordLoad.FORCE );
-                    RelationshipRecord referenceRelationship = relationshipStore.getRecord( reference, relationshipStore.newRecord(), RecordLoad.FORCE );
-                    linkOf( sourceOrTarget == SOURCE, prevOrNext == PREV ).reportDoesNotReferenceBack( reporter, relationship, referenceRelationship );
+                    if ( !consistent )
+                    {
+                        RelationshipStore relationshipStore = context.neoStores.getRelationshipStore();
+                        RelationshipRecord relationship = relationshipStore.getRecord( relationshipId, relationshipStore.newRecord(), FORCE, cursorTracer );
+                        RelationshipRecord referenceRelationship = relationshipStore.getRecord( reference, relationshipStore.newRecord(), FORCE, cursorTracer );
+                        linkOf( sourceOrTarget == SOURCE, prevOrNext == PREV ).reportDoesNotReferenceBack( reporter, relationship, referenceRelationship );
+                    }
                 }
             }
         }
@@ -221,7 +210,8 @@ class RelationshipChainChecker implements Checker
         final long prevOrNext = direction.cacheSlot;
         return () ->
         {
-            try ( PageCursor otherRelationshipCursor = store.openPageCursorForReading( 0 ) )
+            try ( var cursorTracer = context.pageCacheTracer.createPageCursorTracer( RELATIONSHIP_CONSISTENCY_CHECKER_TAG );
+                  var otherRelationshipCursor = store.openPageCursorForReading( 0, cursorTracer ) )
             {
                 while ( (!end.get() || !queue.isEmpty()) && !context.isCancelled() )
                 {
@@ -239,13 +229,17 @@ class RelationshipChainChecker implements Checker
                                     Math.abs( secondNode % numberOfChainCheckers ) == threadId && nodeIdRange.isWithinRangeExclusiveTo( secondNode );
                             if ( processStartNode )
                             {
-                                checkRelationshipLink( direction, SOURCE_PREV, relationship, client, otherRelationship, otherRelationshipCursor, store );
-                                checkRelationshipLink( direction, SOURCE_NEXT, relationship, client, otherRelationship, otherRelationshipCursor, store );
+                                checkRelationshipLink( direction, SOURCE_PREV, relationship, client, otherRelationship, otherRelationshipCursor, store,
+                                        cursorTracer );
+                                checkRelationshipLink( direction, SOURCE_NEXT, relationship, client, otherRelationship, otherRelationshipCursor, store,
+                                        cursorTracer );
                             }
                             if ( processEndNode )
                             {
-                                checkRelationshipLink( direction, TARGET_PREV, relationship, client, otherRelationship, otherRelationshipCursor, store );
-                                checkRelationshipLink( direction, TARGET_NEXT, relationship, client, otherRelationship, otherRelationshipCursor, store );
+                                checkRelationshipLink( direction, TARGET_PREV, relationship, client, otherRelationship, otherRelationshipCursor, store,
+                                        cursorTracer );
+                                checkRelationshipLink( direction, TARGET_NEXT, relationship, client, otherRelationship, otherRelationshipCursor, store,
+                                        cursorTracer );
                             }
                             if ( processStartNode )
                             {
@@ -286,7 +280,8 @@ class RelationshipChainChecker implements Checker
     }
 
     private void checkRelationshipLink( ScanDirection direction, RelationshipLink link, RelationshipRecord relationshipCursor,
-            CacheAccess.Client client, RelationshipRecord otherRelationship, PageCursor otherRelationshipCursor, RelationshipStore store )
+            CacheAccess.Client client, RelationshipRecord otherRelationship, PageCursor otherRelationshipCursor, RelationshipStore store,
+            PageCursorTracer cursorTracer )
     {
         long relationshipId = relationshipCursor.getId();
         long nodeId = link.node( relationshipCursor );
@@ -305,12 +300,12 @@ class RelationshipChainChecker implements Checker
                 else if ( !NULL_REFERENCE.is( fromCache ) )
                 {
                     // Load it from store
-                    store.getRecordByCursor( linkId, otherRelationship, RecordLoad.FORCE, otherRelationshipCursor );
+                    store.getRecordByCursor( linkId, otherRelationship, FORCE, otherRelationshipCursor );
                 }
                 else
                 {
                     otherRelationship.clear();
-                    link.reportDoesNotReferenceBack( reporter, recordLoader.relationship( relationshipCursor.getId() ), otherRelationship );
+                    link.reportDoesNotReferenceBack( reporter, recordLoader.relationship( relationshipCursor.getId(), cursorTracer ), otherRelationship );
                 }
             }
             else
@@ -325,18 +320,18 @@ class RelationshipChainChecker implements Checker
                 otherRelationship.setInUse( client.getBooleanFromCache( nodeId, SLOT_IN_USE ) );
                 otherRelationship.setCreated();
             }
-            checkRelationshipLink( direction, link, otherRelationship, relationshipId, nodeId, linkId );
+            checkRelationshipLink( direction, link, otherRelationship, relationshipId, nodeId, linkId, cursorTracer );
         }
     }
 
     private void checkRelationshipLink( ScanDirection direction, RelationshipLink thing, RelationshipRecord otherRelationship, long relationshipId, long nodeId,
-            long linkId )
+            long linkId, PageCursorTracer cursorTracer )
     {
         // Perform the checks
         NodeLink nodeLink = NodeLink.select( otherRelationship, nodeId );
         if ( nodeLink == null )
         {
-            thing.reportOtherNode( reporter, recordLoader.relationship( relationshipId ), recordLoader.relationship( linkId ) );
+            thing.reportOtherNode( reporter, recordLoader.relationship( relationshipId, cursorTracer ), recordLoader.relationship( linkId, cursorTracer ) );
         }
         else
         {
@@ -345,20 +340,21 @@ class RelationshipChainChecker implements Checker
                 // Read the relationship from store and do the check on that actual record instead, should happen rarely anyway
                 if ( otherRelationship.isCreated() )
                 {
-                    recordLoader.relationship( otherRelationship, otherRelationship.getId() );
+                    recordLoader.relationship( otherRelationship, otherRelationship.getId(), cursorTracer );
                     // Call this method one more time, now with !created
-                    checkRelationshipLink( direction, thing, otherRelationship, relationshipId, nodeId, linkId );
+                    checkRelationshipLink( direction, thing, otherRelationship, relationshipId, nodeId, linkId, cursorTracer );
                     return;
                 }
 
-                thing.reportDoesNotReferenceBack( reporter, recordLoader.relationship( relationshipId ), recordLoader.relationship( linkId ) );
+                thing.reportDoesNotReferenceBack( reporter, recordLoader.relationship( relationshipId, cursorTracer ),
+                        recordLoader.relationship( linkId, cursorTracer ) );
             }
             else
             {
                 if ( !direction.exclude( relationshipId, linkId ) && !otherRelationship.inUse() )
                 {
-                    thing.reportNotUsedRelationshipReferencedInChain( reporter, recordLoader.relationship( relationshipId ),
-                            recordLoader.relationship( linkId ) );
+                    thing.reportNotUsedRelationshipReferencedInChain( reporter, recordLoader.relationship( relationshipId, cursorTracer ),
+                            recordLoader.relationship( linkId, cursorTracer ) );
                 }
             }
         }

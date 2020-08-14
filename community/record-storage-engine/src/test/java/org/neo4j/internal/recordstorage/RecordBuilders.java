@@ -19,29 +19,31 @@
  */
 package org.neo4j.internal.recordstorage;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdSequence;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
+import org.neo4j.memory.EmptyMemoryTracker;
+
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 /** Test utility DSL for creating store records */
 public class RecordBuilders
 {
-    public static <R extends AbstractBaseRecord, A> List<R> records(
-            Iterable<RecordAccess.RecordProxy<R,A>> changes )
+    public static <R extends AbstractBaseRecord, A> List<R> records( Collection<? extends RecordAccess.RecordProxy<R,A>> changes )
     {
-        return StreamSupport.stream( changes.spliterator(), false ).map(
-                RecordAccess.RecordProxy::forChangingData ).collect( Collectors.toList() );
+        return changes.stream().map( RecordAccess.RecordProxy::forChangingData ).collect( Collectors.toList() );
     }
 
     public static NodeRecord node( long id, Consumer<NodeRecord>... modifiers )
@@ -206,7 +208,7 @@ public class RecordBuilders
                             group.setType( extra );
                             return group;
                         } ),
-                null, null, null, null );
+                null, null, null, null, EmptyMemoryTracker.INSTANCE );
     }
 
     public static RelationshipGroupGetter newRelGroupGetter( AbstractBaseRecord... records )
@@ -216,17 +218,17 @@ public class RecordBuilders
             private long nextId = filterType( records, RelationshipGroupRecord.class ).count();
 
             @Override
-            public long nextId()
+            public long nextId( PageCursorTracer cursorTracer )
             {
                 return nextId++;
             }
 
             @Override
-            public IdRange nextIdBatch( int size )
+            public IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
             {
                 throw new UnsupportedOperationException();
             }
-        } );
+        }, NULL );
     }
 
     private static class Loader<T extends AbstractBaseRecord, E> implements RecordAccess.Loader<T,E>
@@ -247,22 +249,26 @@ public class RecordBuilders
         }
 
         @Override
-        public T load( long key, E additionalData )
+        public T load( long key, E additionalData, PageCursorTracer cursorTracer )
         {
             return records.stream().filter( r -> r.getId() == key ).findFirst().get();
         }
 
         @Override
-        public void ensureHeavy( T relationshipRecord )
+        public void ensureHeavy( T relationshipRecord, PageCursorTracer cursorTracer )
         {
 
         }
 
         @SuppressWarnings( "unchecked" )
         @Override
+<<<<<<< HEAD
         public T clone( T record )
+=======
+        public T copy( T record )
+>>>>>>> neo4j/4.1
         {
-            return (T)record.clone();
+            return (T)record.copy();
         }
     }
 }

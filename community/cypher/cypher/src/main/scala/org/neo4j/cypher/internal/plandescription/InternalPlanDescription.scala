@@ -21,19 +21,35 @@ package org.neo4j.cypher.internal.plandescription
 
 import java.util
 
-import org.neo4j.cypher.internal.plandescription.Arguments._
+import org.neo4j.cypher.internal.macros.AssertMacros.checkOnlyWhenAssertionsAreEnabled
+import org.neo4j.cypher.internal.plandescription.Arguments.ByteCode
+import org.neo4j.cypher.internal.plandescription.Arguments.DbHits
+import org.neo4j.cypher.internal.plandescription.Arguments.Details
+import org.neo4j.cypher.internal.plandescription.Arguments.PageCacheHitRatio
+import org.neo4j.cypher.internal.plandescription.Arguments.PageCacheHits
+import org.neo4j.cypher.internal.plandescription.Arguments.PageCacheMisses
+import org.neo4j.cypher.internal.plandescription.Arguments.Planner
+import org.neo4j.cypher.internal.plandescription.Arguments.Rows
+import org.neo4j.cypher.internal.plandescription.Arguments.Runtime
+import org.neo4j.cypher.internal.plandescription.Arguments.RuntimeVersion
+import org.neo4j.cypher.internal.plandescription.Arguments.SourceCode
+import org.neo4j.cypher.internal.plandescription.Arguments.Time
+import org.neo4j.cypher.internal.plandescription.Arguments.Version
 import org.neo4j.cypher.internal.plandescription.InternalPlanDescription.TotalHits
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.InternalException
 import org.neo4j.graphdb.ExecutionPlanDescription
 import org.neo4j.graphdb.ExecutionPlanDescription.ProfilerStatistics
 
-import scala.collection.mutable
+import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.collection.JavaConverters.seqAsJavaListConverter
+import scala.collection.JavaConverters.setAsJavaSetConverter
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayStack
 
 /**
-  * Abstract description of an execution plan
-  */
+ * Abstract description of an execution plan
+ */
 sealed trait InternalPlanDescription extends org.neo4j.graphdb.ExecutionPlanDescription {
   self =>
 
@@ -45,7 +61,7 @@ sealed trait InternalPlanDescription extends org.neo4j.graphdb.ExecutionPlanDesc
 
   def children: Children
 
-  def variables: Set[String]
+  def variables: Set[PrettyString]
 
   def cd(name: String): InternalPlanDescription = children.find(name).head
 
@@ -56,25 +72,23 @@ sealed trait InternalPlanDescription extends org.neo4j.graphdb.ExecutionPlanDesc
   def addArgument(arg: Argument): InternalPlanDescription
 
   def flatten: Seq[InternalPlanDescription] = {
-      val flatten = new ArrayBuffer[InternalPlanDescription]
-      val stack = new mutable.Stack[InternalPlanDescription]()
-      stack.push(self)
-      while (stack.nonEmpty) {
-        val plan = stack.pop()
-        flatten.append(plan)
-        plan.children match {
-          case NoChildren =>
-          case SingleChild(child) =>
-            stack.push(child)
-          case TwoChildren(l, r) =>
-            stack.push(r)
-            stack.push(l)
-        }
+    val flatten = new ArrayBuffer[InternalPlanDescription]
+    val stack = new ArrayStack[InternalPlanDescription]()
+    stack.push(self)
+    while (stack.nonEmpty) {
+      val plan = stack.pop()
+      flatten.append(plan)
+      plan.children match {
+        case NoChildren =>
+        case SingleChild(child) =>
+          stack.push(child)
+        case TwoChildren(l, r) =>
+          stack.push(r)
+          stack.push(l)
       }
-      flatten
+    }
+    flatten
   }
-
-  def orderedVariables: Seq[String] = variables.toIndexedSeq.sorted
 
   def totalDbHits: TotalHits = {
     val allMaybeDbHits: Seq[TotalHits] = flatten.map {
@@ -86,8 +100,6 @@ sealed trait InternalPlanDescription extends org.neo4j.graphdb.ExecutionPlanDesc
   //Implement public Java API here=
   override def getName: String = name
 
-  import scala.collection.JavaConverters._
-
   override def getChildren: util.List[ExecutionPlanDescription] = {
     val childPlans: Seq[org.neo4j.graphdb.ExecutionPlanDescription] = children.toIndexedSeq
     childPlans.asJava
@@ -96,7 +108,7 @@ sealed trait InternalPlanDescription extends org.neo4j.graphdb.ExecutionPlanDesc
   override def getArguments: util.Map[String, AnyRef] =
     arguments.map { arg => arg.name -> PlanDescriptionArgumentSerializer.serialize(arg) }.toMap.asJava
 
-  override def getIdentifiers: util.Set[String] = orderedVariables.toSet.asJava
+  override def getIdentifiers: util.Set[String] = variables.map(_.prettifiedString).asJava
 
   override def hasProfilerStatistics: Boolean = arguments.exists(_.isInstanceOf[DbHits])
 
@@ -177,7 +189,9 @@ final case class PlanDescriptionImpl(id: Id,
                                      name: String,
                                      children: Children,
                                      arguments: Seq[Argument],
-                                     variables: Set[String]) extends InternalPlanDescription {
+                                     variables: Set[PrettyString]) extends InternalPlanDescription {
+
+  checkOnlyWhenAssertionsAreEnabled(arguments.count(_.isInstanceOf[Details]) < 2)
 
   def find(name: String): Seq[InternalPlanDescription] =
     children.find(name) ++ (if (this.name == name)
@@ -233,7 +247,7 @@ final case class CompactedPlanDescription(similar: Seq[InternalPlanDescription])
 
   override def name: String = s"${similar.head.name}(${similar.size})"
 
-  override lazy val variables: Set[String] = similar.foldLeft(Set.empty[String]) { (acc, plan) =>
+  override lazy val variables: Set[PrettyString] = similar.foldLeft(Set.empty[PrettyString]) { (acc, plan) =>
     acc ++ plan.variables
   }
 
@@ -271,14 +285,14 @@ final case class CompactedPlanDescription(similar: Seq[InternalPlanDescription])
   override def addArgument(argument: Argument): InternalPlanDescription = ???
 
   override def map(f: InternalPlanDescription => InternalPlanDescription): InternalPlanDescription = f(copy
-                                                                                                       (similar = similar
-                                                                                                         .map(f)))
+  (similar = similar
+    .map(f)))
 
 }
 
 final case class ArgumentPlanDescription(id: Id,
                                          arguments: Seq[Argument] = Seq.empty,
-                                         variables: Set[String])
+                                         variables: Set[PrettyString])
   extends InternalPlanDescription {
 
   def children = NoChildren

@@ -22,21 +22,29 @@ package org.neo4j.internal.recordstorage;
 import org.apache.commons.lang3.exception.CloneFailedException;
 
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.record.RecordLoad;
+import org.neo4j.kernel.impl.store.record.RecordLoadOverride;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.storageengine.api.RelationshipVisitor;
 import org.neo4j.storageengine.api.StoragePropertyCursor;
 import org.neo4j.storageengine.api.StorageRelationshipCursor;
 
+import static org.neo4j.kernel.impl.store.record.RecordLoad.ALWAYS;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.CHECK;
+
 abstract class RecordRelationshipCursor extends RelationshipRecord implements RelationshipVisitor<RuntimeException>, StorageRelationshipCursor
 {
     final RelationshipStore relationshipStore;
+    RecordLoadOverride loadMode;
+    private final PageCursorTracer cursorTracer;
 
-    RecordRelationshipCursor( RelationshipStore relationshipStore )
+    RecordRelationshipCursor( RelationshipStore relationshipStore, PageCursorTracer cursorTracer )
     {
         super( NO_ID );
         this.relationshipStore = relationshipStore;
+        this.cursorTracer = cursorTracer;
+        this.loadMode = RecordLoadOverride.none();
     }
 
     @Override
@@ -89,15 +97,20 @@ abstract class RecordRelationshipCursor extends RelationshipRecord implements Re
         initialize( true, NO_ID, startNodeId, endNodeId, typeId, NO_ID, NO_ID, NO_ID, NO_ID, false, false );
     }
 
+    protected void resetState()
+    {
+        loadMode = RecordLoadOverride.none();
+    }
+
     PageCursor relationshipPage( long reference )
     {
-        return relationshipStore.openPageCursorForReading( reference );
+        return relationshipStore.openPageCursorForReading( reference, cursorTracer );
     }
 
     void relationship( RelationshipRecord record, long reference, PageCursor pageCursor )
     {
         // When scanning, we inspect RelationshipRecord.inUse(), so using RecordLoad.CHECK is fine
-        relationshipStore.getRecordByCursor( reference, record, RecordLoad.CHECK, pageCursor );
+        relationshipStore.getRecordByCursor( reference, record, loadMode.orElse( CHECK ), pageCursor );
     }
 
     void relationshipFull( RelationshipRecord record, long reference, PageCursor pageCursor )
@@ -108,17 +121,29 @@ abstract class RecordRelationshipCursor extends RelationshipRecord implements Re
         // see
         //      org.neo4j.kernel.impl.store.RelationshipChainPointerChasingTest
         //      org.neo4j.kernel.impl.locking.RelationshipCreateDeleteIT
-        relationshipStore.getRecordByCursor( reference, record, RecordLoad.FORCE, pageCursor );
+        relationshipStore.getRecordByCursor( reference, record, loadMode.orElse( ALWAYS ), pageCursor );
     }
 
     long relationshipHighMark()
     {
-        return relationshipStore.getHighestPossibleIdInUse();
+        return relationshipStore.getHighestPossibleIdInUse( cursorTracer );
     }
 
     @Override
+    public void setForceLoad()
+    {
+        loadMode = RecordLoadOverride.FORCE;
+    }
+
+    @Override
+<<<<<<< HEAD
     public final RelationshipRecord clone()
     {
         throw new CloneFailedException( "Record cursors are not cloneable." );
+=======
+    public RelationshipRecord copy()
+    {
+        throw new UnsupportedOperationException( "Record cursors are not copyable." );
+>>>>>>> neo4j/4.1
     }
 }

@@ -35,10 +35,10 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.QueryContext;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
+import org.neo4j.kernel.api.index.IndexDirectoryStructure;
 import org.neo4j.kernel.api.index.IndexReader;
 import org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
@@ -59,7 +59,9 @@ import org.neo4j.values.storable.Values;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.neo4j.kernel.api.index.IndexProvider.Monitor.EMPTY;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unorderedValues;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.index.schema.GenericNativeIndexProvider.DESCRIPTOR;
 import static org.neo4j.values.storable.CoordinateReferenceSystem.WGS84;
 
 @PageCacheExtension
@@ -86,12 +88,14 @@ class GenericAccessorPointsTest
     @BeforeEach
     void setup()
     {
-        IndexFiles indexFiles = new IndexFiles.SingleFile( fs, directory.file( "index" ) );
+        IndexDirectoryStructure directoryStructure = IndexDirectoryStructure.directoriesByProvider( directory.homeDir() ).forProvider( DESCRIPTOR );
+        descriptor = TestIndexDescriptorFactory.forLabel( 1, 1 );
+        IndexFiles indexFiles = new IndexFiles( fs, directoryStructure, descriptor.getId() );
         GenericLayout layout = new GenericLayout( 1, indexSettings );
         RecoveryCleanupWorkCollector collector = RecoveryCleanupWorkCollector.ignore();
-        descriptor = TestIndexDescriptorFactory.forLabel( 1, 1 );
-        accessor = new GenericNativeIndexAccessor( pageCache, fs, indexFiles, layout, collector, EMPTY, descriptor, indexSettings, new StandardConfiguration(),
-                false );
+        DatabaseIndexContext databaseIndexContext = DatabaseIndexContext.builder( pageCache, fs ).build();
+        StandardConfiguration configuration = new StandardConfiguration();
+        accessor = new GenericNativeIndexAccessor( databaseIndexContext, indexFiles, layout, collector, descriptor, indexSettings, configuration );
     }
 
     @AfterEach
@@ -231,7 +235,7 @@ class GenericAccessorPointsTest
 
     private void processAll( List<IndexEntryUpdate<?>> updates ) throws IndexEntryConflictException
     {
-        try ( NativeIndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+        try ( NativeIndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
         {
             for ( IndexEntryUpdate<?> update : updates )
             {
@@ -249,7 +253,7 @@ class GenericAccessorPointsTest
             for ( Value value : values )
             {
                 IndexQuery.ExactPredicate exact = IndexQuery.exact( descriptor.schema().getPropertyId(), value );
-                indexReader.query( QueryContext.NULL_CONTEXT, client, IndexOrder.NONE, true, exact );
+                indexReader.query( QueryContext.NULL_CONTEXT, client, unorderedValues(), exact );
 
                 // then
                 assertTrue( client.next() );

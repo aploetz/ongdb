@@ -20,10 +20,16 @@
 package org.neo4j.cypher.operations
 
 import org.mockito.Mockito.when
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.operations.CursorUtils.{nodeGetProperty, nodeHasLabel, relationshipGetProperty}
-import org.neo4j.internal.kernel.api.{NodeCursor, PropertyCursor, Read, RelationshipScanCursor}
-import org.neo4j.values.storable.Values.{NO_VALUE, stringValue}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.operations.CursorUtils.nodeGetProperty
+import org.neo4j.cypher.operations.CursorUtils.nodeHasLabel
+import org.neo4j.cypher.operations.CursorUtils.relationshipGetProperty
+import org.neo4j.internal.kernel.api.NodeCursor
+import org.neo4j.internal.kernel.api.PropertyCursor
+import org.neo4j.internal.kernel.api.Read
+import org.neo4j.internal.kernel.api.RelationshipScanCursor
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.stringValue
 
 class CursorUtilsTest extends CypherFunSuite {
 
@@ -31,8 +37,7 @@ class CursorUtilsTest extends CypherFunSuite {
     val nodeCursor = mock[NodeCursor]
     val propertyCursor = mock[PropertyCursor]
     when(nodeCursor.next()).thenReturn(true)
-    when(propertyCursor.next()).thenReturn(true, true, true, false)
-    when(propertyCursor.propertyKey()).thenReturn(1336, 1337, 1338)
+    when(propertyCursor.seekProperty(1337)).thenReturn(true)
     when(propertyCursor.propertyValue()).thenReturn(stringValue("hello"))
 
     // When
@@ -46,9 +51,7 @@ class CursorUtilsTest extends CypherFunSuite {
     val nodeCursor = mock[NodeCursor]
     val propertyCursor = mock[PropertyCursor]
     when(nodeCursor.next()).thenReturn(true)
-    when(propertyCursor.next()).thenReturn(true, true, true, false)
-    when(propertyCursor.propertyKey()).thenReturn(1336, 1337, 1338)
-    when(propertyCursor.propertyValue()).thenReturn(stringValue("hello"))
+    when(propertyCursor.seekProperty(1339)).thenReturn(false)
 
     // When
     val value = nodeGetProperty(mock[Read], nodeCursor, 42L, propertyCursor, 1339)
@@ -71,8 +74,7 @@ class CursorUtilsTest extends CypherFunSuite {
     val relationshipCursor = mock[RelationshipScanCursor]
     val propertyCursor = mock[PropertyCursor]
     when(relationshipCursor.next()).thenReturn(true)
-    when(propertyCursor.next()).thenReturn(true, true, true, false)
-    when(propertyCursor.propertyKey()).thenReturn(1336, 1337, 1338)
+    when(propertyCursor.seekProperty(1337)).thenReturn(true)
     when(propertyCursor.propertyValue()).thenReturn(stringValue("hello"))
 
     // When
@@ -86,9 +88,7 @@ class CursorUtilsTest extends CypherFunSuite {
     val relationshipCursor = mock[RelationshipScanCursor]
     val propertyCursor = mock[PropertyCursor]
     when(relationshipCursor.next()).thenReturn(true)
-    when(propertyCursor.next()).thenReturn(true, true, true, false)
-    when(propertyCursor.propertyKey()).thenReturn(1336, 1337, 1338)
-    when(propertyCursor.propertyValue()).thenReturn(stringValue("hello"))
+    when(propertyCursor.seekProperty(1339)).thenReturn(false)
 
     // When
     val value = relationshipGetProperty(mock[Read], relationshipCursor, 42L, propertyCursor, 1339)

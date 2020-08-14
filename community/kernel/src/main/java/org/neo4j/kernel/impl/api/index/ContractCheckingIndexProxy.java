@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.impl.api.index.updater.DelegatingIndexUpdater;
@@ -91,12 +92,12 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
     }
 
     @Override
-    public IndexUpdater newUpdater( IndexUpdateMode mode )
+    public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
     {
         if ( IndexUpdateMode.ONLINE == mode )
         {
             openCall( "update" );
-            return new DelegatingIndexUpdater( super.newUpdater( mode ) )
+            return new DelegatingIndexUpdater( super.newUpdater( mode, cursorTracer ) )
             {
                 @Override
                 public void close() throws IndexEntryConflictException
@@ -114,18 +115,26 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
         }
         else
         {
-            return super.newUpdater( mode );
+            return super.newUpdater( mode, cursorTracer );
         }
     }
 
     @Override
-    public void force( IOLimiter ioLimiter ) throws IOException
+    public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer ) throws IOException
     {
+<<<<<<< HEAD
         if ( tryOpenCall( "force" ) )
         {
             try
             {
                 super.force( ioLimiter );
+=======
+        if ( tryOpenCall() )
+        {
+            try
+            {
+                super.force( ioLimiter, cursorTracer );
+>>>>>>> neo4j/4.1
             }
             finally
             {
@@ -159,11 +168,11 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
     }
 
     @Override
-    public void close() throws IOException
+    public void close( PageCursorTracer cursorTracer ) throws IOException
     {
         if ( state.compareAndSet( State.INIT, State.CLOSED ) )
         {
-            super.close();
+            super.close( cursorTracer );
             return;
         }
 
@@ -175,7 +184,7 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
         if ( state.compareAndSet( State.STARTED, State.CLOSED ) )
         {
             waitOpenCallsToClose();
-            super.close();
+            super.close( cursorTracer );
             return;
         }
 
@@ -209,7 +218,11 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
         }
     }
 
+<<<<<<< HEAD
     private boolean tryOpenCall( String name )
+=======
+    private boolean tryOpenCall()
+>>>>>>> neo4j/4.1
     {
         // do not open call unless we are in STARTED
         if ( State.STARTED == state.get() )

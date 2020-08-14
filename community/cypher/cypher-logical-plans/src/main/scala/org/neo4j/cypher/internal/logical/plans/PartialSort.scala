@@ -19,12 +19,12 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * Given an input that is sorted on a prefix of columns, e.g. [a],
-  * produce an output that is sorted on more columns, e.g. [a, b, c].
-  */
+ * Given an input that is sorted on a prefix of columns, e.g. [a],
+ * produce an output that is sorted on more columns, e.g. [a, b, c].
+ */
 case class PartialSort(source: LogicalPlan,
                        alreadySortedPrefix: Seq[ColumnOrder],
                        stillToSortSuffix: Seq[ColumnOrder])

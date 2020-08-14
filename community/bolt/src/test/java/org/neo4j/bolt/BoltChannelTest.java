@@ -21,17 +21,21 @@ package org.neo4j.bolt;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.embedded.EmbeddedChannel;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
+import org.neo4j.bolt.transport.pipeline.ChannelProtector;
 import org.neo4j.configuration.helpers.SocketAddress;
 import org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,7 +49,7 @@ class BoltChannelTest
     void shouldCloseUnderlyingChannelWhenItIsOpen()
     {
         Channel channel = channelMock( true );
-        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel, ChannelProtector.NULL );
 
         boltChannel.close();
 
@@ -56,7 +60,7 @@ class BoltChannelTest
     void shouldNotCloseUnderlyingChannelWhenItIsClosed()
     {
         Channel channel = channelMock( false );
-        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel, ChannelProtector.NULL );
 
         boltChannel.close();
 
@@ -66,7 +70,7 @@ class BoltChannelTest
     @Test
     void shouldHaveId()
     {
-        BoltChannel boltChannel = new BoltChannel( "bolt-42", "bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-42", "bolt", channel, ChannelProtector.NULL );
 
         assertEquals( "bolt-42", boltChannel.id() );
     }
@@ -74,7 +78,7 @@ class BoltChannelTest
     @Test
     void shouldHaveConnector()
     {
-        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel, ChannelProtector.NULL );
 
         assertEquals( "my-bolt", boltChannel.connector() );
     }
@@ -82,15 +86,15 @@ class BoltChannelTest
     @Test
     void shouldHaveConnectTime()
     {
-        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel, ChannelProtector.NULL );
 
-        assertThat( boltChannel.connectTime(), greaterThan( 0L ) );
+        assertThat( boltChannel.connectTime() ).isGreaterThan( 0L );
     }
 
     @Test
     void shouldHaveUsernameAndUserAgent()
     {
-        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "my-bolt", channel, ChannelProtector.NULL );
 
         assertNull( boltChannel.username() );
         boltChannel.updateUser( "hello", "my-bolt-driver/1.2.3" );
@@ -102,7 +106,7 @@ class BoltChannelTest
     void shouldExposeClientConnectionInfo()
     {
         EmbeddedChannel channel = new EmbeddedChannel();
-        BoltChannel boltChannel = new BoltChannel( "bolt-42", "my-bolt", channel );
+        BoltChannel boltChannel = new BoltChannel( "bolt-42", "my-bolt", channel, ChannelProtector.NULL );
 
         ClientConnectionInfo info1 = boltChannel.info();
         assertEquals( "bolt-42", info1.connectionId() );
@@ -115,7 +119,49 @@ class BoltChannelTest
         assertEquals( "bolt-42", info2.connectionId() );
         assertEquals( "bolt", info2.protocol() );
         assertEquals( SocketAddress.format( channel.remoteAddress() ), info2.clientAddress() );
-        assertThat( info2.asConnectionDetails(), containsString( "my-driver" ) );
+        assertThat( info2.asConnectionDetails() ).contains( "my-driver" );
+    }
+
+    @Test
+    void shouldNotifyChannelProtectorInConstructor() throws Throwable
+    {
+        // Given
+        var protector = mock( ChannelProtector.class );
+        // When
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel, protector );
+        // Then
+        verify( protector ).afterChannelCreated();
+    }
+
+    @Test
+    void shouldNotifyChannelProtectorBeforeProtocolInstallation() throws Throwable
+    {
+        // Given
+        var protector = mock( ChannelProtector.class );
+        var channel = mock( Channel.class );
+        var pipeline = mock( ChannelPipeline.class );
+        when( channel.pipeline() ).thenReturn( pipeline );
+
+        // When
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel, protector );
+        InOrder inOrder = inOrder( protector, pipeline );
+        boltChannel.installBoltProtocol( mock( ChannelHandler.class ) );
+        // Then
+        inOrder.verify( protector ).beforeBoltProtocolInstalled();
+        inOrder.verify( pipeline ).addLast( any() );
+    }
+
+    @Test
+    void shouldDisableChannelProtectorAfterUpdateUser() throws Throwable
+    {
+        // Given
+        var protector = mock( ChannelProtector.class );
+        BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", channel, protector );
+        // When
+        boltChannel.updateUser( "hello", "my-bolt-driver/1.2.3" );
+
+        // Then
+        verify( protector ).disable();
     }
 
     private static Channel channelMock( boolean open )

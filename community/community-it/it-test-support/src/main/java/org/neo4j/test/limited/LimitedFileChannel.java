@@ -21,144 +21,73 @@ package org.neo4j.test.limited;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 
+import org.neo4j.io.fs.DelegatingStoreChannel;
 import org.neo4j.io.fs.StoreChannel;
 
-public class LimitedFileChannel implements StoreChannel
+public class LimitedFileChannel extends DelegatingStoreChannel implements StoreChannel
 {
-    private final StoreChannel inner;
     private final LimitedFilesystemAbstraction fs;
 
     public LimitedFileChannel( StoreChannel inner, LimitedFilesystemAbstraction limitedFilesystemAbstraction )
     {
-        this.inner = inner;
+        super( inner );
         fs = limitedFilesystemAbstraction;
-    }
-
-    @Override
-    public int read( ByteBuffer byteBuffer ) throws IOException
-    {
-        return inner.read( byteBuffer );
-    }
-
-    @Override
-    public long read( ByteBuffer[] byteBuffers, int i, int i1 ) throws IOException
-    {
-        return inner.read( byteBuffers, i, i1 );
-    }
-
-    @Override
-    public long read( ByteBuffer[] dsts )
-    {
-        return 0;
     }
 
     @Override
     public int write( ByteBuffer byteBuffer ) throws IOException
     {
         fs.ensureHasSpace();
-        return inner.write( byteBuffer );
+        return super.write( byteBuffer );
     }
 
     @Override
-    public long write( ByteBuffer[] byteBuffers, int i, int i1 ) throws IOException
+    public long write( ByteBuffer[] byteBuffers, int offset, int length ) throws IOException
     {
         fs.ensureHasSpace();
-        return inner.write( byteBuffers, i, i1 );
+        return super.write( byteBuffers, offset, length );
     }
 
     @Override
-    public long write( ByteBuffer[] srcs )
-    {
-        return 0;
-    }
-
-    @Override
-    public long position() throws IOException
-    {
-        return inner.position();
-    }
-
-    @Override
-    public LimitedFileChannel position( long l ) throws IOException
-    {
-        return new LimitedFileChannel( inner.position( l ), fs );
-    }
-
-    @Override
-    public long size() throws IOException
-    {
-        return inner.size();
-    }
-
-    @Override
-    public LimitedFileChannel truncate( long l ) throws IOException
-    {
-        return new LimitedFileChannel( inner.truncate( l ), fs );
-    }
-
-    @Override
-    public FileChannel fileChannel()
-    {
-        return inner.fileChannel();
-    }
-
-    @Override
-    public void force( boolean b ) throws IOException
+    public long write( ByteBuffer[] srcs ) throws IOException
     {
         fs.ensureHasSpace();
-        inner.force( b );
+        return super.write( srcs );
     }
 
     @Override
-    public int read( ByteBuffer byteBuffer, long l ) throws IOException
+    public LimitedFileChannel position( long newPosition ) throws IOException
     {
-        return inner.read( byteBuffer, l );
+        super.position( newPosition );
+        return this;
     }
 
     @Override
-    public void readAll( ByteBuffer dst ) throws IOException
+    public LimitedFileChannel truncate( long size ) throws IOException
     {
-        inner.readAll( dst );
+        super.truncate( size );
+        return this;
     }
 
     @Override
-    public FileLock tryLock() throws IOException
+    public void force( boolean metaData ) throws IOException
     {
-        return inner.tryLock();
+        fs.ensureHasSpace();
+        super.force( metaData );
     }
 
     @Override
     public void writeAll( ByteBuffer src, long position ) throws IOException
     {
         fs.ensureHasSpace();
-        inner.writeAll( src, position );
+        super.writeAll( src, position );
     }
 
     @Override
     public void writeAll( ByteBuffer src ) throws IOException
     {
         fs.ensureHasSpace();
-        inner.writeAll( src );
-    }
-
-    @Override
-    public boolean isOpen()
-    {
-        return inner.isOpen();
-    }
-
-    @Override
-    public void close() throws IOException
-    {
-        inner.close();
-    }
-
-    @Override
-    public void flush() throws IOException
-    {
-        inner.flush();
+        super.writeAll( src );
     }
 }

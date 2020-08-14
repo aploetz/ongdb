@@ -19,44 +19,52 @@
  */
 package org.neo4j.internal.recordstorage;
 
+<<<<<<< HEAD
 import org.apache.commons.lang3.exception.CloneFailedException;
 import org.eclipse.collections.api.map.primitive.MutableIntObjectMap;
 import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
 
 import org.neo4j.internal.recordstorage.RecordRelationshipTraversalCursor.Record;
+=======
+>>>>>>> neo4j/4.1
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipGroupStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.record.RecordLoad;
+import org.neo4j.kernel.impl.store.record.RecordLoadOverride;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
-import org.neo4j.storageengine.api.StorageRelationshipGroupCursor;
 
-class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements StorageRelationshipGroupCursor
+import static org.neo4j.kernel.impl.store.record.RecordLoad.ALWAYS;
+
+class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements AutoCloseable
 {
     private final RelationshipStore relationshipStore;
     private final RelationshipGroupStore groupStore;
+    private final PageCursorTracer cursorTracer;
     private final RelationshipRecord edge = new RelationshipRecord( NO_ID );
 
-    private BufferedGroup bufferedGroup;
     private PageCursor page;
     private PageCursor edgePage;
     private boolean open;
+    RecordLoadOverride loadMode;
 
-    RecordRelationshipGroupCursor( RelationshipStore relationshipStore, RelationshipGroupStore groupStore )
+    RecordRelationshipGroupCursor( RelationshipStore relationshipStore, RelationshipGroupStore groupStore, PageCursorTracer cursorTracer,
+            RecordLoadOverride loadMode )
     {
         super( NO_ID );
         this.relationshipStore = relationshipStore;
         this.groupStore = groupStore;
+        this.cursorTracer = cursorTracer;
+        this.loadMode = loadMode;
     }
 
-    @Override
-    public void init( long nodeReference, long reference, boolean nodeIsDense )
+    void init( long nodeReference, long reference, boolean nodeIsDense )
     {
         // the relationships for this node are not grouped in the store
         if ( reference != NO_ID && !nodeIsDense )
         {
-            buffer( nodeReference, reference );
+            throw new UnsupportedOperationException( "Not a dense node" );
         }
         else // this is a normal group reference.
         {
@@ -66,60 +74,10 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
     }
 
     /**
-     * Sparse node, i.e. fake groups by reading the whole chain and buffering it.
-     */
-    private void buffer( long nodeReference, long relationshipReference )
-    {
-        setOwningNode( nodeReference );
-        setId( NO_ID );
-        setNext( NO_ID );
-
-        try ( PageCursor edgePage = relationshipStore.openPageCursorForReading( relationshipReference ) )
-        {
-            final MutableIntObjectMap<BufferedGroup> buffer = new IntObjectHashMap<>();
-            BufferedGroup current = null;
-            while ( relationshipReference != NO_ID )
-            {
-                relationshipStore.getRecordByCursor( relationshipReference, edge, RecordLoad.FORCE, edgePage );
-                // find the group
-                BufferedGroup group = buffer.get( edge.getType() );
-                if ( group == null )
-                {
-                    buffer.put( edge.getType(), current = group = new BufferedGroup( edge, current ) );
-                }
-                // buffer the relationship into the group
-                if ( edge.getFirstNode() == nodeReference ) // outgoing or loop
-                {
-                    if ( edge.getSecondNode() == nodeReference ) // loop
-                    {
-                        group.loop( edge );
-                    }
-                    else // outgoing
-                    {
-                        group.outgoing( edge );
-                    }
-                    relationshipReference = edge.getFirstNextRel();
-                }
-                else if ( edge.getSecondNode() == nodeReference ) // incoming
-                {
-                    group.incoming( edge );
-                    relationshipReference = edge.getSecondNextRel();
-                }
-                else
-                {
-                    throw new IllegalStateException( "not a part of the chain! TODO: better exception" );
-                }
-            }
-            this.bufferedGroup = new BufferedGroup( edge, current ); // we need a dummy before the first to denote the initial pos
-        }
-    }
-
-    /**
      * Dense node, real groups iterated with every call to next.
      */
     void direct( long nodeReference, long reference )
     {
-        bufferedGroup = null;
         clear();
         setOwningNode( nodeReference );
         setNext( reference );
@@ -129,19 +87,8 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         }
     }
 
-    @Override
-    public boolean next()
+    boolean next()
     {
-        if ( isBuffered() )
-        {
-            bufferedGroup = bufferedGroup.next;
-            if ( bufferedGroup != null )
-            {
-                loadFromBuffer();
-                return true;
-            }
-        }
-
         do
         {
             if ( getNext() == NO_ID )
@@ -156,48 +103,19 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         return true;
     }
 
-    private void loadFromBuffer()
+    int outgoingCount()
     {
-        setType( bufferedGroup.label );
-        setFirstOut( bufferedGroup.outgoing() );
-        setFirstIn( bufferedGroup.incoming() );
-        setFirstLoop( bufferedGroup.loops() );
+        return count( outgoingRawId() );
     }
 
-    @Override
-    public void reset()
+    int incomingCount()
     {
-        if ( open )
-        {
-            open = false;
-            bufferedGroup = null;
-            setId( NO_ID );
-            clear();
-        }
+        return count( incomingRawId() );
     }
 
-    @Override
-    public int type()
+    int loopCount()
     {
-        return getType();
-    }
-
-    @Override
-    public int outgoingCount()
-    {
-        return isBuffered() ? bufferedGroup.outgoingCount : count( outgoingRawId() );
-    }
-
-    @Override
-    public int incomingCount()
-    {
-        return isBuffered() ? bufferedGroup.incomingCount : count( incomingRawId() );
-    }
-
-    @Override
-    public int loopCount()
-    {
-        return isBuffered() ? bufferedGroup.loopsCount : count( loopsRawId() );
+        return count( loopsRawId() );
     }
 
     private int count( long reference )
@@ -208,9 +126,9 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         }
         if ( edgePage == null )
         {
-            edgePage = relationshipStore.openPageCursorForReading( reference );
+            edgePage = relationshipStore.openPageCursorForReading( reference, cursorTracer );
         }
-        relationshipStore.getRecordByCursor( reference, edge, RecordLoad.FORCE, edgePage );
+        relationshipStore.getRecordByCursor( reference, edge, loadMode.orElse( ALWAYS ), edgePage );
         if ( edge.getFirstNode() == getOwningNode() )
         {
             return (int) edge.getFirstPrevRel();
@@ -221,40 +139,16 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         }
     }
 
-    /**
-     * If the returned reference points to a chain of relationships that aren't physically filtered by direction and type then
-     * a flag in this reference can be set so that external filtering will be performed as the cursor progresses.
-     */
     @Override
-    public long outgoingReference()
-    {
-        return getFirstOut();
-    }
-
-    /**
-     * If the returned reference points to a chain of relationships that aren't physically filtered by direction and type then
-     * a flag in this reference can be set so that external filtering will be performed as the cursor progresses.
-     */
-    @Override
-    public long incomingReference()
-    {
-        return getFirstIn();
-    }
-
-    /**
-     * If the returned reference points to a chain of relationships that aren't physically filtered by direction and type then
-     * a flag in this reference can be set so that external filtering will be performed as the cursor progresses.
-     */
-    @Override
-    public long loopsReference()
-    {
-        return getFirstLoop();
-    }
-
-    @Override
+<<<<<<< HEAD
     public RelationshipGroupRecord clone()
     {
         throw new CloneFailedException( "Record cursors are not cloneable." );
+=======
+    public RelationshipGroupRecord copy()
+    {
+        throw new UnsupportedOperationException( "Record cursors are not copyable." );
+>>>>>>> neo4j/4.1
     }
 
     @Override
@@ -266,16 +160,7 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         }
         else
         {
-            String mode = "mode=";
-            if ( isBuffered() )
-            {
-                mode = mode + "group";
-            }
-            else
-            {
-                mode = mode + "direct";
-            }
-            return "RelationshipGroupCursor[id=" + getId() + ", open state with: " + mode + ", underlying record=" + super.toString() + "]";
+            return "RelationshipGroupCursor[id=" + getId() + ", open state with: underlying record=" + super.toString() + "]";
         }
     }
 
@@ -303,11 +188,6 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         return getFirstLoop();
     }
 
-    private boolean isBuffered()
-    {
-        return bufferedGroup != null;
-    }
-
     @Override
     public void close()
     {
@@ -324,75 +204,9 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         }
     }
 
-    static class BufferedGroup
-    {
-        final int label;
-        final BufferedGroup next;
-        Record outgoing;
-        Record incoming;
-        Record loops;
-        private long firstOut = NO_ID;
-        private long firstIn = NO_ID;
-        private long firstLoop = NO_ID;
-        int outgoingCount;
-        int incomingCount;
-        int loopsCount;
-
-        BufferedGroup( RelationshipRecord edge, BufferedGroup next )
-        {
-            this.label = edge.getType();
-            this.next = next;
-        }
-
-        void outgoing( RelationshipRecord edge )
-        {
-            if ( outgoing == null )
-            {
-                firstOut = edge.getId();
-            }
-            outgoing = new Record( edge, outgoing );
-            outgoingCount++;
-        }
-
-        void incoming( RelationshipRecord edge )
-        {
-            if ( incoming == null )
-            {
-                firstIn = edge.getId();
-            }
-            incoming = new Record( edge, incoming );
-            incomingCount++;
-        }
-
-        void loop( RelationshipRecord edge )
-        {
-            if ( loops == null )
-            {
-                firstLoop = edge.getId();
-            }
-            loops = new Record( edge, loops );
-            loopsCount++;
-        }
-
-        long outgoing()
-        {
-            return firstOut;
-        }
-
-        long incoming()
-        {
-            return firstIn;
-        }
-
-        long loops()
-        {
-            return firstLoop;
-        }
-    }
-
     private PageCursor groupPage( long reference )
     {
-        return groupStore.openPageCursorForReading( reference );
+        return groupStore.openPageCursorForReading( reference, cursorTracer );
     }
 
     private void group( RelationshipGroupRecord record, long reference, PageCursor page )
@@ -400,6 +214,6 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements S
         // We need to load forcefully here since otherwise we cannot traverse over groups
         // records which have been concurrently deleted (flagged as inUse = false).
         // @see #org.neo4j.kernel.impl.store.RelationshipChainPointerChasingTest
-        groupStore.getRecordByCursor( reference, record, RecordLoad.FORCE, page );
+        groupStore.getRecordByCursor( reference, record, loadMode.orElse( ALWAYS ), page );
     }
 }

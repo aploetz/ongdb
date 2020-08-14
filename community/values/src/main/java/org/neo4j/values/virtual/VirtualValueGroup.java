@@ -30,6 +30,5 @@ public enum VirtualValueGroup
     EDGE,
     LIST,
     PATH,
-    NO_VALUE,
     ERROR
 }

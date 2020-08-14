@@ -19,12 +19,19 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.logical.plans.{Ascending, Descending, GetValue}
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Descending
+import org.neo4j.cypher.internal.logical.plans.DoNotGetValue
+import org.neo4j.cypher.internal.logical.plans.GetValue
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.graphdb.Direction
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.iterableAsScalaIterableConverter
 
 abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
                                                                edition: Edition[CONTEXT],
@@ -175,7 +182,7 @@ abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
       .produceResults("x", "y", "z")
       .cartesianProduct()
       .|.expand("(y)--(z)")
-      .|.nodeByLabelScan("y", "RHS")
+      .|.nodeByLabelScan("y", "RHS", IndexOrderNone)
       .input(nodes = Seq("x"))
       .build()
 
@@ -360,11 +367,11 @@ abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
       .produceResults("a", "b", "c", "d")
       .cartesianProduct()
       .|.cartesianProduct()
-      .|.|.nodeByLabelScan("d", "D")
-      .|.nodeByLabelScan("c", "C")
+      .|.|.nodeByLabelScan("d", "D", IndexOrderNone)
+      .|.nodeByLabelScan("c", "C", IndexOrderNone)
       .cartesianProduct()
-      .|.nodeByLabelScan("b", "B")
-      .nodeByLabelScan("a", "A")
+      .|.nodeByLabelScan("b", "B", IndexOrderNone)
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -409,28 +416,28 @@ abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
     runtimeResult should beColumns("a", "r1", "r2").withRows(expectedResultRows)
   }
 
-    test("cartesian product with limit on rhs") {
-      val nodesPerLabel = Math.sqrt(sizeHint).toInt
-      val limit = nodesPerLabel - 1
-      val (aNodes, _) = given { bipartiteGraph(nodesPerLabel, "A", "B", "R") }
-      val nodes = select(aNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.3)
-      val input = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
+  test("cartesian product with limit on rhs") {
+    val nodesPerLabel = Math.sqrt(sizeHint).toInt
+    val limit = nodesPerLabel - 1
+    val (aNodes, _) = given { bipartiteGraph(nodesPerLabel, "A", "B", "R") }
+    val nodes = select(aNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.3)
+    val input = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
 
-      // when
-      val logicalQuery = new LogicalQueryBuilder(this)
-        .produceResults("x", "y", "z")
-        .cartesianProduct()
-        .|.limit(limit)
-        .|.expand("(y)--(z)")
-        .|.allNodeScan("y")
-        .input(nodes = Seq("x"))
-        .build()
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y", "z")
+      .cartesianProduct()
+      .|.limit(limit)
+      .|.expand("(y)--(z)")
+      .|.allNodeScan("y")
+      .input(nodes = Seq("x"))
+      .build()
 
-      val runtimeResult = execute(logicalQuery, runtime, input)
+    val runtimeResult = execute(logicalQuery, runtime, input)
 
-      // then
-      runtimeResult should beColumns("x", "y", "z").withRows(rowCount(nodes.size * limit))
-    }
+    // then
+    runtimeResult should beColumns("x", "y", "z").withRows(rowCount(nodes.size * limit))
+  }
 
   test("cartesian product with double sort and limit after join") {
     // given
@@ -486,8 +493,6 @@ abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
     // then
     runtimeResult should beColumns("x", "y", "z").withRows(rowCount(limitCount))
   }
-
-  // These tests are ignored because expand fused over pipelines is broken.
 
   test("should support cartesian product with hash-join on RHS") {
     // given
@@ -588,5 +593,38 @@ abstract class CartesianProductTestBase[CONTEXT <: RuntimeContext](
       } yield Array(x, y)
 
     runtimeResult should beColumns("x", "y").withRows(expectedResultRows)
+  }
+
+  test("preserves order with multiple index seeks") {
+    // given
+    val nValues = 14 // gives 819 results in the range 0-12
+    val inputRows = inputValues((0 until nValues).map { i =>
+      Array[Any](i.toLong, i.toLong)
+    }.toArray: _*)
+
+    index("Label", "prop")
+    given {
+      nodePropertyGraph(nValues, {
+        case i: Int => Map("prop" -> (nValues + 3 - i) % nValues) // Reverse and offset when creating the values so we do not accidentally get them in order
+      }, "Label")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("nn", "mm")
+      .projection("n.prop as nn", "m.prop as mm")
+      .apply()
+      .|.cartesianProduct()
+      .|.|.nodeIndexOperator("m:Label(prop < ???)", paramExpr = Some(varFor("j")), getValue = DoNotGetValue)
+      .|.nodeIndexOperator("n:Label(prop < ???)", paramExpr = Some(varFor("i")), getValue = GetValue)
+      .input(variables = Seq("i", "j"))
+      .build()
+
+    // then
+    val expected = for {i <- 0 until nValues
+                        j <- 0 until i
+                        k <- 0 until i} yield Array(j, k)
+    val runtimeResult = execute(logicalQuery, runtime, inputRows)
+    runtimeResult should beColumns("nn", "mm").withRows(inOrder(expected))
   }
 }

@@ -19,16 +19,13 @@
  */
 package org.neo4j.internal.kernel.api;
 
+import static org.neo4j.internal.kernel.api.Read.NO_ID;
+
 /**
  * Cursor for traversing the relationships of a single node.
  */
-public interface RelationshipTraversalCursor
-        extends RelationshipDataAccessor, SuspendableCursor<RelationshipTraversalCursor.Position>
+public interface RelationshipTraversalCursor extends RelationshipDataAccessor, Cursor
 {
-    abstract class Position extends CursorPosition<Position>
-    {
-    }
-
     /**
      * Get the other node, the one that this cursor was not initialized from.
      * <p>
@@ -37,9 +34,134 @@ public interface RelationshipTraversalCursor
      *
      * @param cursor the cursor to use for accessing the other node.
      */
-    void neighbour( NodeCursor cursor );
+    void otherNode( NodeCursor cursor );
 
-    long neighbourNodeReference();
+    long otherNodeReference();
 
     long originNodeReference();
+
+    RelationshipTraversalCursor EMPTY = new RelationshipTraversalCursor()
+    {
+        @Override
+        public void otherNode( NodeCursor cursor )
+        {
+        }
+
+        @Override
+        public long otherNodeReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public long originNodeReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public boolean next()
+        {
+            return false;
+        }
+
+        @Override
+        public void setTracer( KernelReadTracer tracer )
+        {
+        }
+
+        @Override
+        public void removeTracer()
+        {
+        }
+
+        @Override
+        public void close()
+        {
+        }
+
+        @Override
+        public void closeInternal()
+        {
+        }
+
+        @Override
+        public boolean isClosed()
+        {
+            return true;
+        }
+
+        @Override
+        public void setCloseListener( CloseListener closeListener )
+        {
+        }
+
+        @Override
+        public CloseListener getCloseListener()
+        {
+            return null;
+        }
+
+        @Override
+        public void setToken( int token )
+        {
+        }
+
+        @Override
+        public int getToken()
+        {
+            return TokenRead.ANY_RELATIONSHIP_TYPE;
+        }
+
+        @Override
+        public long relationshipReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public int type()
+        {
+            return TokenRead.ANY_RELATIONSHIP_TYPE;
+        }
+
+        @Override
+        public void source( NodeCursor cursor )
+        {
+        }
+
+        @Override
+        public void target( NodeCursor cursor )
+        {
+        }
+
+        @Override
+        public void properties( PropertyCursor cursor )
+        {
+        }
+
+        @Override
+        public long sourceNodeReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public long targetNodeReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public long propertiesReference()
+        {
+            return NO_ID;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "I AM EMPTY";
+        }
+    };
 }

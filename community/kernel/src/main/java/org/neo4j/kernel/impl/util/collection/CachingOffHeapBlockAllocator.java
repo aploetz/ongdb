@@ -19,18 +19,23 @@
  */
 package org.neo4j.kernel.impl.util.collection;
 
+<<<<<<< HEAD
 import org.jctools.queues.QueueFactory;
 import org.jctools.queues.spec.ConcurrentQueueSpec;
+=======
+import org.jctools.queues.MpmcArrayQueue;
+>>>>>>> neo4j/4.1
 
 import java.util.Queue;
 
 import org.neo4j.internal.unsafe.UnsafeUtil;
 import org.neo4j.io.ByteUnit;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.util.VisibleForTesting;
 
 import static org.neo4j.internal.helpers.Numbers.isPowerOfTwo;
 import static org.neo4j.internal.helpers.Numbers.log2floor;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.util.Preconditions.checkState;
 import static org.neo4j.util.Preconditions.requirePositive;
 import static org.neo4j.util.Preconditions.requirePowerOfTwo;
@@ -74,12 +79,16 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
         this.caches = new Queue[numOfCaches];
         for ( int i = 0; i < caches.length; i++ )
         {
+<<<<<<< HEAD
             caches[i] = QueueFactory.newQueue( spec );
+=======
+            caches[i] = new MpmcArrayQueue<>( maxCachedBlocks );
+>>>>>>> neo4j/4.1
         }
     }
 
     @Override
-    public MemoryBlock allocate( long size, MemoryAllocationTracker tracker )
+    public MemoryBlock allocate( long size, MemoryTracker tracker )
     {
         requirePositive( size );
         checkState( !released, "Allocator is already released" );
@@ -96,13 +105,13 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
         }
         else
         {
-            tracker.allocated( block.unalignedSize );
+            tracker.allocateNative( block.size );
         }
         return block;
     }
 
     @Override
-    public void free( MemoryBlock block, MemoryAllocationTracker tracker )
+    public void free( MemoryBlock block, MemoryTracker tracker )
     {
         if ( released || notCacheable( block.size ) )
         {
@@ -125,7 +134,7 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
             return;
         }
 
-        tracker.deallocated( block.unalignedSize );
+        tracker.releaseNative( block.size );
     }
 
     @Override
@@ -137,24 +146,26 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
             MemoryBlock block;
             while ( (block = cache.poll()) != null )
             {
+<<<<<<< HEAD
                 UnsafeUtil.free( block.unalignedAddr, block.unalignedSize );
+=======
+                UnsafeUtil.free( block.addr, block.size, INSTANCE );
+>>>>>>> neo4j/4.1
             }
         }
     }
 
     @VisibleForTesting
-    void doFree( MemoryBlock block, MemoryAllocationTracker tracker )
+    void doFree( MemoryBlock block, MemoryTracker tracker )
     {
-        UnsafeUtil.free( block.unalignedAddr, block.unalignedSize, tracker );
+        UnsafeUtil.free( block.addr, block.size, tracker );
     }
 
     @VisibleForTesting
-    MemoryBlock allocateNew( long size, MemoryAllocationTracker tracker )
+    MemoryBlock allocateNew( long size, MemoryTracker tracker )
     {
-        final long unalignedSize = requirePositive( size ) + Long.BYTES - 1;
-        final long unalignedAddr = UnsafeUtil.allocateMemory( unalignedSize, tracker );
-        final long addr = UnsafeUtil.alignedMemory( unalignedAddr, Long.BYTES );
-        return new MemoryBlock( addr, size, unalignedAddr, unalignedSize );
+        final long addr = UnsafeUtil.allocateMemory( size, tracker );
+        return new MemoryBlock( addr, size );
     }
 
     private boolean notCacheable( long size )

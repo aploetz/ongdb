@@ -19,11 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
 import org.neo4j.cypher.operations.CypherFunctions
-import org.neo4j.values._
+import org.neo4j.values.AnyValue
 
 case class ToIntegerFunction(a: Expression) extends NullInNullOutExpression(a) {
 
@@ -31,7 +31,7 @@ case class ToIntegerFunction(a: Expression) extends NullInNullOutExpression(a) {
 
   override def rewrite(f: Expression => Expression): Expression = f(ToIntegerFunction(a.rewrite(f)))
 
-  override def compute(value: AnyValue, m: ExecutionContext, state: QueryState): AnyValue = CypherFunctions.toInteger(value)
+  override def compute(value: AnyValue, ctx: ReadableRow, state: QueryState): AnyValue = CypherFunctions.toInteger(value)
 
   override def children: Seq[AstNode[_]] = Seq(a)
 }

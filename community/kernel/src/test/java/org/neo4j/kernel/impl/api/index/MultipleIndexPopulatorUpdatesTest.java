@@ -21,7 +21,6 @@ package org.neo4j.kernel.impl.api.index;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.Answers;
-import org.mockito.Mockito;
 
 import java.util.function.IntPredicate;
 import java.util.function.Supplier;
@@ -33,27 +32,34 @@ import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
+import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
 import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
-import org.neo4j.kernel.impl.transaction.state.storeview.StoreViewNodeStoreScan;
+import org.neo4j.kernel.impl.transaction.state.storeview.NodeStoreScan;
 import org.neo4j.kernel.impl.util.Listener;
 import org.neo4j.lock.LockService;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.StorageNodeCursor;
 import org.neo4j.storageengine.api.StorageReader;
+import org.neo4j.test.InMemoryTokens;
 import org.neo4j.values.storable.Values;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class MultipleIndexPopulatorUpdatesTest
 {
@@ -66,11 +72,13 @@ class MultipleIndexPopulatorUpdatesTest
         IndexStatisticsStore indexStatisticsStore = mock( IndexStatisticsStore.class );
 
         StorageReader reader = mock( StorageReader.class );
-        when( reader.allocateNodeCursor() ).thenReturn( mock( StorageNodeCursor.class ) );
+        when( reader.allocateNodeCursor( any() ) ).thenReturn( mock( StorageNodeCursor.class ) );
         ProcessListenableNeoStoreIndexView
                 storeView = new ProcessListenableNeoStoreIndexView( LockService.NO_LOCK_SERVICE, () -> reader );
-        MultipleIndexPopulator indexPopulator =
-                new MultipleIndexPopulator( storeView, logProvider, EntityType.NODE, mock( SchemaState.class ), indexStatisticsStore );
+        InMemoryTokens tokens = new InMemoryTokens();
+        MultipleIndexPopulator indexPopulator = new MultipleIndexPopulator(
+                storeView, logProvider, EntityType.NODE, mock( SchemaState.class ), indexStatisticsStore,
+                JobSchedulerFactory.createInitialisedScheduler(), tokens, PageCacheTracer.NULL, INSTANCE );
 
         storeView.setProcessListener( new NodeUpdateProcessListener( indexPopulator ) );
 
@@ -79,11 +87,11 @@ class MultipleIndexPopulatorUpdatesTest
 
         addPopulator( indexPopulator, populator, 1, IndexPrototype.forSchema( SchemaDescriptor.forLabel( 1, 1 ) ) );
 
-        indexPopulator.create();
-        StoreScan<IndexPopulationFailedKernelException> storeScan = indexPopulator.indexAllEntities();
+        indexPopulator.create( PageCursorTracer.NULL );
+        StoreScan<IndexPopulationFailedKernelException> storeScan = indexPopulator.createStoreScan( PageCursorTracer.NULL );
         storeScan.run();
 
-        Mockito.verify( indexUpdater, never() ).process( any(IndexEntryUpdate.class) );
+        verify( indexUpdater, never() ).process( any(IndexEntryUpdate.class) );
     }
 
     private static IndexPopulator createIndexPopulator()
@@ -138,12 +146,12 @@ class MultipleIndexPopulatorUpdatesTest
         public <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( int[] labelIds,
                 IntPredicate propertyKeyIdFilter,
                 Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor,
-                Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor,
-                boolean forceStoreScan )
+                Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor,
+                boolean forceStoreScan, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
         {
 
             return new ListenableNodeScanViewNodeStoreScan<>( storageEngine.get(), locks, labelUpdateVisitor,
-                propertyUpdatesVisitor, labelIds, propertyKeyIdFilter, processListener );
+                propertyUpdatesVisitor, labelIds, propertyKeyIdFilter, processListener, cursorTracer );
         }
 
         void setProcessListener( Listener<StorageNodeCursor> processListener )
@@ -152,18 +160,17 @@ class MultipleIndexPopulatorUpdatesTest
         }
     }
 
-    private static class ListenableNodeScanViewNodeStoreScan<FAILURE extends Exception> extends StoreViewNodeStoreScan<FAILURE>
+    private static class ListenableNodeScanViewNodeStoreScan<FAILURE extends Exception> extends NodeStoreScan<FAILURE>
     {
         private final Listener<StorageNodeCursor> processListener;
 
         ListenableNodeScanViewNodeStoreScan( StorageReader storageReader, LockService locks,
-                Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor,
+                Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor,
                 Visitor<EntityUpdates,FAILURE> propertyUpdatesVisitor, int[] labelIds,
-                IntPredicate propertyKeyIdFilter, Listener<StorageNodeCursor> processListener )
+                IntPredicate propertyKeyIdFilter, Listener<StorageNodeCursor> processListener, PageCursorTracer cursorTracer )
         {
             super( storageReader, locks, labelUpdateVisitor, propertyUpdatesVisitor,
-                    labelIds,
-                    propertyKeyIdFilter );
+                    labelIds, propertyKeyIdFilter, cursorTracer, INSTANCE );
             this.processListener = processListener;
         }
 

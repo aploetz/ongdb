@@ -28,10 +28,10 @@ import java.io.PrintStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +42,8 @@ import java.util.concurrent.locks.LockSupport;
 
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.resources.Profiler;
+import org.neo4j.scheduler.CallableExecutorService;
+import org.neo4j.scheduler.CancelListener;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.SchedulerThreadFactory;
@@ -52,14 +54,7 @@ import static java.lang.Thread.sleep;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.stream.Collectors.toList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.both;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -90,7 +85,7 @@ class CentralJobSchedulerTest
                 () -> scheduler.schedule( Group.TASK_SCHEDULER, () -> fail( "This task should not have been executed." ) ) );
     }
 
-    // Tests schedules a recurring job to run 5 times with 100ms in between.
+    // Tests scheduling a recurring job to run 5 times with 100ms in between.
     // The timeout of 10s should be enough.
     @Test
     void shouldRunRecurringJob()
@@ -110,7 +105,7 @@ class CentralJobSchedulerTest
             // Then assert that the recurring job was stopped (when the scheduler was shut down)
             int actualInvocations = invocations.get();
             sleep( period * 5 );
-            assertThat( invocations.get(), equalTo( actualInvocations ) );
+            assertThat( invocations.get() ).isEqualTo( actualInvocations );
         } );
     }
 
@@ -120,7 +115,7 @@ class CentralJobSchedulerTest
         // Given
         long period = 2;
         life.start();
-        JobHandle jobHandle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, countInvocationsJob, period, MILLISECONDS );
+        JobHandle<?> jobHandle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, countInvocationsJob, period, MILLISECONDS );
         awaitFirstInvocation();
 
         // When
@@ -132,8 +127,7 @@ class CentralJobSchedulerTest
         int recorded = invocations.get();
         sleep( period * 100 );
         // we can have task that is already running during cancellation so lets count it as well
-        assertThat( invocations.get(),
-                both( greaterThanOrEqualTo( recorded ) ).and( lessThanOrEqualTo( recorded + 1 ) ) );
+        assertThat( invocations.get() ).isGreaterThanOrEqualTo( recorded ).isLessThanOrEqualTo( recorded + 1 );
     }
 
     @Test
@@ -163,7 +157,7 @@ class CentralJobSchedulerTest
     {
         life.start();
 
-        List<JobHandle> handles = new ArrayList<>( 30 );
+        List<JobHandle<?>> handles = new ArrayList<>( 30 );
         AtomicLong startedCounter = new AtomicLong();
         BinaryLatch blockLatch = new BinaryLatch();
         Runnable task = () ->
@@ -192,7 +186,7 @@ class CentralJobSchedulerTest
             {
                 // All jobs got started. We're good!
                 blockLatch.release();
-                for ( JobHandle handle : handles )
+                for ( JobHandle<?> handle : handles )
                 {
                     handle.cancel();
                 }
@@ -219,7 +213,7 @@ class CentralJobSchedulerTest
                 LockSupport.parkNanos( MILLISECONDS.toNanos( 10 ) );
             }
         };
-        JobHandle handle = scheduler.schedule( Group.INDEX_POPULATION, job );
+        JobHandle<?> handle = scheduler.schedule( Group.INDEX_POPULATION, job );
         handle.registerCancelListener( () -> halted.set( true ) );
         handle.cancel();
 
@@ -241,7 +235,7 @@ class CentralJobSchedulerTest
                 triggered.set( true );
             };
 
-            JobHandle handle = scheduler.schedule( Group.INDEX_POPULATION, job, 10, TimeUnit.MILLISECONDS );
+            JobHandle<?> handle = scheduler.schedule( Group.INDEX_POPULATION, job, 10, TimeUnit.MILLISECONDS );
 
             handle.waitTermination();
             assertTrue( triggered.get() );
@@ -274,7 +268,7 @@ class CentralJobSchedulerTest
             }
         };
 
-        JobHandle handle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, TimeUnit.MILLISECONDS );
+        JobHandle<?> handle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, TimeUnit.MILLISECONDS );
         handle.registerCancelListener( () -> canceled.set( true ) );
 
         latch.await();
@@ -285,11 +279,11 @@ class CentralJobSchedulerTest
         var e = assertThrows( Exception.class, handle::waitTermination );
         if ( e instanceof ExecutionException )
         {
-            assertThat( e.getCause(), is( boom ) );
+            assertThat( e.getCause() ).isEqualTo( boom );
         }
         else
         {
-            assertThat( e, instanceOf( CancellationException.class ) );
+            assertThat( e ).isInstanceOf( CancellationException.class );
         }
     }
 
@@ -318,7 +312,7 @@ class CentralJobSchedulerTest
             }
         };
 
-        JobHandle handle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, TimeUnit.MILLISECONDS );
+        JobHandle<?> handle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, TimeUnit.MILLISECONDS );
         handle.registerCancelListener( () -> canceled.set( true ) );
 
         startCounter.await();
@@ -353,12 +347,12 @@ class CentralJobSchedulerTest
             }
         };
 
-        final JobHandle jobHandle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, MILLISECONDS );
+        JobHandle<?> jobHandle = scheduler.scheduleRecurring( Group.INDEX_POPULATION, job, 1, MILLISECONDS );
         jobHandle.registerCancelListener( () -> canceled.set( true ) );
 
         triggerLatch.await();
 
-        assertThat( triggerCounter.get(), greaterThanOrEqualTo( 1 ) );
+        assertThat( triggerCounter.get() ).isGreaterThanOrEqualTo( 1 );
         assertFalse( canceled.get() );
 
         jobHandle.cancel();
@@ -395,9 +389,9 @@ class CentralJobSchedulerTest
     void schedulerExecutorMustBeOfTypeDefinedByGroup()
     {
         life.start();
-        Executor executor = scheduler.executor( Group.CYPHER_WORKER );
+        CallableExecutorService executor = (CallableExecutorService) scheduler.executor( Group.CYPHER_WORKER );
         // The CYPHER_WORKER group configures a ForkJoin pool, so that's what we should get.
-        assertThat( executor, instanceOf( ForkJoinPool.class ) );
+        assertThat( executor.delegate() ).isInstanceOf( ForkJoinPool.class );
     }
 
     @Test
@@ -425,17 +419,17 @@ class CentralJobSchedulerTest
             counter.getAndDecrement();
         };
 
-        List<JobHandle> handles = new ArrayList<>();
+        List<JobHandle<?>> handles = new ArrayList<>();
         for ( int i = 0; i < 10; i++ )
         {
             handles.add( scheduler.schedule( Group.CYPHER_WORKER, runnable ) );
         }
-        for ( JobHandle handle : handles )
+        for ( JobHandle<?> handle : handles )
         {
             handle.waitTermination();
         }
 
-        assertThat( max.get(), is( 3 ) );
+        assertThat( max.get() ).isLessThanOrEqualTo( 3 );
     }
 
     @Test
@@ -446,7 +440,7 @@ class CentralJobSchedulerTest
         SchedulerThreadFactory schedulerThreadFactory = mock( SchedulerThreadFactory.class );
 
         scheduler.setThreadFactory( Group.BOLT_WORKER, ( group, parentThreadGroup ) -> schedulerThreadFactory );
-        assertThat( scheduler.threadFactory( Group.BOLT_WORKER ), sameInstance( schedulerThreadFactory ) );
+        assertThat( scheduler.threadFactory( Group.BOLT_WORKER ) ).isSameAs( schedulerThreadFactory );
     }
 
     @Test
@@ -484,16 +478,79 @@ class CentralJobSchedulerTest
         String printedProfile;
         do
         {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            PrintStream out = new PrintStream( baos );
+            ByteArrayOutputStream bufferOut = new ByteArrayOutputStream();
+            PrintStream out = new PrintStream( bufferOut );
             profiler.printProfile( out, "Test Title" );
             out.flush();
-            printedProfile = baos.toString();
+            printedProfile = bufferOut.toString();
         }
         while ( !printedProfile.contains( "BinaryLatch.await" ) );
 
         checkpointLatch.release();
         profiler.finish();
+    }
+
+    @Test
+    void shouldPropagateResultFromCallable() throws ExecutionException, InterruptedException
+    {
+        life.start();
+        Callable<Boolean> job = () -> true;
+        JobHandle<Boolean> jobHandle = scheduler.schedule( Group.INDEX_POPULATION, job );
+
+        assertTrue( jobHandle.get() );
+    }
+
+    @Test
+    void scheduledTasksCanBeTheirOwnCancellationListeners()
+    {
+        life.start();
+        AtomicInteger cancelled = new AtomicInteger();
+        class CancelCallback implements CancelListener
+        {
+            @Override
+            public void cancelled()
+            {
+                cancelled.incrementAndGet();
+            }
+        }
+        class RunnableAndCancellable extends CancelCallback implements Runnable
+        {
+            @Override
+            public void run()
+            {
+            }
+        }
+        class CallableAndCancellable extends CancelCallback implements Callable<Void>
+        {
+            @Override
+            public Void call() throws Exception
+            {
+                return null;
+            }
+        }
+
+        scheduler.schedule( Group.CHECKPOINT, new RunnableAndCancellable() ).cancel();
+        assertThat( cancelled ).hasValue( 1 );
+
+        cancelled.set( 0 );
+
+        scheduler.schedule( Group.CHECKPOINT, new RunnableAndCancellable(), 1, SECONDS ).cancel();
+        assertThat( cancelled ).hasValue( 1 );
+
+        cancelled.set( 0 );
+
+        scheduler.scheduleRecurring( Group.CHECKPOINT, new RunnableAndCancellable(), 1, SECONDS ).cancel();
+        assertThat( cancelled ).hasValue( 1 );
+
+        cancelled.set( 0 );
+
+        scheduler.scheduleRecurring( Group.CHECKPOINT, new RunnableAndCancellable(), 1, 1, SECONDS ).cancel();
+        assertThat( cancelled ).hasValue( 1 );
+
+        cancelled.set( 0 );
+
+        scheduler.schedule( Group.CHECKPOINT, new CallableAndCancellable() ).cancel();
+        assertThat( cancelled ).hasValue( 1 );
     }
 
     private void awaitFirstInvocation() throws InterruptedException

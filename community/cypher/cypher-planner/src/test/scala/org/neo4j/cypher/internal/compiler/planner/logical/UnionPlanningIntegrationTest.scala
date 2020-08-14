@@ -20,15 +20,16 @@
 package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.helpers.LogicalPlanBuilder
-import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.createNode
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.createNode
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class UnionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
   test("one UNION all") {
 
-    val (_, logicalPlan, _, _, _) = new given {
+    val (_, logicalPlan, _, _) = new given {
       knownLabels = Set("A", "B")
     }.getLogicalPlanFor(
       """
@@ -45,17 +46,17 @@ class UnionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         .union()
         .|.projection(s"$a3 AS $a2", s"$b3 AS $b2")
         .|.projection(s"1 AS $b3")
-        .|.nodeByLabelScan(a3, "B")
+        .|.nodeByLabelScan(a3, "B", IndexOrderNone)
         .projection(s"$a1 AS $a2", s"$b1 AS $b2")
         .projection(s"1 AS $b1")
-        .nodeByLabelScan(a1, "A")
+        .nodeByLabelScan(a1, "A", IndexOrderNone)
         .build()
     )
   }
 
   test("one UNION distinct") {
 
-    val (_, logicalPlan, _, _, _) = new given {
+    val (_, logicalPlan, _, _) = new given {
       knownLabels = Set("A", "B")
     }.getLogicalPlanFor(
       """
@@ -73,16 +74,16 @@ class UnionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         .union()
         .|.projection(s"$a3 AS $a2", s"$b3 AS $b2")
         .|.projection(s"1 AS $b3")
-        .|.nodeByLabelScan(a3, "B")
+        .|.nodeByLabelScan(a3, "B", IndexOrderNone)
         .projection(s"$a1 AS $a2", s"$b1 AS $b2")
         .projection(s"1 AS $b1")
-        .nodeByLabelScan(a1, "A")
+        .nodeByLabelScan(a1, "A", IndexOrderNone)
         .build()
     )
   }
   test("two UNION all") {
 
-    val (_, logicalPlan, _, _, _) = new given {
+    val (_, logicalPlan, _, _) = new given {
       knownLabels = Set("A", "B", "C")
     }.getLogicalPlanFor(
       """MATCH (a:A) RETURN a AS a, 1 AS b
@@ -101,22 +102,22 @@ class UnionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         .union()
         .|.projection(s"$a5 AS $a4", s"$b5 AS $b4")
         .|.projection(s"1 AS $b5")
-        .|.nodeByLabelScan(a5, "C")
+        .|.nodeByLabelScan(a5, "C", IndexOrderNone)
         .projection(s"$a2 AS $a4", s"$b2 AS $b4")
         .union()
         .|.projection(s"$a3 AS $a2", s"$b3 AS $b2")
         .|.projection(s"1 AS $b3")
-        .|.nodeByLabelScan(a3, "B")
+        .|.nodeByLabelScan(a3, "B", IndexOrderNone)
         .projection(s"$a1 AS $a2", s"$b1 AS $b2")
         .projection(s"1 AS $b1")
-        .nodeByLabelScan(a1, "A")
+        .nodeByLabelScan(a1, "A", IndexOrderNone)
         .build()
     )
   }
 
   test("two UNION distinct") {
 
-    val (_, logicalPlan, _, _, _) = new given {
+    val (_, logicalPlan, _, _) = new given {
       knownLabels = Set("A", "B", "C")
     }.getLogicalPlanFor(
       """MATCH (a:A) RETURN a AS a, 1 AS b
@@ -136,22 +137,22 @@ class UnionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         .union()
         .|.projection(s"$a5 AS $a4", s"$b5 AS $b4")
         .|.projection(s"1 AS $b5")
-        .|.nodeByLabelScan(a5, "C")
+        .|.nodeByLabelScan(a5, "C", IndexOrderNone)
         .projection(s"$a2 AS $a4", s"$b2 AS $b4")
         .union()
         .|.projection(s"$a3 AS $a2", s"$b3 AS $b2")
         .|.projection(s"1 AS $b3")
-        .|.nodeByLabelScan(a3, "B")
+        .|.nodeByLabelScan(a3, "B", IndexOrderNone)
         .projection(s"$a1 AS $a2", s"$b1 AS $b2")
         .projection(s"1 AS $b1")
-        .nodeByLabelScan(a1, "A")
+        .nodeByLabelScan(a1, "A", IndexOrderNone)
         .build()
     )
   }
 
   test("one UNION distinct without columns") {
 
-    val (_, logicalPlan, _, _, _) = new given {
+    val (_, logicalPlan, _, _) = new given {
     }.getLogicalPlanFor(
       """
         |CREATE (a)

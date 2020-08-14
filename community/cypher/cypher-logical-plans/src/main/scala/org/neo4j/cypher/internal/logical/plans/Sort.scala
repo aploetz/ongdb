@@ -19,11 +19,11 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * Buffer all source rows and sort them according to 'sortItems'. Produce the rows in sorted order.
-  */
+ * Buffer all source rows and sort them according to 'sortItems'. Produce the rows in sorted order.
+ */
 case class Sort(source: LogicalPlan,
                 sortItems: Seq[ColumnOrder])
                 (implicit idGen: IdGen) extends LogicalPlan(idGen) with EagerLogicalPlan  {

@@ -27,19 +27,25 @@ Third-party licenses
 
 Apache Software License, Version 2.0
   Apache Commons Compress
-  Apache Commons IO
   Apache Commons Lang
   Apache Commons Text
   Java Concurrency Tools Core Library
+<<<<<<< HEAD
+=======
+  Jettison
+>>>>>>> neo4j/4.1
   jPowerShell
   jProcesses
-  Lucene codecs
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
+<<<<<<< HEAD
   Netty/All-in-One
   parboiled-core
   parboiled-scala
+=======
+>>>>>>> neo4j/4.1
   picocli - a mighty tiny Command Line Interface
   WMI4Java
 
@@ -56,10 +62,6 @@ BSD License
 
 BSD License 2-clause
   zstd-jni
-
-Bouncy Castle License
-  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
-  Bouncy Castle Provider
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API

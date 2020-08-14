@@ -37,11 +37,12 @@ import org.neo4j.dbms.api.DatabaseManagementServiceBuilder;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.id.IdController;
-import org.neo4j.internal.index.label.LabelScanReader;
+import org.neo4j.internal.index.label.TokenScanReader;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.memory.ByteBufferFactory;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
@@ -50,6 +51,7 @@ import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.extension.ExtensionType;
 import org.neo4j.kernel.extension.context.ExtensionContext;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.test.Barrier;
@@ -59,9 +61,8 @@ import org.neo4j.test.rule.ImpermanentDbmsRule;
 import org.neo4j.util.FeatureToggles;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
@@ -88,8 +89,7 @@ public class IndexPopulationMissConcurrentUpdateIT
         {
             return new TestDatabaseManagementServiceBuilder().impermanent().noOpSystemGraphInitializer().addExtension( index );
         }
-    }.withSetting( GraphDatabaseSettings.multi_threaded_schema_index_population_enabled, false )
-     .withSetting( GraphDatabaseSettings.default_schema_provider, ControlledSchemaIndexProvider.INDEX_PROVIDER.name() );
+    }.withSetting( GraphDatabaseSettings.default_schema_provider, ControlledSchemaIndexProvider.INDEX_PROVIDER.name() );
     // The single-threaded setting makes the test deterministic. The multi-threaded variant has the same problem tested below.
 
     @Before
@@ -97,24 +97,20 @@ public class IndexPopulationMissConcurrentUpdateIT
     {
         // let our populator have fine-grained insight into updates coming in
         FeatureToggles.set( MultipleIndexPopulator.class, BATCH_SIZE_NAME, 1 );
-        FeatureToggles.set( BatchingMultipleIndexPopulator.class, BATCH_SIZE_NAME, 1 );
         FeatureToggles.set( MultipleIndexPopulator.class, QUEUE_THRESHOLD_NAME, 1 );
-        FeatureToggles.set( BatchingMultipleIndexPopulator.class, QUEUE_THRESHOLD_NAME, 1 );
     }
 
     @After
     public void resetFeatureToggle()
     {
         FeatureToggles.clear( MultipleIndexPopulator.class, BATCH_SIZE_NAME );
-        FeatureToggles.clear( BatchingMultipleIndexPopulator.class, BATCH_SIZE_NAME );
         FeatureToggles.clear( MultipleIndexPopulator.class, QUEUE_THRESHOLD_NAME );
-        FeatureToggles.clear( BatchingMultipleIndexPopulator.class, QUEUE_THRESHOLD_NAME );
     }
 
     /**
      * Tests an issue where the {@link MultipleIndexPopulator} had a condition when applying external concurrent updates that any given
      * update would only be applied if the entity id was lower than the highest entity id the scan had seen (i.e. where the scan was currently at).
-     * This would be a problem because of how the {@link LabelScanReader} works internally, which is that it reads one bit-set of node ids
+     * This would be a problem because of how the {@link TokenScanReader} works internally, which is that it reads one bit-set of node ids
      * at the time, effectively caching a small range of ids. If a concurrent creation would happen right in front of where the scan was
      * after it had read and cached that bit-set it would not apply the update and miss that entity in the scan and would end up with an index
      * that was inconsistent with the store.
@@ -138,12 +134,12 @@ public class IndexPopulationMissConcurrentUpdateIT
             while ( node.getId() < INITIAL_CREATION_NODE_ID_THRESHOLD );
             tx.commit();
         }
-        assertThat( "At least one node below the scan barrier threshold must have been created, otherwise test assumptions are invalid or outdated",
-                count( filter( n -> n.getId() <= SCAN_BARRIER_NODE_ID_THRESHOLD, nodes ) ), greaterThan( 0L ) );
-        assertThat( "At least two nodes above the scan barrier threshold and below initial creation threshold must have been created, " +
-                        "otherwise test assumptions are invalid or outdated",
-                // There has to be at least 2 nodes: one which will trigger the barrier and one which will be added to the index afterwards
-                count( filter( n -> n.getId() > SCAN_BARRIER_NODE_ID_THRESHOLD, nodes ) ), greaterThan( 1L ) );
+        assertThat( count( filter( n -> n.getId() <= SCAN_BARRIER_NODE_ID_THRESHOLD, nodes ) ) ).as(
+                "At least one node below the scan barrier threshold must have been created, otherwise test assumptions are invalid or outdated" ).isGreaterThan(
+                0L );
+        assertThat( count( filter( n -> n.getId() > SCAN_BARRIER_NODE_ID_THRESHOLD, nodes ) ) ).as(
+                "At least two nodes above the scan barrier threshold and below initial creation threshold must have been created, " +
+                        "otherwise test assumptions are invalid or outdated" ).isGreaterThan( 1L );
         db.getDependencyResolver().resolveDependency( IdController.class ).maintenance();
 
         // when
@@ -209,12 +205,13 @@ public class IndexPopulationMissConcurrentUpdateIT
             return new IndexProvider.Adaptor( INDEX_PROVIDER, directoriesByProvider( new File( "not-even-persistent" ) ) )
             {
                 @Override
-                public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory )
+                public IndexPopulator getPopulator( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory,
+                        MemoryTracker memoryTracker )
                 {
                     return new IndexPopulator.Adapter()
                     {
                         @Override
-                        public void add( Collection<? extends IndexEntryUpdate<?>> updates )
+                        public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer )
                         {
                             for ( IndexEntryUpdate<?> update : updates )
                             {
@@ -229,7 +226,7 @@ public class IndexPopulationMissConcurrentUpdateIT
                         }
 
                         @Override
-                        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor )
+                        public IndexUpdater newPopulatingUpdater( NodePropertyAccessor nodePropertyAccessor, PageCursorTracer cursorTracer )
                         {
                             return new IndexUpdater()
                             {
@@ -248,7 +245,7 @@ public class IndexPopulationMissConcurrentUpdateIT
                         }
 
                         @Override
-                        public void close( boolean populationCompletedSuccessfully )
+                        public void close( boolean populationCompletedSuccessfully, PageCursorTracer cursorTracer )
                         {
                             assertTrue( populationCompletedSuccessfully );
                         }
@@ -268,7 +265,7 @@ public class IndexPopulationMissConcurrentUpdateIT
                 }
 
                 @Override
-                public InternalIndexState getInitialState( IndexDescriptor descriptor )
+                public InternalIndexState getInitialState( IndexDescriptor descriptor, PageCursorTracer cursorTracer )
                 {
                     return POPULATING;
                 }

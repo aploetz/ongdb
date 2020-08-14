@@ -23,19 +23,19 @@ import org.eclipse.collections.api.set.primitive.LongSet;
 
 import java.util.Arrays;
 
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 
-public class Labels implements LabelSet
+public class Labels implements TokenSet
 {
     /**
      * This really only needs to be {@code int[]}, but the underlying implementation uses {@code long[]} for some
      * reason.
      */
-    private final long[] labels;
+    private final long[] labelIds;
 
-    private Labels( long[] labels )
+    private Labels( long[] labelIds )
     {
-        this.labels = labels;
+        this.labelIds = labelIds;
     }
 
     public static Labels from( long...labels )
@@ -49,27 +49,27 @@ public class Labels implements LabelSet
     }
 
     @Override
-    public int numberOfLabels()
+    public int numberOfTokens()
     {
-        return labels.length;
+        return labelIds.length;
     }
 
     @Override
-    public int label( int offset )
+    public int token( int offset )
     {
-        return (int) labels[offset];
+        return (int) labelIds[offset];
     }
 
     @Override
-    public boolean contains( int labelToken )
+    public boolean contains( int token )
     {
         //It may look tempting to use binary search
         //however doing a linear search is actually faster for reasonable
         //label sizes (≤100 labels)
-        for ( long label : labels )
+        for ( long label : labelIds )
         {
             assert (int) label == label : "value too big to be represented as and int";
-            if ( label == labelToken )
+            if ( label == token )
             {
                 return true;
             }
@@ -80,12 +80,12 @@ public class Labels implements LabelSet
     @Override
     public String toString()
     {
-        return "Labels" + Arrays.toString( labels );
+        return "Labels" + Arrays.toString( labelIds );
     }
 
     @Override
     public long[] all()
     {
-        return labels;
+        return labelIds;
     }
 }

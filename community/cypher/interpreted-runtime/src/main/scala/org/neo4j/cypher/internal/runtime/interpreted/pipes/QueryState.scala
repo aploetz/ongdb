@@ -19,9 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime._
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ExpressionCursors
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.MapCypherRow
+import org.neo4j.cypher.internal.runtime.NoInput
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryMemoryTracker
+import org.neo4j.cypher.internal.runtime.QueryStatistics
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.PathValueBuilder
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{InCheckContainer, SingleThreadedLRUCache}
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.InCheckContainer
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.SingleThreadedLRUCache
 import org.neo4j.internal.kernel.api.IndexReadSession
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.AnyValue
@@ -35,7 +44,7 @@ class QueryState(val query: QueryContext,
                  val subscriber: QuerySubscriber,
                  val memoryTracker: QueryMemoryTracker,
                  val decorator: PipeDecorator = NullPipeDecorator,
-                 val initialContext: Option[ExecutionContext] = None,
+                 val initialContext: Option[CypherRow] = None,
                  val cachedIn: SingleThreadedLRUCache[Any, InCheckContainer] = new SingleThreadedLRUCache(maxSize = 16),
                  val lenientCreateRelationship: Boolean = false,
                  val prePopulateResults: Boolean = false,
@@ -44,9 +53,19 @@ class QueryState(val query: QueryContext,
   private var _pathValueBuilder: PathValueBuilder = _
   private var _exFactory: ExecutionContextFactory = _
 
-  def newExecutionContext(factory: ExecutionContextFactory): ExecutionContext = {
+  def newExecutionContext(factory: ExecutionContextFactory): CypherRow = {
     initialContext match {
       case Some(init) => factory.copyWith(init)
+      case None => factory.newExecutionContext()
+    }
+  }
+
+  /**
+   * When running on the RHS of an Apply, this method will fill the new row with argument data
+   */
+  def newExecutionContextWithInitialContext(factory: ExecutionContextFactory): CypherRow = {
+    initialContext match {
+      case Some(init) => factory.copyWithArgument(init)
       case None => factory.newExecutionContext()
     }
   }
@@ -62,23 +81,15 @@ class QueryState(val query: QueryContext,
 
   def withDecorator(decorator: PipeDecorator) =
     new QueryState(query, resources, params, cursors, queryIndexes, expressionVariables, subscriber, memoryTracker, decorator, initialContext,
-                   cachedIn, lenientCreateRelationship, prePopulateResults, input)
+      cachedIn, lenientCreateRelationship, prePopulateResults, input)
 
-  def withInitialContext(initialContext: ExecutionContext) =
+  def withInitialContext(initialContext: CypherRow) =
     new QueryState(query, resources, params, cursors, queryIndexes, expressionVariables, subscriber, memoryTracker, decorator, Some(initialContext),
-                   cachedIn, lenientCreateRelationship, prePopulateResults, input)
-
-  /**
-    * When running on the RHS of an Apply, this method will fill an execution context with argument data
-    *
-    * @param ctx ExecutionContext to fill with data
-    */
-  def copyArgumentStateTo(ctx: ExecutionContext, nLongs: Int, nRefs: Int): Unit = initialContext
-    .foreach(initData => ctx.copyFrom(initData, nLongs, nRefs))
+      cachedIn, lenientCreateRelationship, prePopulateResults, input)
 
   def withQueryContext(query: QueryContext) =
     new QueryState(query, resources, params, cursors, queryIndexes, expressionVariables, subscriber, memoryTracker, decorator, initialContext,
-                   cachedIn, lenientCreateRelationship, prePopulateResults, input)
+      cachedIn, lenientCreateRelationship, prePopulateResults, input)
 
   def setExecutionContextFactory(exFactory: ExecutionContextFactory): Unit = {
     _exFactory = exFactory
@@ -98,68 +109,57 @@ object QueryState {
 
 trait ExecutionContextFactory {
 
-  def newExecutionContext(): ExecutionContext
+  def newExecutionContext(): CypherRow
 
-  def copyWith(init: ExecutionContext): ExecutionContext
+  def copyWithArgument(row: ReadableRow): CypherRow
 
-  def copyWith(row: ExecutionContext, newEntries: Seq[(String, AnyValue)]): ExecutionContext
+  def copyWith(row: ReadableRow): CypherRow
 
-  def copyWith(row: ExecutionContext, key: String, value: AnyValue): ExecutionContext
+  def copyWith(row: ReadableRow, newEntries: Seq[(String, AnyValue)]): CypherRow
 
-  def copyWith(row: ExecutionContext, key1: String, value1: AnyValue, key2: String, value2: AnyValue): ExecutionContext
+  def copyWith(row: ReadableRow, key: String, value: AnyValue): CypherRow
 
-  def copyWith(row: ExecutionContext,
+  def copyWith(row: ReadableRow, key1: String, value1: AnyValue, key2: String, value2: AnyValue): CypherRow
+
+  def copyWith(row: ReadableRow,
                key1: String, value1: AnyValue,
                key2: String, value2: AnyValue,
-               key3: String, value3: AnyValue): ExecutionContext
+               key3: String, value3: AnyValue): CypherRow
 }
 
 case class CommunityExecutionContextFactory() extends ExecutionContextFactory {
 
-  override def newExecutionContext(): ExecutionContext = ExecutionContext.empty
+  override def newExecutionContext(): CypherRow = CypherRow.empty
+
+  override def copyWithArgument(row: ReadableRow): CypherRow = copyWith(row)
 
   // Not using polymorphism here, instead cast since the cost of being megamorhpic is too high
-  override def copyWith(init: ExecutionContext): ExecutionContext = init match {
-    case context: MapExecutionContext =>
+  override def copyWith(row: ReadableRow): CypherRow = row match {
+    case context: MapCypherRow =>
       context.createClone()
-    case _ =>
-      init.createClone()
   }
 
   // Not using polymorphism here, instead cast since the cost of being megamorhpic is too high
-  override def copyWith(row: ExecutionContext, newEntries: Seq[(String, AnyValue)]): ExecutionContext = row match {
-    case context: MapExecutionContext =>
+  override def copyWith(row: ReadableRow, newEntries: Seq[(String, AnyValue)]): CypherRow = row match {
+    case context: MapCypherRow =>
       context.copyWith(newEntries)
-    case _ =>
-      row.copyWith(newEntries)
   }
 
   // Not using polymorphism here, instead cast since the cost of being megamorhpic is too high
-  override def copyWith(row: ExecutionContext, key: String, value: AnyValue): ExecutionContext = row match {
-    case context: MapExecutionContext =>
+  override def copyWith(row: ReadableRow, key: String, value: AnyValue): CypherRow = row match {
+    case context: MapCypherRow =>
       context.copyWith(key, value)
-    case _ =>
-      row.copyWith(key, value)
   }
 
   // Not using polymorphism here, instead cast since the cost of being megamorhpic is too high
-  override def copyWith(row : ExecutionContext,
-                        key1: String, value1: AnyValue,
-                        key2: String, value2: AnyValue): ExecutionContext = row match {
-    case context: MapExecutionContext =>
+  override def copyWith(row: ReadableRow, key1: String, value1: AnyValue, key2: String, value2: AnyValue): CypherRow = row match {
+    case context: MapCypherRow =>
       context.copyWith(key1, value1, key2, value2)
-    case _ =>
-      row.copyWith(key1, value1, key2, value2)
     }
 
   // Not using polymorphism here, instead cast since the cost of being megamorhpic is too high
-  override def copyWith(row : ExecutionContext,
-                        key1: String, value1: AnyValue,
-                        key2: String, value2: AnyValue,
-                        key3: String, value3: AnyValue): ExecutionContext = row match {
-    case context: MapExecutionContext =>
+  override def copyWith(row: ReadableRow, key1: String, value1: AnyValue, key2: String, value2: AnyValue, key3: String, value3: AnyValue): CypherRow = row match {
+    case context: MapCypherRow =>
       context.copyWith(key1, value1, key2, value2, key3, value3)
-    case _ =>
-      row.copyWith(key1, value1, key2, value2, key3, value3)
   }
 }

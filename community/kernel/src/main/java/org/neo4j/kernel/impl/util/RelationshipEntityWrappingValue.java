@@ -32,8 +32,13 @@ import org.neo4j.values.virtual.RelationshipValue;
 import org.neo4j.values.virtual.VirtualNodeValue;
 import org.neo4j.values.virtual.VirtualValues;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.values.AnyValueWriter.EntityMode.REFERENCE;
+
 public class RelationshipEntityWrappingValue extends RelationshipValue
 {
+    static final long SHALLOW_SIZE = shallowSizeOfInstance( RelationshipEntityWrappingValue.class ) + RelationshipEntity.SHALLOW_SIZE;
+
     private final Relationship relationship;
     private volatile TextValue type;
     private volatile MapValue properties;
@@ -54,44 +59,51 @@ public class RelationshipEntityWrappingValue extends RelationshipValue
     @Override
     public <E extends Exception> void writeTo( AnyValueWriter<E> writer ) throws E
     {
-        if ( relationship instanceof RelationshipEntity )
+        if ( writer.entityMode() == REFERENCE )
         {
-            RelationshipEntity proxy = (RelationshipEntity) relationship;
-            if ( !proxy.initializeData() )
+            writer.writeRelationshipReference( id() );
+        }
+        else
+        {
+            if ( relationship instanceof RelationshipEntity )
             {
-                // If the relationship has been deleted since it was found by the query, then we'll have to tell the client that their transaction conflicted,
-                // and that they need to retry it.
-                throw new ReadAndDeleteTransactionConflictException( RelationshipEntity.isDeletedInCurrentTransaction( relationship ) );
+                RelationshipEntity proxy = (RelationshipEntity) relationship;
+                if ( !proxy.initializeData() )
+                {
+                    // If the relationship has been deleted since it was found by the query,
+                    // then we'll have to tell the client that their transaction conflicted,
+                    // and that they need to retry it.
+                    throw new ReadAndDeleteTransactionConflictException( RelationshipEntity.isDeletedInCurrentTransaction( relationship ) );
+                }
             }
-        }
 
-        MapValue p;
-        try
-        {
-            p = properties();
-        }
-        catch ( NotFoundException e )
-        {
-            p = VirtualValues.EMPTY_MAP;
-        }
-        catch ( IllegalStateException e )
-        {
-            throw new ReadAndDeleteTransactionConflictException( RelationshipEntity.isDeletedInCurrentTransaction( relationship ), e );
-        }
+            MapValue p;
+            try
+            {
+                p = properties();
+            }
+            catch ( NotFoundException e )
+            {
+                p = VirtualValues.EMPTY_MAP;
+            }
+            catch ( IllegalStateException e )
+            {
+                throw new ReadAndDeleteTransactionConflictException( RelationshipEntity.isDeletedInCurrentTransaction( relationship ), e );
+            }
 
-        if ( id() < 0 )
-        {
-            writer.writeVirtualRelationshipHack( relationship );
-        }
+            if ( id() < 0 )
+            {
+                writer.writeVirtualRelationshipHack( relationship );
+            }
 
-        writer.writeRelationship( id(), startNode().id(), endNode().id(), type(), p );
+            writer.writeRelationship( id(), startNode().id(), endNode().id(), type(), p );
+        }
     }
 
     @Override
-    protected long estimatedPayloadSize()
+    public long estimatedHeapUsage()
     {
-        //5 references (20) plus the relationship is assumed to use 48 bytes
-        long size = 68;
+        long size = SHALLOW_SIZE;
         if ( type != null )
         {
             size += type.estimatedHeapUsage();
@@ -208,7 +220,7 @@ public class RelationshipEntityWrappingValue extends RelationshipValue
                 t = type;
                 if ( t == null )
                 {
-                    t = type = Values.stringValue( relationship.getType().name() );
+                    t = type = Values.utf8Value( relationship.getType().name() );
                 }
             }
         }

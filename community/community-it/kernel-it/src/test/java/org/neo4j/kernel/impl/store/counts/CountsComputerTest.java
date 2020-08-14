@@ -45,6 +45,8 @@ import org.neo4j.io.fs.UncloseableDelegatingFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.CountsComputer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
@@ -58,11 +60,14 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_ID;
 
 @PageCacheExtension
@@ -87,6 +92,29 @@ class CountsComputerTest
         dbBuilder = new TestDatabaseManagementServiceBuilder( databaseLayout )
                 .setFileSystem( new UncloseableDelegatingFileSystemAbstraction( fileSystem ) )
                 .impermanent();
+    }
+
+    @Test
+    void tracePageCacheAccessOnInitialization() throws IOException
+    {
+        DatabaseManagementService managementService = dbBuilder.build();
+        try
+        {
+            GraphDatabaseAPI db = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
+            var countsStore = db.getDependencyResolver().resolveDependency( GBPTreeCountsStore.class );
+            var pageCacheTracer = new DefaultPageCacheTracer();
+            var cursorTracer = pageCacheTracer.createPageCursorTracer( "tracePageCacheAccessOnInitialization" );
+
+            countsStore.start( cursorTracer, INSTANCE );
+
+            assertThat( cursorTracer.pins() ).isEqualTo( 1 );
+            assertThat( cursorTracer.unpins() ).isEqualTo( 1 );
+            assertThat( cursorTracer.hits() ).isEqualTo( 1 );
+        }
+        finally
+        {
+            managementService.shutdown();
+        }
     }
 
     @Test
@@ -139,11 +167,11 @@ class CountsComputerTest
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
             assertEquals( BASE_TX_ID + 1 + 1 + 1 + 1, store.txId() );
-            assertEquals( 4, store.nodeCount( -1 ) );
-            assertEquals( 1, store.nodeCount( 0 ) );
-            assertEquals( 1, store.nodeCount( 1 ) );
-            assertEquals( 1, store.nodeCount( 2 ) );
-            assertEquals( 0, store.nodeCount( 3 ) );
+            assertEquals( 4, store.nodeCount( -1, NULL ) );
+            assertEquals( 1, store.nodeCount( 0, NULL ) );
+            assertEquals( 1, store.nodeCount( 1, NULL ) );
+            assertEquals( 1, store.nodeCount( 2, NULL ) );
+            assertEquals( 0, store.nodeCount( 3, NULL ) );
         }
     }
 
@@ -169,11 +197,11 @@ class CountsComputerTest
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
             assertEquals( lastCommittedTransactionId, store.txId() );
-            assertEquals( 3, store.nodeCount( -1 ) );
-            assertEquals( 1, store.nodeCount( 0 ) );
-            assertEquals( 1, store.nodeCount( 1 ) );
-            assertEquals( 0, store.nodeCount( 2 ) );
-            assertEquals( 0, store.nodeCount( 3 ) );
+            assertEquals( 3, store.nodeCount( -1, NULL ) );
+            assertEquals( 1, store.nodeCount( 0, NULL ) );
+            assertEquals( 1, store.nodeCount( 1, NULL ) );
+            assertEquals( 0, store.nodeCount( 2, NULL ) );
+            assertEquals( 0, store.nodeCount( 3, NULL ) );
         }
     }
 
@@ -199,13 +227,13 @@ class CountsComputerTest
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
             assertEquals( lastCommittedTransactionId, store.txId() );
-            assertEquals( 2, store.nodeCount( -1 ) );
-            assertEquals( 1, store.nodeCount( 0 ) );
-            assertEquals( 1, store.nodeCount( 1 ) );
-            assertEquals( 0, store.nodeCount( 2 ) );
-            assertEquals( 0, store.nodeCount( 3 ) );
-            assertEquals( 0, store.relationshipCount( -1, 0, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 1, -1 ) );
+            assertEquals( 2, store.nodeCount( -1, NULL ) );
+            assertEquals( 1, store.nodeCount( 0, NULL ) );
+            assertEquals( 1, store.nodeCount( 1, NULL ) );
+            assertEquals( 0, store.nodeCount( 2, NULL ) );
+            assertEquals( 0, store.nodeCount( 3, NULL ) );
+            assertEquals( 0, store.relationshipCount( -1, 0, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 1, -1, NULL ) );
         }
     }
 
@@ -232,17 +260,17 @@ class CountsComputerTest
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
             assertEquals( lastCommittedTransactionId, store.txId() );
-            assertEquals( 4, store.nodeCount( -1 ) );
-            assertEquals( 1, store.nodeCount( 0 ) );
-            assertEquals( 1, store.nodeCount( 1 ) );
-            assertEquals( 1, store.nodeCount( 2 ) );
-            assertEquals( 0, store.nodeCount( 3 ) );
-            assertEquals( 2, store.relationshipCount( -1, -1, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 0, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 1, -1 ) );
-            assertEquals( 0, store.relationshipCount( -1, 2, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 1, 1 ) );
-            assertEquals( 0, store.relationshipCount( -1, 0, 1 ) );
+            assertEquals( 4, store.nodeCount( -1, NULL ) );
+            assertEquals( 1, store.nodeCount( 0, NULL ) );
+            assertEquals( 1, store.nodeCount( 1, NULL ) );
+            assertEquals( 1, store.nodeCount( 2, NULL ) );
+            assertEquals( 0, store.nodeCount( 3, NULL ) );
+            assertEquals( 2, store.relationshipCount( -1, -1, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 0, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 1, -1, NULL ) );
+            assertEquals( 0, store.relationshipCount( -1, 2, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 1, 1, NULL ) );
+            assertEquals( 0, store.relationshipCount( -1, 0, 1, NULL ) );
         }
     }
 
@@ -271,20 +299,20 @@ class CountsComputerTest
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
             assertEquals( lastCommittedTransactionId, store.txId() );
-            assertEquals( 3, store.nodeCount( -1 ) );
-            assertEquals( 1, store.nodeCount( 0 ) );
-            assertEquals( 1, store.nodeCount( 1 ) );
-            assertEquals( 1, store.nodeCount( 2 ) );
-            assertEquals( 0, store.nodeCount( 3 ) );
-            assertEquals( 4, store.relationshipCount( -1, -1, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 0, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 1, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 2, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 3, -1 ) );
-            assertEquals( 0, store.relationshipCount( -1, 4, -1 ) );
-            assertEquals( 1, store.relationshipCount( -1, 1, 1 ) );
-            assertEquals( 2, store.relationshipCount( -1, -1, 1 ) );
-            assertEquals( 3, store.relationshipCount( 0, -1, -1 ) );
+            assertEquals( 3, store.nodeCount( -1, NULL ) );
+            assertEquals( 1, store.nodeCount( 0, NULL ) );
+            assertEquals( 1, store.nodeCount( 1, NULL ) );
+            assertEquals( 1, store.nodeCount( 2, NULL ) );
+            assertEquals( 0, store.nodeCount( 3, NULL ) );
+            assertEquals( 4, store.relationshipCount( -1, -1, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 0, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 1, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 2, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 3, -1, NULL ) );
+            assertEquals( 0, store.relationshipCount( -1, 4, -1, NULL ) );
+            assertEquals( 1, store.relationshipCount( -1, 1, 1, NULL ) );
+            assertEquals( 2, store.relationshipCount( -1, -1, 1, NULL ) );
+            assertEquals( 3, store.relationshipCount( 0, -1, -1, NULL ) );
         }
     }
 
@@ -302,17 +330,17 @@ class CountsComputerTest
     {
         try ( GBPTreeCountsStore store = createCountsStore() )
         {
-            store.start();
+            store.start( NULL, INSTANCE );
             assertEquals( BASE_TX_ID, store.txId() );
             // check that nothing is stored in the counts store by trying all combinations of tokens in the lower range
             for ( int s = 0; s < 10; s++ )
             {
-                assertEquals( store.nodeCount( s ), 0 );
+                assertEquals( 0, store.nodeCount( s, NULL ) );
                 for ( int e = 0; e < 10; e++ )
                 {
                     for ( int t = 0; t < 10; t++ )
                     {
-                        assertEquals( store.relationshipCount( s, t, e ), 0 );
+                        assertEquals( 0, store.relationshipCount( s, t, e, NULL ) );
                     }
                 }
             }
@@ -335,7 +363,12 @@ class CountsComputerTest
 
     private GBPTreeCountsStore createCountsStore( CountsBuilder builder ) throws IOException
     {
+<<<<<<< HEAD
         return new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem, immediate(), builder, false, GBPTreeCountsStore.NO_MONITOR );
+=======
+        return new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem, immediate(), builder, false, PageCacheTracer.NULL,
+                GBPTreeCountsStore.NO_MONITOR );
+>>>>>>> neo4j/4.1
     }
 
     private void rebuildCounts( long lastCommittedTransactionId )
@@ -348,7 +381,7 @@ class CountsComputerTest
         cleanupCountsForRebuilding();
 
         IdGeneratorFactory idGenFactory = new DefaultIdGeneratorFactory( fileSystem, immediate() );
-        StoreFactory storeFactory = new StoreFactory( databaseLayout, CONFIG, idGenFactory, pageCache, fileSystem, LOG_PROVIDER );
+        StoreFactory storeFactory = new StoreFactory( databaseLayout, CONFIG, idGenFactory, pageCache, fileSystem, LOG_PROVIDER, PageCacheTracer.NULL );
         try ( NeoStores neoStores = storeFactory.openAllNeoStores() )
         {
             NodeStore nodeStore = neoStores.getNodeStore();
@@ -357,11 +390,11 @@ class CountsComputerTest
             int highRelationshipTypeId = (int) neoStores.getRelationshipTypeTokenStore().getHighId();
             CountsComputer countsComputer = new CountsComputer(
                     lastCommittedTransactionId, nodeStore, relationshipStore, highLabelId, highRelationshipTypeId, NumberArrayFactory.AUTO_WITHOUT_PAGECACHE,
-                    progressReporter );
+                    progressReporter, PageCacheTracer.NULL, INSTANCE );
             try ( GBPTreeCountsStore countsStore = createCountsStore( countsComputer ) )
             {
-                countsStore.start();
-                countsStore.checkpoint( IOLimiter.UNLIMITED );
+                countsStore.start( NULL, INSTANCE );
+                countsStore.checkpoint( IOLimiter.UNLIMITED, NULL );
             }
             catch ( IOException e )
             {

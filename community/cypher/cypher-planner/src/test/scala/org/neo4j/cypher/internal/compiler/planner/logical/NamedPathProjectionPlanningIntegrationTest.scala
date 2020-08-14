@@ -20,16 +20,24 @@
 package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.logical.plans.{Expand, NodeByLabelScan, Projection, Selection}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.expressions.{NodePathStep, PathExpression, SemanticDirection, SingleRelationshipPathStep, NilPathStep}
+import org.neo4j.cypher.internal.expressions.NilPathStep
+import org.neo4j.cypher.internal.expressions.NodePathStep
+import org.neo4j.cypher.internal.expressions.PathExpression
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.SingleRelationshipPathStep
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class NamedPathProjectionPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
   test("should build plans containing outgoing path projections") {
     planFor("MATCH p = (a:X)-[r]->(b) RETURN p")._2 should equal(
       Projection(
-        Expand( NodeByLabelScan("a",  labelName("X"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r"),
+        Expand( NodeByLabelScan("a",  labelName("X"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r"),
         projectExpressions = Map(
           "p" -> PathExpression(NodePathStep(varFor("a"),SingleRelationshipPathStep(varFor("r"), SemanticDirection.OUTGOING, Some(varFor("b")), NilPathStep)))_
         )
@@ -48,7 +56,7 @@ class NamedPathProjectionPlanningIntegrationTest extends CypherFunSuite with Log
           function("head", function("nodes", pathExpr)),
           varFor("a")
         )),
-          Expand(NodeByLabelScan("a", labelName("X"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
+        Expand(NodeByLabelScan("a", labelName("X"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
       )
     )
   }
@@ -70,7 +78,7 @@ class NamedPathProjectionPlanningIntegrationTest extends CypherFunSuite with Log
             literalInt(10)
           )
         ),
-          Expand(NodeByLabelScan("a", labelName("X"), Set.empty), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
+        Expand(NodeByLabelScan("a", labelName("X"), Set.empty, IndexOrderNone), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r")
       )
     )
   }

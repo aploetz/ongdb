@@ -59,6 +59,7 @@ import org.neo4j.kernel.internal.locker.DatabaseLocker;
 import org.neo4j.kernel.internal.locker.Locker;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
+import org.neo4j.test.extension.DisabledForRoot;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
@@ -67,10 +68,7 @@ import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.startsWith;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -228,7 +226,7 @@ class DumpCommandIT
             writer.writeStartEntry( 0x123456789ABCDEFL, logFiles.getLogFileInformation().getLastEntryId() + 1, BASE_TX_CHECKSUM, new byte[]{0} );
         }
         CommandFailedException commandFailed = assertThrows( CommandFailedException.class, () -> execute( "foo" ) );
-        assertThat( commandFailed.getMessage(), startsWith( "Active logical log detected, this might be a source of inconsistencies." ) );
+        assertThat( commandFailed.getMessage() ).startsWith( "Active logical log detected, this might be a source of inconsistencies." );
     }
 
     @Test
@@ -254,7 +252,7 @@ class DumpCommandIT
 
         doAnswer( ignored ->
         {
-            assertThat( Files.exists( databaseDirectory ), equalTo( false ) );
+            assertThat( Files.exists( databaseDirectory ) ).isEqualTo( false );
             return null;
         } ).when( dumper ).dump( any(), any(), any(), any(), any() );
 
@@ -263,6 +261,7 @@ class DumpCommandIT
 
     @Test
     @DisabledOnOs( OS.WINDOWS )
+    @DisabledForRoot
     void shouldReportAHelpfulErrorIfWeDontHaveWritePermissionsForLock() throws Exception
     {
         DatabaseLayout databaseLayout = DatabaseLayout.ofFlat( databaseDirectory.toFile() );
@@ -286,8 +285,8 @@ class DumpCommandIT
         doAnswer( invocation ->
         {
             Predicate<Path> exclude = invocation.getArgument( 4 );
-            assertThat( exclude.test( Paths.get( lockFile.getName() ) ), is( true ) );
-            assertThat( exclude.test( Paths.get( "some-other-file" ) ), is( false ) );
+            assertThat( exclude.test( Paths.get( lockFile.getName() ) ) ).isEqualTo( true );
+            assertThat( exclude.test( Paths.get( "some-other-file" ) ) ).isEqualTo( false );
             return null;
         } ).when( dumper ).dump(any(), any(), any(), any(), any() );
 

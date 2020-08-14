@@ -25,18 +25,24 @@ import java.nio.ByteBuffer;
 
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.io.memory.ByteBuffers;
+import org.neo4j.io.memory.HeapScopedBuffer;
+import org.neo4j.io.memory.ScopedBuffer;
+import org.neo4j.memory.MemoryTracker;
 
 import static org.neo4j.io.ByteUnit.KibiByte;
 
 public class ChannelInputStream extends InputStream
 {
     private final StoreChannel channel;
-    private final ByteBuffer buffer = ByteBuffers.allocate( 8, KibiByte );
+    private final ScopedBuffer scopedBuffer;
+    private final ByteBuffer buffer;
     private int position;
 
-    public ChannelInputStream( StoreChannel channel )
+    public ChannelInputStream( StoreChannel channel, MemoryTracker memoryTracker )
     {
         this.channel = channel;
+        this.scopedBuffer = new HeapScopedBuffer( 8, KibiByte, memoryTracker );
+        this.buffer = scopedBuffer.getBuffer();
     }
 
     @Override
@@ -60,13 +66,6 @@ public class ChannelInputStream extends InputStream
     }
 
     @Override
-    public int read( byte[] b, int off, int len ) throws IOException
-    {
-        // TODO implement properly
-        return super.read( b, off, len );
-    }
-
-    @Override
     public int available() throws IOException
     {
         return (int) (position - channel.size());
@@ -75,6 +74,7 @@ public class ChannelInputStream extends InputStream
     @Override
     public void close() throws IOException
     {
+        scopedBuffer.close();
         channel.close();
     }
 }

@@ -35,6 +35,8 @@ import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.string.UTF8;
@@ -51,6 +53,8 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -70,7 +74,7 @@ class TestArrayStore
     {
         DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fileSystem, immediate() );
         StoreFactory factory = new StoreFactory( databaseLayout, Config.defaults(), idGeneratorFactory, pageCache, fileSystem,
-                NullLogProvider.getInstance() );
+                NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = factory.openAllNeoStores( true );
         arrayStore = neoStores.getPropertyStore().getArrayStore();
     }
@@ -132,7 +136,7 @@ class TestArrayStore
     {
         String[] array = new String[] { "first", "second" };
         Collection<DynamicRecord> records = new ArrayList<>();
-        arrayStore.allocateRecords( records, array );
+        arrayStore.allocateRecords( records, array, PageCursorTracer.NULL, INSTANCE );
         Pair<byte[], byte[]> loaded = loadArray( records );
         assertStringHeader( loaded.first(), array.length );
         ByteBuffer buffer = ByteBuffer.wrap( loaded.other() );
@@ -178,7 +182,7 @@ class TestArrayStore
                             Values.pointValue( CoordinateReferenceSystem.WGS84, longBitsToDouble( 0x1L ), longBitsToDouble( 0x1L ) )};
 
             Collection<DynamicRecord> records = new ArrayList<>();
-            arrayStore.allocateRecords( records, array );
+            arrayStore.allocateRecords( records, array, PageCursorTracer.NULL, INSTANCE );
         } );
     }
 
@@ -193,14 +197,14 @@ class TestArrayStore
                                     longBitsToDouble( 0x4L ) )};
 
             Collection<DynamicRecord> records = new ArrayList<>();
-            arrayStore.allocateRecords( records, array );
+            arrayStore.allocateRecords( records, array, PageCursorTracer.NULL, INSTANCE );
         } );
     }
 
     private void assertPointArrayHasCorrectFormat( PointValue[] array, int numberOfBitsUsedForDoubles )
     {
         Collection<DynamicRecord> records = new ArrayList<>();
-        arrayStore.allocateRecords( records, array );
+        arrayStore.allocateRecords( records, array, PageCursorTracer.NULL, INSTANCE );
         Pair<byte[],byte[]> loaded = loadArray( records );
         assertGeometryHeader( loaded.first(),
                 GeometryType.GEOMETRY_POINT.getGtype(),
@@ -271,16 +275,16 @@ class TestArrayStore
     private Collection<DynamicRecord> storeArray( Object array )
     {
         Collection<DynamicRecord> records = new ArrayList<>();
-        arrayStore.allocateRecords( records, array );
+        arrayStore.allocateRecords( records, array, PageCursorTracer.NULL, INSTANCE );
         for ( DynamicRecord record : records )
         {
-            arrayStore.updateRecord( record );
+            arrayStore.updateRecord( record, NULL );
         }
         return records;
     }
 
     private Pair<byte[], byte[]> loadArray( Collection<DynamicRecord> records )
     {
-        return arrayStore.readFullByteArray( records, PropertyType.ARRAY );
+        return arrayStore.readFullByteArray( records, PropertyType.ARRAY, NULL );
     }
 }

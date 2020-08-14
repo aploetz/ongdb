@@ -21,15 +21,26 @@ package org.neo4j.cypher.internal.compiler
 
 import java.time.Clock
 
-import org.neo4j.cypher.internal.compiler.phases.CompilationPhases._
-import org.neo4j.cypher.internal.compiler.phases._
-import org.neo4j.cypher.internal.compiler.planner.logical._
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.ParsingConfig
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.planPipeLine
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.prepareForCaching
+import org.neo4j.cypher.internal.compiler.phases.CompilationPhases.systemPipeLine
+import org.neo4j.cypher.internal.compiler.phases.CypherCompatibilityVersion
+import org.neo4j.cypher.internal.compiler.phases.LogicalPlanState
+import org.neo4j.cypher.internal.compiler.phases.PlannerContext
+import org.neo4j.cypher.internal.compiler.planner.logical.MetricsFactory
 import org.neo4j.cypher.internal.compiler.planner.logical.debug.DebugPrinter
-import org.neo4j.cypher.internal.planner.spi.{IDPPlannerName, PlannerNameFor}
-import org.neo4j.cypher.internal.v4_0.frontend.phases.{CompilationPhases => _, _}
-import org.neo4j.cypher.internal.v4_0.rewriting.RewriterStepSequencer
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.InnerVariableNamer
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
+import org.neo4j.cypher.internal.frontend.phases.BaseState
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer
+import org.neo4j.cypher.internal.frontend.phases.InitialState
+import org.neo4j.cypher.internal.frontend.phases.InternalNotificationLogger
+import org.neo4j.cypher.internal.frontend.phases.Monitors
+import org.neo4j.cypher.internal.planner.spi.IDPPlannerName
+import org.neo4j.cypher.internal.planner.spi.PlannerNameFor
+import org.neo4j.cypher.internal.rewriting.RewriterStepSequencer
+import org.neo4j.cypher.internal.rewriting.rewriters.InnerVariableNamer
+import org.neo4j.cypher.internal.util.InputPosition
 import org.neo4j.values.virtual.MapValue
 
 case class CypherPlanner[Context <: PlannerContext](monitors: Monitors,
@@ -46,9 +57,9 @@ case class CypherPlanner[Context <: PlannerContext](monitors: Monitors,
     val pipeLine = if(config.planSystemCommands)
       systemPipeLine
     else if (context.debugOptions.contains("tostring"))
-      planPipeLine(sequencer) andThen DebugPrinter
+      planPipeLine(sequencer, readPropertiesFromCursor = context.config.readPropertiesFromCursor) andThen DebugPrinter
     else
-      planPipeLine(sequencer)
+      planPipeLine(sequencer, readPropertiesFromCursor = context.config.readPropertiesFromCursor)
 
     pipeLine.transform(state, context)
   }
@@ -62,7 +73,7 @@ case class CypherPlanner[Context <: PlannerContext](monitors: Monitors,
                  tracer: CompilationPhaseTracer,
                  innerVariableNamer: InnerVariableNamer,
                  params: MapValue,
-                 compatibilityMode: Boolean): BaseState = {
+                 compatibilityMode: CypherCompatibilityVersion): BaseState = {
 
     val plannerName = PlannerNameFor(plannerNameText)
     val startState = InitialState(queryText, offset, plannerName)
@@ -83,7 +94,9 @@ case class CypherPlanner[Context <: PlannerContext](monitors: Monitors,
                                          evaluator = null,
                                          innerVariableNamer = innerVariableNamer,
                                          params )
-    CompilationPhases.parsing(sequencer, context.innerVariableNamer, compatibilityMode).transform(startState, context)
+    CompilationPhases.parsing(ParsingConfig(
+      sequencer, context.innerVariableNamer, compatibilityMode, parameterTypeMapping = context.getParameterValueTypeMapping
+    )).transform(startState, context)
   }
 
 }
@@ -98,4 +111,5 @@ case class CypherPlannerConfiguration(queryCacheSize: Int,
                                       legacyCsvQuoteEscaping: Boolean,
                                       csvBufferSize: Int,
                                       nonIndexedLabelWarningThreshold: Long,
-                                      planSystemCommands: Boolean)
+                                      planSystemCommands: Boolean,
+                                      readPropertiesFromCursor: Boolean)

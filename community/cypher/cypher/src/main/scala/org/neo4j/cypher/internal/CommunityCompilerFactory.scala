@@ -19,24 +19,34 @@
  */
 package org.neo4j.cypher.internal
 
-import org.neo4j.cypher.internal.planning.CypherPlanner
+import org.neo4j.cypher.CypherPlannerOption
+import org.neo4j.cypher.CypherRuntimeOption
+import org.neo4j.cypher.CypherUpdateStrategy
+import org.neo4j.cypher.CypherVersion
 import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
-import org.neo4j.cypher.{CypherPlannerOption, CypherRuntimeOption, CypherUpdateStrategy, CypherVersion}
+import org.neo4j.cypher.internal.compiler.phases.Compatibility3_5
+import org.neo4j.cypher.internal.compiler.phases.Compatibility4_0
+import org.neo4j.cypher.internal.compiler.phases.Compatibility4_1
+import org.neo4j.cypher.internal.planning.CypherPlanner
+import org.neo4j.exceptions.SyntaxException
 import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.logging.{Log, LogProvider}
-import org.neo4j.monitoring.{Monitors => KernelMonitors}
+import org.neo4j.logging.Log
+import org.neo4j.logging.LogProvider
+import org.neo4j.monitoring
 
 /**
-  * Factory which creates cypher compilers.
-  */
+ * Factory which creates cypher compilers.
+ */
 class CommunityCompilerFactory(graph: GraphDatabaseQueryService,
-                               kernelMonitors: KernelMonitors,
+                               kernelMonitors: monitoring.Monitors,
                                logProvider: LogProvider,
                                plannerConfig: CypherPlannerConfiguration,
                                runtimeConfig: CypherRuntimeConfiguration
                               ) extends CompilerFactory {
 
   private val log: Log = logProvider.getLog(getClass)
+
+  override def supportsAdministrativeCommands(): Boolean = plannerConfig.planSystemCommands
 
   override def createCompiler(cypherVersion: CypherVersion,
                               cypherPlanner: CypherPlannerOption,
@@ -45,8 +55,9 @@ class CommunityCompilerFactory(graph: GraphDatabaseQueryService,
                               executionEngineProvider: () => ExecutionEngine): Compiler = {
 
     val compatibilityMode = cypherVersion match {
-      case CypherVersion.`v3_5` => true
-      case CypherVersion.v4_0 => false
+      case CypherVersion.v3_5 => Compatibility3_5
+      case CypherVersion.v4_0 => Compatibility4_0
+      case CypherVersion.v4_1 => Compatibility4_1
     }
 
     val planner =
@@ -61,7 +72,10 @@ class CommunityCompilerFactory(graph: GraphDatabaseQueryService,
         compatibilityMode)
 
     val runtime = if (plannerConfig.planSystemCommands)
-      CommunityAdministrationCommandRuntime(executionEngineProvider(), graph.getDependencyResolver)
+      cypherVersion match {
+        case CypherVersion.v3_5 => throw new SyntaxException("Commands towards system database are not supported in this Cypher version.")
+        case _ => CommunityAdministrationCommandRuntime(executionEngineProvider(), graph.getDependencyResolver)
+      }
     else
       CommunityRuntimeFactory.getRuntime(cypherRuntime, plannerConfig.useErrorsOverWarnings)
 

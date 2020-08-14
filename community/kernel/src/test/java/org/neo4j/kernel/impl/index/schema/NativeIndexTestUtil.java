@@ -20,8 +20,10 @@
 package org.neo4j.kernel.impl.index.schema;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,10 +40,13 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
 import org.neo4j.kernel.api.index.IndexProvider;
+import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
+import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
-import org.neo4j.test.extension.pagecache.PageCacheExtension;
+import org.neo4j.test.extension.pagecache.PageCacheSupportExtension;
+import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.RandomRule;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.values.storable.ValueGroup;
@@ -50,15 +55,18 @@ import static java.lang.String.format;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesByProvider;
 import static org.neo4j.kernel.impl.index.schema.NativeIndexKey.Inclusion.NEUTRAL;
 
-@PageCacheExtension
+@TestDirectoryExtension
 @ExtendWith( RandomExtension.class )
 public abstract class NativeIndexTestUtil<KEY extends NativeIndexKey<KEY>,VALUE extends NativeIndexValue>
 {
     static final long NON_EXISTENT_ENTITY_ID = 1_000_000_000;
 
+    @RegisterExtension
+    static PageCacheSupportExtension pageCacheExtension = new PageCacheSupportExtension();
     @Inject
     protected DefaultFileSystemAbstraction fs;
     @Inject
@@ -74,16 +82,24 @@ public abstract class NativeIndexTestUtil<KEY extends NativeIndexKey<KEY>,VALUE 
     private IndexDirectoryStructure indexDirectoryStructure;
     IndexFiles indexFiles;
     IndexProvider.Monitor monitor = IndexProvider.Monitor.EMPTY;
+    JobScheduler jobScheduler;
 
     @BeforeEach
-    public void setup() throws IOException
+    void setup() throws IOException
     {
         valueCreatorUtil = createValueCreatorUtil();
         indexDescriptor = valueCreatorUtil.indexDescriptor();
         layout = createLayout();
         indexDirectoryStructure = directoriesByProvider( directory.directory( "root" ) ).forProvider( indexDescriptor.getIndexProvider() );
-        this.indexFiles = new IndexFiles.Directory( fs, indexDirectoryStructure, indexDescriptor.getId() );
+        this.indexFiles = new IndexFiles( fs, indexDirectoryStructure, indexDescriptor.getId() );
         fs.mkdirs( indexFiles.getStoreFile().getParentFile() );
+        jobScheduler = JobSchedulerFactory.createInitialisedScheduler();
+    }
+
+    @AfterEach
+    void tearDown() throws Exception
+    {
+        jobScheduler.shutdown();
     }
 
     abstract ValueCreatorUtil<KEY,VALUE> createValueCreatorUtil();
@@ -137,7 +153,7 @@ public abstract class NativeIndexTestUtil<KEY extends NativeIndexKey<KEY>,VALUE 
         KEY highest = layout.newKey();
         highest.initialize( Long.MAX_VALUE );
         highest.initValueAsHighest( 0, ValueGroup.UNKNOWN );
-        return tree.seek( lowest, highest );
+        return tree.seek( lowest, highest, NULL );
     }
 
     private void assertSameHits( Pair<KEY, VALUE>[] expectedHits, Pair<KEY, VALUE>[] actualHits,

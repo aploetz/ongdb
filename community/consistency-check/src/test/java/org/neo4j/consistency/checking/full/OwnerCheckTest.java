@@ -38,8 +38,8 @@ import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.neo4j.consistency.checking.DynamicRecordCheckTest.configureDynamicStore;
 import static org.neo4j.consistency.checking.RecordCheckTestBase.NONE;
 import static org.neo4j.consistency.checking.RecordCheckTestBase.array;
@@ -82,8 +82,8 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord node1 = records.add( inUse( new NodeRecord( 1, false, NONE, 7 ) ) );
-        NodeRecord node2 = records.add( inUse( new NodeRecord( 2, false, NONE, 8 ) ) );
+        NodeRecord node1 = records.add( inUse( new NodeRecord( 1 ).initialize( false, 7, false, NONE, 0 ) ) );
+        NodeRecord node2 = records.add( inUse( new NodeRecord( 2 ).initialize( false, 8, false, NONE, 0 ) ) );
 
         // when
         ConsistencyReport.NodeConsistencyReport report1 =
@@ -92,8 +92,8 @@ class OwnerCheckTest
                 check( ConsistencyReport.NodeConsistencyReport.class, nodeChecker, node2, records );
 
         // then
-        verifyZeroInteractions( report1 );
-        verifyZeroInteractions( report2 );
+        verifyNoInteractions( report1 );
+        verifyNoInteractions( report2 );
     }
 
     @Test
@@ -106,8 +106,8 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord node1 = records.add( notInUse( new NodeRecord( 1, false, NONE, 6 ) ) );
-        NodeRecord node2 = records.add( notInUse( new NodeRecord( 2, false, NONE, 6 ) ) );
+        NodeRecord node1 = records.add( notInUse( new NodeRecord( 1 ).initialize( false, 6, false, NONE, 0 ) ) );
+        NodeRecord node2 = records.add( notInUse( new NodeRecord( 2 ).initialize( false, 6, false, NONE, 0 ) ) );
 
         // when
         ConsistencyReport.NodeConsistencyReport report1 =
@@ -116,8 +116,8 @@ class OwnerCheckTest
                 check( ConsistencyReport.NodeConsistencyReport.class, nodeChecker, node2, records );
 
         // then
-        verifyZeroInteractions( report1 );
-        verifyZeroInteractions( report2 );
+        verifyNoInteractions( report1 );
+        verifyNoInteractions( report2 );
     }
 
     @Test
@@ -130,9 +130,11 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        RelationshipRecord relationship1 = records.add( inUse( new RelationshipRecord( 1, 0, 1, 0 ) ) );
+        RelationshipRecord relationship1 = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        relationship1.setLinks( 0, 1, 0 );
         relationship1.setNextProp( 7 );
-        RelationshipRecord relationship2 = records.add( inUse( new RelationshipRecord( 2, 0, 1, 0 ) ) );
+        RelationshipRecord relationship2 = records.add( inUse( new RelationshipRecord( 2 ) ) );
+        relationship2.setLinks( 0, 1, 0 );
         relationship2.setNextProp( 8 );
 
         // when
@@ -144,8 +146,8 @@ class OwnerCheckTest
                        relationshipChecker, relationship2, records );
 
         // then
-        verifyZeroInteractions( report1 );
-        verifyZeroInteractions( report2 );
+        verifyNoInteractions( report1 );
+        verifyNoInteractions( report2 );
     }
 
     @Test
@@ -158,8 +160,8 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord node1 = records.add( inUse( new NodeRecord( 1, false, NONE, 7 ) ) );
-        NodeRecord node2 = records.add( inUse( new NodeRecord( 2, false, NONE, 7 ) ) );
+        NodeRecord node1 = records.add( inUse( new NodeRecord( 1 ).initialize( false, 7, false, NONE, 0 ) ) );
+        NodeRecord node2 = records.add( inUse( new NodeRecord( 2 ).initialize( false, 7, false, NONE, 0 ) ) );
 
         // when
         ConsistencyReport.NodeConsistencyReport report1 =
@@ -168,7 +170,7 @@ class OwnerCheckTest
                 check( ConsistencyReport.NodeConsistencyReport.class, nodeChecker, node2, records );
 
         // then
-        verifyZeroInteractions( report1 );
+        verifyNoInteractions( report1 );
         verify( report2 ).multipleOwners( node1 );
     }
 
@@ -182,9 +184,11 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        RelationshipRecord relationship1 = records.add( inUse( new RelationshipRecord( 1, 0, 1, 0 ) ) );
+        RelationshipRecord relationship1 = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        relationship1.setLinks( 0, 1, 0 );
         relationship1.setNextProp( 7 );
-        RelationshipRecord relationship2 = records.add( inUse( new RelationshipRecord( 2, 0, 1, 0 ) ) );
+        RelationshipRecord relationship2 = records.add( inUse( new RelationshipRecord( 2 ) ) );
+        relationship2.setLinks( 0, 1, 0 );
         relationship2.setNextProp( relationship1.getNextProp() );
 
         // when
@@ -196,7 +200,7 @@ class OwnerCheckTest
                        relationshipChecker, relationship2, records );
 
         // then
-        verifyZeroInteractions( report1 );
+        verifyNoInteractions( report1 );
         verify( report2 ).multipleOwners( relationship1 );
     }
 
@@ -212,8 +216,9 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord node = records.add( inUse( new NodeRecord( 1, false, NONE, 7 ) ) );
-        RelationshipRecord relationship = records.add( inUse( new RelationshipRecord( 1, 0, 1, 0 ) ) );
+        NodeRecord node = records.add( inUse( new NodeRecord( 1 ).initialize( false, 7, false, NONE, 0 ) ) );
+        RelationshipRecord relationship = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        relationship.setLinks( 0, 1, 0 );
         relationship.setNextProp( node.getNextProp() );
 
         // when
@@ -224,7 +229,7 @@ class OwnerCheckTest
                        relationshipChecker, relationship, records );
 
         // then
-        verifyZeroInteractions( nodeReport );
+        verifyNoInteractions( nodeReport );
         verify( relationshipReport ).multipleOwners( node );
     }
 
@@ -240,8 +245,9 @@ class OwnerCheckTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord node = records.add( inUse( new NodeRecord( 1, false, NONE, 7 ) ) );
-        RelationshipRecord relationship = records.add( inUse( new RelationshipRecord( 1, 0, 1, 0 ) ) );
+        NodeRecord node = records.add( inUse( new NodeRecord( 1 ).initialize( false, 7, false, NONE, 0 ) ) );
+        RelationshipRecord relationship = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        relationship.setLinks( 0, 1, 0 );
         relationship.setNextProp( node.getNextProp() );
 
         // when
@@ -252,7 +258,7 @@ class OwnerCheckTest
                 check( ConsistencyReport.NodeConsistencyReport.class, nodeChecker, node, records );
 
         // then
-        verifyZeroInteractions( relationshipReport );
+        verifyNoInteractions( relationshipReport );
         verify( nodeReport ).multipleOwners( relationship );
     }
 
@@ -293,7 +299,7 @@ class OwnerCheckTest
         ConsistencyReport.NodeConsistencyReport nodeReport =
                 check( ConsistencyReport.NodeConsistencyReport.class,
                        decorator.decorateNodeChecker( dummyNodeCheck() ),
-                       inUse( new NodeRecord( 10, false, NONE, 42 ) ), records );
+                       inUse( new NodeRecord( 10 ).initialize( false, 42, false, NONE, 0 ) ), records );
 
         // when
         decorator.scanForOrphanChains( ProgressMonitorFactory.NONE );
@@ -317,7 +323,8 @@ class OwnerCheckTest
                 check( ConsistencyReport.PropertyConsistencyReport.class,
                        decorator.decoratePropertyChecker( dummyPropertyChecker() ),
                        record, records );
-        RelationshipRecord relationship = inUse( new RelationshipRecord( 10, 1, 1, 0 ) );
+        RelationshipRecord relationship = inUse( new RelationshipRecord( 10 ) );
+        relationship.setLinks( 1, 1, 0 );
         relationship.setNextProp( 42 );
         ConsistencyReport.RelationshipConsistencyReport relationshipReport =
                 check( ConsistencyReport.RelationshipConsistencyReport.class,

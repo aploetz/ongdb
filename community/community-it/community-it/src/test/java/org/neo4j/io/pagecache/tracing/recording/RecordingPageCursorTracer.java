@@ -39,16 +39,21 @@ public class RecordingPageCursorTracer extends RecordingTracer implements PageCu
     private int pins;
     private int faults;
     private PageCacheTracer tracer;
+    private final String tag;
 
-    public RecordingPageCursorTracer()
+    public RecordingPageCursorTracer( PageCacheTracer tracer, String tag )
     {
         super( Pin.class, Fault.class );
+        this.tracer = tracer;
+        this.tag = tag;
     }
 
     @SafeVarargs
-    public RecordingPageCursorTracer( Class<? extends Event>... eventTypesToTrace )
+    public RecordingPageCursorTracer( PageCacheTracer tracer, String tag, Class<? extends Event>... eventTypesToTrace )
     {
         super( eventTypesToTrace );
+        this.tracer = tracer;
+        this.tag = tag;
     }
 
     @Override
@@ -172,17 +177,17 @@ public class RecordingPageCursorTracer extends RecordingTracer implements PageCu
     }
 
     @Override
-    public void init( PageCacheTracer tracer )
-    {
-        this.tracer = tracer;
-    }
-
-    @Override
     public void reportEvents()
     {
         Objects.requireNonNull( tracer );
         tracer.pins( pins );
         tracer.faults( faults );
+    }
+
+    @Override
+    public String getTag()
+    {
+        return tag;
     }
 
     private void pageFaulted( long filePageId, PageSwapper swapper )

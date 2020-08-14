@@ -21,8 +21,11 @@ package org.neo4j.kernel.impl.store.record;
 
 import java.util.Objects;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+
 public class SchemaRecord extends PrimitiveRecord
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( SchemaRecord.class );
     public static final byte COMMAND_HAS_NO_SCHEMA_RULE = 0;
     public static final byte COMMAND_HAS_SCHEMA_RULE = 1;
     public static final byte SCHEMA_FLAG_IS_CONSTRAINT = 1;
@@ -32,6 +35,12 @@ public class SchemaRecord extends PrimitiveRecord
     public SchemaRecord( long id )
     {
         super( id );
+    }
+
+    public SchemaRecord( SchemaRecord other )
+    {
+        super( other );
+        this.constraint = other.constraint;
     }
 
     @Override
@@ -48,9 +57,13 @@ public class SchemaRecord extends PrimitiveRecord
     }
 
     @Override
+<<<<<<< HEAD
     public SchemaRecord clone()
+=======
+    public SchemaRecord copy()
+>>>>>>> neo4j/4.1
     {
-        return (SchemaRecord) super.clone();
+        return new SchemaRecord( this );
     }
 
     @Override

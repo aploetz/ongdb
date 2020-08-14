@@ -24,15 +24,14 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.kernel.impl.locking.LocksFactory;
 import org.neo4j.kernel.impl.locking.community.CommunityLocksFactory;
 import org.neo4j.lock.ResourceTypes;
 import org.neo4j.logging.internal.NullLogService;
 import org.neo4j.time.Clocks;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
@@ -62,23 +61,23 @@ class EditionLocksFactoriesTest
         Config config = Config.defaults();
         LocksFactory lockFactory = createLockFactory( config, NullLogService.getInstance() );
 
-        assertThat( lockFactory, instanceOf( CommunityLocksFactory.class ) );
+        assertThat( lockFactory ).isInstanceOf( CommunityLocksFactory.class );
     }
 
     @Test
     void createCommunityLocksFactoryWhenSpecified()
     {
-        Config config = Config.defaults( GraphDatabaseSettings.lock_manager, "community");
+        Config config = Config.defaults( GraphDatabaseInternalSettings.lock_manager, "community");
 
         LocksFactory lockFactory = createLockFactory( config, NullLogService.getInstance() );
 
-        assertThat( lockFactory, instanceOf( CommunityLocksFactory.class ) );
+        assertThat( lockFactory ).isInstanceOf( CommunityLocksFactory.class );
     }
 
     @Test
     void failToCreateWhenConfiguredFactoryNotFound()
     {
-        Config config = Config.defaults(GraphDatabaseSettings.lock_manager, "notFoundManager");
+        Config config = Config.defaults( GraphDatabaseInternalSettings.lock_manager, "notFoundManager");
 
         IllegalArgumentException exception =
                 assertThrows( IllegalArgumentException.class, () -> createLockFactory( config, NullLogService.getInstance() ) );

@@ -26,8 +26,8 @@ import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.database.DatabaseConfig;
-import org.neo4j.exceptions.UnsatisfiedDependencyException;
 import org.neo4j.function.Factory;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.id.BufferedIdController;
@@ -35,6 +35,7 @@ import org.neo4j.internal.id.BufferingIdGeneratorFactory;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.internal.id.IdController;
 import org.neo4j.internal.id.IdGeneratorFactory;
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.watcher.DatabaseLayoutWatcher;
 import org.neo4j.io.layout.DatabaseLayout;
@@ -62,7 +63,7 @@ import org.neo4j.kernel.impl.context.TransactionVersionContextSupplier;
 import org.neo4j.kernel.impl.factory.AccessCapabilityFactory;
 import org.neo4j.kernel.impl.factory.CanWrite;
 import org.neo4j.kernel.impl.factory.CommunityCommitProcessFactory;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.StatementLocks;
 import org.neo4j.kernel.impl.locking.StatementLocksFactory;
@@ -74,6 +75,8 @@ import org.neo4j.kernel.internal.event.GlobalTransactionEventListeners;
 import org.neo4j.kernel.internal.locker.FileLockerService;
 import org.neo4j.kernel.internal.locker.GlobalLockerService;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.kernel.monitoring.DatabaseEventListeners;
+import org.neo4j.kernel.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.kernel.recovery.RecoveryExtension;
 import org.neo4j.logging.NullLog;
@@ -81,9 +84,10 @@ import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.DatabaseLogService;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.SimpleLogService;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
+import org.neo4j.memory.MemoryGroup;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.StorageEngineFactory;
@@ -98,6 +102,7 @@ import static org.mockito.Mockito.when;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_schema_provider;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexProvider.EMPTY;
 import static org.neo4j.kernel.database.DatabaseStartupController.NEVER_ABORT;
 import static org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier.ON_HEAP;
@@ -142,7 +147,8 @@ public class DatabaseRule extends ExternalResource
 
         // Satisfy non-satisfied dependencies
         mutableDependencies.satisfyDependency( mock( CompositeDatabaseAvailabilityGuard.class ) );
-        Config config = dependency( mutableDependencies, Config.class, deps -> Config.defaults() );
+        Config config = dependency( mutableDependencies, Config.class,
+                deps -> Config.defaults( GraphDatabaseSettings.logical_log_rotation_threshold, ByteUnit.mebiBytes( 1 ) ) );
         config.set( default_schema_provider, EMPTY.getProviderDescriptor().name() );
         LogService logService = dependency( mutableDependencies, LogService.class,
                 deps -> new SimpleLogService( NullLogProvider.getInstance() ) );
@@ -158,6 +164,7 @@ public class DatabaseRule extends ExternalResource
                 deps -> StorageEngineFactory.selectStorageEngine() );
         NamedDatabaseId namedDatabaseId = databaseIdRepository.getRaw( databaseName );
 
+        MemoryPools memoryPools = new MemoryPools();
         database = new Database( new TestDatabaseCreationContext( namedDatabaseId, databaseLayout, config, idGeneratorFactory, logService,
                 mock( JobScheduler.class, RETURNS_MOCKS ), mock( TokenNameLookup.class ), mutableDependencies, mockedTokenHolders(), locksFactory,
                 mock( GlobalTransactionEventListeners.class ), fs, transactionStats, databaseHealth,
@@ -166,23 +173,21 @@ public class DatabaseRule extends ExternalResource
                 new Tracers( "null", NullLog.getInstance(), monitors, jobScheduler, clock ),
                 mock( GlobalProcedures.class ), IOLimiter.UNLIMITED, clock, new StoreCopyCheckPointMutex(),
                 new BufferedIdController( new BufferingIdGeneratorFactory( idGeneratorFactory ),
-                        jobScheduler ), DatabaseInfo.COMMUNITY, new TransactionVersionContextSupplier(), ON_HEAP,
+                        jobScheduler, NULL ), DbmsInfo.COMMUNITY, new TransactionVersionContextSupplier(), ON_HEAP,
                 Iterables.iterable( new EmptyIndexExtensionFactory() ),
                 file -> mock( DatabaseLayoutWatcher.class ), null,
-                storageEngineFactory, new GlobalLockerService(), LeaseService.NO_LEASES, NEVER_ABORT ) );
+                storageEngineFactory, new GlobalLockerService(), LeaseService.NO_LEASES, NEVER_ABORT, memoryPools,
+                memoryPools.pool( MemoryGroup.TRANSACTION, 0, null ), memoryPools.pool( MemoryGroup.OTHER, 0, null ) ) );
         return database;
     }
 
     private static <T> T dependency( Dependencies dependencies, Class<T> type, Function<DependencyResolver,T> defaultSupplier )
     {
-        try
+        if ( dependencies.containsDependency( type ) )
         {
             return dependencies.resolveDependency( type );
         }
-        catch ( IllegalArgumentException | UnsatisfiedDependencyException e )
-        {
-            return dependencies.satisfyDependency( defaultSupplier.apply( dependencies ) );
-        }
+        return dependencies.satisfyDependency( defaultSupplier.apply( dependencies ) );
     }
 
     private void shutdownAnyRunning()
@@ -206,6 +211,9 @@ public class DatabaseRule extends ExternalResource
         private final Config config;
         private final LeaseService leaseService;
         private final DatabaseStartupController startupController;
+        private final MemoryPools memoryPools;
+        private final GlobalMemoryGroupTracker transactionsMemoryPool;
+        private final GlobalMemoryGroupTracker otherMemoryPool;
         private final DatabaseConfig databaseConfig;
         private final IdGeneratorFactory idGeneratorFactory;
         private final DatabaseLogService logService;
@@ -228,7 +236,7 @@ public class DatabaseRule extends ExternalResource
         private final SystemNanoClock clock;
         private final StoreCopyCheckPointMutex storeCopyCheckPointMutex;
         private final IdController idController;
-        private final DatabaseInfo databaseInfo;
+        private final DbmsInfo dbmsInfo;
         private final VersionContextSupplier versionContextSupplier;
         private final CollectionsFactorySupplier collectionsFactorySupplier;
         private final Iterable<ExtensionFactory<?>> extensionFactories;
@@ -245,16 +253,20 @@ public class DatabaseRule extends ExternalResource
                 CommitProcessFactory commitProcessFactory, PageCache pageCache, ConstraintSemantics constraintSemantics, Monitors monitors, Tracers tracers,
                 GlobalProcedures globalProcedures, IOLimiter ioLimiter, SystemNanoClock clock,
                 StoreCopyCheckPointMutex storeCopyCheckPointMutex, IdController idController,
-                DatabaseInfo databaseInfo, VersionContextSupplier versionContextSupplier, CollectionsFactorySupplier collectionsFactorySupplier,
+                DbmsInfo dbmsInfo, VersionContextSupplier versionContextSupplier, CollectionsFactorySupplier collectionsFactorySupplier,
                 Iterable<ExtensionFactory<?>> extensionFactories, Function<DatabaseLayout,DatabaseLayoutWatcher> watcherServiceFactory,
                 QueryEngineProvider engineProvider, StorageEngineFactory storageEngineFactory,
-                FileLockerService fileLockerService, LeaseService leaseService, DatabaseStartupController startupController )
+                FileLockerService fileLockerService, LeaseService leaseService, DatabaseStartupController startupController, MemoryPools memoryPools,
+                GlobalMemoryGroupTracker transactionsMemoryPool, GlobalMemoryGroupTracker otherMemoryPool )
         {
             this.namedDatabaseId = namedDatabaseId;
             this.databaseLayout = databaseLayout;
             this.config = config;
             this.leaseService = leaseService;
             this.startupController = startupController;
+            this.memoryPools = memoryPools;
+            this.transactionsMemoryPool = transactionsMemoryPool;
+            this.otherMemoryPool = otherMemoryPool;
             this.databaseConfig = new DatabaseConfig( config, namedDatabaseId );
             this.idGeneratorFactory = idGeneratorFactory;
             this.logService = new DatabaseLogService( new DatabaseNameLogContext( namedDatabaseId ), logService );
@@ -277,7 +289,7 @@ public class DatabaseRule extends ExternalResource
             this.clock = clock;
             this.storeCopyCheckPointMutex = storeCopyCheckPointMutex;
             this.idController = idController;
-            this.databaseInfo = databaseInfo;
+            this.dbmsInfo = dbmsInfo;
             this.versionContextSupplier = versionContextSupplier;
             this.collectionsFactorySupplier = collectionsFactorySupplier;
             this.extensionFactories = extensionFactories;
@@ -328,12 +340,6 @@ public class DatabaseRule extends ExternalResource
         public JobScheduler getScheduler()
         {
             return scheduler;
-        }
-
-        @Override
-        public TokenNameLookup getTokenNameLookup()
-        {
-            return tokenNameLookup;
         }
 
         @Override
@@ -460,9 +466,9 @@ public class DatabaseRule extends ExternalResource
         }
 
         @Override
-        public DatabaseInfo getDatabaseInfo()
+        public DbmsInfo getDbmsInfo()
         {
-            return databaseInfo;
+            return dbmsInfo;
         }
 
         @Override
@@ -529,6 +535,18 @@ public class DatabaseRule extends ExternalResource
         public DatabaseStartupController getStartupController()
         {
             return startupController;
+        }
+
+        @Override
+        public GlobalMemoryGroupTracker getTransactionsMemoryPool()
+        {
+            return transactionsMemoryPool;
+        }
+
+        @Override
+        public GlobalMemoryGroupTracker getOtherMemoryPool()
+        {
+            return otherMemoryPool;
         }
     }
 

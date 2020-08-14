@@ -26,6 +26,7 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
+import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
 import org.junit.platform.commons.JUnitException;
 
 import java.io.IOException;
@@ -33,18 +34,20 @@ import java.lang.reflect.Method;
 
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.test.extension.FileSystemExtension;
-import org.neo4j.test.extension.StatefullFieldExtension;
+import org.neo4j.test.extension.StatefulFieldExtension;
 import org.neo4j.test.rule.TestDirectory;
 
+import static java.lang.Boolean.TRUE;
 import static java.lang.String.format;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_METHOD;
 import static org.neo4j.test.rule.TestDirectory.testDirectory;
 
-public class TestDirectorySupportExtension extends StatefullFieldExtension<TestDirectory>
-        implements BeforeEachCallback, BeforeAllCallback, AfterEachCallback, AfterAllCallback
+public class TestDirectorySupportExtension extends StatefulFieldExtension<TestDirectory>
+        implements BeforeEachCallback, BeforeAllCallback, AfterEachCallback, AfterAllCallback, TestExecutionExceptionHandler
 {
     public static final String TEST_DIRECTORY = "testDirectory";
+    private static final String FAILURE_MARKER = "failureMarker";
     public static final Namespace TEST_DIRECTORY_NAMESPACE = Namespace.create( TEST_DIRECTORY );
 
     @Override
@@ -83,14 +86,14 @@ public class TestDirectorySupportExtension extends StatefullFieldExtension<TestD
         }
     }
 
-    private TestInstance.Lifecycle getLifecycle( ExtensionContext context )
+    private static TestInstance.Lifecycle getLifecycle( ExtensionContext context )
     {
         return context.getTestInstanceLifecycle().orElse( PER_METHOD );
     }
 
     public void prepare( ExtensionContext context ) throws IOException
     {
-        String name = context.getTestMethod().map( Method::getName )
+        String name = context.getTestMethod().map( method -> method.getName().concat( context.getDisplayName() ) )
                 .orElseGet( () -> context.getRequiredTestClass().getSimpleName() );
         TestDirectory testDirectory = getStoredValue( context );
         testDirectory.prepareDirectory( context.getRequiredTestClass(), name );
@@ -101,7 +104,8 @@ public class TestDirectorySupportExtension extends StatefullFieldExtension<TestD
         TestDirectory testDirectory = getStoredValue( context );
         try
         {
-            testDirectory.complete( context.getExecutionException().isEmpty() );
+            testDirectory.complete( context.getExecutionException().isEmpty() &&
+                                    !hasFailureMarker( context ) );
         }
         catch ( Exception e )
         {
@@ -126,12 +130,48 @@ public class TestDirectorySupportExtension extends StatefullFieldExtension<TestD
     {
         ExtensionContext.Store fileSystemStore = getStore( extensionContext, FileSystemExtension.FILE_SYSTEM_NAMESPACE );
         FileSystemAbstraction fileSystemAbstraction = fileSystemStore.get( FileSystemExtension.FILE_SYSTEM, FileSystemAbstraction.class );
-        return fileSystemAbstraction != null ? testDirectory(fileSystemAbstraction) : testDirectory();
+        return fileSystemAbstraction != null ? testDirectory( fileSystemAbstraction ) : testDirectory();
     }
 
     @Override
     protected Namespace getNameSpace()
     {
         return TEST_DIRECTORY_NAMESPACE;
+    }
+
+    @Override
+    public void handleTestExecutionException( ExtensionContext context, Throwable throwable ) throws Throwable
+    {
+        if ( getLifecycle( context ) == PER_CLASS )
+        {
+            var store = getTestDirectoryStore( context );
+            store.put( FAILURE_MARKER, TRUE );
+        }
+        throw throwable;
+    }
+
+    private boolean hasFailureMarker( ExtensionContext context )
+    {
+        return getLifecycle( context ) == PER_CLASS &&
+               getLocalStore( context ).get( FAILURE_MARKER ) != null;
+    }
+
+    private ExtensionContext.Store getTestDirectoryStore( ExtensionContext context )
+    {
+        ExtensionContext.Store store = null;
+        while ( context != null )
+        {
+            var localStore = context.getStore( getNameSpace() );
+            if ( localStore.get( getFieldKey() ) == null )
+            {
+                return store;
+            }
+            else
+            {
+                store = localStore;
+            }
+            context = context.getParent().orElse( null );
+        }
+        throw new IllegalStateException( "Test directory store not found" );
     }
 }

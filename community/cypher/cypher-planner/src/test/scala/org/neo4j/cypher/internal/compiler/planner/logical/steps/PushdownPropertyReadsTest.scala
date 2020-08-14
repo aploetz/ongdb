@@ -23,10 +23,11 @@ import org.neo4j.cypher.internal.compiler.helpers.LogicalPlanBuilder
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanConstructionTestSupport
 import org.neo4j.cypher.internal.compiler.planner.logical.PlanMatchHelp
 import org.neo4j.cypher.internal.logical.plans.CanGetValue
-import org.neo4j.cypher.internal.v4_0.util.attribution.Attributes
-import org.neo4j.cypher.internal.v4_0.util.symbols.CTNode
-import org.neo4j.cypher.internal.v4_0.util.symbols.CTInteger
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.util.attribution.Attributes
+import org.neo4j.cypher.internal.util.symbols.CTInteger
+import org.neo4j.cypher.internal.util.symbols.CTNode
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with LogicalPlanConstructionTestSupport {
 
@@ -191,6 +192,35 @@ class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with L
       .|.|.argument("n").withCardinality(10)
       .|.expandAll("(n)-->(m)").withCardinality(1)
       .|.argument("n").withCardinality(10)
+      .allNodeScan("n").withCardinality(10)
+
+    val plan = planBuilder.build()
+    val rewritten = PushdownPropertyReads.pushdown(plan, planBuilder.cardinalities, Attributes(planBuilder.idGen, planBuilder.cardinalities), planBuilder.getSemanticTable)
+    rewritten shouldBe plan
+  }
+
+  test("should not pushdown through Anti") {
+    val planBuilder = new LogicalPlanBuilder()
+      .produceResults("n")
+      .filter("n.prop > 10").withCardinality(10)
+      .apply().withCardinality(10)
+      .|.anti().withCardinality(10)
+      .|.optionalExpandAll("(n)-[:INFURIATES]->(m)").withCardinality(1)
+      .|.argument().withCardinality(10)
+      .allNodeScan("n").withCardinality(10)
+
+    val plan = planBuilder.build()
+    val rewritten = PushdownPropertyReads.pushdown(plan, planBuilder.cardinalities, Attributes(planBuilder.idGen, planBuilder.cardinalities), planBuilder.getSemanticTable)
+    rewritten shouldBe plan
+  }
+
+  test("should not pushdown through AntiSemiApply") {
+    val planBuilder = new LogicalPlanBuilder()
+      .produceResults("n")
+      .filter("n.prop > 10").withCardinality(10)
+      .antiSemiApply().withCardinality(10)
+      .|.optionalExpandAll("(n)-[:INFURIATES]->(m)").withCardinality(1)
+      .|.argument().withCardinality(10)
       .allNodeScan("n").withCardinality(10)
 
     val plan = planBuilder.build()
@@ -490,7 +520,7 @@ class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with L
       .produceResults("x")
       .projection("n.prop AS x").withCardinality(100)
       .expandAll("(n)-->(q)").withCardinality(100)
-      .orderedAggregation(Seq("n AS n"), Seq("count(*) AS c"), Seq(varFor("n"))).withCardinality(10)
+      .orderedAggregation(Seq("n AS n"), Seq("count(*) AS c"), Seq("n")).withCardinality(10)
       .expandAll("(n)-->(m)").withCardinality(50)
       .filter("id(n) <> 0").withCardinality(5)
       .allNodeScan("n").withCardinality(10)
@@ -502,7 +532,7 @@ class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with L
         .projection("n.prop AS x")
         .expandAll("(n)-->(q)")
         .cacheProperties("n.prop")
-        .orderedAggregation(Seq("n AS n"), Seq("count(*) AS c"), Seq(varFor("n")))
+        .orderedAggregation(Seq("n AS n"), Seq("count(*) AS c"), Seq("n"))
         .expandAll("(n)-->(m)")
         .filter("id(n) <> 0")
         .allNodeScan("n")
@@ -525,8 +555,8 @@ class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with L
       .produceResults("x")
       .projection("n.prop AS x").withCardinality(100)
       .union().withCardinality(100)
-      .|.nodeByLabelScan("n", "A").withCardinality(90)
-      .nodeByLabelScan("n", "B").withCardinality(10)
+      .|.nodeByLabelScan("n", "A", IndexOrderNone).withCardinality(90)
+      .nodeByLabelScan("n", "B", IndexOrderNone).withCardinality(10)
 
     val plan = planBuilder.build()
     val rewritten = PushdownPropertyReads.pushdown(plan, planBuilder.cardinalities, Attributes(planBuilder.idGen, planBuilder.cardinalities), planBuilder.getSemanticTable)
@@ -538,8 +568,8 @@ class PushdownPropertyReadsTest extends CypherFunSuite with PlanMatchHelp with L
       .produceResults("x")
       .projection("n.prop AS x").withCardinality(100)
       .union().withCardinality(100)
-      .|.nodeByLabelScan("n", "A").withCardinality(10)
-      .nodeByLabelScan("n", "B").withCardinality(90)
+      .|.nodeByLabelScan("n", "A", IndexOrderNone).withCardinality(10)
+      .nodeByLabelScan("n", "B", IndexOrderNone).withCardinality(90)
 
     val plan = planBuilder.build()
     val rewritten = PushdownPropertyReads.pushdown(plan, planBuilder.cardinalities, Attributes(planBuilder.idGen, planBuilder.cardinalities), planBuilder.getSemanticTable)

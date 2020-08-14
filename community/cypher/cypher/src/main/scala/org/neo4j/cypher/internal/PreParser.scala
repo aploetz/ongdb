@@ -19,32 +19,40 @@
  */
 package org.neo4j.cypher.internal
 
-import org.neo4j.cypher._
+import org.neo4j.cypher.CypherExecutionMode
+import org.neo4j.cypher.CypherExpressionEngineOption
+import org.neo4j.cypher.CypherInterpretedPipesFallbackOption
+import org.neo4j.cypher.CypherOperatorEngineOption
+import org.neo4j.cypher.CypherPlannerOption
+import org.neo4j.cypher.CypherReplanOption
+import org.neo4j.cypher.CypherRuntimeOption
+import org.neo4j.cypher.CypherUpdateStrategy
+import org.neo4j.cypher.CypherVersion
 import org.neo4j.cypher.internal.cache.LFUCache
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
-import org.neo4j.exceptions.{InvalidArgumentException, SyntaxException}
-import org.neo4j.cypher.internal.PreParser._
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.exceptions.InvalidArgumentException
+import org.neo4j.exceptions.SyntaxException
 
 import scala.util.matching.Regex
 
 /**
-  * Preparses Cypher queries.
-  *
-  * The PreParser converts queries like
-  *
-  *   'CYPHER 3.5 planner=cost,runtime=slotted MATCH (n) RETURN n'
-  *
-  * into
-  *
-  * PreParsedQuery(
-  *   statement: 'MATCH (n) RETURN n'
-  *   options: QueryOptions(
-  *     planner: 'cost'
-  *     runtime: 'slotted'
-  *     version: '3.5'
-  *   )
-  * )
-  */
+ * Preparses Cypher queries.
+ *
+ * The PreParser converts queries like
+ *
+ *   'CYPHER 3.5 planner=cost,runtime=slotted MATCH (n) RETURN n'
+ *
+ * into
+ *
+ * PreParsedQuery(
+ *   statement: 'MATCH (n) RETURN n'
+ *   options: QueryOptions(
+ *     planner: 'cost'
+ *     runtime: 'slotted'
+ *     version: '3.5'
+ *   )
+ * )
+ */
 class PreParser(configuredVersion: CypherVersion,
                 configuredPlanner: CypherPlannerOption,
                 configuredRuntime: CypherRuntimeOption,
@@ -56,34 +64,42 @@ class PreParser(configuredVersion: CypherVersion,
   private val preParsedQueries = new LFUCache[String, PreParsedQuery](planCacheSize)
 
   /**
-    * Clear the pre-parser query cache.
-    *
-    * @return the number of entries cleared
-    */
+   * Clear the pre-parser query cache.
+   *
+   * @return the number of entries cleared
+   */
   def clearCache(): Long = {
     preParsedQueries.clear()
   }
 
   /**
-    * Pre-parse a user-specified cypher query.
-    *
-    * @param queryText the query
-    * @param profile true if the query should be profiled even if profile is not given as a pre-parser option
-    * @throws SyntaxException if there are syntactic errors in the pre-parser options
-    * @return the pre-parsed query
-    */
+   * Pre-parse a user-specified cypher query.
+   *
+   * @param queryText the query
+   * @param profile true if the query should be profiled even if profile is not given as a pre-parser option
+   * @param couldContainSensitiveFields true if the query might contain passwords, like some administrative commands can
+   * @throws SyntaxException if there are syntactic errors in the pre-parser options
+   * @return the pre-parsed query
+   */
   @throws(classOf[SyntaxException])
-  def preParseQuery(queryText: String, profile: Boolean = false): PreParsedQuery = {
-    val preParsedQuery = preParsedQueries.computeIfAbsent(queryText, actuallyPreParse(queryText))
-    if (profile) preParsedQuery.copy(options = preParsedQuery.options.copy(executionMode = CypherExecutionMode.profile))
-    else preParsedQuery
+  def preParseQuery(queryText: String, profile: Boolean = false, couldContainSensitiveFields: Boolean = false): PreParsedQuery = {
+    val preParsedQuery = if (couldContainSensitiveFields) {   // This is potentially any outer query running on the system database
+      actuallyPreParse(queryText)
+    } else {
+      preParsedQueries.computeIfAbsent(queryText, actuallyPreParse(queryText))
+    }
+    if (profile) {
+      preParsedQuery.copy(options = preParsedQuery.options.copy(executionMode = CypherExecutionMode.profile))
+    } else {
+      preParsedQuery
+    }
   }
 
   private def actuallyPreParse(queryText: String): PreParsedQuery = {
     val preParsedStatement = CypherPreParser(queryText)
     val isPeriodicCommit = PreParser.periodicCommitHintRegex.findFirstIn(preParsedStatement.statement.toUpperCase).nonEmpty
 
-    val options = queryOptions(preParsedStatement.options,
+    val options = PreParser.queryOptions(preParsedStatement.options,
       preParsedStatement.offset,
       isPeriodicCommit,
       configuredVersion,
@@ -158,6 +174,7 @@ object PreParser {
     val operatorEngine: PPOption[CypherOperatorEngineOption] = new PPOption(configuredOperatorEngine)
     val interpretedPipesFallback: PPOption[CypherInterpretedPipesFallbackOption] = new PPOption(configuredInterpretedPipesFallback)
     val updateStrategy: PPOption[CypherUpdateStrategy] = new PPOption(CypherUpdateStrategy.default)
+    val replan: PPOption[CypherReplanOption] = new PPOption(CypherReplanOption.default)
     var debugOptions: Set[String] = Set()
 
     def parseOptions(options: Seq[PreParserOption]): Unit =
@@ -174,7 +191,7 @@ object PreParser {
           case r: RuntimePreParserOption =>
             runtime.selectOrThrow(CypherRuntimeOption(r.name), "Can't specify multiple conflicting Cypher runtimes")
           case u: UpdateStrategyOption =>
-            updateStrategy.selectOrThrow( CypherUpdateStrategy(u.name), "Can't specify multiple conflicting update strategies")
+            updateStrategy.selectOrThrow(CypherUpdateStrategy(u.name), "Can't specify multiple conflicting update strategies")
           case DebugOption(debug) =>
             debugOptions = debugOptions + debug.toLowerCase()
           case engine: ExpressionEnginePreParserOption =>
@@ -183,6 +200,8 @@ object PreParser {
             operatorEngine.selectOrThrow(CypherOperatorEngineOption(o.name), "Can't specify multiple conflicting operator execution modes")
           case i: InterpretedPipesFallbackPreParserOption =>
             interpretedPipesFallback.selectOrThrow(CypherInterpretedPipesFallbackOption(i.name), "Can't specify multiple conflicting interpreted pipes fallback modes")
+          case r: ReplanPreParserOption =>
+            replan.selectOrThrow(CypherReplanOption(r.name), "Can't specify multiple conflicting replan strategies")
 
           case ConfigurationOptions(versionOpt, innerOptions) =>
             for (v <- versionOpt)
@@ -203,11 +222,11 @@ object PreParser {
     if (runtime.isSelected && expressionEngine.isSelected && ILLEGAL_EXPRESSION_ENGINE_RUNTIME_COMBINATIONS((expressionEngine.pick, runtime.pick)))
       throw new InvalidPreparserOption(s"Cannot combine EXPRESSION ENGINE '${expressionEngine.pick.name}' with RUNTIME '${runtime.pick.name}'")
 
-    if (runtime.isSelected && operatorEngine.isSelected && ILLEGAL_OPERATOR_ENGINE_RUNTIME_COMBINATIONS(operatorEngine.pick, runtime.pick)) {
+    if (runtime.isSelected && operatorEngine.isSelected && ILLEGAL_OPERATOR_ENGINE_RUNTIME_COMBINATIONS((operatorEngine.pick, runtime.pick))) {
       throw new InvalidPreparserOption(s"Cannot combine OPERATOR ENGINE '${operatorEngine.pick.name}' with RUNTIME '${runtime.pick.name}'")
     }
 
-    if (runtime.isSelected && interpretedPipesFallback.isSelected && ILLEGAL_INTERPRETED_PIPES_FALLBACK_RUNTIME_COMBINATIONS(interpretedPipesFallback.pick, runtime.pick)) {
+    if (runtime.isSelected && interpretedPipesFallback.isSelected && ILLEGAL_INTERPRETED_PIPES_FALLBACK_RUNTIME_COMBINATIONS((interpretedPipesFallback.pick, runtime.pick))) {
       throw new InvalidPreparserOption(s"Cannot combine INTERPRETED PIPES FALLBACK '${interpretedPipesFallback.pick.name}' with RUNTIME '${runtime.pick.name}'")
     }
 
@@ -221,6 +240,7 @@ object PreParser {
       expressionEngine.pick,
       operatorEngine.pick,
       interpretedPipesFallback.pick,
+      replan.pick,
       debugOptions)
   }
 }

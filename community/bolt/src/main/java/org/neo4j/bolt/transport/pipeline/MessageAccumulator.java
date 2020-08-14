@@ -56,7 +56,6 @@ public class MessageAccumulator extends ByteToMessageDecoder
 
             readMessageBoundary = true;
         }
-
         super.channelRead( ctx, msg );
     }
 

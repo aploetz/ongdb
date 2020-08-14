@@ -41,6 +41,8 @@ import static org.hamcrest.Matchers.containsString;
 
 public class DeprecationAcceptanceTest extends NotificationTestSupport
 {
+    private List<String> newerVersions = List.of("CYPHER 4.0 ", "CYPHER 4.1 ");
+
     // DEPRECATED PRE-PARSER OPTIONS
 
     @Test
@@ -63,24 +65,16 @@ public class DeprecationAcceptanceTest extends NotificationTestSupport
     void deprecatedProcedureCalls() throws Exception
     {
         db.getDependencyResolver().provideDependency( GlobalProcedures.class ).get().registerProcedure( TestProcedures.class );
-        Stream.of( "CYPHER 3.5", "CYPHER 4.0" ).forEach( version ->
-        {
-            assertNotifications( version + "explain CALL oldProc()",
-                    containsItem( deprecatedProcedureWarning ) );
-            assertNotifications( version + "explain CALL oldProc() RETURN 1",
-                    containsItem( deprecatedProcedureWarning ) );
-        } );
+        assertNotifications( "explain CALL oldProc()", containsItem( deprecatedProcedureWarning ) );
+        assertNotifications( "explain CALL oldProc() RETURN 1", containsItem( deprecatedProcedureWarning ) );
     }
 
     @Test
     void deprecatedProcedureResultField() throws Exception
     {
         db.getDependencyResolver().provideDependency( GlobalProcedures.class ).get().registerProcedure( TestProcedures.class );
-        Stream.of( "CYPHER 4.0" ).forEach(
-                version -> assertNotifications(
-                        version + "explain CALL changedProc() YIELD oldField RETURN oldField",
-                        containsItem( deprecatedProcedureReturnFieldWarning )
-                ) );
+        assertNotifications( newerVersions, "explain CALL changedProc() YIELD oldField RETURN oldField",
+                        containsItem( deprecatedProcedureReturnFieldWarning ) );
     }
 
     // DEPRECATED SYNTAX
@@ -88,47 +82,46 @@ public class DeprecationAcceptanceTest extends NotificationTestSupport
     @Test
     void deprecatedBindingVariableLengthRelationship()
     {
-        assertNotifications( "CYPHER 4.0 explain MATCH ()-[rs*]-() RETURN rs", containsItem( deprecatedBindingWarning
-        ) );
-
-        assertNotifications( "CYPHER 4.0 explain MATCH p = ()-[*]-() RETURN relationships(p) AS rs", containsNoItem(
-                deprecatedBindingWarning ) );
+        assertNotifications( newerVersions, "explain MATCH ()-[rs*]-() RETURN rs", containsItem( deprecatedBindingWarning ) );
+        assertNotifications( newerVersions, "explain MATCH p = ()-[*]-() RETURN relationships(p) AS rs", containsNoItem( deprecatedBindingWarning ) );
     }
 
     @Test
     void deprecatedCreateIndexSyntax()
     {
-        assertNotifications( "EXPLAIN CREATE INDEX ON :Label(prop)", containsItem( deprecatedCreateIndexSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN CREATE INDEX ON :Label(prop)", containsItem( deprecatedCreateIndexSyntax ) );
     }
 
     @Test
     void deprecatedDropIndexSyntax()
     {
-        assertNotifications( "EXPLAIN DROP INDEX ON :Label(prop)", containsItem( deprecatedDropIndexSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN DROP INDEX ON :Label(prop)", containsItem( deprecatedDropIndexSyntax ) );
     }
 
     @Test
     void deprecatedDropNodeKeyConstraintSyntax()
     {
-        assertNotifications( "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT (n.prop) IS NODE KEY", containsItem( deprecatedDropConstraintSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT (n.prop) IS NODE KEY",
+                containsItem( deprecatedDropConstraintSyntax ) );
     }
 
     @Test
     void deprecatedDropUniquenessConstraintSyntax()
     {
-        assertNotifications( "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT n.prop IS UNIQUE", containsItem( deprecatedDropConstraintSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT n.prop IS UNIQUE", containsItem( deprecatedDropConstraintSyntax ) );
     }
 
     @Test
     void deprecatedDropNodePropertyExistenceConstraintSyntax()
     {
-        assertNotifications( "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT EXISTS (n.prop)", containsItem( deprecatedDropConstraintSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN DROP CONSTRAINT ON (n:Label) ASSERT EXISTS (n.prop)", containsItem( deprecatedDropConstraintSyntax ) );
     }
 
     @Test
     void deprecatedDropRelationshipPropertyExistenceConstraintSyntax()
     {
-        assertNotifications( "EXPLAIN DROP CONSTRAINT ON ()-[r:Type]-() ASSERT EXISTS (r.prop)", containsItem( deprecatedDropConstraintSyntax ) );
+        assertNotifications( newerVersions, "EXPLAIN DROP CONSTRAINT ON ()-[r:Type]-() ASSERT EXISTS (r.prop)",
+                containsItem( deprecatedDropConstraintSyntax ) );
     }
 
     // FUNCTIONALITY DEPRECATED IN 3.5, REMOVED IN 4.0
@@ -136,69 +129,94 @@ public class DeprecationAcceptanceTest extends NotificationTestSupport
     @Test
     void deprecatedToInt()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN RETURN toInt('1') AS one", containsItem( deprecatedFeatureWarning ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN toInt('1') AS one", containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedUpper()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN RETURN upper('foo') AS upper", containsItem( deprecatedFeatureWarning ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN upper('foo') AS upper", containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedLower()
     {
-       assertNotifications( "CYPHER 3.5 EXPLAIN RETURN lower('BAR') AS lower", containsItem( deprecatedFeatureWarning ) );
+       assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN lower('BAR') AS lower", containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedRels()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN MATCH p = ()-->() RETURN rels(p) AS r", containsItem( deprecatedFeatureWarning ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN MATCH p = ()-->() RETURN rels(p) AS r", containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedFilter()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN WITH [1,2,3] AS list RETURN filter(x IN list WHERE x % 2 = 1) AS odds",
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN WITH [1,2,3] AS list RETURN filter(x IN list WHERE x % 2 = 1) AS odds",
                 containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedExtract()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN WITH [1,2,3] AS list RETURN extract(x IN list | x * 10) AS tens",
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN WITH [1,2,3] AS list RETURN extract(x IN list | x * 10) AS tens",
                 containsItem( deprecatedFeatureWarning ) );
     }
 
     @Test
     void deprecatedParameterSyntax()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN RETURN {param} AS parameter", containsItem( deprecatedParameterSyntax ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN {param} AS parameter", containsItem( deprecatedParameterSyntax ) );
     }
 
     @Test
     void deprecatedParameterSyntaxForPropertyMap()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN CREATE (:Label {props})", containsItem( deprecatedParameterSyntax ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN CREATE (:Label {props})", containsItem( deprecatedParameterSyntax ) );
     }
 
     @Test
     void deprecatedLengthOfString()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN RETURN length('a string')", containsItem( deprecatedLengthOnNonPath ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN length('a string')", containsItem( deprecatedLengthOnNonPath ) );
     }
 
     @Test
     void deprecatedLengthOfList()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN RETURN length([1, 2, 3])", containsItem( deprecatedLengthOnNonPath ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN RETURN length([1, 2, 3])", containsItem( deprecatedLengthOnNonPath ) );
     }
 
     @Test
     void deprecatedLengthOfPatternExpression()
     {
-        assertNotifications( "CYPHER 3.5 EXPLAIN MATCH (a) WHERE a.name='Alice' RETURN length((a)-->()-->())", containsItem( deprecatedLengthOnNonPath ) );
+        assertNotifications( List.of( "CYPHER 3.5 "), "EXPLAIN MATCH (a) WHERE a.name='Alice' RETURN length((a)-->()-->())",
+                containsItem( deprecatedLengthOnNonPath ) );
+    }
+
+    @Test
+    void deprecatedFutureAmbiguousRelTypeSeparator()
+    {
+        List<String> deprecatedQueries = Arrays.asList( "explain MATCH (a)-[:A|:B|:C {foo:'bar'}]-(b) RETURN a,b", "explain MATCH (a)-[x:A|:B|:C]-() RETURN a",
+                "explain MATCH (a)-[:A|:B|:C*]-() RETURN a" );
+
+        List<String> nonDeprecatedQueries =
+                Arrays.asList( "explain MATCH (a)-[:A|B|C {foo:'bar'}]-(b) RETURN a,b", "explain MATCH (a)-[:A|:B|:C]-(b) RETURN a,b",
+                        "explain MATCH (a)-[:A|B|C]-(b) RETURN a,b" );
+
+        for ( String query : deprecatedQueries )
+        {
+            assertNotifications( List.of( "CYPHER 3.5 "), query, containsItem( deprecatedSeparatorWarning ) );
+        }
+
+        // clear caches of the rewritten queries to not keep notifications around
+        db.getDependencyResolver().resolveDependency( QueryExecutionEngine.class ).clearQueryCaches();
+
+        for ( String query : nonDeprecatedQueries )
+        {
+            assertNotifications( List.of( "CYPHER 3.5 "), query, containsNoItem( deprecatedSeparatorWarning ) );
+        }
     }
 
     @Test

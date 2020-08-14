@@ -25,10 +25,16 @@ import org.neo4j.values.AnyValue;
 import org.neo4j.values.ValueMapper;
 
 import static java.lang.String.format;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOf;
 
 public final class ByteArray extends IntegralArray
 {
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance( ByteArray.class );
+
     private final byte[] value;
+
+    private boolean invalid;
 
     ByteArray( byte[] value )
     {
@@ -36,106 +42,131 @@ public final class ByteArray extends IntegralArray
         this.value = value;
     }
 
+    private void checkValid()
+    {
+        if ( invalid )
+        {
+            throw new RuntimeException( "Invalidated" );
+        }
+    }
+
     @Override
     public int length()
     {
+        checkValid();
         return value.length;
     }
 
     @Override
     public long longValue( int index )
     {
+        checkValid();
         return value[index];
     }
 
     @Override
     public int computeHash()
     {
+        checkValid();
         return NumberValues.hash( value );
     }
 
     @Override
     public <T> T map( ValueMapper<T> mapper )
     {
+        checkValid();
         return mapper.mapByteArray( this );
     }
 
     @Override
     public boolean equals( Value other )
     {
+        checkValid();
         return other.equals( value );
     }
 
     @Override
     public boolean equals( byte[] x )
     {
+        checkValid();
         return Arrays.equals( value, x );
     }
 
     @Override
     public boolean equals( short[] x )
     {
+        checkValid();
         return PrimitiveArrayValues.equals( value, x );
     }
 
     @Override
     public boolean equals( int[] x )
     {
+        checkValid();
         return PrimitiveArrayValues.equals( value, x );
     }
 
     @Override
     public boolean equals( long[] x )
     {
+        checkValid();
         return PrimitiveArrayValues.equals( value, x );
     }
 
     @Override
     public boolean equals( float[] x )
     {
+        checkValid();
         return PrimitiveArrayValues.equals( value, x );
     }
 
     @Override
     public boolean equals( double[] x )
     {
+        checkValid();
         return PrimitiveArrayValues.equals( value, x );
     }
 
     @Override
     public <E extends Exception> void writeTo( ValueWriter<E> writer ) throws E
     {
+        checkValid();
         writer.writeByteArray( value );
     }
 
     @Override
     public byte[] asObjectCopy()
     {
-        return value.clone();
+        checkValid();
+        return Arrays.copyOf( value, value.length );
     }
 
     @Override
     @Deprecated
     public byte[] asObject()
     {
+        checkValid();
         return value;
     }
 
     @Override
     public String prettyPrint()
     {
+        checkValid();
         return Arrays.toString( value );
     }
 
     @Override
     public AnyValue value( int offset )
     {
+        checkValid();
         return Values.byteValue( value[offset] );
     }
 
     @Override
     public String toString()
     {
+        checkValid();
         return format( "%s%s", getTypeName(), Arrays.toString( value ) );
     }
 
@@ -146,8 +177,14 @@ public final class ByteArray extends IntegralArray
     }
 
     @Override
-    long sizePerItem()
+    public long estimatedHeapUsage()
     {
-        return Byte.BYTES;
+        return SHALLOW_SIZE + sizeOf( value );
+    }
+
+    public void zero()
+    {
+        invalid = true;
+        Arrays.fill( value, (byte) 0 );
     }
 }

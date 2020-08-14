@@ -26,7 +26,8 @@ import java.nio.channels.ReadableByteChannel;
 
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
-import org.neo4j.io.memory.ByteBuffers;
+import org.neo4j.io.memory.HeapScopedBuffer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StoreId;
 
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeader.LOG_HEADER_VERSION_SIZE;
@@ -42,16 +43,17 @@ public class LogHeaderReader
     {
     }
 
-    public static LogHeader readLogHeader( FileSystemAbstraction fileSystem, File file ) throws IOException
+    public static LogHeader readLogHeader( FileSystemAbstraction fileSystem, File file, MemoryTracker memoryTracker ) throws IOException
     {
-        return readLogHeader( fileSystem, file, true );
+        return readLogHeader( fileSystem, file, true, memoryTracker );
     }
 
-    public static LogHeader readLogHeader( FileSystemAbstraction fileSystem, File file, boolean strict ) throws IOException
+    public static LogHeader readLogHeader( FileSystemAbstraction fileSystem, File file, boolean strict, MemoryTracker memoryTracker ) throws IOException
     {
-        try ( StoreChannel channel = fileSystem.read( file ) )
+        try ( StoreChannel channel = fileSystem.read( file );
+              var scopedBuffer = new HeapScopedBuffer( CURRENT_FORMAT_LOG_HEADER_SIZE, memoryTracker ) )
         {
-            return readLogHeader( ByteBuffers.allocate( CURRENT_FORMAT_LOG_HEADER_SIZE ), channel, strict, file );
+            return readLogHeader( scopedBuffer.getBuffer(), channel, strict, file );
         }
     }
 
@@ -144,7 +146,7 @@ public class LogHeaderReader
 
     static long decodeLogVersion( long encLogVersion )
     {
-        return encLogVersion & 0x00FFFFFFFFFFFFFFL;
+        return encLogVersion & 0x00FF_FFFF_FFFF_FFFFL;
     }
 
     static byte decodeLogFormatVersion( long encLogVersion )

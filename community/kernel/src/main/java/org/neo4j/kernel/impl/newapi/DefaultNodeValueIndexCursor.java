@@ -28,8 +28,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.security.AccessMode;
@@ -73,7 +75,10 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
     private SortedMergeJoin sortedMergeJoin = new SortedMergeJoin();
     private AccessMode accessMode;
     private boolean shortcutSecurity;
+<<<<<<< HEAD
     private boolean disableSecurity;
+=======
+>>>>>>> neo4j/4.1
     private int[] propertyIds;
 
     DefaultNodeValueIndexCursor( CursorPool<DefaultNodeValueIndexCursor> pool, DefaultNodeCursor nodeCursor )
@@ -89,16 +94,15 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
     public void initialize( IndexDescriptor descriptor,
                             IndexProgressor progressor,
                             IndexQuery[] query,
-                            IndexOrder indexOrder,
-                            boolean needsValues,
+                            IndexQueryConstraints constraints,
                             boolean indexIncludesTransactionState )
     {
         assert query != null;
         super.initialize( progressor );
+        this.indexOrder = constraints.order();
+        this.needsValues = constraints.needsValues();
         sortedMergeJoin.initialize( indexOrder );
 
-        this.indexOrder = indexOrder;
-        this.needsValues = needsValues;
         this.query = query;
 
         if ( tracer != null )
@@ -111,7 +115,7 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
         if ( !indexIncludesTransactionState && read.hasTxStateWithChanges() && query.length > 0 )
         {
            // Extract out the equality queries
-            ArrayList<Value> exactQueryValues = new ArrayList<>( query.length );
+            List<Value> exactQueryValues = new ArrayList<>( query.length );
             int i = 0;
             while ( i < query.length && query[i] instanceof IndexQuery.ExactPredicate )
             {
@@ -151,7 +155,7 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
                     // This case covers first query to be range or exact followed by range
                     // If composite index all following will be exists as well so no need to consider those
                     setNeedsValuesIfRequiresOrder();
-                    rangeQuery( descriptor, exactValues, (IndexQuery.RangePredicate) nextQuery );
+                    rangeQuery( descriptor, exactValues, (IndexQuery.RangePredicate<?>) nextQuery );
                     break;
 
                 case stringPrefix:
@@ -241,7 +245,11 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
 
     protected boolean allowed( long reference )
     {
+<<<<<<< HEAD
         if ( disableSecurity || shortcutSecurity )
+=======
+        if ( shortcutSecurity )
+>>>>>>> neo4j/4.1
         {
             return true;
         }
@@ -262,6 +270,7 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
         return allowed;
     }
 
+<<<<<<< HEAD
     /**
      * This is to let {@link Read#nodeIndexDistinctValues(IndexDescriptor, NodeValueIndexCursor, boolean)} work.
      * The security checks in {@link DefaultNodeValueIndexCursor#allowed(long)} expect the reference to be a node,
@@ -273,6 +282,8 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
         disableSecurity = true;
     }
 
+=======
+>>>>>>> neo4j/4.1
     @Override
     public boolean needsValues()
     {

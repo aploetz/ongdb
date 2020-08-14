@@ -51,14 +51,16 @@ import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.token.api.NamedToken;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
+import static java.lang.Math.toIntExact;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @EphemeralPageCacheExtension
 abstract class TokenStoreTestTemplate<R extends TokenRecord>
@@ -74,7 +76,7 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
     private DynamicStringStore nameStore;
 
     @BeforeEach
-    private void setUp() throws IOException
+    void setUp() throws IOException
     {
         File file = dir.file( "label-tokens.db" );
         File idFile = dir.file( "label-tokens.db.id" );
@@ -87,19 +89,19 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
         RecordFormats formats = RecordFormatSelector.defaultFormat();
         Config config = Config.defaults();
         nameStore = new DynamicStringStore( namesFile, namesIdFile, config, IdType.LABEL_TOKEN_NAME, generatorFactory, pageCache, logProvider,
-                TokenStore.NAME_STORE_BLOCK_SIZE, formats.dynamic(), formats.storeVersion() );
+                TokenStore.NAME_STORE_BLOCK_SIZE, formats.dynamic(), formats.storeVersion(), immutable.empty() );
         store = instantiateStore( file, idFile, generatorFactory, pageCache, logProvider, nameStore, formats, config );
-        nameStore.initialise( true );
-        store.initialise( true );
-        nameStore.start();
-        store.start();
+        nameStore.initialise( true, NULL );
+        store.initialise( true, NULL );
+        nameStore.start( NULL );
+        store.start( NULL );
     }
 
     protected abstract TokenStore<R> instantiateStore( File file, File idFile, IdGeneratorFactory generatorFactory, PageCache pageCache,
             LogProvider logProvider, DynamicStringStore nameStore, RecordFormats formats, Config config );
 
     @AfterEach
-    private void tearDown() throws IOException
+    void tearDown() throws IOException
     {
         IOUtils.closeAll( store, nameStore );
     }
@@ -108,7 +110,7 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
     void forceGetRecordSkipInUseCheck() throws IOException
     {
         createEmptyPageZero();
-        R record = store.getRecord( 7, store.newRecord(), FORCE );
+        R record = store.getRecord( 7, store.newRecord(), FORCE, NULL );
         assertFalse( record.inUse(), "Record should not be in use" );
     }
 
@@ -117,7 +119,7 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
     {
         createEmptyPageZero();
 
-        Assertions.assertThrows( InvalidRecordException.class, () -> store.getRecord( 7, store.newRecord(), NORMAL ) );
+        Assertions.assertThrows( InvalidRecordException.class, () -> store.getRecord( 7, store.newRecord(), NORMAL, NULL ) );
     }
 
     @Test
@@ -126,11 +128,11 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
         R tokenRecord = createInUseRecord( allocateNameRecords( "MyToken" ) );
         storeToken( tokenRecord );
 
-        R readBack = store.getRecord( tokenRecord.getId(), store.newRecord(), NORMAL );
-        store.ensureHeavy( readBack );
-        assertThat( readBack, is( equalTo( tokenRecord ) ) );
-        assertThat( tokenRecord.isInternal(), is( false ) );
-        assertThat( readBack.isInternal(), is( false ) );
+        R readBack = store.getRecord( tokenRecord.getId(), store.newRecord(), NORMAL, NULL );
+        store.ensureHeavy( readBack, NULL );
+        assertThat( readBack ).isEqualTo( tokenRecord );
+        assertThat( tokenRecord.isInternal() ).isEqualTo( false );
+        assertThat( readBack.isInternal() ).isEqualTo( false );
     }
 
     @Test
@@ -140,15 +142,15 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
         tokenRecord.setInternal( true );
         storeToken( tokenRecord );
 
-        R readBack = store.getRecord( tokenRecord.getId(), store.newRecord(), NORMAL );
-        store.ensureHeavy( readBack );
-        assertThat( readBack, is( equalTo( tokenRecord ) ) );
-        assertThat( tokenRecord.isInternal(), is( true ) );
-        assertThat( readBack.isInternal(), is( true ) );
+        R readBack = store.getRecord( tokenRecord.getId(), store.newRecord(), NORMAL, NULL );
+        store.ensureHeavy( readBack, NULL );
+        assertThat( readBack ).isEqualTo( tokenRecord );
+        assertThat( tokenRecord.isInternal() ).isEqualTo( true );
+        assertThat( readBack.isInternal() ).isEqualTo( true );
 
-        NamedToken token = store.getToken( Math.toIntExact( tokenRecord.getId() ) );
-        assertThat( token.name(), is( "MyInternalToken" ) );
-        assertThat( token.id(), is( Math.toIntExact( tokenRecord.getId() ) ) );
+        NamedToken token = store.getToken( toIntExact( tokenRecord.getId() ), NULL );
+        assertThat( token.name() ).isEqualTo( "MyInternalToken" );
+        assertThat( token.id() ).isIn( toIntExact( tokenRecord.getId() ) );
         assertTrue( token.isInternal() );
     }
 
@@ -166,49 +168,49 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
         storeToken( tokenC );
         storeToken( tokenD );
 
-        R readA = store.getRecord( tokenA.getId(), store.newRecord(), NORMAL );
-        R readB = store.getRecord( tokenB.getId(), store.newRecord(), NORMAL );
-        R readC = store.getRecord( tokenC.getId(), store.newRecord(), NORMAL );
-        R readD = store.getRecord( tokenD.getId(), store.newRecord(), NORMAL );
-        store.ensureHeavy( readA );
-        store.ensureHeavy( readB );
-        store.ensureHeavy( readC );
-        store.ensureHeavy( readD );
+        R readA = store.getRecord( tokenA.getId(), store.newRecord(), NORMAL, NULL );
+        R readB = store.getRecord( tokenB.getId(), store.newRecord(), NORMAL, NULL );
+        R readC = store.getRecord( tokenC.getId(), store.newRecord(), NORMAL, NULL );
+        R readD = store.getRecord( tokenD.getId(), store.newRecord(), NORMAL, NULL );
+        store.ensureHeavy( readA, NULL );
+        store.ensureHeavy( readB, NULL );
+        store.ensureHeavy( readC, NULL );
+        store.ensureHeavy( readD, NULL );
 
-        assertThat( readA, is( equalTo( tokenA ) ) );
-        assertThat( readA.isInternal(), is( tokenA.isInternal() ) );
-        assertThat( readB, is( equalTo( tokenB ) ) );
-        assertThat( readB.isInternal(), is( tokenB.isInternal() ) );
-        assertThat( readC, is( equalTo( tokenC ) ) );
-        assertThat( readC.isInternal(), is( tokenC.isInternal() ) );
-        assertThat( readD, is( equalTo( tokenD ) ) );
-        assertThat( readD.isInternal(), is( tokenD.isInternal() ) );
+        assertThat( readA ).isEqualTo( tokenA );
+        assertThat( readA.isInternal() ).isEqualTo( tokenA.isInternal() );
+        assertThat( readB ).isEqualTo( tokenB );
+        assertThat( readB.isInternal() ).isEqualTo( tokenB.isInternal() );
+        assertThat( readC ).isEqualTo( tokenC );
+        assertThat( readC.isInternal() ).isEqualTo( tokenC.isInternal() );
+        assertThat( readD ).isEqualTo( tokenD );
+        assertThat( readD.isInternal() ).isEqualTo( tokenD.isInternal() );
 
-        Iterator<NamedToken> itr = store.getAllReadableTokens().iterator();
+        Iterator<NamedToken> itr = store.getAllReadableTokens( NULL ).iterator();
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenA", 0 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenA", 0 ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenB", 1 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenB", 1 ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenC", 2, true ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenC", 2, true ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenD", 3 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenD", 3 ) );
 
-        itr = store.getTokens().iterator();
+        itr = store.getTokens( NULL ).iterator();
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenA", 0 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenA", 0 ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenB", 1 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenB", 1 ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenC", 2, true ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenC", 2, true ) );
         assertTrue( itr.hasNext() );
-        assertThat( itr.next(), is( new NamedToken( "TokenD", 3 ) ) );
+        assertThat( itr.next() ).isEqualTo( new NamedToken( "TokenD", 3 ) );
     }
 
     private R createInUseRecord( List<DynamicRecord> nameRecords )
     {
         R tokenRecord = store.newRecord();
-        tokenRecord.setId( store.nextId() );
+        tokenRecord.setId( store.nextId( NULL ) );
         tokenRecord.initialize( true, nameRecords.get( 0 ).getIntId() );
         tokenRecord.addNameRecords( nameRecords );
         tokenRecord.setCreated();
@@ -217,7 +219,7 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
 
     private void createEmptyPageZero() throws IOException
     {
-        try ( PageCursor cursor = store.pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK ) )
+        try ( PageCursor cursor = store.pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK, NULL ) )
         {
             // Create an empty page in the file. All records in here will look like they are unused.
             assertTrue( cursor.next() );
@@ -227,7 +229,7 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
     private List<DynamicRecord> allocateNameRecords( String tokenName )
     {
         List<DynamicRecord> nameRecords = new ArrayList<>();
-        nameStore.allocateRecordsFromBytes( nameRecords, tokenName.getBytes( StandardCharsets.UTF_8 ) );
+        nameStore.allocateRecordsFromBytes( nameRecords, tokenName.getBytes( StandardCharsets.UTF_8 ), NULL, INSTANCE );
         return nameRecords;
     }
 
@@ -235,8 +237,8 @@ abstract class TokenStoreTestTemplate<R extends TokenRecord>
     {
         for ( DynamicRecord nameRecord : tokenRecord.getNameRecords() )
         {
-            nameStore.updateRecord( nameRecord );
+            nameStore.updateRecord( nameRecord, NULL );
         }
-        store.updateRecord( tokenRecord );
+        store.updateRecord( tokenRecord, NULL );
     }
 }

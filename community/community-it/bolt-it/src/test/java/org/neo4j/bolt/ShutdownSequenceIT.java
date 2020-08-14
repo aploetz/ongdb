@@ -19,6 +19,10 @@
  */
 package org.neo4j.bolt;
 
+<<<<<<< HEAD
+=======
+import org.assertj.core.api.Condition;
+>>>>>>> neo4j/4.1
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -55,10 +59,13 @@ import org.neo4j.procedure.Procedure;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.rule.OtherThreadRule;
 import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
+import org.neo4j.values.AnyValue;
 
 import static java.lang.String.valueOf;
 import static java.util.concurrent.TimeUnit.MINUTES;
+<<<<<<< HEAD
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertTrue;
@@ -66,9 +73,21 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doAnswer;
 import static org.neo4j.bolt.testing.MessageMatchers.msgFailure;
 import static org.neo4j.bolt.testing.MessageMatchers.msgSuccess;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doAnswer;
+import static org.neo4j.bolt.testing.MessageConditions.either;
+import static org.neo4j.bolt.testing.MessageConditions.msgFailure;
+import static org.neo4j.bolt.testing.MessageConditions.msgRecord;
+import static org.neo4j.bolt.testing.MessageConditions.msgSuccess;
+import static org.neo4j.bolt.testing.StreamConditions.eqRecord;
+>>>>>>> neo4j/4.1
 import static org.neo4j.bolt.testing.TransportTestUtil.eventuallyDisconnects;
 import static org.neo4j.configuration.connectors.BoltConnector.EncryptionLevel.OPTIONAL;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.DEBUG;
+import static org.neo4j.logging.LogAssertions.assertThat;
 import static org.neo4j.procedure.Mode.READ;
 import static org.neo4j.values.storable.Values.stringValue;
 
@@ -80,7 +99,12 @@ public class ShutdownSequenceIT
             new SpiedAssertableLogProvider( ExecutorBoltScheduler.class );
     private final AssertableLogProvider userLogProvider = new AssertableLogProvider();
     private final EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
+<<<<<<< HEAD
     private final Neo4jWithSocket server = new Neo4jWithSocket( getClass(), getTestGraphDatabaseFactory(), fsRule, getSettingsFunction() );
+=======
+    private final Neo4jWithSocket server =
+            new Neo4jWithSocket( getTestGraphDatabaseFactory(), () -> TestDirectory.testDirectory( getClass(), fsRule.get() ), getSettingsFunction() );
+>>>>>>> neo4j/4.1
     private final TransportTestUtil util = new TransportTestUtil();
     private HostnamePort address;
     private CountDownLatch txStarted;
@@ -90,7 +114,7 @@ public class ShutdownSequenceIT
     public RuleChain ruleChain = RuleChain.outerRule( SuppressOutput.suppressAll() ).around( fsRule ).around( server );
 
     @Rule
-    public OtherThreadRule<Void> otherThread = new OtherThreadRule<>( 1, MINUTES );
+    public OtherThreadRule<Void> otherThread = new OtherThreadRule<>();
 
     @Before
     public void setup() throws Exception
@@ -133,10 +157,20 @@ public class ShutdownSequenceIT
         server.getManagementService().shutdown();
 
         // Expect the connection to have the following interactions
+<<<<<<< HEAD
         assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
         assertThat( connection, util.eventuallyReceives( msgFailure( Status.General.UnknownError, "The transaction has been terminated" ) ) );
         assertThat( connection, eventuallyDisconnects() );
         internalLogProvider.assertAtLeastOnce( inLog( ExecutorBoltScheduler.class ).debug( "Thread pool shut down" ) );
+=======
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                either( msgFailure( Status.Transaction.Terminated, "The transaction has been terminated" ),
+                        msgFailure( Status.General.UnknownError, "The transaction has been terminated" ) ) ) );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
+        assertThat( internalLogProvider ).forClass( ExecutorBoltScheduler.class )
+                .forLevel( DEBUG ).containsMessages( "Thread pool shut down" );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -149,8 +183,9 @@ public class ShutdownSequenceIT
         server.getManagementService().shutdown();
 
         // Expect the connection to be silently closed.
-        assertThat( connection, eventuallyDisconnects() );
-        internalLogProvider.assertAtLeastOnce( inLog( ExecutorBoltScheduler.class ).debug( "Thread pool shut down" ) );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
+        assertThat( internalLogProvider ).forClass( ExecutorBoltScheduler.class )
+                .forLevel( DEBUG ).containsMessages( "Thread pool shut down" );
     }
 
     @Test
@@ -175,11 +210,23 @@ public class ShutdownSequenceIT
         server.getManagementService().shutdown();
 
         // Expect the connection to have the following interactions
+<<<<<<< HEAD
         assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
         assertThat( connection, util.eventuallyReceives( MessageMatchers.msgRecord( StreamMatchers.eqRecord( equalTo( stringValue( "0" ) ) ) ) ) );
         assertThat( connection, util.eventuallyReceives( msgFailure( Status.General.UnknownError, "The transaction has been terminated" ) ) );
         assertThat( connection, eventuallyDisconnects() );
         internalLogProvider.assertAtLeastOnce( inLog( ExecutorBoltScheduler.class ).debug( "Thread pool shut down" ) );
+=======
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
+        Condition<AnyValue> equalRecord = new Condition<>( record -> record.equals( stringValue( "0" ) ), "Equal record" );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgRecord( eqRecord( equalRecord ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                either( msgFailure( Status.Transaction.Terminated, "The transaction has been terminated." ),
+                        msgFailure( Status.General.UnknownError, "The transaction has been terminated" ) ) ) );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
+        assertThat( internalLogProvider ).forClass( ExecutorBoltScheduler.class )
+                .forLevel( DEBUG ).containsMessages( "Thread pool shut down" );
+>>>>>>> neo4j/4.1
     }
 
     private TransportConnection connectAndAuthenticate() throws Exception
@@ -187,10 +234,10 @@ public class ShutdownSequenceIT
         var connection = new SocketConnection();
 
         connection.connect( address ).send( util.defaultAcceptedVersions() );
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
 
         connection.send( util.defaultAuth() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
 
         return connection;
     }

@@ -19,14 +19,16 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
+import MinMaxOrdering.NullOrdering
+
 /*
   Seek ranges describe intervals. In practice they are used to summarize all inequalities over the
   same node and property (n.prop) during planning, esp. for generating index seek by range plans.
  */
 sealed trait SeekRange[+V] {
   /**
-    * The [[V]]s that are used to define this [[SeekRange]].
-    */
+   * The [[V]]s that are used to define this [[SeekRange]].
+   */
   def arguments: Seq[V]
 }
 
@@ -174,8 +176,6 @@ final case class MaxBoundOrdering[T](inner: Ordering[T]) extends Ordering[Bound[
 }
 
 case class MinMaxOrdering[T](ordering: Ordering[T]) {
-
-  import MinMaxOrdering._
 
   val forMin = ordering.withNullsFirst
   val forMax = ordering.withNullsLast

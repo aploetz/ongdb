@@ -46,13 +46,11 @@ import org.neo4j.test.extension.ExtensionCallback;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.util.concurrent.BinaryLatch;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.neo4j.configuration.GraphDatabaseSettings.lock_manager;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.lock_manager;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_monitor_check_interval;
 import static org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo.EMBEDDED_CONNECTION;
 
@@ -61,6 +59,8 @@ public class KernelTransactionTimeoutMonitorIT
 {
     @Inject
     private GraphDatabaseAPI database;
+    @Inject
+    private KernelTransactions kernelTransactions;
 
     private static final int NODE_ID = 0;
     private ExecutorService executor;
@@ -134,7 +134,7 @@ public class KernelTransactionTimeoutMonitorIT
 
     @Timeout( 30 )
     @Test
-    void terminateExpiredTransaction() throws Exception
+    void terminateExpiredTransaction()
     {
         try ( Transaction transaction = database.beginTx() )
         {
@@ -151,14 +151,13 @@ public class KernelTransactionTimeoutMonitorIT
                 executor.submit( startAnotherTransaction() ).get();
             }
         } );
-        assertThat( exception.getMessage(), containsString( "The transaction has been terminated." ) );
+        assertThat( exception.getMessage() ).contains( "The transaction has been terminated." );
     }
 
     private void terminateOngoingTransaction()
     {
-        Set<KernelTransactionHandle> kernelTransactionHandles =
-                database.getDependencyResolver().resolveDependency( KernelTransactions.class ).activeTransactions();
-        assertThat( kernelTransactionHandles, hasSize( 1 ) );
+        Set<KernelTransactionHandle> kernelTransactionHandles = kernelTransactions.activeTransactions();
+        assertThat( kernelTransactionHandles ).hasSize( 1 );
         for ( KernelTransactionHandle kernelTransactionHandle : kernelTransactionHandles )
         {
             kernelTransactionHandle.markForTermination( Status.Transaction.Terminated );
@@ -170,7 +169,7 @@ public class KernelTransactionTimeoutMonitorIT
         return () ->
         {
             try ( InternalTransaction tx = database
-                    .beginTransaction( KernelTransaction.Type.implicit, LoginContext.AUTH_DISABLED, EMBEDDED_CONNECTION, 1, TimeUnit.SECONDS ) )
+                    .beginTransaction( KernelTransaction.Type.IMPLICIT, LoginContext.AUTH_DISABLED, EMBEDDED_CONNECTION, 1, TimeUnit.SECONDS ) )
             {
                 Node node = tx.getNodeById( NODE_ID );
                 node.setProperty( "c", "d" );

@@ -41,12 +41,15 @@ import java.util.stream.Stream;
 import org.neo4j.collection.PrimitiveLongCollections;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.schema.IndexCapability;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexValueCapability;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.api.index.IndexReader;
@@ -55,6 +58,7 @@ import org.neo4j.kernel.api.index.IndexSampler;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.schema.SimpleNodeValueClient;
+import org.neo4j.test.rule.PageCacheConfig;
 import org.neo4j.values.storable.CoordinateReferenceSystem;
 import org.neo4j.values.storable.PointValue;
 import org.neo4j.values.storable.RandomValues;
@@ -64,10 +68,7 @@ import org.neo4j.values.storable.ValueType;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.String.format;
-import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,7 +79,11 @@ import static org.neo4j.function.Predicates.alwaysTrue;
 import static org.neo4j.function.Predicates.in;
 import static org.neo4j.internal.helpers.collection.Iterables.asUniqueSet;
 import static org.neo4j.internal.helpers.collection.Iterators.filter;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.constrained;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unorderedValues;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.IndexUpdateMode.ONLINE;
 import static org.neo4j.kernel.impl.index.schema.ValueCreatorUtil.countUniqueValues;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.change;
@@ -93,10 +98,10 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     @BeforeEach
     void setupAccessor() throws IOException
     {
-        accessor = makeAccessor();
+        accessor = makeAccessor( pageCache );
     }
 
-    abstract NativeIndexAccessor<KEY,VALUE> makeAccessor() throws IOException;
+    abstract NativeIndexAccessor<KEY,VALUE> makeAccessor( PageCache pageCache ) throws IOException;
 
     abstract IndexCapability indexCapability();
 
@@ -112,7 +117,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     void shouldHandleCloseWithoutCallsToProcess() throws Exception
     {
         // given
-        IndexUpdater updater = accessor.newUpdater( ONLINE );
+        IndexUpdater updater = accessor.newUpdater( ONLINE, NULL );
 
         // when
         updater.close();
@@ -125,7 +130,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     void processMustThrowAfterClose() throws Exception
     {
         // given
-        IndexUpdater updater = accessor.newUpdater( ONLINE );
+        IndexUpdater updater = accessor.newUpdater( ONLINE, NULL );
         updater.close();
 
         assertThrows( IllegalStateException.class, () -> updater.process( simpleUpdate() ) );
@@ -136,7 +141,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     {
         // given
         IndexEntryUpdate<IndexDescriptor>[] updates = someUpdatesSingleType();
-        try ( IndexUpdater updater = accessor.newUpdater( ONLINE ) )
+        try ( IndexUpdater updater = accessor.newUpdater( ONLINE, NULL ) )
         {
             // when
             processAll( updater, updates );
@@ -227,7 +232,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         {
             // when
             IndexEntryUpdate<IndexDescriptor> update = valueCreatorUtil.randomUpdateGenerator( random ).next();
-            long count = reader.countIndexedNodes( 123, valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), update.values()[0] );
+            long count = reader.countIndexedNodes( 123, NULL, valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), update.values()[0] );
 
             // then
             assertEquals( 0, count );
@@ -246,7 +251,8 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         {
             for ( IndexEntryUpdate<IndexDescriptor> update : updates )
             {
-                long count = reader.countIndexedNodes( update.getEntityId(), valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), update.values() );
+                long count = reader.countIndexedNodes( update.getEntityId(), NULL,
+                        valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), update.values() );
 
                 // then
                 assertEquals( 1, count );
@@ -254,7 +260,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
 
             // and when
             Iterator<IndexEntryUpdate<IndexDescriptor>> generator = filter( skipExisting( updates ), valueCreatorUtil.randomUpdateGenerator( random ) );
-            long count = reader.countIndexedNodes( 123, valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), generator.next().values()[0] );
+            long count = reader.countIndexedNodes( 123, NULL, valueCreatorUtil.indexDescriptor.schema().getPropertyIds(), generator.next().values()[0] );
 
             // then
             assertEquals( 0, count );
@@ -274,9 +280,9 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         for ( IndexEntryUpdate<IndexDescriptor> update : updates )
         {
             int[] propKeys = valueCreatorUtil.indexDescriptor.schema().getPropertyIds();
-            long countWithMismatchingData = reader.countIndexedNodes( update.getEntityId() + 1, propKeys, update.values() );
-            long countWithNonExistentEntityId = reader.countIndexedNodes( NON_EXISTENT_ENTITY_ID, propKeys, update.values() );
-            long countWithNonExistentValue = reader.countIndexedNodes( update.getEntityId(), propKeys, generateUniqueValue( updates ) );
+            long countWithMismatchingData = reader.countIndexedNodes( update.getEntityId() + 1, NULL, propKeys, update.values() );
+            long countWithNonExistentEntityId = reader.countIndexedNodes( NON_EXISTENT_ENTITY_ID, NULL, propKeys, update.values() );
+            long countWithNonExistentValue = reader.countIndexedNodes( update.getEntityId(), NULL, propKeys, generateUniqueValue( updates ) );
 
             // then
             assertEquals( 0, countWithMismatchingData );
@@ -549,7 +555,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         // when
         for ( IndexEntryUpdate<IndexDescriptor> update : updates )
         {
-            try ( IndexUpdater updater = accessor.newUpdater( ONLINE ) )
+            try ( IndexUpdater updater = accessor.newUpdater( ONLINE, NULL ) )
             {
                 updater.process( update );
             }
@@ -564,9 +570,9 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     void requestForSecondUpdaterMustThrow() throws Exception
     {
         // given
-        try ( IndexUpdater ignored = accessor.newUpdater( ONLINE ) )
+        try ( IndexUpdater ignored = accessor.newUpdater( ONLINE, NULL ) )
         {
-            assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE ) );
+            assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE, NULL ) );
         }
     }
 
@@ -584,6 +590,29 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     }
 
     @Test
+    void dropShouldNotFlushContent() throws IOException
+    {
+        // given
+        accessor.close();
+        DefaultPageCacheTracer tracer = new DefaultPageCacheTracer();
+        try ( PageCache pageCache = pageCacheExtension.getPageCache( fs, PageCacheConfig.config().withTracer( tracer ) ) )
+        {
+            accessor = makeAccessor( pageCache );
+            long baseline = tracer.flushes();
+            accessor.force( IOLimiter.UNLIMITED, NULL );
+            long preDrop = tracer.flushes();
+            assertThat( preDrop ).isGreaterThan( baseline );
+
+            // when
+            accessor.drop();
+
+            // then
+            long postDrop = tracer.flushes();
+            assertEquals( preDrop, postDrop );
+        }
+    }
+
+    @Test
     void forceShouldCheckpointTree() throws Exception
     {
         // given
@@ -591,7 +620,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         processAll( data );
 
         // when
-        accessor.force( IOLimiter.UNLIMITED );
+        accessor.force( IOLimiter.UNLIMITED, NULL );
         accessor.close();
 
         // then
@@ -635,7 +664,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
               IndexSampler sampler = reader.createSampler() )
         {
             // when
-            IndexSample sample = sampler.sampleIndex();
+            IndexSample sample = sampler.sampleIndex( NULL );
 
             // then
             assertEquals( updates.length, sample.indexSize() );
@@ -659,7 +688,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         // given
         accessor.drop();
 
-        assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE ) );
+        assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE, NULL ) );
     }
 
     @Test
@@ -677,7 +706,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         // given
         accessor.close();
 
-        assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE ) );
+        assertThrows( IllegalStateException.class, () -> accessor.newUpdater( ONLINE, NULL ) );
     }
 
     @Test
@@ -688,7 +717,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         processAll( updates );
 
         // when
-        Set<Long> ids = asUniqueSet( accessor.newAllEntriesReader() );
+        Set<Long> ids = asUniqueSet( accessor.newAllEntriesReader( NULL ) );
 
         // then
         Set<Long> expectedIds = Stream.of( updates )
@@ -701,7 +730,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     void shouldSeeNoEntriesInAllEntriesReaderOnEmptyIndex()
     {
         // when
-        Set<Long> ids = asUniqueSet( accessor.newAllEntriesReader() );
+        Set<Long> ids = asUniqueSet( accessor.newAllEntriesReader( NULL ) );
 
         // then
         Set<Long> expectedIds = Collections.emptySet();
@@ -723,7 +752,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
             IndexQuery.ExactPredicate filter = IndexQuery.exact( 0, valueOf( updates[1] ) );
             IndexQuery rangeQuery = valueCreatorUtil.rangeQuery( valueOf( updates[0] ), true, valueOf( updates[2] ), true );
             IndexProgressor.EntityValueClient filterClient = filterClient( iter, filter );
-            reader.query( NULL_CONTEXT, filterClient, IndexOrder.NONE, false, rangeQuery );
+            reader.query( NULL_CONTEXT, filterClient, unconstrained(), rangeQuery );
 
             // then
             assertTrue( iter.hasNext() );
@@ -775,7 +804,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
                 }
 
                 SimpleNodeValueClient client = new SimpleNodeValueClient();
-                reader.query( NULL_CONTEXT, client, supportedOrder, true, supportedQuery );
+                reader.query( NULL_CONTEXT, client, constrained( supportedOrder, true ), supportedQuery );
                 int i = 0;
                 while ( client.next() )
                 {
@@ -797,11 +826,8 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
             IndexQuery.ExactPredicate unsupportedQuery = IndexQuery.exact( 0, PointValue.MAX_VALUE ); // <- Any spatial value would do
 
             var e = assertThrows( UnsupportedOperationException.class, () ->
-                reader.query( NULL_CONTEXT, new SimpleNodeValueClient(), unsupportedOrder, false, unsupportedQuery ) );
-            assertThat( e.getMessage(), allOf(
-                containsString( "unsupported order" ),
-                containsString( unsupportedOrder.toString() ),
-                containsString( unsupportedQuery.toString() ) ) );
+                reader.query( NULL_CONTEXT, new SimpleNodeValueClient(), constrained( unsupportedOrder, false ), unsupportedQuery ) );
+            assertThat( e.getMessage() ).contains( "unsupported order" ).contains( unsupportedOrder.toString() ).contains( unsupportedQuery.toString() );
         }
     }
 
@@ -855,7 +881,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         try ( IndexReader reader = accessor.newReader() )
         {
                 SimpleNodeValueClient client = new SimpleNodeValueClient();
-                reader.query( NULL_CONTEXT, client, IndexOrder.NONE, true, supportedQuery );
+                reader.query( NULL_CONTEXT, client, unorderedValues(), supportedQuery );
 
                 // then
                 while ( client.next() )
@@ -863,7 +889,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
                     Value foundValue = client.values[0];
                     assertTrue( expectedValues.remove( foundValue ), "found value that was not expected " + foundValue );
                 }
-            assertThat( "did not find all expected values", expectedValues.size(), is( 0 ) );
+            assertThat( expectedValues.size() ).as( "did not find all expected values" ).isEqualTo( 0 );
         }
     }
 
@@ -898,10 +924,9 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
         {
             @Override
             public void initialize( IndexDescriptor descriptor, IndexProgressor progressor,
-                    IndexQuery[] query, IndexOrder indexOrder, boolean needsValues,
-                    boolean indexIncludesTransactionState )
+                    IndexQuery[] query, IndexQueryConstraints constraints, boolean indexIncludesTransactionState )
             {
-                iter.initialize( descriptor, progressor, query, indexOrder, needsValues, indexIncludesTransactionState );
+                iter.initialize( descriptor, progressor, query, constraints, indexIncludesTransactionState );
             }
 
             @Override
@@ -926,7 +951,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     private static NodeValueIterator query( IndexReader reader, IndexQuery query ) throws IndexNotApplicableKernelException
     {
         NodeValueIterator client = new NodeValueIterator();
-        reader.query( NULL_CONTEXT, client, IndexOrder.NONE, false, query );
+        reader.query( NULL_CONTEXT, client, unconstrained(), query );
         return client;
     }
 
@@ -1047,7 +1072,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
     private void processAll( IndexEntryUpdate<IndexDescriptor>... updates )
             throws IndexEntryConflictException
     {
-        try ( IndexUpdater updater = accessor.newUpdater( ONLINE ) )
+        try ( IndexUpdater updater = accessor.newUpdater( ONLINE, NULL ) )
         {
             for ( IndexEntryUpdate<IndexDescriptor> update : updates )
             {
@@ -1058,7 +1083,7 @@ abstract class NativeIndexAccessorTests<KEY extends NativeIndexKey<KEY>, VALUE e
 
     private void forceAndCloseAccessor()
     {
-        accessor.force( IOLimiter.UNLIMITED );
+        accessor.force( IOLimiter.UNLIMITED, NULL );
         closeAccessor();
     }
 

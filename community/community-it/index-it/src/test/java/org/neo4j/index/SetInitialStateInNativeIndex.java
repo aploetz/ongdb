@@ -23,18 +23,19 @@ import java.io.File;
 import java.io.IOException;
 
 import org.neo4j.index.internal.gbptree.GBPTree;
+import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.impl.muninn.StandalonePageCacheFactory;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
-import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.kernel.impl.index.schema.NativeIndexHeaderWriter;
 import org.neo4j.kernel.impl.index.schema.NativeIndexes;
 import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_WRITER;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 public class SetInitialStateInNativeIndex extends NativeIndexRestartAction
 {
@@ -49,9 +50,9 @@ public class SetInitialStateInNativeIndex extends NativeIndexRestartAction
     @Override
     protected void runOnDirectoryStructure( FileSystemAbstraction fs, IndexDirectoryStructure indexDirectoryStructure ) throws IOException
     {
-        PageCache pageCache = StandalonePageCacheFactory.createPageCache( fs, JobSchedulerFactory.createInitialisedScheduler() );
+        PageCache pageCache = StandalonePageCacheFactory.createPageCache( fs, JobSchedulerFactory.createInitialisedScheduler(), PageCacheTracer.NULL );
         int filesChanged = setInitialState( fs, indexDirectoryStructure.rootDirectory(), pageCache );
-        assertThat( "couldn't find any index to set state on", filesChanged, greaterThanOrEqualTo( 1 ) );
+        assertThat( filesChanged ).as( "couldn't find any index to set state on" ).isGreaterThanOrEqualTo( 1 );
     }
 
     private int setInitialState( FileSystemAbstraction fs, File fileOrDir, PageCache pageCache ) throws IOException
@@ -85,7 +86,7 @@ public class SetInitialStateInNativeIndex extends NativeIndexRestartAction
         {
             // Try and read initial state, if we succeed then we know this file is a native index file
             // and we overwrite initial state with target.
-            NativeIndexes.readState( pageCache, fileOrDir );
+            NativeIndexes.readState( pageCache, fileOrDir, NULL );
             return true;
         }
         catch ( Throwable t )
@@ -97,6 +98,6 @@ public class SetInitialStateInNativeIndex extends NativeIndexRestartAction
     private static void overwriteState( PageCache pageCache, File indexFile, byte state ) throws IOException
     {
         NativeIndexHeaderWriter stateWriter = new NativeIndexHeaderWriter( state, NO_HEADER_WRITER );
-        GBPTree.overwriteHeader( pageCache, indexFile, stateWriter );
+        GBPTree.overwriteHeader( pageCache, indexFile, stateWriter, NULL );
     }
 }

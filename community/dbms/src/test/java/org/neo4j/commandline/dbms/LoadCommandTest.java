@@ -56,9 +56,7 @@ import org.neo4j.test.rule.TestDirectory;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -68,9 +66,12 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+<<<<<<< HEAD
+=======
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
+>>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_TX_LOGS_ROOT_DIR_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.data_directory;
-import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_database;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
@@ -114,7 +115,7 @@ class LoadCommandTest
         {
             CommandLine.usage( command, new PrintStream( out ) );
         }
-        assertThat( baos.toString().trim(), equalTo( String.format(
+        assertThat( baos.toString().trim() ).isEqualTo( String.format(
                 "Load a database from an archive created with the dump command.%n" +
                         "%n" +
                         "USAGE%n" +
@@ -140,7 +141,11 @@ class LoadCommandTest
                         "      --force         If an existing database should be replaced.%n" +
                         "      --info          Print meta-data information about the archive file,%n" +
                         "                        instead of loading the contained database."
+<<<<<<< HEAD
         ) ) );
+=======
+        ) );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -218,7 +223,7 @@ class LoadCommandTest
 
         doAnswer( ignored ->
         {
-            assertThat( Files.exists( marker ), equalTo( false ) );
+            assertThat( Files.exists( marker ) ).isEqualTo( false );
             return null;
         } ).when( loader ).load( any(), any() );
 
@@ -234,7 +239,7 @@ class LoadCommandTest
 
         doAnswer( ignored ->
         {
-            assertThat( Files.exists( databaseDirectory ), equalTo( true ) );
+            assertThat( Files.exists( databaseDirectory ) ).isEqualTo( true );
             return null;
         } ).when( loader ).load( any(), any() );
 
@@ -296,8 +301,28 @@ class LoadCommandTest
     {
         doThrow( IncorrectFormat.class ).when( loader ).load( any(), any() );
         CommandFailedException commandFailed = assertThrows( CommandFailedException.class, () -> execute( "foo", archive ) );
-        assertThat( commandFailed.getMessage(), containsString( archive.toString() ) );
-        assertThat( commandFailed.getMessage(), containsString( "valid Neo4j archive" ) );
+        assertThat( commandFailed.getMessage() ).contains( archive.toString() );
+        assertThat( commandFailed.getMessage() ).contains( "valid Neo4j archive" );
+    }
+
+    @Test
+    void infoMustPrintArchiveMetaData() throws IOException
+    {
+        when( loader.getMetaData( archive ) ).thenReturn( new Loader.DumpMetaData( "ZSTD", "42", "1337" ) );
+        var baos = new ByteArrayOutputStream();
+        try ( PrintStream out = new PrintStream( baos ) )
+        {
+            Path dir = Path.of( "." );
+            var command = new LoadCommand( new ExecutionContext( dir, dir, out, out, testDirectory.getFileSystem() ), loader );
+            CommandLine.populateCommand( command,
+                    "--info",
+                    "--from",
+                    archive.toAbsolutePath().toString() );
+            command.execute();
+            out.flush();
+        }
+        String output = baos.toString();
+        assertThat( output ).contains( "ZSTD", "42", "1337" );
     }
 
     @Test

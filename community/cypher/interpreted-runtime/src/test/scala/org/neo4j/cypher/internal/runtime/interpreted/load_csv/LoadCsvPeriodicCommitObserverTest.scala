@@ -22,11 +22,19 @@ package org.neo4j.cypher.internal.runtime.interpreted.load_csv
 import java.net.URL
 
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{ExternalCSVResource, LoadCsvIterator}
-import org.neo4j.cypher.internal.runtime.{QueryContext, QueryTransactionalContext, ResourceManager}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyBoolean
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.Mockito.never
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryTransactionalContext
+import org.neo4j.cypher.internal.runtime.ResourceManager
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExternalCSVResource
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.LoadCsvIterator
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class LoadCsvPeriodicCommitObserverTest extends CypherFunSuite {
   private val DEFAULT_BUFFER_SIZE = 4 * 1024 * 1024
@@ -62,7 +70,7 @@ class LoadCsvPeriodicCommitObserverTest extends CypherFunSuite {
 
     // when
     val iterator = resourceUnderTest.getCsvIterator(url, fieldTerminator = None, legacyCsvQuoteEscaping = false,
-                                                    DEFAULT_BUFFER_SIZE, headers = true)
+      DEFAULT_BUFFER_SIZE, headers = true)
     verify(transactionalContext, never()).commitAndRestartTx()
 
     iterator.next() should equal(Array("header"))
@@ -84,9 +92,9 @@ class LoadCsvPeriodicCommitObserverTest extends CypherFunSuite {
       thenReturn(getIterator(Iterator(Array("outer1"),Array("outer2")))).
       thenReturn(getIterator(Iterator(Array("inner1"),Array("inner2"),Array("inner3"),Array("inner4"))))
     val iterator1 = resourceUnderTest.getCsvIterator(url, fieldTerminator = None, legacyCsvQuoteEscaping = false,
-                                                     DEFAULT_BUFFER_SIZE)
+      DEFAULT_BUFFER_SIZE)
     val iterator2 = resourceUnderTest.getCsvIterator(url, fieldTerminator = None, legacyCsvQuoteEscaping = false,
-                                                     DEFAULT_BUFFER_SIZE)
+      DEFAULT_BUFFER_SIZE)
 
     // When
     iterator1.next()
@@ -106,7 +114,7 @@ class LoadCsvPeriodicCommitObserverTest extends CypherFunSuite {
 
     // When
     verify(resource).getCsvIterator(url, Some(";"), legacyCsvQuoteEscaping = false,
-                                              DEFAULT_BUFFER_SIZE, false)
+      DEFAULT_BUFFER_SIZE, false)
   }
 
   override protected def beforeEach() {

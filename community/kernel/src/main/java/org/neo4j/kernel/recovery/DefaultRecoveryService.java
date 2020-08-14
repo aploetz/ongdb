@@ -21,6 +21,7 @@ package org.neo4j.kernel.recovery;
 
 import java.io.IOException;
 
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.TransactionToApply;
 import org.neo4j.kernel.impl.transaction.CommittedTransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
@@ -66,9 +67,9 @@ public class DefaultRecoveryService implements RecoveryService
     }
 
     @Override
-    public RecoveryApplier getRecoveryApplier( TransactionApplicationMode mode ) throws Exception
+    public RecoveryApplier getRecoveryApplier( TransactionApplicationMode mode, PageCursorTracer cursorTracer )
     {
-        return new RecoveryVisitor( storageEngine, mode );
+        return new RecoveryVisitor( storageEngine, mode, cursorTracer );
     }
 
     @Override
@@ -85,7 +86,7 @@ public class DefaultRecoveryService implements RecoveryService
 
     @Override
     public void transactionsRecovered( CommittedTransactionRepresentation lastRecoveredTransaction, LogPosition lastRecoveredTransactionPosition,
-            LogPosition positionAfterLastRecoveredTransaction, boolean missingLogs )
+            LogPosition positionAfterLastRecoveredTransaction, boolean missingLogs, PageCursorTracer cursorTracer )
     {
         if ( missingLogs )
         {
@@ -97,7 +98,7 @@ public class DefaultRecoveryService implements RecoveryService
             long logVersion = lastClosedTransaction[1];
             log.warn( "Recovery detected that transaction logs were missing. " +
                     "Resetting offset of last closed transaction to point to the head of %d transaction log file.", logVersion );
-            transactionIdStore.resetLastClosedTransaction( lastClosedTransaction[0], logVersion, CURRENT_FORMAT_LOG_HEADER_SIZE, true );
+            transactionIdStore.resetLastClosedTransaction( lastClosedTransaction[0], logVersion, CURRENT_FORMAT_LOG_HEADER_SIZE, true, cursorTracer );
             return;
         }
         if ( lastRecoveredTransaction != null )
@@ -105,7 +106,7 @@ public class DefaultRecoveryService implements RecoveryService
             LogEntryCommit commitEntry = lastRecoveredTransaction.getCommitEntry();
             transactionIdStore
                     .setLastCommittedAndClosedTransactionId( commitEntry.getTxId(), lastRecoveredTransaction.getChecksum(), commitEntry.getTimeWritten(),
-                            lastRecoveredTransactionPosition.getByteOffset(), lastRecoveredTransactionPosition.getLogVersion() );
+                            lastRecoveredTransactionPosition.getByteOffset(), lastRecoveredTransactionPosition.getLogVersion(), cursorTracer );
         }
         else
         {
@@ -116,21 +117,23 @@ public class DefaultRecoveryService implements RecoveryService
             log.warn( "Recovery detected that transaction logs tail can't be trusted. " +
                     "Resetting offset of last closed transaction to point to the last recoverable log position: " + positionAfterLastRecoveredTransaction );
             transactionIdStore.resetLastClosedTransaction( lastClosedTransactionId, positionAfterLastRecoveredTransaction.getLogVersion(),
-                    positionAfterLastRecoveredTransaction.getByteOffset(), false );
+                    positionAfterLastRecoveredTransaction.getByteOffset(), false, cursorTracer );
         }
 
-        logVersionRepository.setCurrentLogVersion( positionAfterLastRecoveredTransaction.getLogVersion() );
+        logVersionRepository.setCurrentLogVersion( positionAfterLastRecoveredTransaction.getLogVersion(), cursorTracer );
     }
 
     static class RecoveryVisitor implements RecoveryApplier
     {
         private final StorageEngine storageEngine;
         private final TransactionApplicationMode mode;
+        private final PageCursorTracer cursorTracer;
 
-        RecoveryVisitor( StorageEngine storageEngine, TransactionApplicationMode mode )
+        RecoveryVisitor( StorageEngine storageEngine, TransactionApplicationMode mode, PageCursorTracer cursorTracer )
         {
             this.storageEngine = storageEngine;
             this.mode = mode;
+            this.cursorTracer = cursorTracer;
         }
 
         @Override
@@ -138,7 +141,7 @@ public class DefaultRecoveryService implements RecoveryService
         {
             TransactionRepresentation txRepresentation = transaction.getTransactionRepresentation();
             long txId = transaction.getCommitEntry().getTxId();
-            TransactionToApply tx = new TransactionToApply( txRepresentation, txId );
+            TransactionToApply tx = new TransactionToApply( txRepresentation, txId, cursorTracer );
             tx.commitment( NO_COMMITMENT, txId );
             tx.logPosition( transaction.getStartEntry().getStartPosition() );
             storageEngine.apply( tx, mode );

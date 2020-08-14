@@ -25,7 +25,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.JobScheduler;
@@ -39,7 +38,7 @@ class IndexSamplingJobTracker
 
     private boolean stopped;
 
-    IndexSamplingJobTracker( IndexSamplingConfig config, JobScheduler jobScheduler )
+    IndexSamplingJobTracker( JobScheduler jobScheduler )
     {
         this.jobScheduler = jobScheduler;
         this.executingJobs = new HashSet<>();
@@ -52,13 +51,13 @@ class IndexSamplingJobTracker
         {
             if ( stopped )
             {
-                return JobHandle.nullInstance;
+                return JobHandle.EMPTY;
             }
 
             long indexId = samplingJob.indexId();
             if ( executingJobs.contains( indexId ) )
             {
-                return JobHandle.nullInstance;
+                return JobHandle.EMPTY;
             }
 
             executingJobs.add( indexId );

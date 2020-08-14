@@ -15,7 +15,11 @@
   </properties>
 
   <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
   <artifactId>ongdb-procedure-api</artifactId>
+=======
+  <artifactId>neo4j-procedure-api</artifactId>
+>>>>>>> neo4j/4.1
 
   <packaging>jar</packaging>
   <name>ONgDB - Procedure API</name>
@@ -50,6 +54,7 @@
 
   <dependencies>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-graphdb-api</artifactId>
       <version>${project.version}</version>
@@ -58,6 +63,10 @@
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-logging</artifactId>
       <version>${project.version}</version>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>annotations</artifactId>
+>>>>>>> neo4j/4.1
     </dependency>
   </dependencies>
 </project>

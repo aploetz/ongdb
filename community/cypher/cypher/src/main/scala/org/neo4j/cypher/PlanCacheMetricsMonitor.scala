@@ -21,15 +21,15 @@ package org.neo4j.cypher
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.neo4j.cypher.internal.ExecutionEngineQueryCacheMonitor
 import org.neo4j.cypher.internal.QueryCache.ParameterTypeMap
-import org.neo4j.cypher.internal.StringCacheMonitor
 import org.neo4j.internal.helpers.collection.Pair
 
-class PlanCacheMetricsMonitor extends StringCacheMonitor {
+class PlanCacheMetricsMonitor extends ExecutionEngineQueryCacheMonitor {
   private val counter = new AtomicLong()
   private val waitTime = new AtomicLong()
 
-  override def cacheDiscard(ignored1: Pair[String, ParameterTypeMap], ignored2: String, secondsSinceReplan: Int): Unit = {
+  override def cacheDiscard(ignored1: Pair[String, ParameterTypeMap], ignored2: String, secondsSinceReplan: Int, maybeReason: Option[String]): Unit = {
     counter.incrementAndGet()
     waitTime.addAndGet(secondsSinceReplan)
   }

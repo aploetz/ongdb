@@ -19,23 +19,26 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.mockito.Mockito._
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.exceptions.{CypherTypeException, InvalidArgumentException}
-import org.neo4j.graphdb.{Node, Relationship}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.exceptions.CypherTypeException
+import org.neo4j.exceptions.InvalidArgumentException
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Relationship
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 import org.neo4j.values.storable.Values.longValue
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 class ContainerIndexTest extends CypherFunSuite {
 
   val qtx = mock[QueryContext]
   implicit val state = QueryStateHelper.empty.withQueryContext(qtx)
-  val ctx = ExecutionContext.empty
+  val ctx = CypherRow.empty
   val expectedNull: AnyValue = Values.NO_VALUE
 
   test("handles collection lookup") {

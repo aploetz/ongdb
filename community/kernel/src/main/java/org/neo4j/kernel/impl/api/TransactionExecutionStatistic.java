@@ -28,7 +28,8 @@ public class TransactionExecutionStatistic
     public static final TransactionExecutionStatistic NOT_AVAILABLE = new TransactionExecutionStatistic();
 
     private final Long heapAllocatedBytes;
-    private final Long directAllocatedBytes;
+    private final Long nativeAllocatedBytes;
+    private final Long estimatedUsedHeapMemory;
     private final Long cpuTimeMillis;
     private final long waitTimeMillis;
     private final long elapsedTimeMillis;
@@ -39,7 +40,8 @@ public class TransactionExecutionStatistic
     private TransactionExecutionStatistic()
     {
         heapAllocatedBytes = null;
-        directAllocatedBytes = null;
+        nativeAllocatedBytes = null;
+        estimatedUsedHeapMemory = null;
         cpuTimeMillis = null;
         waitTimeMillis = -1;
         elapsedTimeMillis = -1;
@@ -55,7 +57,8 @@ public class TransactionExecutionStatistic
         KernelTransactionImplementation.Statistics statistics = tx.getStatistics();
         this.waitTimeMillis = NANOSECONDS.toMillis( statistics.getWaitingTimeNanos( nowNanos ) );
         this.heapAllocatedBytes = nullIfNegative( statistics.heapAllocatedBytes() );
-        this.directAllocatedBytes = nullIfNegative( statistics.directAllocatedBytes() );
+        this.nativeAllocatedBytes = nullIfNegative( statistics.usedNativeMemory() );
+        this.estimatedUsedHeapMemory = nullIfNegative( statistics.estimatedHeapMemory() );
         this.cpuTimeMillis = nullIfNegative( statistics.cpuTimeMillis() );
         this.pageFaults = statistics.totalTransactionPageCacheFaults();
         this.pageHits = statistics.totalTransactionPageCacheHits();
@@ -63,14 +66,19 @@ public class TransactionExecutionStatistic
         this.idleTimeMillis = this.cpuTimeMillis != null ? elapsedTimeMillis - this.cpuTimeMillis - waitTimeMillis : null;
     }
 
+    public Long getEstimatedUsedHeapMemory()
+    {
+        return estimatedUsedHeapMemory;
+    }
+
     public Long getHeapAllocatedBytes()
     {
         return heapAllocatedBytes;
     }
 
-    public Long getDirectAllocatedBytes()
+    public Long getNativeAllocatedBytes()
     {
-        return directAllocatedBytes;
+        return nativeAllocatedBytes;
     }
 
     public Long getCpuTimeMillis()

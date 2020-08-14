@@ -19,6 +19,8 @@
  */
 package org.neo4j.index.internal.gbptree;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.file.OpenOption;
 import java.util.function.Consumer;
@@ -26,10 +28,13 @@ import java.util.function.Consumer;
 import org.neo4j.index.internal.gbptree.GBPTree.Monitor;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 
+import static org.eclipse.collections.impl.factory.Sets.immutable;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_READER;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_WRITER;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_MONITOR;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 
 /**
  * Convenient builder for a {@link GBPTree}. Either created using zero-argument constructor for maximum
@@ -49,7 +54,8 @@ public class GBPTreeBuilder<KEY,VALUE>
     private Consumer<PageCursor> headerWriter = NO_HEADER_WRITER;
     private RecoveryCleanupWorkCollector recoveryCleanupWorkCollector = RecoveryCleanupWorkCollector.immediate();
     private boolean readOnly;
-    private OpenOption[] openOptions = {};
+    private PageCacheTracer pageCacheTracer = NULL;
+    private ImmutableSet<OpenOption> openOptions = immutable.empty();
 
     public GBPTreeBuilder( PageCache pageCache, File file, Layout<KEY,VALUE> layout )
     {
@@ -112,7 +118,13 @@ public class GBPTreeBuilder<KEY,VALUE>
         return this;
     }
 
-    public GBPTreeBuilder<KEY,VALUE> with( OpenOption... openOptions )
+    public GBPTreeBuilder<KEY,VALUE> with( PageCacheTracer pageCacheTracer )
+    {
+        this.pageCacheTracer = pageCacheTracer;
+        return this;
+    }
+
+    public GBPTreeBuilder<KEY,VALUE> with( ImmutableSet<OpenOption> openOptions )
     {
         this.openOptions = openOptions;
         return this;
@@ -121,6 +133,6 @@ public class GBPTreeBuilder<KEY,VALUE>
     public GBPTree<KEY,VALUE> build()
     {
         return new GBPTree<>( pageCache, file, layout, tentativeIndexPageSize, monitor, headerReader, headerWriter,
-                recoveryCleanupWorkCollector, readOnly, openOptions );
+                recoveryCleanupWorkCollector, readOnly, pageCacheTracer, openOptions );
     }
 }

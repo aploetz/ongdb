@@ -19,7 +19,6 @@
  */
 package org.neo4j.internal.schema;
 
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.schema.constraints.IndexBackedConstraintDescriptor;
 import org.neo4j.internal.schema.constraints.NodeExistenceConstraintDescriptor;
 import org.neo4j.internal.schema.constraints.NodeKeyConstraintDescriptor;
@@ -28,6 +27,8 @@ import org.neo4j.internal.schema.constraints.UniquenessConstraintDescriptor;
 
 public interface ConstraintDescriptor extends SchemaDescriptorSupplier, SchemaRule
 {
+    int NO_ID = -1;
+
     @Override
     SchemaDescriptor schema();
 
@@ -36,8 +37,6 @@ public interface ConstraintDescriptor extends SchemaDescriptorSupplier, SchemaRu
     boolean enforcesUniqueness();
 
     boolean enforcesPropertyExistence();
-
-    String prettyPrint( TokenNameLookup tokenNameLookup );
 
     /**
      * Test if this constraint descriptor is a relationship property existence constraint.
@@ -122,5 +121,6 @@ public interface ConstraintDescriptor extends SchemaDescriptorSupplier, SchemaRu
      * @return the id of this constraint descriptor.
      * @see SchemaRule#getId()
      */
+    @Override
     long getId();
 }

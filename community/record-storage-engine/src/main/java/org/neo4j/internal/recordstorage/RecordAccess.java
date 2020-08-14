@@ -19,6 +19,10 @@
  */
 package org.neo4j.internal.recordstorage;
 
+import java.util.Collection;
+
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+
 /**
  * Provides access to records, both for reading and for writing.
  */
@@ -34,14 +38,11 @@ public interface RecordAccess<RECORD,ADDITIONAL>
      * @param additionalData additional data to put in the record after loaded.
      * @return a {@link RecordProxy} for the record for {@code key}.
      */
-    RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData );
+    RecordProxy<RECORD, ADDITIONAL> getOrLoad( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer );
 
     RecordProxy<RECORD, ADDITIONAL> getIfLoaded( long key );
 
-    @Deprecated
-    void setTo( long key, RECORD newRecord, ADDITIONAL additionalData );
-
-    RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData );
+    RecordProxy<RECORD,ADDITIONAL> setRecord( long key, RECORD record, ADDITIONAL additionalData, PageCursorTracer cursorTracer );
 
     /**
      * Creates a new record with the given {@code key}. Any {@code additionalData} is set in the
@@ -51,16 +52,11 @@ public interface RecordAccess<RECORD,ADDITIONAL>
      * @param additionalData additional data to put in the record after loaded.
      * @return a {@link RecordProxy} for the record for {@code key}.
      */
-    RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData );
-
-    /**
-     * Closes the record access.
-     */
-    void close();
+    RecordProxy<RECORD, ADDITIONAL> create( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer );
 
     int changeSize();
 
-    Iterable<RecordProxy<RECORD,ADDITIONAL>> changes();
+    Collection<? extends RecordProxy<RECORD,ADDITIONAL>> changes();
 
     /**
      * A proxy for a record that encapsulates load/store actions to take, knowing when the underlying record is
@@ -94,10 +90,14 @@ public interface RecordAccess<RECORD,ADDITIONAL>
     {
         RECORD newUnused( long key, ADDITIONAL additionalData );
 
-        RECORD load( long key, ADDITIONAL additionalData );
+        RECORD load( long key, ADDITIONAL additionalData, PageCursorTracer cursorTracer );
 
-        void ensureHeavy( RECORD record );
+        void ensureHeavy( RECORD record, PageCursorTracer cursorTracer );
 
+<<<<<<< HEAD
         RECORD clone( RECORD record );
+=======
+        RECORD copy( RECORD record );
+>>>>>>> neo4j/4.1
     }
 }

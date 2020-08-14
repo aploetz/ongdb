@@ -26,6 +26,7 @@ import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.security.LoginContext;
+import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.extension.DbmsExtension;
 import org.neo4j.test.extension.Inject;
@@ -33,7 +34,7 @@ import org.neo4j.test.extension.RandomExtension;
 import org.neo4j.test.rule.RandomRule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.neo4j.kernel.api.KernelTransaction.Type.explicit;
+import static org.neo4j.kernel.api.KernelTransaction.Type.EXPLICIT;
 
 @DbmsExtension
 @ExtendWith( RandomExtension.class )
@@ -46,15 +47,16 @@ class KernelAPIParallelLabelScanStressIT
     private GraphDatabaseAPI db;
     @Inject
     private RandomRule random;
+    @Inject
+    private Kernel kernel;
 
     @Test
     void shouldDoParallelLabelScans() throws Throwable
     {
         int[] labels = new int[3];
-        Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
 
         // Create nodes with labels
-        try ( KernelTransaction tx = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED ) )
         {
             labels[0] = createLabeledNodes( tx, N_NODES, "LABEL1" );
             labels[1] = createLabeledNodes( tx, N_NODES, "LABEL2" );
@@ -64,7 +66,7 @@ class KernelAPIParallelLabelScanStressIT
 
         KernelAPIParallelStress.parallelStressInTx( kernel,
                                                     N_THREADS,
-                                                    tx -> tx.cursors().allocateNodeLabelIndexCursor(),
+                                                    tx -> tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ),
                                                     ( read, cursor ) -> labelScan( read,
                                                                                    cursor,
                                                                                    labels[random.nextInt( labels.length )] ) );
@@ -85,7 +87,7 @@ class KernelAPIParallelLabelScanStressIT
     {
         return () ->
         {
-            read.nodeLabelScan( label, cursor );
+            read.nodeLabelScan( label, cursor, IndexOrder.NONE );
 
             int n = 0;
             while ( cursor.next() )

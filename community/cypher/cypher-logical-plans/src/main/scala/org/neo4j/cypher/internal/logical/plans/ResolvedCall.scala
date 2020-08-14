@@ -19,13 +19,30 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.ast._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticCheckResult._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.{SemanticCheck, SemanticError, SemanticExpressionCheck, SemanticState}
-import org.neo4j.cypher.internal.v4_0.expressions.Expression.SemanticContext
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
+import org.neo4j.cypher.internal.ast.CallClause
+import org.neo4j.cypher.internal.ast.ProcedureResult
+import org.neo4j.cypher.internal.ast.ProcedureResultItem
+import org.neo4j.cypher.internal.ast.UnresolvedCall
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheck
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheckResult.error
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheckResult.success
+import org.neo4j.cypher.internal.ast.semantics.SemanticError
+import org.neo4j.cypher.internal.ast.semantics.SemanticExpressionCheck
+import org.neo4j.cypher.internal.ast.semantics.SemanticState
+import org.neo4j.cypher.internal.expressions.CoerceTo
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.Expression.SemanticContext
+import org.neo4j.cypher.internal.expressions.ImplicitProcedureArgument
+import org.neo4j.cypher.internal.expressions.LogicalVariable
+import org.neo4j.cypher.internal.expressions.Namespace
+import org.neo4j.cypher.internal.expressions.Parameter
+import org.neo4j.cypher.internal.expressions.ProcedureName
+import org.neo4j.cypher.internal.expressions.SensitiveParameter
+import org.neo4j.cypher.internal.expressions.SensitiveString
+import org.neo4j.cypher.internal.expressions.StringLiteral
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.exceptions.SyntaxException
 
 object ResolvedCall {
@@ -35,18 +52,24 @@ object ResolvedCall {
     val signature = signatureLookup(QualifiedName(unresolved))
     val implicitArguments = signature.inputSignature.map(s => s.default.map(d => ImplicitProcedureArgument(s.name, s.typ, d.value)).getOrElse(Parameter(s.name, s.typ)(position)))
     val callArguments = declaredArguments.getOrElse(implicitArguments)
+    val sensitiveArguments = signature.inputSignature.take(callArguments.length).map(_.sensitive)
+    val callArgumentsWithSensitivityMarkers = callArguments.zipAll(sensitiveArguments, null, false).map {
+      case (p: Parameter, true) => new Parameter(p.name, p.parameterType)(p.position) with SensitiveParameter
+      case (p: StringLiteral, true) => new StringLiteral(p.value)(p.position) with SensitiveString
+      case (p, _) => p
+    }
     val callResults = declaredResult.map(_.items).getOrElse(signatureResults(signature, position))
     val callFilter = declaredResult.flatMap(_.where)
     if (callFilter.nonEmpty)
       throw new IllegalArgumentException(s"Expected no unresolved call with WHERE but got: $unresolved")
     else
-      ResolvedCall(signature, callArguments, callResults, declaredArguments.nonEmpty, declaredResult.nonEmpty)(position)
+      ResolvedCall(signature, callArgumentsWithSensitivityMarkers, callResults, declaredArguments.nonEmpty, declaredResult.nonEmpty)(position)
   }
 
   private def signatureResults(signature: ProcedureSignature, position: InputPosition): IndexedSeq[ProcedureResultItem] =
     signature.outputSignature.getOrElse(Seq.empty).filter(!_.deprecated).map {
       field => ProcedureResultItem(Variable(field.name)(position))(position)
-  }.toIndexedSeq
+    }.toIndexedSeq
 }
 
 case class ResolvedCall(signature: ProcedureSignature,
@@ -181,6 +204,14 @@ case class ResolvedCall(signature: ProcedureSignature,
 
   override def containsNoUpdates: Boolean = signature.accessMode match {
     case ProcedureReadOnlyAccess(_) => true
+    case ProcedureDbmsAccess(_) => true
     case _ => false
   }
+
+  def asUnresolvedCall: UnresolvedCall = UnresolvedCall(
+    procedureNamespace = Namespace(signature.name.namespace.toList)(position),
+    procedureName = ProcedureName(signature.name.name)(position),
+    declaredArguments = if (declaredArguments) Some(callArguments) else None,
+    declaredResult = if (declaredResults) Some(ProcedureResult(callResults)(position)) else None,
+  )(position)
 }

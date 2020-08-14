@@ -21,7 +21,7 @@ package org.neo4j.internal.kernel.api.helpers;
 
 import java.util.Map;
 
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.values.storable.Value;
 
 class NodeData
@@ -37,28 +37,28 @@ class NodeData
         this.properties = properties;
     }
 
-    LabelSet labelSet()
+    TokenSet labelSet()
     {
-        return new LabelSet()
+        return new TokenSet()
         {
             @Override
-            public int numberOfLabels()
+            public int numberOfTokens()
             {
                 return labels.length;
             }
 
             @Override
-            public int label( int offset )
+            public int token( int offset )
             {
                 return (int) labels[offset];
             }
 
             @Override
-            public boolean contains( int labelToken )
+            public boolean contains( int token )
             {
                 for ( long label : labels )
                 {
-                    if ( label == labelToken )
+                    if ( label == token )
                     {
                         return true;
                     }

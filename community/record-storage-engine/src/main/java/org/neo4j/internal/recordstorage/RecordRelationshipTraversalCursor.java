@@ -20,16 +20,22 @@
 package org.neo4j.internal.recordstorage;
 
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipGroupStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.record.RelationshipRecord;
-import org.neo4j.storageengine.api.RelationshipDirection;
+import org.neo4j.storageengine.api.ReadTracer;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.storageengine.api.StorageRelationshipTraversalCursor;
 
+import static org.neo4j.storageengine.api.RelationshipDirection.INCOMING;
+import static org.neo4j.storageengine.api.RelationshipDirection.LOOP;
+import static org.neo4j.storageengine.api.RelationshipDirection.OUTGOING;
 import static org.neo4j.storageengine.api.RelationshipDirection.directionOfStrict;
 
 class RecordRelationshipTraversalCursor extends RecordRelationshipCursor implements StorageRelationshipTraversalCursor
 {
+    private ReadTracer tracer;
+
     private enum GroupState
     {
         INCOMING,
@@ -38,28 +44,50 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
         NONE
     }
 
-    private int filterType = NO_ID;
-    private RelationshipDirection filterDirection;
-    private boolean lazyFilterInitialization;
+    private RelationshipSelection selection;
     private long originNodeReference;
     private long next;
-    private Record buffer;
     private PageCursor pageCursor;
     private final RecordRelationshipGroupCursor group;
     private GroupState groupState;
     private boolean open;
 
-    RecordRelationshipTraversalCursor( RelationshipStore relationshipStore, RelationshipGroupStore groupStore )
+    RecordRelationshipTraversalCursor( RelationshipStore relationshipStore, RelationshipGroupStore groupStore, PageCursorTracer cursorTracer )
     {
-        super( relationshipStore );
-        this.group = new RecordRelationshipGroupCursor( relationshipStore, groupStore );
+        super( relationshipStore, cursorTracer );
+        this.group = new RecordRelationshipGroupCursor( relationshipStore, groupStore, cursorTracer, loadMode );
+    }
+
+    void init( RecordNodeCursor nodeCursor, RelationshipSelection selection )
+    {
+        init( nodeCursor.entityReference(), nodeCursor.getNextRel(), nodeCursor.isDense(), selection );
     }
 
     @Override
-    public void init( long nodeReference, long reference, boolean nodeIsDense )
+    public void init( long nodeReference, long reference, RelationshipSelection selection )
     {
-        // Read all relationships, regardless of type/direction
-        if ( nodeIsDense )
+        if ( reference == NO_ID )
+        {
+            resetState();
+            return;
+        }
+
+        RelationshipReferenceEncoding encoding = RelationshipReferenceEncoding.parseEncoding( reference );
+        reference = RelationshipReferenceEncoding.clearEncoding( reference );
+
+        init( nodeReference, reference, encoding == RelationshipReferenceEncoding.DENSE, selection );
+    }
+
+    private void init( long nodeReference, long reference, boolean isDense, RelationshipSelection selection )
+    {
+        if ( reference == NO_ID )
+        {
+            resetState();
+            return;
+        }
+
+        this.selection = selection;
+        if ( isDense )
         {
             // The reference points to a relationship group record
             groups( nodeReference, reference );
@@ -68,24 +96,6 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
         {
             // The reference points to a relationship record
             chain( nodeReference, reference );
-        }
-        open = true;
-    }
-
-    @Override
-    public void init( long nodeReference, long reference, int type, RelationshipDirection direction, boolean nodeIsDense )
-    {
-        // Read relationships of specific type/direction
-        chain( nodeReference, reference );
-        if ( !nodeIsDense )
-        {
-            // For non-dense nodes the chain we're about to traverse contains relationships of mixed type/direction so we need to filter
-            filterType = type;
-            filterDirection = direction;
-            if ( filterType == NO_ID )
-            {
-                lazyFilterInitialization = true;
-            }
         }
         open = true;
     }
@@ -144,14 +154,10 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
     @Override
     public boolean next()
     {
-        if ( hasBufferedData() )
-        {   // We have buffered data, iterate the chain of buffered records
-            return nextBuffered();
-        }
-
+        boolean traversingDenseNode;
         do
         {
-            boolean traversingDenseNode = traversingDenseNode();
+            traversingDenseNode = traversingDenseNode();
             if ( traversingDenseNode )
             {
                 traverseDenseNode();
@@ -164,41 +170,13 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
             }
 
             relationshipFull( this, next, pageCursor );
-            if ( !traversingDenseNode )
-            {
-                if ( lazyFilterInitialization )
-                {
-                    filterType = getType();
-                    filterDirection = directionOfStrict( originNodeReference, getFirstNode(), getSecondNode() );
-                    lazyFilterInitialization = false;
-                }
-            }
             computeNext();
+            if ( tracer != null )
+            {
+                tracer.onRelationship( entityReference() );
+            }
         }
-        while ( !inUse() || (filterType != NO_ID && !correctTypeAndDirection()) );
-
-        return true;
-    }
-
-    private boolean correctTypeAndDirection()
-    {
-        return filterType == getType() && directionOfStrict( originNodeReference, getFirstNode(), getSecondNode() ) == filterDirection;
-    }
-
-    private boolean nextBuffered()
-    {
-        buffer = buffer.next;
-        if ( !hasBufferedData() )
-        {
-            resetState();
-            return false;
-        }
-        else
-        {
-            // Copy buffer data to self
-            copyFromBuffer();
-        }
-
+        while ( !inUse() || (!traversingDenseNode && !selection.test( getType(), directionOfStrict( originNodeReference, getFirstNode(), getSecondNode() ) )) );
         return true;
     }
 
@@ -247,27 +225,53 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
                     assert next == NO_ID;
                     return; // no more groups nor relationships
                 }
-                next = group.incomingRawId();
-                if ( pageCursor == null )
+                if ( tracer != null )
                 {
-                    pageCursor = relationshipPage( Math.max( next, 0L ) );
+                    tracer.dbHit();
+                }
+                if ( !selection.test( group.getType() ) )
+                {
+                    // This type isn't part of this selection, so skip the whole group
+                    continue;
+                }
+
+                if ( selection.test( group.getType(), INCOMING ) )
+                {
+                    next = group.incomingRawId();
+                    initializePageCursor();
                 }
                 groupState = GroupState.OUTGOING;
                 break;
 
             case OUTGOING:
-                next = group.outgoingRawId();
+                if ( selection.test( group.getType(), OUTGOING ) )
+                {
+                    initializePageCursor();
+                    next = group.outgoingRawId();
+                }
                 groupState = GroupState.LOOP;
                 break;
 
             case LOOP:
-                next = group.loopsRawId();
+                if ( selection.test( group.getType(), LOOP ) )
+                {
+                    initializePageCursor();
+                    next = group.loopsRawId();
+                }
                 groupState = GroupState.INCOMING;
                 break;
 
             default:
                 throw new IllegalStateException( "We cannot get here, but checkstyle forces this!" );
             }
+        }
+    }
+
+    private void initializePageCursor()
+    {
+        if ( pageCursor == null )
+        {
+            pageCursor = relationshipPage( Math.max( next, 0L ) );
         }
     }
 
@@ -288,15 +292,6 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
         }
     }
 
-    private void copyFromBuffer()
-    {
-        this.setId( buffer.id );
-        this.setType( buffer.type );
-        this.setNextProp( buffer.nextProp );
-        this.setFirstNode( buffer.firstNode );
-        this.setSecondNode( buffer.secondNode );
-    }
-
     private boolean traversingDenseNode()
     {
         return groupState != GroupState.NONE;
@@ -312,14 +307,35 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
         }
     }
 
-    private void resetState()
+    @Override
+    public void setTracer( ReadTracer tracer )
     {
+        // Since this cursor does its own filtering on relationships and has internal relationship group records and such,
+        // the kernel can't possible tell the number of db hits and therefore we do it here in this cursor instead.
+        this.tracer = tracer;
+    }
+
+    @Override
+    public void removeTracer()
+    {
+        this.tracer = null;
+    }
+
+    @Override
+    public void setForceLoad()
+    {
+        super.setForceLoad();
+        group.loadMode = loadMode;
+    }
+
+    @Override
+    protected void resetState()
+    {
+        super.resetState();
+        group.loadMode = loadMode;
         setId( next = NO_ID );
         groupState = GroupState.NONE;
-        filterType = NO_ID;
-        filterDirection = null;
-        lazyFilterInitialization = false;
-        buffer = null;
+        selection = null;
     }
 
     @Override
@@ -344,63 +360,10 @@ class RecordRelationshipTraversalCursor extends RecordRelationshipCursor impleme
         else
         {
             String dense = "denseNode=" + traversingDenseNode();
-            String mode = "mode=";
-
-            if ( hasBufferedData() )
-            {
-                mode = mode + "bufferedData";
-            }
-            else
-            {
-                mode = mode + "regular";
-            }
             return "RelationshipTraversalCursor[id=" + getId() +
                     ", open state with: " + dense +
-                    ", next=" + next + ", " + mode +
+                    ", next=" + next + ", " +
                     ", underlying record=" + super.toString() + "]";
-        }
-    }
-
-    private boolean hasBufferedData()
-    {
-        return buffer != null;
-    }
-
-    /*
-     * Record is both a data holder for buffering data from a RelationshipRecord
-     * as well as a linked list over the records in the group.
-     */
-    static class Record
-    {
-        final long id;
-        final int type;
-        final long nextProp;
-        final long firstNode;
-        final long secondNode;
-        final Record next;
-
-        /*
-         * Initialize the record chain or push a new record as the new head of the record chain
-         */
-        Record( RelationshipRecord record, Record next )
-        {
-            if ( record != null )
-            {
-                id = record.getId();
-                type = record.getType();
-                nextProp = record.getNextProp();
-                firstNode = record.getFirstNode();
-                secondNode = record.getSecondNode();
-            }
-            else
-            {
-                id = NO_ID;
-                type = NO_ID;
-                nextProp = NO_ID;
-                firstNode = NO_ID;
-                secondNode = NO_ID;
-            }
-            this.next = next;
         }
     }
 }

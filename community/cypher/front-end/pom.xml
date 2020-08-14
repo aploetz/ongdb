@@ -10,7 +10,11 @@
 
     <modelVersion>4.0.0</modelVersion>
 
+<<<<<<< HEAD
     <artifactId>ongdb-front-end-parent-4.0</artifactId>
+=======
+    <artifactId>neo4j-front-end-parent</artifactId>
+>>>>>>> neo4j/4.1
     <packaging>pom</packaging>
     <name>openCypher Front End Parent</name>
     <description>Project that builds the openCypher front end modules</description>
@@ -34,6 +38,7 @@
         <module>frontend</module>
         <module>util</module>
         <module>expressions</module>
+        <module>cypher-macros</module>
     </modules>
 
     <dependencies>
@@ -41,7 +46,6 @@
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
-      <version>${scala.version}</version>
     </dependency>
 
         <dependency>

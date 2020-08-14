@@ -25,12 +25,11 @@ import org.mockito.Mockito;
 
 import java.util.Optional;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atMostOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
 
@@ -55,14 +54,14 @@ class MapCachingDatabaseIdRepositoryTest
     void shouldDelegateGetByName()
     {
         NamedDatabaseId namedDatabaseId = databaseIdRepository.getByName( otherDbName ).get();
-        assertThat( namedDatabaseId, equalTo( otherNamedDbId ) );
+        assertThat( namedDatabaseId ).isEqualTo( otherNamedDbId );
     }
 
     @Test
     void shouldDelegateGetByUuid()
     {
         var databaseId = databaseIdRepository.getById( otherDbid ).get();
-        assertThat( databaseId, equalTo( otherNamedDbId ) );
+        assertThat( databaseId ).isEqualTo( otherNamedDbId );
     }
 
     @Test
@@ -106,7 +105,7 @@ class MapCachingDatabaseIdRepositoryTest
         databaseIdRepository.getByName( otherDbName );
         databaseIdRepository.getById( otherDbid );
 
-        verifyZeroInteractions( delegate );
+        verifyNoInteractions( delegate );
     }
 
     @Test
@@ -114,8 +113,8 @@ class MapCachingDatabaseIdRepositoryTest
     {
         NamedDatabaseId namedDatabaseId = databaseIdRepository.getByName( NAMED_SYSTEM_DATABASE_ID.name() ).get();
 
-        assertThat( namedDatabaseId, equalTo( NAMED_SYSTEM_DATABASE_ID ) );
-        verifyZeroInteractions( delegate );
+        assertThat( namedDatabaseId ).isEqualTo( NAMED_SYSTEM_DATABASE_ID );
+        verifyNoInteractions( delegate );
     }
 
     @Test
@@ -123,8 +122,8 @@ class MapCachingDatabaseIdRepositoryTest
     {
         NamedDatabaseId namedDatabaseId = databaseIdRepository.getById( NAMED_SYSTEM_DATABASE_ID.databaseId() ).get();
 
-        assertThat( namedDatabaseId, equalTo( NAMED_SYSTEM_DATABASE_ID ) );
-        verifyZeroInteractions( delegate );
+        assertThat( namedDatabaseId ).isEqualTo( NAMED_SYSTEM_DATABASE_ID );
+        verifyNoInteractions( delegate );
     }
 
 }

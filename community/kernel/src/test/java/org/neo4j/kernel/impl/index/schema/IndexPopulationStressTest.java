@@ -39,11 +39,11 @@ import java.util.function.Function;
 import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.internal.unsafe.UnsafeUtil;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexDirectoryStructure;
@@ -69,17 +69,21 @@ import static org.apache.commons.lang3.ArrayUtils.toArray;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unordered;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesByProvider;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesBySubProvider;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.change;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.remove;
@@ -103,7 +107,6 @@ abstract class IndexPopulationStressTest
     @Inject
     private TestDirectory testDirectory;
 
-    private final String name;
     private final boolean hasValues;
     private final Function<RandomValues, Value> valueGenerator;
     private final Function<IndexPopulationStressTest, IndexProvider> providerCreator;
@@ -116,11 +119,9 @@ abstract class IndexPopulationStressTest
     private IndexProvider indexProvider;
     private boolean prevAccessCheck;
 
-    IndexPopulationStressTest( String name, boolean hasValues,
-        Function<RandomValues, Value> valueGenerator,
-        Function<IndexPopulationStressTest, IndexProvider> providerCreator )
+    IndexPopulationStressTest(
+            boolean hasValues, Function<RandomValues,Value> valueGenerator, Function<IndexPopulationStressTest,IndexProvider> providerCreator )
     {
-        this.name = name;
         this.hasValues = hasValues;
         this.valueGenerator = valueGenerator;
         this.providerCreator = providerCreator;
@@ -139,8 +140,9 @@ abstract class IndexPopulationStressTest
         descriptor = indexProvider.completeConfiguration( forSchema( forLabel( 0, 0 ), PROVIDER ).withName( "index_0" ).materialise( 0 ) );
         descriptor2 = indexProvider.completeConfiguration( forSchema( forLabel( 1, 0 ), PROVIDER ).withName( "index_1" ).materialise( 1 ) );
         fs.mkdirs( indexProvider.directoryStructure().rootDirectory() );
-        populator = indexProvider.getPopulator( descriptor, samplingConfig, heapBufferFactory( (int) kibiBytes( 40 ) ) );
-        when( nodePropertyAccessor.getNodePropertyValue( anyLong(), anyInt() ) ).thenThrow( UnsupportedOperationException.class );
+        populator = indexProvider.getPopulator( descriptor, samplingConfig, heapBufferFactory( (int) kibiBytes( 40 ) ), INSTANCE );
+        when( nodePropertyAccessor.getNodePropertyValue( anyLong(), anyInt(), any( PageCursorTracer.class ) ) ).thenThrow(
+                UnsupportedOperationException.class );
         prevAccessCheck = UnsafeUtil.exchangeNativeAccessCheckEnabled( false );
     }
 
@@ -150,7 +152,7 @@ abstract class IndexPopulationStressTest
         UnsafeUtil.exchangeNativeAccessCheckEnabled( prevAccessCheck );
         if ( populator != null )
         {
-            populator.close( true );
+            populator.close( true, NULL );
         }
     }
 
@@ -172,7 +174,7 @@ abstract class IndexPopulationStressTest
         race.addContestant( updater( lastBatches, insertersDone, updateLock, updates ) );
 
         race.go();
-        populator.close( true );
+        populator.close( true, NULL );
         populator = null; // to let the after-method know that we've closed it ourselves
 
         // then assert that a tree built by a single thread ends up exactly the same
@@ -184,8 +186,8 @@ abstract class IndexPopulationStressTest
         {
             SimpleNodeValueClient entries = new SimpleNodeValueClient();
             SimpleNodeValueClient referenceEntries = new SimpleNodeValueClient();
-            reader.query( NULL_CONTEXT, entries, IndexOrder.NONE, hasValues, IndexQuery.exists( 0 ) );
-            referenceReader.query( NULL_CONTEXT, referenceEntries, IndexOrder.NONE, hasValues, IndexQuery.exists( 0 ) );
+            reader.query( NULL_CONTEXT, entries, unordered( hasValues ), IndexQuery.exists( 0 ) );
+            referenceReader.query( NULL_CONTEXT, referenceEntries, unordered( hasValues ), IndexQuery.exists( 0 ) );
             while ( referenceEntries.next() )
             {
                 assertTrue( entries.next() );
@@ -212,7 +214,7 @@ abstract class IndexPopulationStressTest
                 // Do updates now and then
                 Thread.sleep( 10 );
                 updateLock.writeLock().lock();
-                try ( IndexUpdater updater = populator.newPopulatingUpdater( nodePropertyAccessor ) )
+                try ( IndexUpdater updater = populator.newPopulatingUpdater( nodePropertyAccessor, NULL ) )
                 {
                     for ( int i = 0; i < THREADS; i++ )
                     {
@@ -272,7 +274,7 @@ abstract class IndexPopulationStressTest
                     updateLock.readLock().lock();
                     try
                     {
-                        populator.add( batch );
+                        populator.add( batch, NULL );
                     }
                     finally
                     {
@@ -292,7 +294,8 @@ abstract class IndexPopulationStressTest
     private void buildReferencePopulatorSingleThreaded( Generator[] generators, Collection<IndexEntryUpdate<?>> updates )
         throws IndexEntryConflictException
     {
-        IndexPopulator referencePopulator = indexProvider.getPopulator( descriptor2, samplingConfig, heapBufferFactory( (int) kibiBytes( 40 ) ) );
+        IndexPopulator referencePopulator = indexProvider.getPopulator( descriptor2, samplingConfig, heapBufferFactory( (int) kibiBytes( 40 ) ),
+                INSTANCE );
         referencePopulator.create();
         boolean referenceSuccess = false;
         try
@@ -302,10 +305,10 @@ abstract class IndexPopulationStressTest
                 generator.reset();
                 for ( int i = 0; i < BATCHES_PER_THREAD; i++ )
                 {
-                    referencePopulator.add( generator.batch() );
+                    referencePopulator.add( generator.batch(), NULL );
                 }
             }
-            try ( IndexUpdater updater = referencePopulator.newPopulatingUpdater( nodePropertyAccessor ) )
+            try ( IndexUpdater updater = referencePopulator.newPopulatingUpdater( nodePropertyAccessor, NULL ) )
             {
                 for ( IndexEntryUpdate<?> update : updates )
                 {
@@ -316,7 +319,7 @@ abstract class IndexPopulationStressTest
         }
         finally
         {
-            referencePopulator.close( referenceSuccess );
+            referencePopulator.close( referenceSuccess, NULL );
         }
     }
 

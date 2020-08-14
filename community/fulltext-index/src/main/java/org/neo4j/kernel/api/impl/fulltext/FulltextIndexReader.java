@@ -19,42 +19,57 @@
  */
 package org.neo4j.kernel.api.impl.fulltext;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.core.KeywordAnalyzer;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.search.TotalHitCountCollector;
+import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.WildcardQuery;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.function.LongPredicate;
 
+import org.neo4j.common.EntityType;
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.QueryContext;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.io.IOUtils;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.impl.index.SearcherReference;
-import org.neo4j.kernel.api.impl.index.collector.DocValuesCollector;
 import org.neo4j.kernel.api.impl.index.collector.ValuesIterator;
+import org.neo4j.kernel.api.impl.index.partition.Neo4jIndexSearcher;
+import org.neo4j.kernel.api.impl.schema.LuceneDocumentStructure;
 import org.neo4j.kernel.api.impl.schema.reader.IndexReaderCloseException;
 import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.api.index.IndexReader;
 import org.neo4j.kernel.api.index.IndexSampler;
-import org.neo4j.storageengine.api.NodePropertyAccessor;
-import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.token.api.TokenHolder;
 import org.neo4j.token.api.TokenNotFoundException;
+import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.Value;
+import org.neo4j.values.storable.ValueGroup;
 
 import static org.neo4j.kernel.api.impl.fulltext.FulltextIndexSettings.isEventuallyConsistent;
 
 public class FulltextIndexReader implements IndexReader
 {
+    static final LongPredicate ALWAYS_FALSE = value -> false;
     private final List<SearcherReference> searchers;
     private final TokenHolder propertyKeyTokenHolder;
     private final IndexDescriptor index;
@@ -73,38 +88,6 @@ public class FulltextIndexReader implements IndexReader
         this.transactionState = new FulltextIndexTransactionState( descriptor, analyzer, propertyNames );
     }
 
-    private Query parseFulltextQuery( String query ) throws ParseException
-    {
-        MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser( propertyNames, analyzer );
-        multiFieldQueryParser.setAllowLeadingWildcard( true );
-        return multiFieldQueryParser.parse( query );
-    }
-
-    private ValuesIterator indexQuery( Query query )
-    {
-        List<ValuesIterator> results = new ArrayList<>();
-        for ( SearcherReference searcher : searchers )
-        {
-            ValuesIterator iterator = searchLucene( searcher, query );
-            results.add( iterator );
-        }
-        return ScoreEntityIterator.mergeIterators( results );
-    }
-
-    static ValuesIterator searchLucene( SearcherReference searcher, Query query )
-    {
-        try
-        {
-            DocValuesCollector docValuesCollector = new DocValuesCollector( true );
-            searcher.getIndexSearcher().search( query, docValuesCollector );
-            return docValuesCollector.getValuesSortedByRelevance( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID );
-        }
-        catch ( IOException e )
-        {
-            throw new RuntimeException( e );
-        }
-    }
-
     @Override
     public IndexSampler createSampler()
     {
@@ -112,8 +95,8 @@ public class FulltextIndexReader implements IndexReader
     }
 
     @Override
-    public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexOrder indexOrder, boolean needsValues, IndexQuery... queries )
-            throws IndexNotApplicableKernelException
+    public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexQueryConstraints constraints,
+            IndexQuery... queries ) throws IndexNotApplicableKernelException
     {
         BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
         for ( IndexQuery indexQuery : queries )
@@ -132,19 +115,55 @@ public class FulltextIndexReader implements IndexReader
             }
             else
             {
-                throw new IndexNotApplicableKernelException( "A fulltext schema index cannot answer " + indexQuery.type() + " queries." );
+                // Not fulltext query
+                assertNotComposite( queries );
+                assertCypherCompatible();
+                Query query;
+                if ( indexQuery.type() == IndexQuery.IndexQueryType.stringContains )
+                {
+                    IndexQuery.StringContainsPredicate scp = (IndexQuery.StringContainsPredicate) indexQuery;
+                    String searchTerm = QueryParser.escape( scp.contains().stringValue() );
+                    Term term = new Term( propertyNames[0], "*" + searchTerm + "*" );
+                    query = new WildcardQuery( term );
+                }
+                else if ( indexQuery.type() == IndexQuery.IndexQueryType.stringSuffix )
+                {
+                    IndexQuery.StringSuffixPredicate ssp = (IndexQuery.StringSuffixPredicate) indexQuery;
+                    String searchTerm = QueryParser.escape( ssp.suffix().stringValue() );
+                    Term term = new Term( propertyNames[0], "*" + searchTerm );
+                    query = new WildcardQuery( term );
+                }
+                else if ( indexQuery.type() == IndexQuery.IndexQueryType.stringPrefix )
+                {
+                    IndexQuery.StringPrefixPredicate spp = (IndexQuery.StringPrefixPredicate) indexQuery;
+                    String searchTerm = spp.prefix().stringValue();
+                    Term term = new Term( propertyNames[0], searchTerm );
+                    query = new LuceneDocumentStructure.PrefixMultiTermsQuery( term );
+                }
+                else if ( indexQuery.getClass() == IndexQuery.ExactPredicate.class && indexQuery.valueGroup() == ValueGroup.TEXT )
+                {
+                    IndexQuery.ExactPredicate exact = (IndexQuery.ExactPredicate) indexQuery;
+                    String searchTerm = ((TextValue) exact.value()).stringValue();
+                    Term term = new Term( propertyNames[0], searchTerm );
+                    query = new ConstantScoreQuery( new TermQuery( term ) );
+                }
+                else if ( indexQuery.getClass() == IndexQuery.TextRangePredicate.class )
+                {
+                    IndexQuery.TextRangePredicate sp = (IndexQuery.TextRangePredicate) indexQuery;
+                    query = newRangeSeekByStringQuery( propertyNames[0], sp.from(), sp.fromInclusive(), sp.to(), sp.toInclusive() );
+                }
+                else
+                {
+                    throw new IndexNotApplicableKernelException(
+                            "A fulltext schema index cannot answer " + indexQuery.type() + " queries on " + indexQuery.valueCategory() + " values." );
+                }
+                queryBuilder.add( query, BooleanClause.Occur.MUST );
             }
         }
-        BooleanQuery query = queryBuilder.build();
-        ValuesIterator itr = indexQuery( query );
-        ReadableTransactionState state = context.getTransactionStateOrNull();
-        if ( state != null && !isEventuallyConsistent( index ) )
-        {
-            transactionState.maybeUpdate( context );
-            itr = transactionState.filter( itr, query );
-        }
-        IndexProgressor progressor = new FulltextIndexProgressor( itr, client );
-        client.initialize( index, progressor, queries, indexOrder, needsValues, true );
+        Query query = queryBuilder.build();
+        ValuesIterator itr = searchLucene( query, constraints, context, context.cursorTracer(), context.memoryTracker() );
+        IndexProgressor progressor = new FulltextIndexProgressor( itr, client, constraints );
+        client.initialize( index, progressor, queries, constraints, true );
     }
 
     @Override
@@ -154,7 +173,7 @@ public class FulltextIndexReader implements IndexReader
     }
 
     @Override
-    public long countIndexedNodes( long nodeId, int[] propertyKeyIds, Value... propertyValues )
+    public long countIndexedNodes( long nodeId, PageCursorTracer cursorTracer, int[] propertyKeyIds, Value... propertyValues )
     {
         long count = 0;
         for ( SearcherReference searcher : searchers )
@@ -180,12 +199,6 @@ public class FulltextIndexReader implements IndexReader
     }
 
     @Override
-    public void distinctValues( IndexProgressor.EntityValueClient client, NodePropertyAccessor propertyAccessor, boolean needsValues )
-    {
-        throw new UnsupportedOperationException( "Fulltext indexes does not support distinctValues queries" );
-    }
-
-    @Override
     public void close()
     {
         List<AutoCloseable> resources = new ArrayList<>( searchers.size() + 1 );
@@ -194,43 +207,128 @@ public class FulltextIndexReader implements IndexReader
         IOUtils.close( IndexReaderCloseException::new, resources );
     }
 
+    private Query parseFulltextQuery( String query ) throws ParseException
+    {
+        MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser( propertyNames, analyzer );
+        multiFieldQueryParser.setAllowLeadingWildcard( true );
+        return multiFieldQueryParser.parse( query );
+    }
+
+    private ValuesIterator searchLucene( Query query, IndexQueryConstraints constraints, QueryContext context, PageCursorTracer cursorTracer,
+            MemoryTracker memoryTracker )
+    {
+        try
+        {
+            // We are replicating the behaviour of IndexSearcher.search(Query, Collector), which starts out by re-writing the query,
+            // then creates a weight based on the query and index reader context, and then we finally search the leaf contexts with
+            // the weight we created.
+            // The query rewrite does not really depend on any data in the index searcher (we don't produce such queries), so it's fine
+            // that we only rewrite the query once with the first searcher in our partition list.
+            query = searchers.get( 0 ).getIndexSearcher().rewrite( query );
+            boolean includeTransactionState = context.getTransactionStateOrNull() != null && !isEventuallyConsistent( index );
+            // If we have transaction state, then we need to make our result collector filter out all results touched by the transaction state.
+            // The reason we filter them out entirely, is that we will query the transaction state separately.
+            LongPredicate filter = includeTransactionState ? transactionState.isModifiedInTransactionPredicate() : ALWAYS_FALSE;
+            List<PreparedSearch> searches = new ArrayList<>( searchers.size() + 1 );
+            for ( SearcherReference searcher : searchers )
+            {
+                Neo4jIndexSearcher indexSearcher = searcher.getIndexSearcher();
+                searches.add( new PreparedSearch( indexSearcher, filter ) );
+            }
+            if ( includeTransactionState )
+            {
+                SearcherReference reference = transactionState.maybeUpdate( context, cursorTracer, memoryTracker );
+                searches.add( new PreparedSearch( reference.getIndexSearcher(), ALWAYS_FALSE ) );
+            }
+
+            // The StatsCollector aggregates index statistics across all our partitions.
+            // Weights created based on these statistics will produce scores that are comparable across partitions.
+            StatsCollector statsCollector = new StatsCollector( searches );
+            List<ValuesIterator> results = new ArrayList<>( searches.size() );
+
+            for ( PreparedSearch search : searches )
+            {
+                // Weights are bonded with the top IndexReaderContext of the index searcher that they are created for.
+                // That's why we have to create a new StatsCachingIndexSearcher, and a new weight, for every index partition.
+                // However, the important thing is that we re-use the statsCollector.
+                StatsCachingIndexSearcher statsCachingIndexSearcher = new StatsCachingIndexSearcher( search, statsCollector );
+                Weight weight = statsCachingIndexSearcher.createWeight( query, ScoreMode.COMPLETE, 1 );
+                results.add( search.search( weight, constraints ) );
+            }
+
+            return ScoreEntityIterator.mergeIterators( results );
+        }
+        catch ( IOException e )
+        {
+            throw new RuntimeException( e );
+        }
+    }
+
     private String getPropertyKeyName( int propertyKey ) throws TokenNotFoundException
     {
         return propertyKeyTokenHolder.getTokenById( propertyKey ).name();
     }
 
-    private static class FulltextIndexProgressor implements IndexProgressor
+    private static void assertNotComposite( IndexQuery[] predicates )
     {
-        private final ValuesIterator itr;
-        private final EntityValueClient client;
-
-        private FulltextIndexProgressor( ValuesIterator itr, EntityValueClient client )
+        if ( predicates.length != 1 )
         {
-            this.itr = itr;
-            this.client = client;
+            throw new IllegalStateException( "composite indexes not yet supported for this operation" );
+        }
+    }
+
+    private static Query newRangeSeekByStringQuery( String propertyName, String lower, boolean includeLower, String upper, boolean includeUpper )
+    {
+        boolean includeLowerBoundary = StringUtils.EMPTY.equals( lower ) || includeLower;
+        boolean includeUpperBoundary = StringUtils.EMPTY.equals( upper ) || includeUpper;
+        TermRangeQuery termRangeQuery =
+                TermRangeQuery.newStringRange( propertyName, lower, upper, includeLowerBoundary, includeUpperBoundary );
+
+        if ( (includeLowerBoundary != includeLower) || (includeUpperBoundary != includeUpper) )
+        {
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+            if ( includeLowerBoundary != includeLower )
+            {
+                builder.add( new TermQuery( new Term( propertyName, lower ) ), BooleanClause.Occur.MUST_NOT );
+            }
+            if ( includeUpperBoundary != includeUpper )
+            {
+                builder.add( new TermQuery( new Term( propertyName, upper ) ), BooleanClause.Occur.MUST_NOT );
+            }
+            builder.add( termRangeQuery, BooleanClause.Occur.FILTER );
+            return new ConstantScoreQuery( builder.build() );
+        }
+        return termRangeQuery;
+    }
+
+    private void assertCypherCompatible()
+    {
+        String reason = "";
+        Object configuredAnalyzer = index.getIndexConfig().get( FulltextIndexSettingsKeys.ANALYZER ).asObject();
+        if ( !"cypher".equals( configuredAnalyzer ) || !(analyzer.getClass() == KeywordAnalyzer.class) )
+        {
+            reason = "configured analyzer '" + configuredAnalyzer + "' is not Cypher compatible";
+        }
+        else if ( !(propertyNames.length == 1) )
+        {
+            reason = "index is composite";
+        }
+        else if ( !(index.schema().entityType() == EntityType.NODE) )
+        {
+            reason = "index does not target nodes";
+        }
+        else if ( !(index.schema().getEntityTokenIds().length == 1) )
+        {
+            reason = "index target more than one label";
+        }
+        else if ( isEventuallyConsistent( index ) )
+        {
+            reason = "index is eventually consistent";
         }
 
-        @Override
-        public boolean next()
+        if ( !reason.equals( "" ) )
         {
-            if ( !itr.hasNext() )
-            {
-                return false;
-            }
-            boolean accepted;
-            do
-            {
-                long entityId = itr.next();
-                float score = itr.currentScore();
-                accepted = client.acceptEntity( entityId, score, (Value[]) null );
-            }
-            while ( !accepted && itr.hasNext() );
-            return accepted;
-        }
-
-        @Override
-        public void close()
-        {
+            throw new IllegalStateException( "This fulltext index does not have support for Cypher semantics because " + reason + "." );
         }
     }
 }

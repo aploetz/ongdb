@@ -19,7 +19,7 @@
  */
 package org.neo4j.cypher.internal.runtime.ast
 
-import org.neo4j.cypher.internal.v4_0.expressions.LogicalVariable
+import org.neo4j.cypher.internal.expressions.LogicalVariable
 import org.neo4j.exceptions.InternalException
 
 object ExpressionVariable {
@@ -32,11 +32,11 @@ object ExpressionVariable {
 }
 
 /**
-  * Variable which only lives for the duration of an expression evaluation.
-  *
-  * @param offset offset of the variable at runtime in the expression variable space
-  * @param name name of the variable (used for debuging only at this point)
-  */
+ * Variable which only lives for the duration of an expression evaluation.
+ *
+ * @param offset offset of the variable at runtime in the expression variable space
+ * @param name name of the variable (used for debuging only at this point)
+ */
 case class ExpressionVariable(offset: Int, override val name: String) extends RuntimeVariable(name) {
   override def asCanonicalStringVal: String = name
 }

@@ -19,11 +19,11 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * Consumes and buffers all source rows, marks the transaction as stable, and then produces all rows.
-  */
+ * Consumes and buffers all source rows, marks the transaction as stable, and then produces all rows.
+ */
 case class Eager(source: LogicalPlan)(implicit idGen: IdGen) extends LogicalPlan(idGen) with EagerLogicalPlan {
 
   override val availableSymbols: Set[String] = source.availableSymbols

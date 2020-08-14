@@ -24,6 +24,7 @@ import java.io.UncheckedIOException;
 
 import org.neo4j.internal.helpers.collection.BoundedIterable;
 import org.neo4j.internal.schema.IndexDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.index.AbstractLuceneIndexAccessor;
 import org.neo4j.kernel.api.index.IndexReader;
@@ -35,9 +36,12 @@ import org.neo4j.values.storable.Value;
 
 public class LuceneIndexAccessor extends AbstractLuceneIndexAccessor<IndexReader,SchemaIndex>
 {
+    private final LuceneIndexValueValidator valueValidator;
+
     public LuceneIndexAccessor( SchemaIndex luceneIndex, IndexDescriptor descriptor )
     {
         super( luceneIndex, descriptor );
+        this.valueValidator = new LuceneIndexValueValidator( descriptor );
     }
 
     @Override
@@ -47,7 +51,7 @@ public class LuceneIndexAccessor extends AbstractLuceneIndexAccessor<IndexReader
     }
 
     @Override
-    public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive )
+    public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive, PageCursorTracer cursorTracer )
     {
         return super.newAllEntriesReader( LuceneDocumentStructure::getNodeId, fromIdInclusive, toIdExclusive );
     }
@@ -69,11 +73,7 @@ public class LuceneIndexAccessor extends AbstractLuceneIndexAccessor<IndexReader
     @Override
     public void validateBeforeCommit( Value[] tuple )
     {
-        // In Lucene all values in a tuple (composite index) will be placed in a separate field, so validate their fields individually.
-        for ( Value value : tuple )
-        {
-            LuceneIndexValueValidator.INSTANCE.validate( value );
-        }
+        valueValidator.validate( tuple );
     }
 
     private class LuceneSchemaIndexUpdater extends AbstractLuceneIndexUpdater

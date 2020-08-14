@@ -47,16 +47,16 @@ import org.neo4j.internal.counts.CountsBuilder;
 import org.neo4j.internal.counts.GBPTreeCountsStore;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
-import org.neo4j.internal.index.label.FullStoreChangeStream;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.NativeLabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.index.label.TokenScanStore;
 import org.neo4j.internal.recordstorage.StoreTokens;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.extension.DatabaseExtensions;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -72,24 +72,32 @@ import org.neo4j.logging.DuplicatingLog;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.internal.SimpleLogService;
+import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryPools;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.time.Clocks;
 import org.neo4j.token.DelegatingTokenHolder;
 import org.neo4j.token.ReadOnlyTokenCreator;
 import org.neo4j.token.TokenHolders;
 import org.neo4j.token.api.TokenHolder;
 
 import static java.lang.String.format;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_tracking;
 import static org.neo4j.consistency.checking.full.ConsistencyFlags.DEFAULT;
 import static org.neo4j.consistency.internal.SchemaIndexExtensionLoader.instantiateExtensions;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.Strings.joinAsLines;
+import static org.neo4j.internal.index.label.FullStoreChangeStream.EMPTY;
 import static org.neo4j.io.fs.FileSystemUtils.createOrOpenAsOutputStream;
-import static org.neo4j.kernel.impl.factory.DatabaseInfo.TOOL;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.factory.DbmsInfo.TOOL;
 import static org.neo4j.kernel.recovery.Recovery.isRecoveryRequired;
 
 public class ConsistencyCheckService
 {
+    private static final String CONSISTENCY_TOKEN_READER_TAG = "consistencyTokenReader";
     private final Date timestamp;
 
     public ConsistencyCheckService()
@@ -148,15 +156,17 @@ public class ConsistencyCheckService
     {
         Log log = logProvider.getLog( getClass() );
         JobScheduler jobScheduler = JobSchedulerFactory.createInitialisedScheduler();
+        var pageCacheTracer = PageCacheTracer.NULL;
+        var memoryTracker = EmptyMemoryTracker.INSTANCE;
         ConfiguringPageCacheFactory pageCacheFactory =
-                new ConfiguringPageCacheFactory( fileSystem, config, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL, logProvider.getLog( PageCache.class ),
-                        EmptyVersionContextSupplier.EMPTY, jobScheduler );
+                new ConfiguringPageCacheFactory( fileSystem, config, pageCacheTracer, logProvider.getLog( PageCache.class ), EmptyVersionContextSupplier.EMPTY,
+                        jobScheduler, Clocks.nanoClock(), new MemoryPools( config.get( memory_tracking ) ) );
         PageCache pageCache = pageCacheFactory.getOrCreatePageCache();
 
         try
         {
             return runFullConsistencyCheck( databaseLayout, config, progressFactory, logProvider, fileSystem, pageCache, verbose,
-                    reportDir, consistencyFlags );
+                    reportDir, consistencyFlags, pageCacheTracer, memoryTracker );
         }
         finally
         {
@@ -180,18 +190,19 @@ public class ConsistencyCheckService
     }
 
     public Result runFullConsistencyCheck( DatabaseLayout databaseLayout, Config config, ProgressMonitorFactory progressFactory, LogProvider logProvider,
-            FileSystemAbstraction fileSystem, PageCache pageCache, boolean verbose, ConsistencyFlags consistencyFlags )
-            throws ConsistencyCheckIncompleteException
+            FileSystemAbstraction fileSystem, PageCache pageCache, boolean verbose, ConsistencyFlags consistencyFlags, PageCacheTracer pageCacheTracer,
+            MemoryTracker memoryTracker ) throws ConsistencyCheckIncompleteException
     {
         return runFullConsistencyCheck( databaseLayout, config, progressFactory, logProvider, fileSystem, pageCache, verbose,
-                defaultReportDir( config ), consistencyFlags );
+                defaultReportDir( config ), consistencyFlags, pageCacheTracer, memoryTracker );
     }
 
     public Result runFullConsistencyCheck( DatabaseLayout databaseLayout, Config config,
             ProgressMonitorFactory progressFactory, final LogProvider logProvider, final FileSystemAbstraction fileSystem, final PageCache pageCache,
-            final boolean verbose, File reportDir, ConsistencyFlags consistencyFlags ) throws ConsistencyCheckIncompleteException
+            final boolean verbose, File reportDir, ConsistencyFlags consistencyFlags, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
+            throws ConsistencyCheckIncompleteException
     {
-        assertRecovered( databaseLayout, config, fileSystem );
+        assertRecovered( databaseLayout, config, fileSystem, memoryTracker );
         Log log = logProvider.getLog( getClass() );
         config.set( GraphDatabaseSettings.read_only, true );
         config.set( GraphDatabaseSettings.pagecache_warmup_enabled, false );
@@ -199,8 +210,13 @@ public class ConsistencyCheckService
         LifeSupport life = new LifeSupport();
         final DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fileSystem, immediate() );
         StoreFactory factory =
+<<<<<<< HEAD
                 new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache, fileSystem, logProvider );
         CountsManager countsManager = new CountsManager( pageCache, fileSystem, databaseLayout );
+=======
+                new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache, fileSystem, logProvider, pageCacheTracer );
+        CountsManager countsManager = new CountsManager( pageCache, fileSystem, databaseLayout, pageCacheTracer, memoryTracker );
+>>>>>>> neo4j/4.1
         // Don't start the counts store here as part of life, instead only shut down. This is because it's better to let FullCheck
         // start it and add its missing/broken detection where it can report to user.
         life.add( countsManager );
@@ -227,14 +243,20 @@ public class ConsistencyCheckService
         try ( NeoStores neoStores = factory.openAllNeoStores() )
         {
             // Load tokens before starting extensions, etc.
-            tokenHolders.setInitialTokens( StoreTokens.allReadableTokens( neoStores ) );
+            try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( CONSISTENCY_TOKEN_READER_TAG ) )
+            {
+                tokenHolders.setInitialTokens( StoreTokens.allReadableTokens( neoStores ), cursorTracer );
+            }
 
             life.start();
 
-            LabelScanStore labelScanStore =
-                    new NativeLabelScanStore( pageCache, databaseLayout, fileSystem, FullStoreChangeStream.EMPTY, true, monitors, workCollector );
+            LabelScanStore labelScanStore = TokenScanStore.labelScanStore( pageCache, databaseLayout, fileSystem, EMPTY, true, monitors, workCollector,
+                    pageCacheTracer, memoryTracker );
+            RelationshipTypeScanStore relationshipTypeScanstore = TokenScanStore.toggledRelationshipTypeScanStore( pageCache, databaseLayout, fileSystem,
+                    EMPTY, true, monitors, workCollector, config, pageCacheTracer, memoryTracker );
             life.add( labelScanStore );
-            IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( pageCache, databaseLayout, workCollector, true );
+            life.add( relationshipTypeScanstore );
+            IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( pageCache, databaseLayout, workCollector, true, pageCacheTracer );
             life.add( indexStatisticsStore );
 
             int numberOfThreads = defaultConsistencyCheckThreadsNumber();
@@ -252,9 +274,11 @@ public class ConsistencyCheckService
                 storeAccess = new StoreAccess( neoStores );
             }
             storeAccess.initialize();
-            DirectStoreAccess stores = new DirectStoreAccess( storeAccess, labelScanStore, indexes, tokenHolders, indexStatisticsStore, idGeneratorFactory );
+            DirectStoreAccess stores =
+                    new DirectStoreAccess( storeAccess, labelScanStore, relationshipTypeScanstore, indexes, tokenHolders, indexStatisticsStore,
+                            idGeneratorFactory );
             FullCheck check = new FullCheck( progressFactory, statistics, numberOfThreads, consistencyFlags, config, verbose, NodeBasedMemoryLimiter.DEFAULT );
-            summary = check.execute( pageCache, stores, countsManager, new DuplicatingLog( log, reportLog ) );
+            summary = check.execute( pageCache, stores, countsManager, pageCacheTracer, memoryTracker, new DuplicatingLog( log, reportLog ) );
         }
         finally
         {
@@ -273,12 +297,12 @@ public class ConsistencyCheckService
         return Result.success( reportFile, summary );
     }
 
-    private void assertRecovered( DatabaseLayout databaseLayout, Config config, FileSystemAbstraction fileSystem )
+    private void assertRecovered( DatabaseLayout databaseLayout, Config config, FileSystemAbstraction fileSystem, MemoryTracker memoryTracker )
             throws ConsistencyCheckIncompleteException
     {
         try
         {
-            if ( isRecoveryRequired( fileSystem, databaseLayout, config ) )
+            if ( isRecoveryRequired( fileSystem, databaseLayout, config, memoryTracker ) )
             {
                 throw new IllegalStateException(
                         joinAsLines( "Active logical log detected, this might be a source of inconsistencies.", "Please recover database.",
@@ -365,10 +389,10 @@ public class ConsistencyCheckService
         return Runtime.getRuntime().availableProcessors();
     }
 
-    private class RebuildPreventingCountsInitializer implements CountsBuilder
+    private static class RebuildPreventingCountsInitializer implements CountsBuilder
     {
         @Override
-        public void initialize( CountsAccessor.Updater updater )
+        public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
         {
             throw new UnsupportedOperationException( "Counts store needed rebuild, consistency checker will instead report broken or missing counts store" );
         }
@@ -385,26 +409,40 @@ public class ConsistencyCheckService
      * and start it inside the checker where we have the report instance available. So we pass in something that can supply the store...
      * and it can also close it (we do here in {@link ConsistencyCheckService}.
      */
-    private class CountsManager extends LifecycleAdapter implements ThrowingSupplier<CountsStore,IOException>
+    private static class CountsManager extends LifecycleAdapter implements ThrowingSupplier<CountsStore,IOException>
     {
         private final PageCache pageCache;
         private final FileSystemAbstraction fileSystem;
         private final DatabaseLayout databaseLayout;
+        private final PageCacheTracer pageCacheTracer;
+        private final MemoryTracker memoryTracker;
         private GBPTreeCountsStore counts;
 
+<<<<<<< HEAD
         CountsManager( PageCache pageCache, FileSystemAbstraction fileSystem, DatabaseLayout databaseLayout )
+=======
+        CountsManager( PageCache pageCache, FileSystemAbstraction fileSystem, DatabaseLayout databaseLayout, PageCacheTracer pageCacheTracer,
+                MemoryTracker memoryTracker )
+>>>>>>> neo4j/4.1
         {
             this.pageCache = pageCache;
             this.fileSystem = fileSystem;
             this.databaseLayout = databaseLayout;
+            this.pageCacheTracer = pageCacheTracer;
+            this.memoryTracker = memoryTracker;
         }
 
         @Override
         public CountsStore get() throws IOException
         {
             counts = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem,
+<<<<<<< HEAD
                     RecoveryCleanupWorkCollector.ignore(), new RebuildPreventingCountsInitializer(), true, GBPTreeCountsStore.NO_MONITOR );
             counts.start();
+=======
+                    RecoveryCleanupWorkCollector.ignore(), new RebuildPreventingCountsInitializer(), true, pageCacheTracer, GBPTreeCountsStore.NO_MONITOR );
+            counts.start( NULL, memoryTracker );
+>>>>>>> neo4j/4.1
             return counts;
         }
 

@@ -40,9 +40,11 @@ import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.log.PhysicalTransactionRepresentation;
 import org.neo4j.storageengine.api.StorageCommand;
 
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.TokenStore.NAME_STORE_BLOCK_SIZE;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_PROPERTY;
 import static org.neo4j.kernel.impl.store.record.Record.NO_PREV_RELATIONSHIP;
+import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
 
 public class TransactionWriter
 {
@@ -98,8 +100,7 @@ public class TransactionWriter
     public void create( NodeRecord node )
     {
         node.setCreated();
-        update( new NodeRecord( node.getId(), false, NO_PREV_RELATIONSHIP.intValue(),
-                NO_NEXT_PROPERTY.intValue() ), node );
+        update( new NodeRecord( node.getId() ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, NO_PREV_RELATIONSHIP.intValue(), 0 ), node );
     }
 
     public void create( LabelTokenRecord labelToken )
@@ -117,7 +118,9 @@ public class TransactionWriter
     public void create( RelationshipGroupRecord group )
     {
         group.setCreated();
-        update( new RelationshipGroupRecord( group.getId(), group.getType() ), group );
+        update( new RelationshipGroupRecord( group.getId() )
+                .initialize( false, group.getType(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(),
+                        NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue() ), group );
     }
 
     public void update( NodeRecord before, NodeRecord node )
@@ -135,10 +138,10 @@ public class TransactionWriter
     public void delete( NodeRecord node )
     {
         node.setInUse( false );
-        add( node, new NodeRecord( node.getId(), false, NO_PREV_RELATIONSHIP.intValue(), NO_NEXT_PROPERTY.intValue() ) );
+        add( node, new NodeRecord( node.getId() ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, NO_PREV_RELATIONSHIP.intValue(), 0 ) );
     }
 
-    public void create(  RelationshipRecord record  )
+    public void create( RelationshipRecord record )
     {
         record.setCreated();
         update( new RelationshipRecord( record.getId() ), record );
@@ -147,7 +150,9 @@ public class TransactionWriter
     public void delete( RelationshipGroupRecord group )
     {
         group.setInUse( false );
-        add( group, new RelationshipGroupRecord( group.getId(), group.getType() ) );
+        add( group, new RelationshipGroupRecord( group.getId() )
+                .initialize( false, group.getType(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(),
+                        NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue() ) );
     }
 
     public void createSchema( SchemaRecord before, SchemaRecord after, SchemaRule rule )
@@ -174,7 +179,7 @@ public class TransactionWriter
         add( before, after );
     }
 
-    public void delete(  RelationshipRecord record  )
+    public void delete( RelationshipRecord record )
     {
         record.setInUse( false );
         add( record, new RelationshipRecord( record.getId() ) );
@@ -296,15 +301,15 @@ public class TransactionWriter
     {
         for ( Command.NodeCommand command : nodeCommands )
         {
-            neoStores.getNodeStore().prepareForCommit( command.getAfter() );
+            neoStores.getNodeStore().prepareForCommit( command.getAfter(), NULL );
         }
         for ( Command.RelationshipCommand command : relationshipCommands )
         {
-            neoStores.getRelationshipStore().prepareForCommit( command.getAfter() );
+            neoStores.getRelationshipStore().prepareForCommit( command.getAfter(), NULL );
         }
         for ( Command.RelationshipGroupCommand command : relationshipGroupCommands )
         {
-            neoStores.getRelationshipGroupStore().prepareForCommit( command.getAfter() );
+            neoStores.getRelationshipGroupStore().prepareForCommit( command.getAfter(), NULL );
         }
     }
 

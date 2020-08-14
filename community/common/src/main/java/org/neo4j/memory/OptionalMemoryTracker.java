@@ -19,19 +19,21 @@
  */
 package org.neo4j.memory;
 
-import java.util.Optional;
-
 /**
  * Tracker that is possibly capable of reporting the number of allocated bytes.
  */
 public interface OptionalMemoryTracker
 {
-    OptionalMemoryTracker NONE = Optional::empty;
+    long ALLOCATIONS_NOT_TRACKED = -1L;
+
+    OptionalMemoryTracker NONE = () -> ALLOCATIONS_NOT_TRACKED;
+
+    OptionalMemoryTracker ZERO = () -> 0L;
 
     /**
      * Get the total allocated memory of this query, in bytes.
      *
      * @return the total number of allocated memory bytes, or None, if memory tracking was not enabled.
      */
-    Optional<Long> totalAllocatedMemory();
+    long totalAllocatedMemory();
 }

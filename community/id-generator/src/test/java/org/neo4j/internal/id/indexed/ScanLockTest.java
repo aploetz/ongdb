@@ -19,18 +19,28 @@
  */
 package org.neo4j.internal.id.indexed;
 
+<<<<<<< HEAD
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+=======
+import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.TimeUnit;
+>>>>>>> neo4j/4.1
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 
 import org.neo4j.test.Race;
 
+<<<<<<< HEAD
 import static org.hamcrest.MatcherAssert.assertThat;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+>>>>>>> neo4j/4.1
 import static org.neo4j.test.Race.throwing;
 
 class ScanLockTest
@@ -66,6 +76,10 @@ class ScanLockTest
         race.goUnchecked();
 
         // then if should be >= 10, which is grossly under-estimated tho, it should get a couple of hundred thousand
+<<<<<<< HEAD
         assertThat( numberOfLocks.intValue(), Matchers.greaterThanOrEqualTo( targetNumberOfLocks ) );
+=======
+        assertThat( numberOfLocks.intValue() ).isGreaterThanOrEqualTo( targetNumberOfLocks );
+>>>>>>> neo4j/4.1
     }
 }

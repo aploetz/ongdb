@@ -28,6 +28,7 @@ import org.neo4j.internal.recordstorage.RelationshipGroupGetter.RelationshipGrou
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
@@ -49,6 +50,8 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
 
 @EphemeralPageCacheExtension
 @EphemeralNeo4jLayoutExtension
@@ -67,7 +70,7 @@ class RelationshipGroupGetterTest
         // GIVEN a node with relationship group chain 2-->4-->10-->23
         LogProvider logProvider = NullLogProvider.getInstance();
         StoreFactory storeFactory = new StoreFactory( databaseLayout, Config.defaults(),
-                new DefaultIdGeneratorFactory( fs, immediate()  ), pageCache, fs, logProvider );
+                new DefaultIdGeneratorFactory( fs, immediate()  ), pageCache, fs, logProvider, PageCacheTracer.NULL );
         try ( NeoStores stores = storeFactory.openNeoStores( true, StoreType.RELATIONSHIP_GROUP ) )
         {
             RecordStore<RelationshipGroupRecord> store = spy( stores.getRelationshipGroupStore() );
@@ -77,12 +80,12 @@ class RelationshipGroupGetterTest
             RelationshipGroupRecord group10 = group( 2, 10 );
             RelationshipGroupRecord group23 = group( 3, 23 );
             link( group2, group4, group10, group23 );
-            store.updateRecord( group2 );
-            store.updateRecord( group4 );
-            store.updateRecord( group10 );
-            store.updateRecord( group23 );
-            RelationshipGroupGetter groupGetter = new RelationshipGroupGetter( store );
-            NodeRecord node = new NodeRecord( 0, true, group2.getId(), -1 );
+            store.updateRecord( group2, NULL );
+            store.updateRecord( group4, NULL );
+            store.updateRecord( group10, NULL );
+            store.updateRecord( group23, NULL );
+            RelationshipGroupGetter groupGetter = new RelationshipGroupGetter( store, NULL );
+            NodeRecord node = new NodeRecord( 0 ).initialize( false, -1, true, group2.getId(), 0 );
 
             // WHEN trying to find relationship group 7
             RecordAccess<RelationshipGroupRecord, Integer> access =
@@ -91,11 +94,11 @@ class RelationshipGroupGetterTest
 
             // THEN only groups 2, 4 and 10 should have been loaded
             InOrder verification = inOrder( store );
-            verification.verify( store ).getRecord( eq( group2.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ) );
-            verification.verify( store ).getRecord( eq( group4.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ) );
-            verification.verify( store ).getRecord( eq( group10.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ) );
+            verification.verify( store ).getRecord( eq( group2.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ), any() );
+            verification.verify( store ).getRecord( eq( group4.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ), any() );
+            verification.verify( store ).getRecord( eq( group10.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ), any() );
             verification.verify( store, never() )
-                    .getRecord( eq( group23.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ) );
+                    .getRecord( eq( group23.getId() ), any( RelationshipGroupRecord.class ), any( RecordLoad.class ), any() );
 
             // it should also be reported as not found
             assertNull( result.group() );
@@ -121,8 +124,8 @@ class RelationshipGroupGetterTest
 
     private static RelationshipGroupRecord group( long id, int type )
     {
-        RelationshipGroupRecord group = new RelationshipGroupRecord( id, type );
-        group.setInUse( true );
-        return group;
+        return new RelationshipGroupRecord( id )
+                .initialize( true, type, NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(),
+                        NULL_REFERENCE.longValue() );
     }
 }

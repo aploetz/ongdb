@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.LongFunction;
 import java.util.function.Predicate;
 
 import org.neo4j.collection.Dependencies;
@@ -56,12 +55,14 @@ import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.migration.MigrationProgressMonitor;
 
@@ -84,6 +85,8 @@ import static org.neo4j.io.IOUtils.closeAll;
  */
 public class ImportLogic implements Closeable
 {
+    private static final String IMPORT_COUNT_STORE_REBUILD_TAG = "importCountStoreRebuild";
+
     public interface Monitor
     {
         void doubleRelationshipRecordUnitsEnabled();
@@ -137,6 +140,8 @@ public class ImportLogic implements Closeable
     private final Configuration config;
     private final Config dbConfig;
     private final Log log;
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
     private final ExecutionMonitor executionMonitor;
     private final RecordFormats recordFormats;
     private final DataImporter.Monitor storeUpdateMonitor = new DataImporter.Monitor();
@@ -157,7 +162,7 @@ public class ImportLogic implements Closeable
     private NodeLabelsCache nodeLabelsCache;
     private long startTime;
     private NumberArrayFactory numberArrayFactory;
-    private Collector badCollector;
+    private final Collector badCollector;
     private IdMapper idMapper;
     private long peakMemoryUsage;
     private long availableMemoryForLinking;
@@ -173,7 +178,8 @@ public class ImportLogic implements Closeable
      * @param monitor {@link Monitor} for some events.
      */
     public ImportLogic( DatabaseLayout databaseLayout, BatchingNeoStores neoStore, Configuration config, Config dbConfig, LogService logService,
-            ExecutionMonitor executionMonitor, RecordFormats recordFormats, Collector badCollector, Monitor monitor )
+            ExecutionMonitor executionMonitor, RecordFormats recordFormats, Collector badCollector, Monitor monitor,
+            PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
         this.databaseDirectory = databaseLayout.databaseDirectory();
         this.neoStore = neoStore;
@@ -183,6 +189,8 @@ public class ImportLogic implements Closeable
         this.badCollector = badCollector;
         this.monitor = monitor;
         this.log = logService.getInternalLogProvider().getLog( getClass() );
+        this.pageCacheTracer = pageCacheTracer;
+        this.memoryTracker = memoryTracker;
         this.executionMonitor = ExecutionSupervisors.withDynamicProcessorAssignment( executionMonitor, config );
         this.maxMemory = config.maxMemoryUsage();
     }
@@ -193,10 +201,11 @@ public class ImportLogic implements Closeable
         startTime = currentTimeMillis();
         this.input = input;
         PageCacheArrayFactoryMonitor numberArrayFactoryMonitor = new PageCacheArrayFactoryMonitor();
-        numberArrayFactory = auto( neoStore.getPageCache(), databaseDirectory, config.allowCacheAllocationOnHeap(), numberArrayFactoryMonitor );
+        numberArrayFactory = auto( neoStore.getPageCache(), pageCacheTracer, databaseDirectory, config.allowCacheAllocationOnHeap(),
+                numberArrayFactoryMonitor );
         // Some temporary caches and indexes in the import
         idMapper = instantiateIdMapper( input );
-        nodeRelationshipCache = new NodeRelationshipCache( numberArrayFactory, dbConfig.get( GraphDatabaseSettings.dense_node_threshold ) );
+        nodeRelationshipCache = new NodeRelationshipCache( numberArrayFactory, dbConfig.get( GraphDatabaseSettings.dense_node_threshold ), memoryTracker );
         Input.Estimates inputEstimates = input.calculateEstimates( neoStore.getPropertyStore().newValueEncodedSizeCalculator() );
 
         // Sanity checking against estimates
@@ -220,9 +229,9 @@ public class ImportLogic implements Closeable
         switch ( input.idType() )
         {
         case STRING:
-            return IdMappers.strings( numberArrayFactory, input.groups() );
+            return IdMappers.strings( numberArrayFactory, input.groups(), pageCacheTracer, memoryTracker );
         case INTEGER:
-            return IdMappers.longs( numberArrayFactory, input.groups() );
+            return IdMappers.longs( numberArrayFactory, input.groups(), pageCacheTracer, memoryTracker );
         case ACTUAL:
             return IdMappers.actual();
         default:
@@ -267,7 +276,8 @@ public class ImportLogic implements Closeable
     {
         // Import nodes, properties, labels
         neoStore.startFlushingPageCache();
-        DataImporter.importNodes( config.maxNumberOfProcessors(), input, neoStore, idMapper, badCollector, executionMonitor, storeUpdateMonitor );
+        DataImporter.importNodes( config.maxNumberOfProcessors(), input, neoStore, idMapper, badCollector, executionMonitor, storeUpdateMonitor,
+                pageCacheTracer, memoryTracker );
         neoStore.stopFlushingPageCache();
         updatePeakMemoryUsage();
     }
@@ -280,12 +290,12 @@ public class ImportLogic implements Closeable
         if ( idMapper.needsPreparation() )
         {
             MemoryUsageStatsProvider memoryUsageStats = new MemoryUsageStatsProvider( neoStore, idMapper );
-            LongFunction<Object> inputIdLookup = new NodeInputIdPropertyLookup( neoStore.getTemporaryPropertyStore() );
+            PropertyValueLookup inputIdLookup = new NodeInputIdPropertyLookup( neoStore.getTemporaryPropertyStore() );
             executeStage( new IdMapperPreparationStage( config, idMapper, inputIdLookup, badCollector, memoryUsageStats ) );
             final LongIterator duplicateNodeIds = idMapper.leftOverDuplicateNodesIds();
             if ( duplicateNodeIds.hasNext() )
             {
-                executeStage( new DeleteDuplicateNodesStage( config, duplicateNodeIds, neoStore, storeUpdateMonitor ) );
+                executeStage( new DeleteDuplicateNodesStage( config, duplicateNodeIds, neoStore, storeUpdateMonitor, pageCacheTracer ) );
             }
             updatePeakMemoryUsage();
         }
@@ -304,7 +314,7 @@ public class ImportLogic implements Closeable
         neoStore.startFlushingPageCache();
         DataStatistics typeDistribution = DataImporter.importRelationships(
                 config.maxNumberOfProcessors(), input, neoStore, idMapper, badCollector, executionMonitor, storeUpdateMonitor,
-                !badCollector.isCollectingBadRelationships() );
+                !badCollector.isCollectingBadRelationships(), pageCacheTracer, memoryTracker );
         neoStore.stopFlushingPageCache();
         updatePeakMemoryUsage();
         idMapper.close();
@@ -323,7 +333,7 @@ public class ImportLogic implements Closeable
         nodeRelationshipCache.setNodeCount( neoStore.getNodeStore().getHighId() );
         MemoryUsageStatsProvider memoryUsageStats = new MemoryUsageStatsProvider( neoStore, nodeRelationshipCache );
         NodeDegreeCountStage nodeDegreeStage = new NodeDegreeCountStage( relationshipConfig,
-                neoStore.getRelationshipStore(), nodeRelationshipCache, memoryUsageStats );
+                neoStore.getRelationshipStore(), nodeRelationshipCache, memoryUsageStats, pageCacheTracer );
         executeStage( nodeDegreeStage );
         nodeRelationshipCache.countingCompleted();
         availableMemoryForLinking = maxMemory - totalMemoryUsageOf( nodeRelationshipCache, neoStore );
@@ -397,24 +407,24 @@ public class ImportLogic implements Closeable
 
         // LINK Forward
         RelationshipLinkforwardStage linkForwardStage = new RelationshipLinkforwardStage( topic, relationshipConfig,
-                neoStore, nodeRelationshipCache, readFilter, denseChangeFilter, nodeTypes,
+                neoStore, nodeRelationshipCache, readFilter, denseChangeFilter, nodeTypes, pageCacheTracer,
                 new RelationshipLinkingProgress(), memoryUsageStats );
         executeStage( linkForwardStage );
 
         // Write relationship groups cached from the relationship import above
         executeStage( new RelationshipGroupStage( topic, groupConfig,
-                neoStore.getTemporaryRelationshipGroupStore(), nodeRelationshipCache ) );
+                neoStore.getTemporaryRelationshipGroupStore(), nodeRelationshipCache, pageCacheTracer ) );
         if ( thisIsTheFirstRound )
         {
             // Set node nextRel fields for sparse nodes
             executeStage( new SparseNodeFirstRelationshipStage( nodeConfig, neoStore.getNodeStore(),
-                    nodeRelationshipCache ) );
+                    nodeRelationshipCache, pageCacheTracer ) );
         }
 
         // LINK backward
         nodeRelationshipCache.setForwardScan( false, true/*dense*/ );
         executeStage( new RelationshipLinkbackStage( topic, relationshipConfig, neoStore,
-                nodeRelationshipCache, readFilter, denseChangeFilter, nodeTypes,
+                nodeRelationshipCache, readFilter, denseChangeFilter, nodeTypes, pageCacheTracer,
                 new RelationshipLinkingProgress(), memoryUsageStats ) );
 
         updatePeakMemoryUsage();
@@ -489,8 +499,8 @@ public class ImportLogic implements Closeable
     public void defragmentRelationshipGroups()
     {
         // Defragment relationships groups for better performance
-        new RelationshipGroupDefragmenter( config, executionMonitor, RelationshipGroupDefragmenter.Monitor.EMPTY, numberArrayFactory )
-                .run( max( maxMemory, peakMemoryUsage ), neoStore, neoStore.getNodeStore().getHighId() );
+        new RelationshipGroupDefragmenter( config, executionMonitor, RelationshipGroupDefragmenter.Monitor.EMPTY, numberArrayFactory, pageCacheTracer,
+                memoryTracker ).run( max( maxMemory, peakMemoryUsage ), neoStore, neoStore.getNodeStore().getHighId() );
     }
 
     /**
@@ -498,30 +508,33 @@ public class ImportLogic implements Closeable
      */
     public void buildCountsStore()
     {
-        neoStore.buildCountsStore( new CountsBuilder()
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( IMPORT_COUNT_STORE_REBUILD_TAG ) )
         {
-            @Override
-            public void initialize( CountsAccessor.Updater updater )
+            neoStore.buildCountsStore( new CountsBuilder()
             {
-                MigrationProgressMonitor progressMonitor = MigrationProgressMonitor.SILENT;
-                nodeLabelsCache = new NodeLabelsCache( numberArrayFactory, neoStore.getLabelRepository().getHighId() );
-                MemoryUsageStatsProvider memoryUsageStats = new MemoryUsageStatsProvider( neoStore, nodeLabelsCache );
-                executeStage( new NodeCountsAndLabelIndexBuildStage( config, nodeLabelsCache, neoStore.getNodeStore(),
-                        neoStore.getLabelRepository().getHighId(), updater, progressMonitor.startSection( "Nodes" ),
-                        neoStore.getLabelScanStore(), memoryUsageStats ) );
-                // Count label-[type]->label
-                executeStage( new RelationshipCountsStage( config, nodeLabelsCache, neoStore.getRelationshipStore(),
-                        neoStore.getLabelRepository().getHighId(),
-                        neoStore.getRelationshipTypeRepository().getHighId(),
-                        updater, numberArrayFactory, progressMonitor.startSection( "Relationships" ) ) );
-            }
+                @Override
+                public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
+                {
+                    MigrationProgressMonitor progressMonitor = MigrationProgressMonitor.SILENT;
+                    nodeLabelsCache = new NodeLabelsCache( numberArrayFactory, neoStore.getLabelRepository().getHighId(), memoryTracker );
+                    MemoryUsageStatsProvider memoryUsageStats = new MemoryUsageStatsProvider( neoStore, nodeLabelsCache );
+                    executeStage( new NodeCountsAndLabelIndexBuildStage( config, nodeLabelsCache, neoStore.getNodeStore(),
+                            neoStore.getLabelRepository().getHighId(),
+                            updater, progressMonitor.startSection( "Nodes" ), neoStore.getLabelScanStore(), pageCacheTracer, memoryUsageStats ) );
+                    // Count label-[type]->label
+                    executeStage( new RelationshipCountsAndTypeIndexBuildStage( config, nodeLabelsCache, neoStore.getRelationshipStore(),
+                            neoStore.getLabelRepository().getHighId(),
+                            neoStore.getRelationshipTypeRepository().getHighId(), updater, numberArrayFactory,
+                            progressMonitor.startSection( "Relationships" ), neoStore.getRelationshipTypeScanStore(), pageCacheTracer, memoryTracker ) );
+                }
 
-            @Override
-            public long lastCommittedTxId()
-            {
-                return neoStore.getLastCommittedTransactionId();
-            }
-        } );
+                @Override
+                public long lastCommittedTxId()
+                {
+                    return neoStore.getLastCommittedTransactionId();
+                }
+            }, pageCacheTracer, cursorTracer, memoryTracker );
+        }
     }
 
     public void success()
@@ -549,17 +562,17 @@ public class ImportLogic implements Closeable
     }
 
     public static BatchingNeoStores instantiateNeoStores( FileSystemAbstraction fileSystem, DatabaseLayout databaseLayout,
-            PageCache externalPageCache, RecordFormats recordFormats, Configuration config,
-            LogService logService, AdditionalInitialIds additionalInitialIds, Config dbConfig, JobScheduler scheduler )
+            PageCache externalPageCache, PageCacheTracer cacheTracer, RecordFormats recordFormats, Configuration config,
+            LogService logService, AdditionalInitialIds additionalInitialIds, Config dbConfig, JobScheduler scheduler, MemoryTracker memoryTracker )
     {
         if ( externalPageCache == null )
         {
             return BatchingNeoStores.batchingNeoStores( fileSystem, databaseLayout, recordFormats, config, logService,
-                    additionalInitialIds, dbConfig, scheduler );
+                    additionalInitialIds, dbConfig, scheduler, cacheTracer, memoryTracker );
         }
 
         return BatchingNeoStores.batchingNeoStoresWithExternalPageCache( fileSystem, externalPageCache,
-                PageCacheTracer.NULL, databaseLayout, recordFormats, config, logService, additionalInitialIds, dbConfig );
+                cacheTracer, databaseLayout, recordFormats, config, logService, additionalInitialIds, dbConfig, memoryTracker );
     }
 
     private static long totalMemoryUsageOf( MemoryStatsVisitor.Visitable... users )

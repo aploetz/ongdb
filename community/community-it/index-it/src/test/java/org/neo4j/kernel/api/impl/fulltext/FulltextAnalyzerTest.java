@@ -19,10 +19,11 @@
  */
 package org.neo4j.kernel.api.impl.fulltext;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
+import org.neo4j.configuration.FulltextSettings;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.kernel.api.SchemaRead;
 import org.neo4j.kernel.api.KernelTransaction;
@@ -30,14 +31,14 @@ import org.neo4j.kernel.impl.api.KernelTransactionImplementation;
 
 import static org.neo4j.graphdb.schema.IndexType.FULLTEXT;
 
-public class FulltextAnalyzerTest extends LuceneFulltextTestSupport
+class FulltextAnalyzerTest extends LuceneFulltextTestSupport
 {
     private static final String ENGLISH = "english";
     static final String SWEDISH = "swedish";
     private static final String FOLDING = "standard-folding";
 
     @Test
-    public void shouldBeAbleToSpecifyEnglishAnalyzer() throws Exception
+    void shouldBeAbleToSpecifyEnglishAnalyzer() throws Exception
     {
         applySetting( FulltextSettings.fulltext_default_analyzer, ENGLISH );
 
@@ -73,7 +74,7 @@ public class FulltextAnalyzerTest extends LuceneFulltextTestSupport
     }
 
     @Test
-    public void shouldBeAbleToSpecifySwedishAnalyzer() throws Exception
+    void shouldBeAbleToSpecifySwedishAnalyzer() throws Exception
     {
         applySetting( FulltextSettings.fulltext_default_analyzer, SWEDISH );
 
@@ -109,7 +110,7 @@ public class FulltextAnalyzerTest extends LuceneFulltextTestSupport
     }
 
     @Test
-    public void shouldBeAbleToSpecifyFoldingAnalyzer() throws Exception
+    void shouldBeAbleToSpecifyFoldingAnalyzer() throws Exception
     {
         applySetting( FulltextSettings.fulltext_default_analyzer, FOLDING );
 
@@ -144,7 +145,7 @@ public class FulltextAnalyzerTest extends LuceneFulltextTestSupport
     }
 
     @Test
-    public void shouldNotReindexNodesWhenDefaultAnalyzerIsChanged() throws Exception
+    void shouldNotReindexNodesWhenDefaultAnalyzerIsChanged() throws Exception
     {
         long secondID;
         applySetting( FulltextSettings.fulltext_default_analyzer, ENGLISH );

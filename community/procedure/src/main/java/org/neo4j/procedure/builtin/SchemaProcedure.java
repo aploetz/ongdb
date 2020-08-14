@@ -31,7 +31,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -46,7 +45,6 @@ import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.coreapi.schema.PropertyNameUtils;
 
@@ -74,7 +72,10 @@ public class SchemaProcedure
         {
             Read dataRead = kernelTransaction.dataRead();
             TokenRead tokenRead = kernelTransaction.tokenRead();
+<<<<<<< HEAD
             TokenNameLookup tokenNameLookup = new SilentTokenNameLookup( tokenRead );
+=======
+>>>>>>> neo4j/4.1
             SchemaRead schemaRead = kernelTransaction.schemaRead();
 
             List<Pair<String,Integer>> labelNamesAndIds = new ArrayList<>();
@@ -95,24 +96,40 @@ public class SchemaProcedure
                     Map<String,Object> properties = new HashMap<>();
 
                     Iterator<IndexDescriptor> indexReferences = schemaRead.indexesGetForLabel( labelId );
+<<<<<<< HEAD
                     ArrayList<String> indexes = new ArrayList<>();
+=======
+                    List<String> indexes = new ArrayList<>();
+>>>>>>> neo4j/4.1
                     while ( indexReferences.hasNext() )
                     {
                         IndexDescriptor index = indexReferences.next();
                         if ( !index.isUnique() )
                         {
+<<<<<<< HEAD
                             String[] propertyNames = PropertyNameUtils.getPropertyKeys( tokenNameLookup, index.schema().getPropertyIds() );
+=======
+                            String[] propertyNames = PropertyNameUtils.getPropertyKeys( tokenRead, index.schema().getPropertyIds() );
+>>>>>>> neo4j/4.1
                             indexes.add( String.join( ",", propertyNames ) );
                         }
                     }
                     properties.put( "indexes", indexes );
 
                     Iterator<ConstraintDescriptor> nodePropertyConstraintIterator = schemaRead.constraintsGetForLabel( labelId );
+<<<<<<< HEAD
                     ArrayList<String> constraints = new ArrayList<>();
                     while ( nodePropertyConstraintIterator.hasNext() )
                     {
                         ConstraintDescriptor constraint = nodePropertyConstraintIterator.next();
                         constraints.add( constraint.prettyPrint( tokenNameLookup ) );
+=======
+                    List<String> constraints = new ArrayList<>();
+                    while ( nodePropertyConstraintIterator.hasNext() )
+                    {
+                        ConstraintDescriptor constraint = nodePropertyConstraintIterator.next();
+                        constraints.add( constraint.userDescription( tokenRead ) );
+>>>>>>> neo4j/4.1
                     }
                     properties.put( "constraints", constraints );
 
@@ -346,7 +363,7 @@ public class SchemaProcedure
     private static class VirtualNodeHack implements Node
     {
 
-        private final HashMap<String,Object> propertyMap = new HashMap<>();
+        private final Map<String,Object> propertyMap = new HashMap<>();
 
         private static final AtomicLong MIN_ID = new AtomicLong( -1 );
         private final long id;

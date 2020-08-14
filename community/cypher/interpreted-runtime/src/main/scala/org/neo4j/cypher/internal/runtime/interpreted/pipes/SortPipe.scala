@@ -21,16 +21,33 @@ package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import java.util.Comparator
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.collection.trackable.HeapTrackingArrayList
+import org.neo4j.cypher.internal.runtime.AutoClosingIterator
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.memory.ScopedMemoryTracker
 
-case class SortPipe(source: Pipe, comparator: Comparator[ExecutionContext])
+import scala.collection.JavaConverters.asScalaIteratorConverter
+
+case class SortPipe(source: Pipe, comparator: Comparator[ReadableRow])
                    (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    val array = state.memoryTracker.memoryTrackingIterator(input).toArray
-    java.util.Arrays.sort(array, comparator)
-    array.toIterator
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val scopedMemoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x).getScopedMemoryTracker
+    var arrayList: HeapTrackingArrayList[CypherRow] = HeapTrackingArrayList.newArrayList(256, scopedMemoryTracker)
+    while (input.hasNext) {
+      val row = input.next()
+      scopedMemoryTracker.allocateHeap(row.estimatedHeapUsage())
+      arrayList.add(row)
+    }
+    arrayList.sort(comparator)
+    new AutoClosingIterator[CypherRow](arrayList.iterator().asScala) {
+      override def close(): Unit = {
+        arrayList = null
+        scopedMemoryTracker.close()
+      }
+    }
   }
 }

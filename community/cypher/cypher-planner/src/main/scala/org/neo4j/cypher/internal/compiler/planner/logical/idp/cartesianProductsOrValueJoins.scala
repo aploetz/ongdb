@@ -19,10 +19,15 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.idp
 
-import org.neo4j.cypher.internal.compiler.planner.logical.{LogicalPlanningContext, QueryPlannerKit}
-import org.neo4j.cypher.internal.ir.{InterestingOrder, QueryGraph}
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, NodeIndexSeek, NodeUniqueIndexSeek}
-import org.neo4j.cypher.internal.v4_0.expressions.{Equals, Expression}
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryPlannerKit
+import org.neo4j.cypher.internal.expressions.Equals
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexSeek
+import org.neo4j.cypher.internal.logical.plans.NodeUniqueIndexSeek
 
 trait JoinDisconnectedQueryGraphComponents {
   def apply(componentPlans: Set[PlannedComponent],
@@ -53,7 +58,7 @@ case object cartesianProductsOrValueJoins extends JoinDisconnectedQueryGraphComp
             kit: QueryPlannerKit,
             singleComponentPlanner: SingleComponentPlannerTrait): Set[PlannedComponent] = {
 
-    assert(plans.size > 1, "Can't build cartesian product with less than two input plans")
+    require(plans.size > 1, "Can't build cartesian product with less than two input plans")
 
     /*
     To connect disconnected query parts, we have a couple of different ways. First we check if there are any joins that
@@ -68,7 +73,7 @@ case object cartesianProductsOrValueJoins extends JoinDisconnectedQueryGraphComp
      */
     val joins =
       produceHashJoins(plans, qg, context, kit, singleComponentPlanner) ++
-      produceNIJVariations(plans, qg, interestingOrder, context, kit, singleComponentPlanner)
+        produceNIJVariations(plans, qg, interestingOrder, context, kit, singleComponentPlanner)
 
     if (joins.nonEmpty) {
       pickTheBest(plans, kit, joins)
@@ -92,8 +97,8 @@ case object cartesianProductsOrValueJoins extends JoinDisconnectedQueryGraphComp
   }
 
   /**
-    * Plans a large amount of query parts together. Produces a left deep tree sorted by the cost of the query parts.
-    */
+   * Plans a large amount of query parts together. Produces a left deep tree sorted by the cost of the query parts.
+   */
   private def planLotsOfCartesianProducts(plans: Set[PlannedComponent], qg: QueryGraph, context: LogicalPlanningContext, kit: QueryPlannerKit) = {
     val allPlans = plans.toList.sortBy(c => context.cost.apply(c.plan, context.input, context.planningAttributes.cardinalities))
     val onePlanToRuleThemAll = allPlans.tail.foldLeft(allPlans.head) {
@@ -160,8 +165,8 @@ case object cartesianProductsOrValueJoins extends JoinDisconnectedQueryGraphComp
                                singleComponentPlanner: SingleComponentPlannerTrait): Map[PlannedComponent, (PlannedComponent, PlannedComponent)]  = {
     (for {
       join <- valueJoins(qg.selections.flatPredicates)
-      t1@PlannedComponent(_, planA) <- plans if planA.satisfiesExpressionDependencies(join.lhs)
-      t2@PlannedComponent(_, planB) <- plans if planB.satisfiesExpressionDependencies(join.rhs) && planA != planB
+      t1@PlannedComponent(_, planA) <- plans if planA.satisfiesExpressionDependencies(join.lhs) && !planA.satisfiesExpressionDependencies(join.rhs)
+      t2@PlannedComponent(_, planB) <- plans if planB.satisfiesExpressionDependencies(join.rhs) && !planB.satisfiesExpressionDependencies(join.lhs) && planA != planB
     } yield {
       val hashJoinAB = kit.select(context.logicalPlanProducer.planValueHashJoin(planA, planB, join, join, context), qg)
       val hashJoinBA = kit.select(context.logicalPlanProducer.planValueHashJoin(planB, planA, join.switchSides, join, context), qg)

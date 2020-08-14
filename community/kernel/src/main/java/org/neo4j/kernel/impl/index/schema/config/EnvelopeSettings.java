@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.index.schema.config;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 import org.neo4j.configuration.Config;
 import org.neo4j.gis.spatial.index.Envelope;
@@ -28,14 +29,14 @@ import org.neo4j.values.storable.CoordinateReferenceSystem;
 
 class EnvelopeSettings
 {
-    private static final double DEFAULT_MIN_EXTENT = -1000000;
-    private static final double DEFAULT_MAX_EXTENT = 1000000;
+    private static final double DEFAULT_MIN_EXTENT = -1_000_000;
+    private static final double DEFAULT_MAX_EXTENT = 1_000_000;
     private static final double DEFAULT_MIN_LATITUDE = -90;
     private static final double DEFAULT_MAX_LATITUDE = 90;
     private static final double DEFAULT_MIN_LONGITUDE = -180;
     private static final double DEFAULT_MAX_LONGITUDE = 180;
 
-    private CoordinateReferenceSystem crs;
+    private final CoordinateReferenceSystem crs;
     private Double[] min;
     private Double[] max;
 
@@ -48,9 +49,9 @@ class EnvelopeSettings
         Arrays.fill( this.max, Double.NaN );
     }
 
-    static HashMap<CoordinateReferenceSystem,EnvelopeSettings> envelopeSettingsFromConfig( Config config )
+    static Map<CoordinateReferenceSystem,EnvelopeSettings> envelopeSettingsFromConfig( Config config )
     {
-        HashMap<CoordinateReferenceSystem,EnvelopeSettings> env = new HashMap<>();
+        Map<CoordinateReferenceSystem,EnvelopeSettings> env = new HashMap<>();
         config.getGroups( CrsConfig.class ).forEach( ( id, crsConfig ) ->
         {
             EnvelopeSettings envelopeSettings = new EnvelopeSettings( crsConfig.crs );

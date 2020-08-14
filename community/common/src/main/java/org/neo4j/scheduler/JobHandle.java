@@ -21,25 +21,41 @@ package org.neo4j.scheduler;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public interface JobHandle
+public interface JobHandle<T>
 {
+    JobHandle<?> EMPTY = new NullJobHandle<>();
+
     void cancel();
 
-    void waitTermination() throws InterruptedException, ExecutionException, CancellationException;
+    /**
+     * @throws InterruptedException
+     * @throws ExecutionException
+     * @throws CancellationException
+     */
+    void waitTermination() throws InterruptedException, ExecutionException;
 
     void waitTermination( long timeout, TimeUnit unit ) throws InterruptedException, ExecutionException, TimeoutException;
+
+    /**
+     * Waits if necessary for the computation to complete, and then
+     * retrieves its result, similar to {@link Future#get()}.
+     *
+     * @return the computed result
+     * @throws ExecutionException if the computation threw an exception
+     * @throws InterruptedException if the current thread was interrupted while waiting
+     */
+    T get() throws ExecutionException, InterruptedException;
 
     default void registerCancelListener( CancelListener listener )
     {
         throw new UnsupportedOperationException( "Unsupported in this implementation" );
     }
 
-    JobHandle nullInstance = new NullJobHandle();
-
-    class NullJobHandle implements JobHandle
+    class NullJobHandle<T> implements JobHandle<T>
     {
         @Override
         public void cancel()
@@ -47,13 +63,19 @@ public interface JobHandle
         }
 
         @Override
-        public void waitTermination() throws CancellationException
+        public void waitTermination()
         {   // no-op
         }
 
         @Override
         public void waitTermination( long timeout, TimeUnit unit )
         {   // no-op
+        }
+
+        @Override
+        public T get()
+        {
+            return null;
         }
     }
 }

@@ -34,6 +34,8 @@ import org.neo4j.test.extension.Inject;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.neo4j.internal.helpers.collection.Iterators.loop;
 import static org.neo4j.internal.helpers.collection.Iterators.single;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @DbmsExtension
 class DropBrokenUniquenessConstraintIT
@@ -43,6 +45,8 @@ class DropBrokenUniquenessConstraintIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private RecordStorageEngine storageEngine;
 
     @Test
     void shouldDropUniquenessConstraintWithBackingIndexNotInUse()
@@ -55,9 +59,8 @@ class DropBrokenUniquenessConstraintIT
         }
 
         // when intentionally breaking the schema by setting the backing index rule to unused
-        RecordStorageEngine storageEngine = db.getDependencyResolver().resolveDependency( RecordStorageEngine.class );
         SchemaRuleAccess schemaRules = storageEngine.testAccessSchemaRules();
-        schemaRules.indexesGetAll().forEachRemaining( schemaRules::deleteSchemaRule );
+        schemaRules.indexesGetAll( NULL ).forEachRemaining( rule -> schemaRules.deleteSchemaRule( rule, NULL ) );
         // At this point the SchemaCache doesn't know about this change so we have to reload it
         storageEngine.loadSchemaCache();
         try ( Transaction tx = db.beginTx() )
@@ -85,7 +88,6 @@ class DropBrokenUniquenessConstraintIT
         }
 
         // when intentionally breaking the schema by setting the backing index rule to unused
-        RecordStorageEngine storageEngine = db.getDependencyResolver().resolveDependency( RecordStorageEngine.class );
         SchemaRuleAccess schemaRules = storageEngine.testAccessSchemaRules();
         writeSchemaRulesWithoutConstraint( schemaRules );
         // At this point the SchemaCache doesn't know about this change so we have to reload it
@@ -115,9 +117,8 @@ class DropBrokenUniquenessConstraintIT
         }
 
         // when intentionally breaking the schema by setting the backing index rule to unused
-        RecordStorageEngine storageEngine = db.getDependencyResolver().resolveDependency( RecordStorageEngine.class );
         SchemaRuleAccess schemaRules = storageEngine.testAccessSchemaRules();
-        schemaRules.constraintsGetAllIgnoreMalformed().forEachRemaining( schemaRules::deleteSchemaRule );
+        schemaRules.constraintsGetAllIgnoreMalformed( NULL ).forEachRemaining( rule -> schemaRules.deleteSchemaRule( rule, NULL ) );
 
         // At this point the SchemaCache doesn't know about this change so we have to reload it
         storageEngine.loadSchemaCache();
@@ -148,9 +149,8 @@ class DropBrokenUniquenessConstraintIT
         }
 
         // when intentionally breaking the schema by setting the backing index rule to unused
-        RecordStorageEngine storageEngine = db.getDependencyResolver().resolveDependency( RecordStorageEngine.class );
         SchemaRuleAccess schemaRules = storageEngine.testAccessSchemaRules();
-        schemaRules.constraintsGetAllIgnoreMalformed().forEachRemaining( schemaRules::deleteSchemaRule );
+        schemaRules.constraintsGetAllIgnoreMalformed( NULL ).forEachRemaining( rule -> schemaRules.deleteSchemaRule( rule, NULL ) );
         writeSchemaRulesWithoutConstraint( schemaRules );
 
         // At this point the SchemaCache doesn't know about this change so we have to reload it
@@ -173,9 +173,9 @@ class DropBrokenUniquenessConstraintIT
 
     private void writeSchemaRulesWithoutConstraint( SchemaRuleAccess schemaRules ) throws KernelException
     {
-        for ( IndexDescriptor rule : loop( schemaRules.indexesGetAll() ) )
+        for ( IndexDescriptor rule : loop( schemaRules.indexesGetAll( NULL ) ) )
         {
-            schemaRules.writeSchemaRule( rule );
+            schemaRules.writeSchemaRule( rule, NULL, INSTANCE );
         }
     }
 }

@@ -59,7 +59,11 @@ public class ReadTestSupport implements KernelAPIReadTestSupport
         sysCreate.accept( sysDb );
     }
 
+<<<<<<< HEAD
     protected DatabaseManagementServiceBuilder newManagementServiceBuilder( File storeDir )
+=======
+    protected TestDatabaseManagementServiceBuilder newManagementServiceBuilder( File storeDir )
+>>>>>>> neo4j/4.1
     {
         return new TestDatabaseManagementServiceBuilder( storeDir ).impermanent();
     }

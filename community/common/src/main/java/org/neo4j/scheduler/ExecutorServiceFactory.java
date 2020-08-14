@@ -19,15 +19,18 @@
  */
 package org.neo4j.scheduler;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Callable;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
-import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static java.lang.Runtime.getRuntime;
@@ -69,6 +72,14 @@ interface ExecutorServiceFactory
         {
             return newSingleThreadExecutor( factory ); // Just ignore the thread count.
         };
+    }
+
+    /**
+     * Executes all jobs on the calling thread.
+     */
+    static ExecutorServiceFactory callingThread()
+    {
+        return ( group, factory, threadCount ) -> new CallingThreadExecutorService( group );
     }
 
     /**
@@ -124,15 +135,46 @@ interface ExecutorServiceFactory
     }
 
     /**
-     * An executor service that does not allow any submissions.
+     * Execute jobs in fixed size pool of threads and if job queue fills up, the caller executes the job and thereby applying back pressure.
      */
-    @SuppressWarnings( "NullableProblems" )
-    class ThrowingExecutorService implements ExecutorService
+    static ExecutorServiceFactory fixedWithBackPressure()
     {
-        private final Group group;
-        private volatile boolean shutodwn;
+        return ( group, factory, threadCount ) ->
+        {
+            if ( threadCount == 0 )
+            {
+                threadCount = getRuntime().availableProcessors();
+            }
+            BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>( 2 * threadCount );
+            RejectedExecutionHandler policy = new ThreadPoolExecutor.CallerRunsPolicy();
+            return new ThreadPoolExecutor( threadCount, threadCount, 0, TimeUnit.SECONDS, workQueue, factory, policy );
+        };
+    }
 
-        private ThrowingExecutorService( Group group )
+    /**
+     * Will execute at most thread-count jobs concurrently, and silently discard tasks when over-subscribed.
+     * Tasks are not queued, but either stared immediately or discarded.
+     * Threads are cached for one minute and reused when possible.
+     */
+    static ExecutorServiceFactory cachedWithDiscard()
+    {
+        return ( group, factory, threadCount ) ->
+        {
+            if ( threadCount == 0 )
+            {
+                return new DiscardingExecutorService( group );
+            }
+            ThreadPoolExecutor.DiscardPolicy policy = new ThreadPoolExecutor.DiscardPolicy();
+            return new ThreadPoolExecutor( 0, threadCount, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(), factory, policy );
+        };
+    }
+
+    abstract class ExecutorServiceAdapter extends AbstractExecutorService
+    {
+        protected final Group group;
+        private volatile boolean shutdown;
+
+        private ExecutorServiceAdapter( Group group )
         {
             this.group = group;
         }
@@ -140,7 +182,7 @@ interface ExecutorServiceFactory
         @Override
         public void shutdown()
         {
-            shutodwn = true;
+            shutdown = true;
         }
 
         @Override
@@ -152,13 +194,13 @@ interface ExecutorServiceFactory
         @Override
         public boolean isShutdown()
         {
-            return shutodwn;
+            return shutdown;
         }
 
         @Override
         public boolean isTerminated()
         {
-            return shutodwn;
+            return shutdown;
         }
 
         @Override
@@ -166,58 +208,52 @@ interface ExecutorServiceFactory
         {
             return true;
         }
+    }
 
-        @Override
-        public <T> Future<T> submit( Callable<T> task )
+    /**
+     * An executor service which always throws a {@link RejectedExecutionException} on any task submission.
+     */
+    class ThrowingExecutorService extends ExecutorServiceAdapter
+    {
+        private ThrowingExecutorService( Group group )
         {
-            throw newUnschedulableException( group );
+            super( group );
         }
 
         @Override
-        public <T> Future<T> submit( Runnable task, T result )
+        public void execute( Runnable runnable )
         {
-            throw newUnschedulableException( group );
+            throw new RejectedExecutionException( "Tasks cannot be scheduled directly to the " + group.groupName() + " group." );
+        }
+    }
+
+    class DiscardingExecutorService extends ExecutorServiceAdapter
+    {
+        private DiscardingExecutorService( Group group )
+        {
+            super( group );
         }
 
         @Override
-        public Future<?> submit( Runnable task )
+        public void execute( Runnable runnable )
         {
-            throw newUnschedulableException( group );
+        }
+    }
+
+    /**
+     * An executor service which always executes the runnable on the calling thread.
+     */
+    class CallingThreadExecutorService extends ExecutorServiceAdapter
+    {
+        private CallingThreadExecutorService( Group group )
+        {
+            super( group );
         }
 
         @Override
-        public <T> List<Future<T>> invokeAll( Collection<? extends Callable<T>> tasks )
+        public void execute( Runnable runnable )
         {
-            throw newUnschedulableException( group );
-        }
-
-        @Override
-        public <T> List<Future<T>> invokeAll( Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit )
-        {
-            throw newUnschedulableException( group );
-        }
-
-        @Override
-        public <T> T invokeAny( Collection<? extends Callable<T>> tasks )
-        {
-            throw newUnschedulableException( group );
-        }
-
-        @Override
-        public <T> T invokeAny( Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit )
-        {
-            throw newUnschedulableException( group );
-        }
-
-        @Override
-        public void execute( Runnable command )
-        {
-            throw newUnschedulableException( group );
-        }
-
-        private static RejectedExecutionException newUnschedulableException( Group group )
-        {
-            return new RejectedExecutionException( "Tasks cannot be scheduled directly to the " + group.groupName() + " group." );
+            runnable.run();
         }
     }
 }

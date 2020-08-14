@@ -29,7 +29,8 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 
-import org.neo4j.io.memory.ByteBuffers;
+import org.neo4j.io.memory.HeapScopedBuffer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.TestCommand;
 import org.neo4j.kernel.impl.api.TransactionToApply;
 import org.neo4j.kernel.impl.transaction.CommittedTransactionRepresentation;
@@ -51,8 +52,7 @@ import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.LifeExtension;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -70,8 +70,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.transaction.log.TestLogEntryReader.logEntryReader;
 import static org.neo4j.kernel.impl.transaction.log.rotation.LogRotation.NO_ROTATION;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_CHECKSUM;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_COMMIT_TIMESTAMP;
 
@@ -109,7 +111,7 @@ class BatchingTransactionAppenderTest
         // WHEN
         TransactionRepresentation transaction = transaction( singleTestCommand(), new byte[]{1, 2, 5}, 12345, 4545, 12345 + 10 );
 
-        appender.append( new TransactionToApply( transaction ), logAppendEvent );
+        appender.append( new TransactionToApply( transaction, NULL ), logAppendEvent );
 
         // THEN
         final LogEntryReader logEntryReader = logEntryReader();
@@ -172,7 +174,7 @@ class BatchingTransactionAppenderTest
         LogEntryCommit commit = new LogEntryCommit( nextTxId, 0L, BASE_TX_CHECKSUM );
         CommittedTransactionRepresentation transaction = new CommittedTransactionRepresentation( start, transactionRepresentation, commit );
 
-        appender.append( new TransactionToApply( transactionRepresentation, transaction.getCommitEntry().getTxId() ), logAppendEvent );
+        appender.append( new TransactionToApply( transactionRepresentation, transaction.getCommitEntry().getTxId(), NULL ), logAppendEvent );
 
         // THEN
         LogEntryReader logEntryReader = logEntryReader();
@@ -207,13 +209,13 @@ class BatchingTransactionAppenderTest
 
         when( transactionIdStore.getLastCommittedTransactionId() ).thenReturn( latestCommittedTxWhenStarted );
 
-        LogEntryStart start = new LogEntryStart(  0L, latestCommittedTxWhenStarted, 0, null, LogPosition.UNSPECIFIED );
+        LogEntryStart start = new LogEntryStart( 0L, latestCommittedTxWhenStarted, 0, null, LogPosition.UNSPECIFIED );
         LogEntryCommit commit = new LogEntryCommit( latestCommittedTxWhenStarted + 2, 0L, BASE_TX_CHECKSUM );
         CommittedTransactionRepresentation transaction = new CommittedTransactionRepresentation( start, transactionRepresentation, commit );
 
         var e = assertThrows( Exception.class, () -> appender.append( new TransactionToApply( transaction.getTransactionRepresentation(),
-            transaction.getCommitEntry().getTxId() ), logAppendEvent ) );
-        assertThat( e.getMessage(), containsString( "to be applied, but appending it ended up generating an" ) );
+            transaction.getCommitEntry().getTxId(), NULL ), logAppendEvent ) );
+        assertThat( e.getMessage() ).contains( "to be applied, but appending it ended up generating an" );
     }
 
     @Test
@@ -224,7 +226,7 @@ class BatchingTransactionAppenderTest
         String failureMessage = "Forces a failure";
         FlushablePositionAwareChecksumChannel channel =
                 spy( new PositionAwarePhysicalFlushableChecksumChannel( mock( PhysicalLogVersionedStoreChannel.class ),
-                        ByteBuffers.allocate( Long.BYTES * 2 ) ) );
+                        new HeapScopedBuffer( Long.BYTES * 2, INSTANCE ) ) );
         IOException failure = new IOException( failureMessage );
         when( channel.putLong( anyLong() ) ).thenThrow( failure );
         when( logFile.getWriter() ).thenReturn( channel );
@@ -237,10 +239,10 @@ class BatchingTransactionAppenderTest
         TransactionRepresentation transaction = mock( TransactionRepresentation.class );
         when( transaction.additionalHeader() ).thenReturn( new byte[0] );
 
-        var e = assertThrows( IOException.class, () -> appender.append( new TransactionToApply( transaction ), logAppendEvent ) );
+        var e = assertThrows( IOException.class, () -> appender.append( new TransactionToApply( transaction, NULL ), logAppendEvent ) );
         assertSame( failure, e );
         verify( transactionIdStore ).nextCommittingTransactionId();
-        verify( transactionIdStore, never() ).transactionClosed( eq( txId ), anyLong(), anyLong() );
+        verify( transactionIdStore, never() ).transactionClosed( eq( txId ), anyLong(), anyLong(), any( PageCursorTracer.class ) );
         verify( databaseHealth ).panic( failure );
     }
 
@@ -272,10 +274,10 @@ class BatchingTransactionAppenderTest
         TransactionRepresentation transaction = mock( TransactionRepresentation.class );
         when( transaction.additionalHeader() ).thenReturn( new byte[0] );
 
-        var e = assertThrows( IOException.class, () -> appender.append( new TransactionToApply( transaction ), logAppendEvent ) );
+        var e = assertThrows( IOException.class, () -> appender.append( new TransactionToApply( transaction, NULL ), logAppendEvent ) );
         assertSame( failure, e );
         verify( transactionIdStore ).nextCommittingTransactionId();
-        verify( transactionIdStore, never() ).transactionClosed( eq( txId ), anyLong(), anyLong() );
+        verify( transactionIdStore, never() ).transactionClosed( eq( txId ), anyLong(), anyLong(), any( PageCursorTracer.class ) );
         verify( databaseHealth ).panic( failure );
     }
 
@@ -327,7 +329,7 @@ class BatchingTransactionAppenderTest
         // Given
         BatchingTransactionAppender appender = life.add( createTransactionAppender() );
         when( transactionIdStore.nextCommittingTransactionId() ).thenReturn( 42L );
-        TransactionToApply batch = new TransactionToApply( mock( TransactionRepresentation.class ), 43L );
+        TransactionToApply batch = new TransactionToApply( mock( TransactionRepresentation.class ), 43L, NULL );
         // When
         var e = assertThrows( IllegalStateException.class, () -> appender.append( batch, LogAppendEvent.NULL ) );
         // Then
@@ -358,7 +360,7 @@ class BatchingTransactionAppenderTest
         TransactionToApply last = null;
         for ( TransactionRepresentation transaction : transactions )
         {
-            TransactionToApply tx = new TransactionToApply( transaction );
+            TransactionToApply tx = new TransactionToApply( transaction, NULL );
             if ( first == null )
             {
                 first = last = tx;

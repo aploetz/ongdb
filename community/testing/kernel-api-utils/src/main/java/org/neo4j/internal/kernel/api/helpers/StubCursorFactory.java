@@ -19,6 +19,7 @@
  */
 package org.neo4j.internal.kernel.api.helpers;
 
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -28,14 +29,17 @@ import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
+import org.neo4j.internal.kernel.api.RelationshipTypeIndexCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 
 public class StubCursorFactory implements CursorFactory
 {
     private final boolean continueWithLastItem;
+<<<<<<< HEAD
     private Queue<NodeCursor> nodeCursors = new LinkedList<>();
     private Queue<NodeCursor> fullNodeCursors = new LinkedList<>();
     private Queue<RelationshipScanCursor> relationshipScanCursors = new LinkedList<>();
@@ -49,6 +53,19 @@ public class StubCursorFactory implements CursorFactory
     private Queue<NodeLabelIndexCursor> nodeLabelIndexCursors = new LinkedList<>();
     private Queue<NodeLabelIndexCursor> fullNodeLabelIndexCursors = new LinkedList<>();
     private Queue<RelationshipIndexCursor> relationshipIndexCursors = new LinkedList<>();
+=======
+    private final Queue<NodeCursor> nodeCursors = new ArrayDeque<>();
+    private final Queue<NodeCursor> fullNodeCursors = new ArrayDeque<>();
+    private final Queue<RelationshipScanCursor> relationshipScanCursors = new ArrayDeque<>();
+    private final Queue<RelationshipScanCursor> fullRelationshipScanCursors = new ArrayDeque<>();
+    private final Queue<RelationshipTraversalCursor> relationshipTraversalCursors = new LinkedList<>();
+    private final Queue<PropertyCursor> propertyCursors = new ArrayDeque<>();
+    private final Queue<PropertyCursor> fullPropertyCursors = new ArrayDeque<>();
+    private final Queue<NodeValueIndexCursor> nodeValueIndexCursors = new ArrayDeque<>();
+    private final Queue<NodeLabelIndexCursor> nodeLabelIndexCursors = new ArrayDeque<>();
+    private final Queue<RelationshipIndexCursor> relationshipIndexCursors = new ArrayDeque<>();
+    private final Queue<RelationshipTypeIndexCursor> relationshipTypeIndexCursors = new ArrayDeque<>();
+>>>>>>> neo4j/4.1
 
     public StubCursorFactory()
     {
@@ -61,80 +78,74 @@ public class StubCursorFactory implements CursorFactory
     }
 
     @Override
-    public NodeCursor allocateNodeCursor()
+    public NodeCursor allocateNodeCursor( PageCursorTracer cursorTracer )
     {
         return poll( nodeCursors );
     }
 
     @Override
-    public NodeCursor allocateFullAccessNodeCursor()
+    public NodeCursor allocateFullAccessNodeCursor( PageCursorTracer cursorTracer )
     {
         return poll( fullNodeCursors );
     }
 
     @Override
-    public RelationshipScanCursor allocateRelationshipScanCursor()
+    public RelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         return poll( relationshipScanCursors );
     }
 
     @Override
-    public RelationshipScanCursor allocateFullAccessRelationshipScanCursor()
+    public RelationshipScanCursor allocateFullAccessRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         return poll( fullRelationshipScanCursors );
     }
 
     @Override
-    public RelationshipTraversalCursor allocateRelationshipTraversalCursor()
+    public RelationshipTraversalCursor allocateRelationshipTraversalCursor( PageCursorTracer cursorTracer )
     {
-        return poll( relationshiTraversalCursors );
+        return poll( relationshipTraversalCursors );
     }
 
     @Override
-    public PropertyCursor allocatePropertyCursor()
+    public PropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         return poll( propertyCursors );
     }
 
     @Override
-    public PropertyCursor allocateFullAccessPropertyCursor()
+    public PropertyCursor allocateFullAccessPropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         return poll( fullPropertyCursors );
     }
 
     @Override
-    public RelationshipGroupCursor allocateRelationshipGroupCursor()
-    {
-        return poll( groupCursors );
-    }
-
-    @Override
-    public NodeValueIndexCursor allocateNodeValueIndexCursor()
+    public NodeValueIndexCursor allocateNodeValueIndexCursor( PageCursorTracer cursorTracer )
     {
         return poll( nodeValueIndexCursors );
     }
 
     @Override
-    public NodeLabelIndexCursor allocateNodeLabelIndexCursor()
+    public NodeLabelIndexCursor allocateNodeLabelIndexCursor( PageCursorTracer cursorTracer )
     {
         return poll( nodeLabelIndexCursors );
     }
 
     @Override
-    public RelationshipIndexCursor allocateRelationshipIndexCursor()
+    public RelationshipIndexCursor allocateRelationshipIndexCursor( PageCursorTracer cursorTracer )
     {
         return poll( relationshipIndexCursors );
     }
 
-    public StubCursorFactory withGroupCursors( RelationshipGroupCursor...cursors )
+    @Override
+    public RelationshipTypeIndexCursor allocateRelationshipTypeIndexCursor()
     {
-        groupCursors.addAll( Arrays.asList( cursors ) );
-        return this;
+        return poll( relationshipTypeIndexCursors );
     }
 
     public StubCursorFactory withRelationshipTraversalCursors( RelationshipTraversalCursor...cursors )
     {
-        relationshiTraversalCursors.addAll( Arrays.asList( cursors ) );
+        relationshipTraversalCursors.addAll( Arrays.asList( cursors ) );
         return this;
     }
 

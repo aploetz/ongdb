@@ -19,8 +19,11 @@
  */
 package org.neo4j.procedure.builtin;
 
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+=======
+>>>>>>> neo4j/4.1
 import java.security.NoSuchAlgorithmException;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -31,7 +34,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -59,7 +61,6 @@ import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.procedure.SystemProcedure;
 import org.neo4j.kernel.impl.api.index.IndexingService;
@@ -72,8 +73,12 @@ import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Mode;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
+<<<<<<< HEAD
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.string.HexString;
+=======
+import org.neo4j.storageengine.api.StoreIdProvider;
+>>>>>>> neo4j/4.1
 import org.neo4j.values.storable.Value;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -114,10 +119,16 @@ public class BuiltInProcedures
     @Procedure( name = "db.info", mode = READ )
     public Stream<DatabaseInfo> databaseInfo() throws NoSuchAlgorithmException
     {
+<<<<<<< HEAD
         var storeId = graphDatabaseAPI.storeId();
         var creationTime = formatTime( storeId.getCreationTime(), getConfiguredTimeZone() );
         var id = decodeId( storeId );
         return Stream.of( new DatabaseInfo( id, graphDatabaseAPI.databaseName(), creationTime ) );
+=======
+        var storeIdProvider = graphDatabaseAPI.getDependencyResolver().resolveDependency( StoreIdProvider.class );
+        var creationTime = formatTime( storeIdProvider.getStoreId().getCreationTime(), getConfiguredTimeZone() );
+        return Stream.of( new DatabaseInfo( decodeId( storeIdProvider ), graphDatabaseAPI.databaseName(), creationTime ) );
+>>>>>>> neo4j/4.1
     }
 
     @SystemProcedure
@@ -196,17 +207,16 @@ public class BuiltInProcedures
         }
 
         TokenRead tokenRead = kernelTransaction.tokenRead();
-        TokenNameLookup tokenLookup = new SilentTokenNameLookup( tokenRead );
         IndexingService indexingService = resolver.resolveDependency( IndexingService.class );
 
         SchemaReadCore schemaRead = kernelTransaction.schemaRead().snapshot();
         List<IndexDescriptor> indexes = asList( schemaRead.indexesGetAll() );
 
-        ArrayList<IndexResult> result = new ArrayList<>();
+        List<IndexResult> result = new ArrayList<>();
         for ( IndexDescriptor index : indexes )
         {
             IndexResult indexResult;
-            indexResult = asIndexResult( tokenLookup, schemaRead, index );
+            indexResult = asIndexResult( tokenRead, schemaRead, index );
             result.add( indexResult );
         }
         result.sort( Comparator.comparing( r -> r.name ) );
@@ -224,7 +234,6 @@ public class BuiltInProcedures
         }
 
         TokenRead tokenRead = kernelTransaction.tokenRead();
-        TokenNameLookup tokenLookup = new SilentTokenNameLookup( tokenRead );
         IndexingService indexingService = resolver.resolveDependency( IndexingService.class );
 
         SchemaReadCore schemaRead = kernelTransaction.schemaRead().snapshot();
@@ -243,7 +252,7 @@ public class BuiltInProcedures
             throw new ProcedureException( Status.Schema.IndexNotFound, "Could not find index with name \"" + indexName + "\"" );
         }
 
-        final IndexDetailResult indexDetailResult = asIndexDetails( tokenLookup, schemaRead, index );
+        final IndexDetailResult indexDetailResult = asIndexDetails( tokenRead, schemaRead, index );
         return Stream.of( indexDetailResult );
     }
 
@@ -319,9 +328,9 @@ public class BuiltInProcedures
     private static Map<String,Object> asObjectMap( Map<String,Value> valueConfig )
     {
         Map<String,Object> objectConfig = new HashMap<>();
-        for ( String key : valueConfig.keySet() )
+        for ( Map.Entry<String,Value> entry : valueConfig.entrySet() )
         {
-            objectConfig.put( key, valueConfig.get( key ).asObject() );
+            objectConfig.put( entry.getKey(), entry.getValue().asObject() );
         }
         return objectConfig;
     }
@@ -405,14 +414,7 @@ public class BuiltInProcedures
 
         //Resample indexes
         IndexProcedures indexProcedures = indexProcedures();
-        try
-        {
-            indexProcedures.resampleOutdatedIndexes( timeOutSeconds );
-        }
-        catch ( TimeoutException e )
-        {
-            throw new ProcedureException( Status.Procedure.ProcedureTimedOut, e, "Index resampling timed out" );
-        }
+        indexProcedures.resampleOutdatedIndexes( timeOutSeconds );
 
         //now that index-stats are up-to-date, clear caches so that we are ready to re-plan
         graphDatabaseAPI.getDependencyResolver()
@@ -469,13 +471,14 @@ public class BuiltInProcedures
         }
 
         SchemaReadCore schemaRead = kernelTransaction.schemaRead().snapshot();
-        TokenNameLookup tokens = new SilentTokenNameLookup( kernelTransaction.tokenRead() );
 
         List<ConstraintResult> result = new ArrayList<>();
         final List<ConstraintDescriptor> constraintDescriptors = asList( schemaRead.constraintsGetAll() );
         for ( ConstraintDescriptor constraint : constraintDescriptors )
         {
-            result.add( new ConstraintResult( constraint.getName(), constraint.prettyPrint( tokens ) ) );
+            String description = ConstraintsProcedureUtil.prettyPrint( constraint, kernelTransaction.tokenRead() );
+            String details = constraint.userDescription( kernelTransaction.tokenRead() );
+            result.add( new ConstraintResult( constraint.getName(), description, details ) );
         }
         result.sort( Comparator.comparing( r -> r.name ) );
         return result.stream();
@@ -500,7 +503,7 @@ public class BuiltInProcedures
     @Description( "Create a named unique property constraint. Backing index will use specified index provider and configuration (optional). " +
             "Yield: name, labels, properties, providerName, status" )
     @Procedure( name = "db.createUniquePropertyConstraint", mode = SCHEMA )
-    public Stream<BuiltInProcedures.SchemaIndexInfo> createUniquePropertyConstraint(
+    public Stream<SchemaIndexInfo> createUniquePropertyConstraint(
             @Name( "constraintName" ) String constraintName,
             @Name( "labels" ) List<String> labels,
             @Name( "properties" ) List<String> properties,
@@ -523,12 +526,15 @@ public class BuiltInProcedures
         return Stream.of( new BooleanResult( Boolean.TRUE ) );
     }
 
+<<<<<<< HEAD
     private ZoneId getConfiguredTimeZone()
     {
         Config config = resolver.resolveDependency( Config.class );
         return config.get( GraphDatabaseSettings.db_timezone ).getZoneId();
     }
 
+=======
+>>>>>>> neo4j/4.1
     private static List<String> propertyNames( TokenNameLookup tokens, IndexDescriptor index )
     {
         int[] propertyIds = index.schema().getPropertyIds();
@@ -538,6 +544,12 @@ public class BuiltInProcedures
             propertyNames.add( tokens.propertyKeyGetName( propertyId ) );
         }
         return propertyNames;
+    }
+
+    private ZoneId getConfiguredTimeZone()
+    {
+        Config config = resolver.resolveDependency( Config.class );
+        return config.get( GraphDatabaseSettings.db_timezone ).getZoneId();
     }
 
     private IndexProcedures indexProcedures()
@@ -726,11 +738,13 @@ public class BuiltInProcedures
     {
         public final String name;
         public final String description;
+        public final String details;
 
-        private ConstraintResult( String name, String description )
+        private ConstraintResult( String name, String description, String details )
         {
             this.name = name;
             this.description = description;
+            this.details = details;
         }
     }
 

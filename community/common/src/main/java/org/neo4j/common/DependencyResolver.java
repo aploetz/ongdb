@@ -44,7 +44,7 @@ public interface DependencyResolver
      * @throws IllegalArgumentException if no matching dependency was found.
      * @throws UnsatisfiedDependencyException if no matching dependency was found.
      */
-    <T> T resolveDependency( Class<T> type ) throws IllegalArgumentException, UnsatisfiedDependencyException;
+    <T> T resolveDependency( Class<T> type );
 
     /**
      * Tries to resolve a dependency that matches a given class. All candidates are fed to the
@@ -58,7 +58,7 @@ public interface DependencyResolver
      * @throws IllegalArgumentException if no matching dependency was found.
      * @throws UnsatisfiedDependencyException if no matching dependency was found.
      */
-    <T> T resolveDependency( Class<T> type, SelectionStrategy selector ) throws IllegalArgumentException, UnsatisfiedDependencyException;
+    <T> T resolveDependency( Class<T> type, SelectionStrategy selector );
 
     /**
      * Tries to resolve a dependencies that matches a given class.
@@ -67,7 +67,7 @@ public interface DependencyResolver
      * @param <T> the type that the returned instance must implement
      * @return the iterables with resolved dependencies for the given type.
      */
-    default <T> Iterable<? extends T> resolveTypeDependencies( Class<T> type )
+    default <T> Iterable<T> resolveTypeDependencies( Class<T> type )
     {
         throw new UnsupportedOperationException( "not implemented" );
     }
@@ -75,6 +75,13 @@ public interface DependencyResolver
     <T> Supplier<T> provideDependency( Class<T> type, SelectionStrategy selector );
 
     <T> Supplier<T> provideDependency( Class<T> type );
+
+    /**
+     * Check if dependency resolver contains dependencies of provided type
+     * @param type dependency type to lookup
+     * @return true if dependency resolver contains dependency of requested type, false otherwise
+     */
+    boolean containsDependency( Class<?> type );
 
     /**
      * Responsible for making the choice between available candidates.
@@ -143,7 +150,7 @@ public interface DependencyResolver
     abstract class Adapter implements DependencyResolver
     {
         @Override
-        public <T> T resolveDependency( Class<T> type ) throws IllegalArgumentException
+        public <T> T resolveDependency( Class<T> type )
         {
             return resolveDependency( type, SINGLE );
         }

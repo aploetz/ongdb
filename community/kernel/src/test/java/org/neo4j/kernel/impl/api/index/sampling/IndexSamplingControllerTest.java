@@ -37,8 +37,6 @@ import org.neo4j.logging.LogProvider;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.JobScheduler;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -59,6 +57,7 @@ import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingController.A
 import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingController.ASYNC_RECOVER_INDEX_SAMPLES_WAIT_NAME;
 import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingMode.backgroundRebuildUpdated;
 import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingMode.foregroundRebuildUpdated;
+import static org.neo4j.logging.LogAssertions.assertThat;
 import static org.neo4j.util.FeatureToggles.clear;
 import static org.neo4j.util.FeatureToggles.set;
 
@@ -202,7 +201,7 @@ class IndexSamplingControllerTest
         when( indexProxy.getState() ).thenReturn( ONLINE );
         when( anotherIndexProxy.getState() ).thenReturn( ONLINE );
         indexMap.putIndexProxy( anotherIndexProxy );
-        JobHandle jobHandle = new JobHandle()
+        JobHandle<Object> jobHandle = new JobHandle<>()
         {
             @Override
             public void cancel()
@@ -220,12 +219,19 @@ class IndexSamplingControllerTest
             {
                 throw new TimeoutException( "I'm sorry, so slow." );
             }
+
+            @Override
+            public Object get()
+            {
+                fail( "We should never use this wait for foreground sampling." );
+                return null;
+            }
         };
         when( tracker.scheduleSamplingJob( job ) ).thenReturn( jobHandle );
 
         IndexSamplingMode mode = foregroundRebuildUpdated( 1 );
         RuntimeException e = assertThrows( RuntimeException.class, () -> controller.sampleIndexes( mode ) );
-        assertThat( e.getMessage(), containsString( "Could not finish index sampling within the given time limit, 1 milliseconds." ) );
+        assertThat( e.getMessage() ).contains( "Could not finish index sampling within the given time limit, 1 milliseconds." );
     }
 
     @Test
@@ -310,9 +316,8 @@ class IndexSamplingControllerTest
             controller.recoverIndexSamples();
 
             // then
-            final AssertableLogProvider.MessageMatcher messageMatcher = logProvider.formattedMessageMatcher();
-            messageMatcher.assertContains( "Index requires sampling, id=2, name=index_2." );
-            messageMatcher.assertContains( "Index does not require sampling, id=3, name=index_3." );
+            assertThat( logProvider ).containsMessages( "Index requires sampling, id=2, name=index_2.",
+                                                        "Index does not require sampling, id=3, name=index_3." );
         }
         finally
         {

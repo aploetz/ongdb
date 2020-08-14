@@ -24,22 +24,23 @@ import org.neo4j.consistency.checking.RecordCheck;
 import org.neo4j.consistency.checking.full.NodeInUseWithCorrectLabelsCheck;
 import org.neo4j.consistency.report.ConsistencyReport;
 import org.neo4j.consistency.store.RecordAccess;
-import org.neo4j.consistency.store.synthetic.LabelScanDocument;
-import org.neo4j.internal.index.label.NodeLabelRange;
+import org.neo4j.consistency.store.synthetic.TokenScanDocument;
+import org.neo4j.internal.index.label.EntityTokenRange;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 import static org.neo4j.internal.schema.PropertySchemaType.COMPLETE_ALL_TOKENS;
 
-public class LabelScanCheck implements RecordCheck<LabelScanDocument, ConsistencyReport.LabelScanConsistencyReport>
+public class LabelScanCheck implements RecordCheck<TokenScanDocument, ConsistencyReport.LabelScanConsistencyReport>
 {
     @Override
-    public void check( LabelScanDocument record, CheckerEngine<LabelScanDocument,
-            ConsistencyReport.LabelScanConsistencyReport> engine, RecordAccess records )
+    public void check( TokenScanDocument record, CheckerEngine<TokenScanDocument,
+            ConsistencyReport.LabelScanConsistencyReport> engine, RecordAccess records, PageCursorTracer cursorTracer )
     {
-        NodeLabelRange range = record.getNodeLabelRange();
-        for ( long nodeId : range.nodes() )
+        EntityTokenRange range = record.getEntityTokenRange();
+        for ( long nodeId : range.entities() )
         {
-            long[] labels = record.getNodeLabelRange().labels( nodeId );
-            engine.comparativeCheck( records.node( nodeId ),
+            long[] labels = record.getEntityTokenRange().tokens( nodeId );
+            engine.comparativeCheck( records.node( nodeId, cursorTracer ),
                     new NodeInUseWithCorrectLabelsCheck<>( labels, COMPLETE_ALL_TOKENS, true ) );
         }
     }

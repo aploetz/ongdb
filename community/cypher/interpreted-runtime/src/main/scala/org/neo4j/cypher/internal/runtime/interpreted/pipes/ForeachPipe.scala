@@ -19,17 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ListSupport
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, ListSupport}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 
 case class ForeachPipe(source: Pipe, inner: Pipe, variable: String, expression: Expression)
                       (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) with ListSupport {
 
-  expression.registerOwningPipe(this)
-
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  override protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] =
     input.map {
       outerContext =>
         val values = makeTraversable(expression(outerContext, state)).iterator()

@@ -19,11 +19,13 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.predicates
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, Variable, VariableCommand}
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.VariableCommand
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.NonEmptyList
+import org.neo4j.cypher.internal.util.NonEmptyList
 
 case class Ands(predicates: NonEmptyList[Predicate]) extends CompositeBooleanPredicate {
   override def shouldExitWhen = false
@@ -49,7 +51,7 @@ object Ands {
 
 @deprecated("Use Ands (plural) instead")
 class And(val a: Predicate, val b: Predicate) extends Predicate {
-  def isMatch(m: ExecutionContext, state: QueryState): Option[Boolean] = Ands(NonEmptyList(a, b)).isMatch(m, state)
+  def isMatch(ctx: ReadableRow, state: QueryState): Option[Boolean] = Ands(NonEmptyList(a, b)).isMatch(ctx, state)
 
   override def atoms: Seq[Predicate] = a.atoms ++ b.atoms
   override def toString: String = s"($a AND $b)"

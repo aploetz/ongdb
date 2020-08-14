@@ -19,16 +19,17 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.kernel.impl.core.NodeEntity
 import org.neo4j.kernel.impl.util.ValueUtils
 import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.NodeValue
 
-import scala.collection.{Map, mutable}
+import scala.collection.Map
+import scala.collection.mutable
 
 class TriadicSelectionPipeTest extends CypherFunSuite {
   test("triadic from input with no cycles") {
@@ -177,13 +178,13 @@ class TriadicSelectionPipeTest extends CypherFunSuite {
     val in = createFakeDataWith(keys, data: _*)
 
     new Pipe {
-      override def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = state.initialContext match {
-        case Some(context: ExecutionContext) =>
+      override def internalCreateResults(state: QueryState): Iterator[CypherRow] = state.initialContext match {
+        case Some(context: CypherRow) =>
           in.flatMap { m =>
             if (ValueUtils.of(m(keys(0))) == context.getByName(keys(0))) {
               val stringToProxy: mutable.Map[String, AnyValue] = collection.mutable.Map(m.mapValues(ValueUtils.of).toSeq: _*)
               val outRow = state.newExecutionContext(CommunityExecutionContextFactory())
-              outRow.mergeWith(ExecutionContext(stringToProxy), null)
+              outRow.mergeWith(CypherRow(stringToProxy), null)
               Some(outRow)
             }
             else None

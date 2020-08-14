@@ -19,35 +19,42 @@
  */
 package org.neo4j.cypher.internal.evaluator
 
+import org.neo4j.cypher.internal.evaluator.SimpleInternalExpressionEvaluator.CONVERTERS
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.Parameter
+import org.neo4j.cypher.internal.parser.Expressions
 import org.neo4j.cypher.internal.planner.spi.TokenContext
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ParameterMapping
 import org.neo4j.cypher.internal.runtime.ast.ParameterFromSlot
-import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.{CommunityExpressionConverter, ExpressionConverters}
+import org.neo4j.cypher.internal.runtime.createParameterArray
+import org.neo4j.cypher.internal.runtime.expressionVariableAllocation
+import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.CommunityExpressionConverter
+import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.ExpressionConverters
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, Parameter}
-import org.neo4j.cypher.internal.v4_0.parser.Expressions
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.cypher.internal.v4_0.util.{Rewriter, bottomUp}
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.bottomUp
 import org.neo4j.internal.kernel.api.IndexReadSession
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.MapValue
-import org.parboiled.scala.{EOI, ReportingParseRunner, Rule1}
+import org.parboiled.scala.EOI
+import org.parboiled.scala.ReportingParseRunner
+import org.parboiled.scala.Rule1
 
 class SimpleInternalExpressionEvaluator extends InternalExpressionEvaluator {
-
-  import SimpleInternalExpressionEvaluator.CONVERTERS
 
   override def evaluate(expression: String): AnyValue =
     errorContext(expression) {
       val parsedExpression = SimpleInternalExpressionEvaluator.ExpressionParser.parse(expression)
-      doEvaluate(parsedExpression, MapValue.EMPTY, ExecutionContext.empty)
+      doEvaluate(parsedExpression, MapValue.EMPTY, CypherRow.empty)
     }
 
   def evaluate(
     expression: Expression,
     params: MapValue = MapValue.EMPTY,
-    context: ExecutionContext = ExecutionContext.empty
+    context: CypherRow = CypherRow.empty
   ): AnyValue = errorContext(expression.toString) {
     doEvaluate(expression, params, context)
   }
@@ -58,7 +65,7 @@ class SimpleInternalExpressionEvaluator extends InternalExpressionEvaluator {
         throw new EvaluationException(s"Failed to evaluate expression $expr", e)
     }
 
-  def doEvaluate(expression: Expression, params: MapValue, context: ExecutionContext): AnyValue = {
+  def doEvaluate(expression: Expression, params: MapValue, context: CypherRow): AnyValue = {
     val (expr, paramArray) = withSlottedParams(expression, params)
     val allocated = expressionVariableAllocation.allocate(expr)
     val state = queryState(allocated.nExpressionSlots, paramArray)

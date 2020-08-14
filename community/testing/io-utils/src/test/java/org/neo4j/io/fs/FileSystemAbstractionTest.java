@@ -19,7 +19,6 @@
  */
 package org.neo4j.io.fs;
 
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,12 +48,7 @@ import org.neo4j.test.rule.TestDirectory;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.core.Is.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.io.fs.FileHandle.HANDLE_DELETE;
 import static org.neo4j.io.fs.FileHandle.handleRename;
-import static org.neo4j.test.matchers.ByteArrayMatcher.byteArray;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestDirectoryExtension
 public abstract class FileSystemAbstractionTest
@@ -71,11 +65,11 @@ public abstract class FileSystemAbstractionTest
     @Inject
     TestDirectory testDirectory;
 
-    private int recordSize = 9;
-    private int maxPages = 20;
-    private int pageCachePageSize = 32;
-    private int recordsPerFilePage = pageCachePageSize / recordSize;
-    private int recordCount = 25 * maxPages * recordsPerFilePage;
+    private final int recordSize = 9;
+    private final int maxPages = 20;
+    private final int pageCachePageSize = 32;
+    private final int recordsPerFilePage = pageCachePageSize / recordSize;
+    private final int recordCount = 25 * maxPages * recordsPerFilePage;
     protected FileSystemAbstraction fsa;
     protected File path;
 
@@ -124,18 +118,15 @@ public abstract class FileSystemAbstractionTest
     }
 
     @Test
-    void shouldCreatePathThatPointsToFile() throws Exception
+    void shouldNotCreatePathThatPointsToFile() throws Exception
     {
         fsa.mkdirs( path );
         assertTrue( fsa.fileExists( path ) );
         path = new File( path, "some_file" );
         try ( StoreChannel channel = fsa.write( path ) )
         {
-            assertThat( channel, is( not( nullValue() ) ) );
-
-            fsa.mkdirs( path );
-
-            assertTrue( fsa.fileExists( path ) );
+            assertThat( channel ).isNotNull();
+            assertThrows(IOException.class, () -> fsa.mkdirs( path ));
         }
     }
 
@@ -308,27 +299,27 @@ public abstract class FileSystemAbstractionTest
         File file = new File( path, "file" );
         try ( StoreChannel channel = fsa.write( file ) )
         {
-            assertThat( channel.write( buf ), is( 4 ) );
+            assertThat( channel.write( buf ) ).isEqualTo( 4 );
         }
         try ( InputStream stream = fsa.openAsInputStream( file ) )
         {
-            assertThat( stream.read(), is( 2 ) );
-            assertThat( stream.read(), is( 3 ) );
-            assertThat( stream.read(), is( 4 ) );
-            assertThat( stream.read(), is( 5 ) );
-            assertThat( stream.read(), is( -1 ) );
+            assertThat( stream.read() ).isEqualTo( 2 );
+            assertThat( stream.read() ).isEqualTo( 3 );
+            assertThat( stream.read() ).isEqualTo( 4 );
+            assertThat( stream.read() ).isEqualTo( 5 );
+            assertThat( stream.read() ).isEqualTo( -1 );
         }
         Arrays.fill( bytes, (byte) 0 );
         buf.position( 1 );
         try ( StoreChannel channel = fsa.write( file ) )
         {
-            assertThat( channel.read( buf ), is( 4 ) );
+            assertThat( channel.read( buf ) ).isEqualTo( 4 );
             buf.clear();
-            assertThat( buf.get(), is( (byte) 0 ) );
-            assertThat( buf.get(), is( (byte) 2 ) );
-            assertThat( buf.get(), is( (byte) 3 ) );
-            assertThat( buf.get(), is( (byte) 4 ) );
-            assertThat( buf.get(), is( (byte) 5 ) );
+            assertThat( buf.get() ).isEqualTo( (byte) 0 );
+            assertThat( buf.get() ).isEqualTo( (byte) 2 );
+            assertThat( buf.get() ).isEqualTo( (byte) 3 );
+            assertThat( buf.get() ).isEqualTo( (byte) 4 );
+            assertThat( buf.get() ).isEqualTo( (byte) 5 );
         }
     }
 
@@ -336,7 +327,7 @@ public abstract class FileSystemAbstractionTest
     void streamFilesRecursiveMustBeEmptyForEmptyBaseDirectory() throws Exception
     {
         File dir = existingDirectory( "dir" );
-        assertThat( fsa.streamFilesRecursive( dir ).count(), Matchers.is( 0L ) );
+        assertThat( fsa.streamFilesRecursive( dir ).count() ).isEqualTo( 0L );
     }
 
     @Test
@@ -347,7 +338,7 @@ public abstract class FileSystemAbstractionTest
         File c = existingFile( "c" );
         Stream<FileHandle> stream = fsa.streamFilesRecursive( a.getParentFile() );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() ) );
+        assertThat( filepaths ).contains( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() );
     }
 
     @Test
@@ -363,7 +354,7 @@ public abstract class FileSystemAbstractionTest
 
         Stream<FileHandle> stream = fsa.streamFilesRecursive( a.getParentFile() );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() ) );
+        assertThat( filepaths ).contains( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() );
     }
 
     @Test
@@ -382,7 +373,7 @@ public abstract class FileSystemAbstractionTest
 
         Stream<FileHandle> stream = fsa.streamFilesRecursive( a.getParentFile() );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() ) );
+        assertThat( filepaths ).contains( a.getCanonicalFile(), b.getCanonicalFile(), c.getCanonicalFile() );
     }
 
     @Test
@@ -394,7 +385,7 @@ public abstract class FileSystemAbstractionTest
 
         Stream<FileHandle> stream = fsa.streamFilesRecursive( sub.getParentFile() );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a.getCanonicalFile() ) );// file in our sub directory
+        assertThat( filepaths ).contains( a.getCanonicalFile() );// file in our sub directory
 
     }
 
@@ -407,8 +398,7 @@ public abstract class FileSystemAbstractionTest
         ensureExists( b );
         File base = a.getParentFile();
         Set<File> set = fsa.streamFilesRecursive( base ).map( FileHandle::getRelativeFile ).collect( toSet() );
-        assertThat( "Files relative to base directory " + base, set,
-                containsInAnyOrder( new File( "a" ), new File( "sub" + File.separator + "b" ) ) );
+        assertThat( set ).as( "Files relative to base directory " + base ).contains( new File( "a" ), new File( "sub" + File.separator + "b" ) );
     }
 
     @Test
@@ -420,7 +410,7 @@ public abstract class FileSystemAbstractionTest
 
         Stream<FileHandle> stream = fsa.streamFilesRecursive( a );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a ) ); // note that we don't go into 'sub'
+        assertThat( filepaths ).contains( a ); // note that we don't go into 'sub'
     }
 
     @Test
@@ -433,7 +423,7 @@ public abstract class FileSystemAbstractionTest
 
         Stream<FileHandle> stream = fsa.streamFilesRecursive( queryForA );
         List<File> filepaths = stream.map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( a.getCanonicalFile() ) ); // note that we don't go into 'sub'
+        assertThat( filepaths ).contains( a.getCanonicalFile() ); // note that we don't go into 'sub'
     }
 
     @Test
@@ -451,7 +441,7 @@ public abstract class FileSystemAbstractionTest
         File base = a.getParentFile();
         fsa.streamFilesRecursive( base ).forEach( handleRename( b ) );
         List<File> filepaths = fsa.streamFilesRecursive( base ).map( FileHandle::getFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( b.getCanonicalFile() ) );
+        assertThat( filepaths ).contains( b.getCanonicalFile() );
     }
 
     @Test
@@ -625,8 +615,8 @@ public abstract class FileSystemAbstractionTest
         Stream<FileHandle> stream = fsa.streamFilesRecursive( a.getParentFile() );
         File b = existingFile( "b" );
         Set<File> files = stream.map( FileHandle::getFile ).collect( toSet() );
-        assertThat( files, contains( a ) );
-        assertThat( files, not( contains( b ) ) );
+        assertThat( files ).containsExactly( a );
+        assertThat( files ).doesNotContain( b );
     }
 
     @Test
@@ -647,7 +637,7 @@ public abstract class FileSystemAbstractionTest
                 handleRename( target ).accept( fh );
             }
         } );
-        assertThat( observedFiles, containsInAnyOrder( a, x ) );
+        assertThat( observedFiles ).contains( a, x );
     }
 
     @Test
@@ -666,7 +656,7 @@ public abstract class FileSystemAbstractionTest
                 handleRename( target ).accept( fh );
             }
         } );
-        assertThat( observedFiles, containsInAnyOrder( a ) );
+        assertThat( observedFiles ).contains( a );
     }
 
     @Test
@@ -737,7 +727,7 @@ public abstract class FileSystemAbstractionTest
         {
             ThreadLocalRandom rng = ThreadLocalRandom.current();
             int fileSize = (int) channel.size();
-            ByteBuffer buffer = ByteBuffers.allocate( fileSize );
+            ByteBuffer buffer = ByteBuffers.allocate( fileSize, INSTANCE );
             for ( int i = 0; i < fileSize; i++ )
 
             {
@@ -759,7 +749,7 @@ public abstract class FileSystemAbstractionTest
     @Test
     void lastModifiedOfNonExistingFileIsZero()
     {
-        assertThat( fsa.lastModifiedTime( nonExistingFile( "blabla" ) ), is( 0L ) );
+        assertThat( fsa.lastModifiedTime( nonExistingFile( "blabla" ) ) ).isEqualTo( 0L );
     }
 
     @Test
@@ -769,14 +759,38 @@ public abstract class FileSystemAbstractionTest
         File a = existingFile( "/home/a" );
 
         List<File> filepaths = fsa.streamFilesRecursive( dir ).map( FileHandle::getRelativeFile ).collect( toList() );
-        assertThat( filepaths, containsInAnyOrder( new File( a.getName() ) ) );
+        assertThat( filepaths ).contains( new File( a.getName() ) );
+    }
+
+    @Test
+    void truncationMustReduceFileSize() throws Exception
+    {
+        File a = existingFile( "a" );
+        try ( StoreChannel channel = fsa.write( a ) )
+        {
+            channel.position( 0 );
+            byte[] data = {
+                    1, 2, 3, 4,
+                    5, 6, 7, 8
+            };
+            channel.writeAll( ByteBuffer.wrap( data ) );
+            channel.truncate( 4 );
+            assertThat( channel.size() ).isEqualTo( 4 );
+            ByteBuffer buf = ByteBuffers.allocate( data.length, INSTANCE );
+            channel.position( 0 );
+            int read = channel.read( buf );
+            assertThat( read ).isEqualTo( 4 );
+            buf.flip();
+            assertThat( buf.remaining() ).isEqualTo( 4 );
+            assertThat( buf.array() ).containsExactly( 1, 2, 3, 4, 0, 0, 0, 0 );
+        }
     }
 
     private void generateFileWithRecords( File file, int recordCount ) throws IOException
     {
         try ( StoreChannel channel = fsa.write( file ) )
         {
-            ByteBuffer buf = ByteBuffers.allocate( recordSize );
+            ByteBuffer buf = ByteBuffers.allocate( recordSize, INSTANCE );
             for ( int i = 0; i < recordCount; i++ )
             {
                 generateRecordForId( i, buf );
@@ -794,8 +808,8 @@ public abstract class FileSystemAbstractionTest
     {
         try ( StoreChannel channel = fsa.write( file ) )
         {
-            ByteBuffer buf = ByteBuffers.allocate( recordSize );
-            ByteBuffer observation = ByteBuffers.allocate( recordSize );
+            ByteBuffer buf = ByteBuffers.allocate( recordSize, INSTANCE );
+            ByteBuffer observation = ByteBuffers.allocate( recordSize, INSTANCE );
             for ( int i = 0; i < recordCount; i++ )
             {
                 generateRecordForId( i, buf );
@@ -811,9 +825,8 @@ public abstract class FileSystemAbstractionTest
         byte[] actualBytes = actualPageContents.array();
         byte[] expectedBytes = expectedPageContents.array();
         int estimatedPageId = estimateId( actualBytes );
-        assertThat( "Page id: " + pageId + " " + "(based on record data, it should have been " + estimatedPageId +
-                    ", a difference of " + Math.abs( pageId - estimatedPageId ) + ")", actualBytes,
-                byteArray( expectedBytes ) );
+        assertThat( actualBytes ).as( "Page id: " + pageId + " " + "(based on record data, it should have been " + estimatedPageId + ", a difference of " +
+                Math.abs( pageId - estimatedPageId ) + ")" ).containsExactly( expectedBytes );
     }
 
     private int estimateId( byte[] record )
@@ -868,7 +881,7 @@ public abstract class FileSystemAbstractionTest
     private void writeIntegerIntoFile( File targetFile ) throws IOException
     {
         StoreChannel storeChannel = fsa.write( targetFile );
-        ByteBuffer byteBuffer = ByteBuffers.allocate( Integer.SIZE ).putInt( 7 );
+        ByteBuffer byteBuffer = ByteBuffers.allocate( Integer.SIZE, INSTANCE ).putInt( 7 );
         byteBuffer.flip();
         storeChannel.writeAll( byteBuffer );
         storeChannel.close();

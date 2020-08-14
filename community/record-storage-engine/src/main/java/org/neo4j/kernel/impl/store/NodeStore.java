@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.file.OpenOption;
 import java.util.Arrays;
@@ -28,6 +30,7 @@ import org.neo4j.internal.helpers.Exceptions;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -70,7 +73,7 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
             LogProvider logProvider,
             DynamicArrayStore dynamicLabelStore,
             RecordFormats recordFormats,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, config, IdType.NODE, idGeneratorFactory, pageCache, logProvider, TYPE_DESCRIPTOR, recordFormats.node(),
                 NO_STORE_HEADER_FORMAT, recordFormats.storeVersion(), openOptions );
@@ -78,21 +81,21 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, NodeRecord record ) throws FAILURE
+    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, NodeRecord record, PageCursorTracer cursorTracer ) throws FAILURE
     {
-        processor.processNode( this, record );
+        processor.processNode( this, record, cursorTracer );
     }
 
     @Override
-    public void ensureHeavy( NodeRecord node )
+    public void ensureHeavy( NodeRecord node, PageCursorTracer cursorTracer )
     {
         if ( NodeLabelsField.fieldPointsToDynamicRecordOfLabels( node.getLabelField() ) )
         {
-            ensureHeavy( node, NodeLabelsField.firstDynamicLabelRecordId( node.getLabelField() ) );
+            ensureHeavy( node, NodeLabelsField.firstDynamicLabelRecordId( node.getLabelField() ), cursorTracer );
         }
     }
 
-    public void ensureHeavy( NodeRecord node, long firstDynamicLabelRecord )
+    public void ensureHeavy( NodeRecord node, long firstDynamicLabelRecord, PageCursorTracer cursorTracer )
     {
         if ( !node.isLight() )
         {
@@ -102,7 +105,11 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
         // Load any dynamic labels and populate the node record
         try
         {
+<<<<<<< HEAD
             node.setLabelField( node.getLabelField(), dynamicLabelStore.getRecords( firstDynamicLabelRecord, RecordLoad.NORMAL, false ) );
+=======
+            node.setLabelField( node.getLabelField(), dynamicLabelStore.getRecords( firstDynamicLabelRecord, RecordLoad.NORMAL, false, cursorTracer ) );
+>>>>>>> neo4j/4.1
         }
         catch ( InvalidRecordException e )
         {
@@ -111,10 +118,10 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
     }
 
     @Override
-    public void updateRecord( NodeRecord record, IdUpdateListener idUpdateListener )
+    public void updateRecord( NodeRecord record, IdUpdateListener idUpdateListener, PageCursorTracer cursorTracer )
     {
-        super.updateRecord( record, idUpdateListener );
-        updateDynamicLabelRecords( record.getDynamicLabelRecords(), idUpdateListener );
+        super.updateRecord( record, idUpdateListener, cursorTracer );
+        updateDynamicLabelRecords( record.getDynamicLabelRecords(), idUpdateListener, cursorTracer );
     }
 
     public DynamicArrayStore getDynamicLabelStore()
@@ -122,11 +129,11 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
         return dynamicLabelStore;
     }
 
-    public void updateDynamicLabelRecords( Iterable<DynamicRecord> dynamicLabelRecords, IdUpdateListener idUpdateListener )
+    public void updateDynamicLabelRecords( Iterable<DynamicRecord> dynamicLabelRecords, IdUpdateListener idUpdateListener, PageCursorTracer cursorTracer )
     {
         for ( DynamicRecord record : dynamicLabelRecords )
         {
-            dynamicLabelStore.updateRecord( record, idUpdateListener );
+            dynamicLabelStore.updateRecord( record, idUpdateListener, cursorTracer );
         }
     }
 }

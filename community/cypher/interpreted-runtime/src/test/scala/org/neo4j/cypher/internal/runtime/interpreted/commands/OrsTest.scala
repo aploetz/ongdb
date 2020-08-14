@@ -19,17 +19,20 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.v4_0.util.NonEmptyList
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{Not, Ors, Predicate, True}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Not
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Ors
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.True
+import org.neo4j.cypher.internal.util.NonEmptyList
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class OrsTest extends CypherFunSuite {
   private val state = QueryStateHelper.empty
-  private val ctx = ExecutionContext.empty
+  private val ctx = CypherRow.empty
 
   private val nullPredicate = mock[Predicate]
   when(nullPredicate.isMatch(ctx, state)).thenReturn(None)

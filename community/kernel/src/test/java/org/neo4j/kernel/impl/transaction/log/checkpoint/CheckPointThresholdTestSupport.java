@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.transaction.log.checkpoint;
 
-import org.hamcrest.Matcher;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 
@@ -37,8 +36,7 @@ import org.neo4j.logging.NullLogProvider;
 import org.neo4j.time.Clocks;
 import org.neo4j.time.FakeClock;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CheckPointThresholdTestSupport
@@ -89,14 +87,9 @@ public class CheckPointThresholdTestSupport
         return CheckPointThreshold.createThreshold( config, clock, logPruning, logProvider );
     }
 
-    protected void verifyTriggered( String reason )
+    protected void verifyTriggered( String... reason )
     {
-        verifyTriggered( containsString( reason ) );
-    }
-
-    protected void verifyTriggered( Matcher<String> reason )
-    {
-        assertThat( triggerConsumer.poll(), reason );
+        assertThat( triggerConsumer.poll() ).contains( reason );
     }
 
     protected void verifyNoMoreTriggers()

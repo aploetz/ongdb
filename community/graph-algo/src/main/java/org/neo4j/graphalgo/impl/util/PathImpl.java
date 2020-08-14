@@ -30,11 +30,16 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.traversal.Paths;
 import org.neo4j.internal.helpers.collection.ArrayIterator;
 import org.neo4j.internal.helpers.collection.ReverseArrayIterator;
+import org.neo4j.kernel.impl.core.RelationshipEntity;
+import org.neo4j.memory.HeapEstimator;
+import org.neo4j.memory.Measurable;
 
 import static org.neo4j.internal.helpers.collection.Iterators.iteratorsEqual;
 
-public final class PathImpl implements Path
+public final class PathImpl implements Path, Measurable
 {
+    private static final long SHALLOW_SIZE = HeapEstimator.shallowSizeOfInstance( PathImpl.class );
+
     public static final class Builder
     {
         private final Builder previous;
@@ -81,7 +86,7 @@ public final class PathImpl implements Path
             return new Builder( this, relationship );
         }
 
-        public Path build( Builder other )
+        public PathImpl build( Builder other )
         {
             return new PathImpl( this, other );
         }
@@ -95,7 +100,7 @@ public final class PathImpl implements Path
             }
             else
             {
-                return relToString( relationship ) + ":" + previous.toString();
+                return relToString( relationship ) + ":" + previous;
             }
         }
     }
@@ -316,6 +321,16 @@ public final class PathImpl implements Path
         {
             return false;
         }
+    }
+
+    @Override
+    public long estimatedHeapUsage()
+    {
+        long estimate =  SHALLOW_SIZE + HeapEstimator.shallowSizeOfObjectArray( path.length );
+        int pathLength = path.length;
+        estimate += pathLength * RelationshipEntity.SHALLOW_SIZE;
+
+        return estimate;
     }
 
     @Override

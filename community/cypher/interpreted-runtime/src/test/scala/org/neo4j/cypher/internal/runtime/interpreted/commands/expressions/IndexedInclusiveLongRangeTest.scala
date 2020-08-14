@@ -19,7 +19,7 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 import scala.util.Random
 
@@ -68,13 +68,13 @@ class IndexedInclusiveLongRangeTest extends CypherFunSuite {
          a = random.nextInt(Int.MaxValue);
          b = random.nextInt(Int.MaxValue);
          c = random.nextInt(Int.MaxValue)
-    ) {
+         ) {
       val input = Array(a,b,c).sorted
       val step = input(0)
       val start = input(1)
       val end = input(2)
 
-      IndexedInclusiveLongRange(start, end, step).toIndexedSeq.map(_.toInt) should equal(start to end by step)
+      IndexedInclusiveLongRange(start, end, step).map(_.toInt) should equal(start to end by step)
     }
   }
 

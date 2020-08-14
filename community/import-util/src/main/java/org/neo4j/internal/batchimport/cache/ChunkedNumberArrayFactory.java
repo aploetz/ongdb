@@ -19,19 +19,20 @@
  */
 package org.neo4j.internal.batchimport.cache;
 
+import org.neo4j.memory.MemoryTracker;
+
 import static java.lang.Long.min;
+import static org.neo4j.internal.helpers.ArrayUtil.MAX_ARRAY_SIZE;
 
 /**
  * Used as part of the fallback strategy for {@link Auto}. Tries to split up fixed-size arrays
- * ({@link #newLongArray(long, long)} and {@link #newIntArray(long, int)} into smaller chunks where
+ * ({@link NumberArrayFactory#newLongArray(long, long, MemoryTracker)} and
+ * {@link NumberArrayFactory#newIntArray(long, int, MemoryTracker)} into smaller chunks where
  * some can live on heap and some off heap.
  */
 public class ChunkedNumberArrayFactory extends NumberArrayFactory.Adapter
 {
     static final int MAGIC_CHUNK_COUNT = 10;
-    // This is a safe bet on the maximum number of items the JVM can store in an array. It is commonly slightly less
-    // than Integer.MAX_VALUE
-    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - Short.MAX_VALUE;
     private final NumberArrayFactory delegate;
 
     ChunkedNumberArrayFactory( Monitor monitor )
@@ -45,27 +46,27 @@ public class ChunkedNumberArrayFactory extends NumberArrayFactory.Adapter
     }
 
     @Override
-    public LongArray newLongArray( long length, long defaultValue, long base )
+    public LongArray newLongArray( long length, long defaultValue, long base, MemoryTracker memoryTracker )
     {
         // Here we want to have the property of a dynamic array so that some parts of the array
         // can live on heap, some off.
-        return newDynamicLongArray( fractionOf( length ), defaultValue );
+        return newDynamicLongArray( fractionOf( length ), defaultValue, memoryTracker );
     }
 
     @Override
-    public IntArray newIntArray( long length, int defaultValue, long base )
+    public IntArray newIntArray( long length, int defaultValue, long base, MemoryTracker memoryTracker )
     {
         // Here we want to have the property of a dynamic array so that some parts of the array
         // can live on heap, some off.
-        return newDynamicIntArray( fractionOf( length ), defaultValue );
+        return newDynamicIntArray( fractionOf( length ), defaultValue, memoryTracker );
     }
 
     @Override
-    public ByteArray newByteArray( long length, byte[] defaultValue, long base )
+    public ByteArray newByteArray( long length, byte[] defaultValue, long base, MemoryTracker memoryTracker )
     {
         // Here we want to have the property of a dynamic array so that some parts of the array
         // can live on heap, some off.
-        return newDynamicByteArray( fractionOf( length ), defaultValue );
+        return newDynamicByteArray( fractionOf( length ), defaultValue, memoryTracker );
     }
 
     private long fractionOf( long length )
@@ -78,21 +79,21 @@ public class ChunkedNumberArrayFactory extends NumberArrayFactory.Adapter
     }
 
     @Override
-    public IntArray newDynamicIntArray( long chunkSize, int defaultValue )
+    public IntArray newDynamicIntArray( long chunkSize, int defaultValue, MemoryTracker memoryTracker )
     {
-        return new DynamicIntArray( delegate, chunkSize, defaultValue );
+        return new DynamicIntArray( delegate, chunkSize, defaultValue, memoryTracker );
     }
 
     @Override
-    public LongArray newDynamicLongArray( long chunkSize, long defaultValue )
+    public LongArray newDynamicLongArray( long chunkSize, long defaultValue, MemoryTracker memoryTracker )
     {
-        return new DynamicLongArray( delegate, chunkSize, defaultValue );
+        return new DynamicLongArray( delegate, chunkSize, defaultValue, memoryTracker );
     }
 
     @Override
-    public ByteArray newDynamicByteArray( long chunkSize, byte[] defaultValue )
+    public ByteArray newDynamicByteArray( long chunkSize, byte[] defaultValue, MemoryTracker memoryTracker )
     {
-        return new DynamicByteArray( delegate, chunkSize, defaultValue );
+        return new DynamicByteArray( delegate, chunkSize, defaultValue, memoryTracker );
     }
 
     @Override

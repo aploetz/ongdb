@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 
-import org.neo4j.annotations.service.ServiceProvider;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.kernel.api.exceptions.schema.MalformedSchemaRuleException;
 import org.neo4j.internal.recordstorage.CommandReading.DynamicRecordAdder;
@@ -56,7 +55,7 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 import org.neo4j.kernel.impl.storemigration.legacy.SchemaRuleSerialization35;
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntryVersion;
+import org.neo4j.storageengine.api.CommandReader;
 
 import static org.neo4j.internal.helpers.Numbers.unsignedShortToInt;
 import static org.neo4j.internal.recordstorage.CommandReading.COLLECTION_DYNAMIC_RECORD_ADDER;
@@ -68,14 +67,10 @@ import static org.neo4j.io.fs.IoPrimitiveUtils.read2bMap;
 import static org.neo4j.io.fs.IoPrimitiveUtils.read3bLengthAndString;
 import static org.neo4j.util.Bits.bitFlag;
 
-@ServiceProvider
 public class PhysicalLogCommandReaderV3_0_10 extends BaseCommandReader
 {
-    @Override
-    public int getFormatId()
-    {
-        return LogEntryVersion.V3_0_10.version();
-    }
+    public static final CommandReader INSTANCE = new PhysicalLogCommandReaderV3_0_10();
+    static final byte FORMAT_ID = -10;
 
     @Override
     protected Command read( byte commandType, ReadableChannel channel ) throws IOException
@@ -224,13 +219,12 @@ public class PhysicalLogCommandReaderV3_0_10 extends BaseCommandReader
         boolean usesFixedReferenceFormat = bitFlag( flags, Record.USES_FIXED_REFERENCE_FORMAT );
 
         int type = unsignedShortToInt( channel.getShort() );
-        RelationshipGroupRecord record = new RelationshipGroupRecord( id, type );
-        record.setInUse( inUse );
-        record.setNext( channel.getLong() );
-        record.setFirstOut( channel.getLong() );
-        record.setFirstIn( channel.getLong() );
-        record.setFirstLoop( channel.getLong() );
-        record.setOwningNode( channel.getLong() );
+        long next = channel.getLong();
+        long firstOut = channel.getLong();
+        long firstIn = channel.getLong();
+        long firstLoop = channel.getLong();
+        long owningNode = channel.getLong();
+        RelationshipGroupRecord record = new RelationshipGroupRecord( id ).initialize( inUse, type, firstOut, firstIn, firstLoop, owningNode, next );
         record.setRequiresSecondaryUnit( requireSecondaryUnit );
         if ( hasSecondaryUnit )
         {
@@ -427,7 +421,9 @@ public class PhysicalLogCommandReaderV3_0_10 extends BaseCommandReader
         if ( inUse )
         {
             boolean dense = channel.get() == 1;
-            record = new NodeRecord( id, dense, channel.getLong(), channel.getLong() );
+            long nextRel = channel.getLong();
+            long nextProp = channel.getLong();
+            record = new NodeRecord( id ).initialize( false, nextProp, dense, nextRel, 0 );
             // labels
             labelField = channel.getLong();
             record.setRequiresSecondaryUnit( requiresSecondaryUnit );
@@ -462,7 +458,8 @@ public class PhysicalLogCommandReaderV3_0_10 extends BaseCommandReader
         RelationshipRecord record;
         if ( inUse )
         {
-            record = new RelationshipRecord( id, channel.getLong(), channel.getLong(), channel.getInt() );
+            record = new RelationshipRecord( id );
+            record.setLinks( channel.getLong(), channel.getLong(), channel.getInt() );
             record.setInUse( true );
             record.setRequiresSecondaryUnit( requiresSecondaryUnit );
             record.setFirstPrevRel( channel.getLong() );
@@ -481,7 +478,8 @@ public class PhysicalLogCommandReaderV3_0_10 extends BaseCommandReader
         }
         else
         {
-            record = new RelationshipRecord( id, -1, -1, channel.getInt() );
+            record = new RelationshipRecord( id );
+            record.setLinks( -1, -1, channel.getInt() );
             record.setInUse( false );
         }
         if ( bitFlag( flags, Record.CREATED_IN_TX ) )

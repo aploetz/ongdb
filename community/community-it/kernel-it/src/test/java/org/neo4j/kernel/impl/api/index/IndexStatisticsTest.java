@@ -24,8 +24,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -41,7 +39,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.graphdb.Label;
@@ -53,31 +50,30 @@ import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.monitoring.Monitors;
-import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.register.Registers;
 import org.neo4j.test.Barrier;
 import org.neo4j.test.rule.DbmsRule;
 import org.neo4j.test.rule.EmbeddedDbmsRule;
 import org.neo4j.test.rule.RandomRule;
 import org.neo4j.util.FeatureToggles;
+import org.neo4j.util.concurrent.Futures;
 import org.neo4j.values.storable.Values;
 
+import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
-import static org.apache.commons.lang3.StringUtils.join;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.junit.runners.Parameterized.Parameter;
-import static org.junit.runners.Parameterized.Parameters;
 import static org.neo4j.internal.helpers.collection.Iterables.filter;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 
 /**
@@ -91,7 +87,6 @@ import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
  * The area around when the index population is done is controlled using a {@link Barrier} so that we can assert sample data
  * with 100% accuracy against the updates we know that the test has done during the time the index was populating.
  */
-@RunWith( Parameterized.class )
 public class IndexStatisticsTest
 {
     private static final double UNIQUE_NAMES = 10.0;
@@ -105,9 +100,6 @@ public class IndexStatisticsTest
     private static final String PERSON_LABEL = "Person";
     private static final String NAME_PROPERTY = "name";
 
-    @Parameter
-    public boolean multiThreadedPopulationEnabled;
-
     @Rule
     public final DbmsRule db = new EmbeddedDbmsRule()
             .withSetting( GraphDatabaseSettings.index_background_sampling_enabled, false )
@@ -117,20 +109,16 @@ public class IndexStatisticsTest
 
     private final IndexOnlineMonitor indexOnlineMonitor = new IndexOnlineMonitor();
 
-    @Parameters( name = "multiThreadedIndexPopulationEnabled = {0}" )
-    public static Object[] multiThreadedIndexPopulationEnabledValues()
-    {
-        return new Object[]{true, false};
-    }
-
     @Before
     public void before()
     {
+<<<<<<< HEAD
         db.withSetting( GraphDatabaseSettings.multi_threaded_schema_index_population_enabled, multiThreadedPopulationEnabled );
 
+=======
+>>>>>>> neo4j/4.1
         int batchSize = random.nextInt( 1, 5 );
         FeatureToggles.set( MultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME, batchSize );
-        FeatureToggles.set( BatchingMultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME, batchSize );
         FeatureToggles.set( MultipleIndexPopulator.class, "print_debug", true );
 
         db.getGraphDatabaseAPI().getDependencyResolver()
@@ -142,7 +130,6 @@ public class IndexStatisticsTest
     public void tearDown()
     {
         FeatureToggles.clear( MultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME );
-        FeatureToggles.clear( BatchingMultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME );
         FeatureToggles.clear( MultipleIndexPopulator.class, "print_debug" );
     }
 
@@ -237,13 +224,15 @@ public class IndexStatisticsTest
         }
         catch ( IndexNotFoundKernelException e )
         {
-            DoubleLongRegister actual = getIndexingStatisticsStore().indexSample( index.getId(), Registers.newDoubleLongRegister() );
-            assertDoubleLongEquals( 0L, 0L, actual );
+            var sample = getIndexingStatisticsStore().indexSample( index.getId() );
+            assertEquals( 0, sample.uniqueValues() );
+            assertEquals( 0, sample.sampleSize() );
         }
 
         // and then index size and index updates are zero on disk
-        DoubleLongRegister actual = getIndexingStatisticsStore().indexUpdatesAndSize( index.getId(), Registers.newDoubleLongRegister() );
-        assertDoubleLongEquals( 0L, 0L, actual );
+        var indexSample = getIndexingStatisticsStore().indexSample( index.getId() );
+        assertEquals( 0, indexSample.indexSize() );
+        assertEquals( 0, indexSample.updates() );
     }
 
     @Test
@@ -258,8 +247,7 @@ public class IndexStatisticsTest
         awaitIndexesOnline();
 
         // then
-        double expectedSelectivity = UNIQUE_NAMES / created;
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        assertCorrectIndexSelectivity( index, created );
         assertCorrectIndexSize( created, indexSize( index ) );
         assertEquals( 0L, indexUpdates( index ) );
     }
@@ -278,10 +266,10 @@ public class IndexStatisticsTest
 
         // then
         int seenWhilePopulating = initialNodes + updatesTracker.createdDuringPopulation();
-        double expectedSelectivity = UNIQUE_NAMES / seenWhilePopulating;
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        assertCorrectIndexSelectivity( index, seenWhilePopulating );
         assertCorrectIndexSize( seenWhilePopulating, indexSize( index ) );
-        assertCorrectIndexUpdates( updatesTracker.createdAfterPopulation(), indexUpdates( index ) );
+        int expectedUpdates = updatesTracker.createdAfterPopulation() + toIntExact( indexOnlineMonitor.indexSampleOnCompletion.updates() );
+        assertCorrectIndexUpdates( expectedUpdates, indexUpdates( index ) );
     }
 
     @Test
@@ -300,10 +288,10 @@ public class IndexStatisticsTest
         // then
         assertIndexedNodesMatchesStoreNodes( index );
         int seenWhilePopulating = initialNodes + updatesTracker.createdDuringPopulation() - updatesTracker.deletedDuringPopulation();
-        double expectedSelectivity = UNIQUE_NAMES / seenWhilePopulating;
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        assertCorrectIndexSelectivity( index, seenWhilePopulating );
         assertCorrectIndexSize( seenWhilePopulating, indexSize( index ) );
-        int expectedIndexUpdates = updatesTracker.deletedAfterPopulation() + updatesTracker.createdAfterPopulation();
+        int expectedIndexUpdates = updatesTracker.deletedAfterPopulation() + updatesTracker.createdAfterPopulation() +
+                toIntExact( indexOnlineMonitor.indexSampleOnCompletion.updates() );
         assertCorrectIndexUpdates( expectedIndexUpdates, indexUpdates( index ) );
     }
 
@@ -323,10 +311,10 @@ public class IndexStatisticsTest
         // then
         assertIndexedNodesMatchesStoreNodes( index );
         int seenWhilePopulating = initialNodes + updatesTracker.createdDuringPopulation();
-        double expectedSelectivity = UNIQUE_NAMES / seenWhilePopulating;
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        assertCorrectIndexSelectivity( index, seenWhilePopulating );
         assertCorrectIndexSize( seenWhilePopulating, indexSize( index ) );
-        int expectedIndexUpdates = updatesTracker.createdAfterPopulation() + updatesTracker.updatedAfterPopulation();
+        int expectedIndexUpdates = updatesTracker.createdAfterPopulation() + updatesTracker.updatedAfterPopulation() +
+                toIntExact( indexOnlineMonitor.indexSampleOnCompletion.updates() );
         assertCorrectIndexUpdates( expectedIndexUpdates, indexUpdates( index ) );
     }
 
@@ -346,9 +334,9 @@ public class IndexStatisticsTest
         // then
         assertIndexedNodesMatchesStoreNodes( index );
         int seenWhilePopulating = initialNodes + updatesTracker.createdDuringPopulation() - updatesTracker.deletedDuringPopulation();
-        double expectedSelectivity = UNIQUE_NAMES / seenWhilePopulating;
-        int expectedIndexUpdates = updatesTracker.deletedAfterPopulation() + updatesTracker.createdAfterPopulation() + updatesTracker.updatedAfterPopulation();
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        int expectedIndexUpdates = updatesTracker.deletedAfterPopulation() + updatesTracker.createdAfterPopulation() + updatesTracker.updatedAfterPopulation() +
+                toIntExact( indexOnlineMonitor.indexSampleOnCompletion.updates() );
+        assertCorrectIndexSelectivity( index, seenWhilePopulating );
         assertCorrectIndexSize( seenWhilePopulating, indexSize( index ) );
         assertCorrectIndexUpdates( expectedIndexUpdates, indexUpdates( index ) );
     }
@@ -376,9 +364,9 @@ public class IndexStatisticsTest
         // sum result into empty result
         UpdatesTracker result = new UpdatesTracker();
         result.notifyPopulationCompleted();
-        for ( Future<UpdatesTracker> future : futures )
+        for ( UpdatesTracker jobTracker : Futures.getAllResults( futures ) )
         {
-            result.add( future.get() );
+            result.add( jobTracker );
         }
         awaitIndexesOnline();
 
@@ -388,10 +376,10 @@ public class IndexStatisticsTest
         // then
         assertIndexedNodesMatchesStoreNodes( index );
         int seenWhilePopulating = initialNodes + result.createdDuringPopulation() - result.deletedDuringPopulation();
-        double expectedSelectivity = UNIQUE_NAMES / seenWhilePopulating;
-        assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
+        assertCorrectIndexSelectivity( index, seenWhilePopulating );
         assertCorrectIndexSize( "Tracker had " + result, seenWhilePopulating, indexSize( index ) );
-        int expectedIndexUpdates = result.deletedAfterPopulation() + result.createdAfterPopulation() + result.updatedAfterPopulation();
+        int expectedIndexUpdates = result.deletedAfterPopulation() + result.createdAfterPopulation() + result.updatedAfterPopulation() +
+                toIntExact( indexOnlineMonitor.indexSampleOnCompletion.updates() );
         assertCorrectIndexUpdates( "Tracker had " + result, expectedIndexUpdates, indexUpdates( index ) );
     }
 
@@ -405,14 +393,14 @@ public class IndexStatisticsTest
             List<String> mismatches = new ArrayList<>();
             int propertyKeyId = ktx.tokenRead().propertyKey( NAME_PROPERTY );
             IndexReadSession indexSession = ktx.dataRead().indexReadSession( index );
-            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor() )
+            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() ) )
             {
                 // Node --> Index
                 for ( Node node : filter( n -> n.hasLabel( label ) && n.hasProperty( NAME_PROPERTY ), transaction.getAllNodes() ) )
                 {
                     nodesInStore++;
                     String name = (String) node.getProperty( NAME_PROPERTY );
-                    ktx.dataRead().nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, IndexQuery.exact( propertyKeyId, name ) );
+                    ktx.dataRead().nodeIndexSeek( indexSession, cursor, unconstrained(), IndexQuery.exact( propertyKeyId, name ) );
                     boolean found = false;
                     while ( cursor.next() )
                     {
@@ -433,10 +421,10 @@ public class IndexStatisticsTest
                 }
                 if ( !mismatches.isEmpty() )
                 {
-                    fail( join( mismatches.toArray(), format( "%n" ) ) );
+                    fail( String.join( format( "%n" ), mismatches ) );
                 }
                 // Node count == indexed node count
-                ktx.dataRead().nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, IndexQuery.exists( propertyKeyId ) );
+                ktx.dataRead().nodeIndexSeek( indexSession, cursor, unconstrained(), IndexQuery.exists( propertyKeyId ) );
                 int nodesInIndex = 0;
                 while ( cursor.next() )
                 {
@@ -527,10 +515,7 @@ public class IndexStatisticsTest
             } );
         }
 
-        for ( Future<?> job : service.invokeAll( jobs ) )
-        {
-            job.get();
-        }
+        Futures.getAllResults( service.invokeAll( jobs ) );
 
         service.awaitTermination( 1, TimeUnit.SECONDS );
         service.shutdown();
@@ -555,14 +540,14 @@ public class IndexStatisticsTest
         }
     }
 
-    private long indexSize( IndexDescriptor reference ) throws IndexNotFoundKernelException
+    private long indexSize( IndexDescriptor reference )
     {
-        return resolveDependency( IndexingService.class ).indexUpdatesAndSize( reference ).readSecond();
+        return resolveDependency( IndexStatisticsStore.class ).indexSample( reference.getId() ).indexSize();
     }
 
-    private long indexUpdates( IndexDescriptor reference ) throws IndexNotFoundKernelException
+    private long indexUpdates( IndexDescriptor reference )
     {
-        return resolveDependency( IndexingService.class ).indexUpdatesAndSize( reference ).readFirst();
+        return resolveDependency( IndexStatisticsStore.class ).indexSample( reference.getId() ).updates();
     }
 
     private double indexSelectivity( IndexDescriptor reference ) throws KernelException
@@ -737,24 +722,18 @@ public class IndexStatisticsTest
         return !updatesTracker.isPopulationCompleted() && indexOnlineMonitor.isIndexOnline();
     }
 
-    private void assertDoubleLongEquals( long expectedUniqueValue, long expectedSampledSize,
-                                         DoubleLongRegister register )
-    {
-        assertEquals( expectedUniqueValue, register.readFirst() );
-        assertEquals( expectedSampledSize, register.readSecond() );
-    }
-
-    private static void assertCorrectIndexSize( long expected, long actual )
+    private void assertCorrectIndexSize( long expected, long actual )
     {
         assertCorrectIndexSize( "", expected, actual );
     }
 
-    private static void assertCorrectIndexSize( String info, long expected, long actual )
+    private void assertCorrectIndexSize( String info, long expected, long actual )
     {
+        long updatesAfterCompletion = indexOnlineMonitor.indexSampleOnCompletion.updates();
         String message = format(
                 "Expected number of entries to not differ (expected: %d actual: %d) %s",
                 expected, actual, info );
-        assertEquals( message, 0L, Math.abs( expected - actual ) );
+        assertThat( Math.abs( expected - actual ) ).withFailMessage( message ).isLessThanOrEqualTo( updatesAfterCompletion );
     }
 
     private static void assertCorrectIndexUpdates( long expected, long actual )
@@ -770,20 +749,25 @@ public class IndexStatisticsTest
         assertEquals( message, 0L, Math.abs( expected - actual ) );
     }
 
-    private static void assertCorrectIndexSelectivity( double expected, double actual )
+    private void assertCorrectIndexSelectivity( IndexDescriptor index, long numberOfEntries ) throws KernelException
     {
+        double expected = UNIQUE_NAMES / numberOfEntries;
+        double actual = indexSelectivity( index );
+        double maxDelta = Double.max( 0.0001, (double) indexOnlineMonitor.indexSampleOnCompletion.updates() / numberOfEntries );
+
         String message = format(
                 "Expected number of entries to not differ (expected: %f actual: %f)",
                 expected, actual );
-        assertEquals( message, expected, actual, 0d );
+        assertEquals( message, expected, actual, maxDelta );
     }
 
-    private static class IndexOnlineMonitor extends IndexingService.MonitorAdapter
+    private class IndexOnlineMonitor extends IndexingService.MonitorAdapter
     {
         private CountDownLatch updateTrackerCompletionLatch;
         private final CountDownLatch startSignal = new CountDownLatch( 1 );
         private volatile boolean isOnline;
         private Barrier.Control barrier;
+        private IndexSample indexSampleOnCompletion;
 
         void initialize( int numberOfUpdateTrackers )
         {
@@ -844,6 +828,7 @@ public class IndexStatisticsTest
         @Override
         public void populationCompleteOn( IndexDescriptor descriptor )
         {
+            indexSampleOnCompletion = getIndexingStatisticsStore().indexSample( descriptor.getId() );
             if ( barrier != null )
             {
                 barrier.release();

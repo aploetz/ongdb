@@ -24,6 +24,12 @@ import java.util.regex.Pattern;
 
 import org.neo4j.hashing.HashFunction;
 
+<<<<<<< HEAD
+=======
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOf;
+
+>>>>>>> neo4j/4.1
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 
 /**
@@ -32,6 +38,8 @@ import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
  */
 final class StringWrappingStringValue extends StringValue
 {
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance( StringWrappingStringValue.class );
+
     private final String value;
 
     StringWrappingStringValue( String value )
@@ -168,10 +176,9 @@ final class StringWrappingStringValue extends StringValue
     }
 
     @Override
-    protected long estimatedPayloadSize()
+    public long estimatedHeapUsage()
     {
-        // we leverage the fact that Character.BYTES is always 2 to speed up this computation.
-        return 48 + value.length() << 1;
+        return SHALLOW_SIZE + sizeOf( value );
     }
 
     private int ltrimIndex( String value )

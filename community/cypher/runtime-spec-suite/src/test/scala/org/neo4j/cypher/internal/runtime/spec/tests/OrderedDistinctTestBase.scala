@@ -19,8 +19,13 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.GetValue
+import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.graphdb.Node
 
 abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
@@ -36,7 +41,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-      .orderedDistinct(Seq(varFor("x")), "x AS x")
+      .orderedDistinct(Seq("x"), "x AS x")
       .input(variables = Seq("x"))
       .build()
 
@@ -53,7 +58,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-      .orderedDistinct(Seq(varFor("x")), "x AS x")
+      .orderedDistinct(Seq("x"), "x AS x")
       .input(variables = Seq("x"))
       .build()
 
@@ -71,7 +76,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-      .orderedDistinct(Seq(varFor("x")), "x AS x")
+      .orderedDistinct(Seq("x"), "x AS x")
       .input(nodes = Seq("x"), nullable = false)
       .build()
 
@@ -88,7 +93,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
-      .orderedDistinct(Seq(varFor("x")), "x AS y")
+      .orderedDistinct(Seq("x"), "x AS y")
       .input(variables = Seq("x"))
       .build()
 
@@ -105,7 +110,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1")
-      .orderedDistinct(Seq(varFor("x")),"x AS x1", "1 + y AS y1")
+      .orderedDistinct(Seq("x"),"x AS x1", "1 + y AS y1")
       .input(variables = Seq("x", "y"))
       .build()
 
@@ -123,7 +128,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1")
-      .orderedDistinct(Seq(varFor("x"),varFor("y")),"x AS x1", "y AS y1")
+      .orderedDistinct(Seq("x","y"),"x AS x1", "y AS y1")
       .input(variables = Seq("x", "y"))
       .build()
 
@@ -142,7 +147,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1")
-      .orderedDistinct(Seq(varFor("x")),"x AS x1", "y AS y1")
+      .orderedDistinct(Seq("x"),"x AS x1", "y AS y1")
       .input(nodes = Seq("x", "y"), nullable = false)
       .build()
 
@@ -161,7 +166,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1")
-      .orderedDistinct(Seq(varFor("x"),varFor("y")),"x AS x1", "y AS y1")
+      .orderedDistinct(Seq("x","y"),"x AS x1", "y AS y1")
       .input(nodes = Seq("x", "y"), nullable = false)
       .build()
 
@@ -181,7 +186,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1", "z1")
-      .orderedDistinct(Seq(varFor("x")),"x AS x1", "y AS y1", "z AS z1")
+      .orderedDistinct(Seq("x"),"x AS x1", "y AS y1", "z AS z1")
       .input(nodes = Seq("x", "y", "z"), nullable = false)
       .build()
 
@@ -201,7 +206,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1", "z1", "w1")
-      .orderedDistinct(Seq(varFor("x"), varFor("w")),"x AS x1", "y AS y1", "z AS z1", "w AS w1")
+      .orderedDistinct(Seq("x", "w"),"x AS x1", "y AS y1", "z AS z1", "w AS w1")
       .input(nodes = Seq("x", "y", "z", "w"), nullable = false)
       .build()
 
@@ -219,7 +224,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x1", "y1")
-      .orderedDistinct(Seq(varFor("x"),varFor("y")),"x AS x1", "y AS y1")
+      .orderedDistinct(Seq("x","y"),"x AS x1", "y AS y1")
       .input(variables = Seq("x", "y"))
       .build()
 
@@ -238,7 +243,7 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
-      .orderedDistinct(Seq(varFor("x")),"x AS x", "y AS y")
+      .orderedDistinct(Seq("x"),"x AS x", "y AS y")
       .input(variables = Seq("x", "y"))
       .build()
 
@@ -247,5 +252,102 @@ abstract class OrderedDistinctTestBase[CONTEXT <: RuntimeContext](
     // then
     runtimeResult should beColumns("y")
       .withRows(inOrder((0 until sizeHint).map(f).distinct.sorted.map(Array[Any](_))))
+  }
+
+  test("should work on cached property") {
+    val nodes = given {
+      index("A", "prop")
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      }, "A")
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("prop")
+      .orderedDistinct(Seq("cache[x.prop]"), "cache[x.prop] AS prop")
+      .nodeIndexOperator(s"x:A(prop > ${sizeHint / 2})", GetValue, indexOrder = IndexOrderAscending)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected = ((sizeHint / 2 + 1) until sizeHint).distinct.sorted
+    runtimeResult should beColumns("prop").withRows(singleColumn(expected))
+  }
+
+  test("should work under apply, one column, one sorted") {
+    // given
+    val input = for (x <- 0 until sizeHint) yield Array[Any](x)
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y")
+      .apply()
+      .|.orderedDistinct(Seq("y"), "y AS y")
+      .|.unwind("[1,1,2,2,3,3] AS y")
+      .|.argument("x")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, inputValues(input:_*))
+
+    // then
+    val expectedRows = for {
+      x <- 0 until sizeHint
+      y <- 1 to 3
+    } yield Array[Any](x, y)
+
+    runtimeResult should beColumns("x", "y").withRows(expectedRows)
+  }
+
+  test("should work under apply, two columns, one sorted") {
+    // given
+    val input = for (x <- 0 until sizeHint) yield Array[Any](x)
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "a", "b")
+      .apply()
+      .|.orderedDistinct(Seq("x"), "x AS a", "y AS b")
+      .|.unwind("[1,2,3,1,2,3] AS y")
+      .|.argument("x")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, inputValues(input:_*))
+
+    // then
+    val expectedRows = for {
+      x <- 0 until sizeHint
+      y <- 1 to 3
+    } yield Array[Any](x, x, y)
+
+    runtimeResult should beColumns("x", "a", "b").withRows(expectedRows)
+  }
+
+  test("should work under apply, two columns, two sorted") {
+    // given
+    val input = for (x <- 0 until sizeHint) yield Array[Any](x)
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "a", "b")
+      .apply()
+      .|.orderedDistinct(Seq("x", "y"), "x AS a", "y AS b")
+      .|.unwind("[1,1,2,2,3,3] AS y")
+      .|.argument("x")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, inputValues(input:_*))
+
+    // then
+    val expectedRows = for {
+      x <- 0 until sizeHint
+      y <- 1 to 3
+    } yield Array[Any](x, x, y)
+
+    runtimeResult should beColumns("x", "a", "b").withRows(expectedRows)
   }
 }

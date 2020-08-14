@@ -41,15 +41,14 @@ import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.io.memory.ByteBuffers;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.extension.ExecutionSharedContext.SHARED_RESOURCE;
-import static org.neo4j.test.matchers.ByteArrayMatcher.byteArray;
 
 @ResourceLock( SHARED_RESOURCE )
 public abstract class PageCacheTestSupport<T extends PageCache>
@@ -112,47 +111,41 @@ public abstract class PageCacheTestSupport<T extends PageCache>
         fs.close();
     }
 
-    protected final T createPageCache( PageSwapperFactory swapperFactory, int maxPages,
-                                       PageCacheTracer tracer, PageCursorTracerSupplier cursorTracerSupplier,
-                                       VersionContextSupplier versionContextSupplier )
+    protected final T createPageCache( PageSwapperFactory swapperFactory, int maxPages, PageCacheTracer tracer, VersionContextSupplier versionContextSupplier )
     {
-        T pageCache = fixture.createPageCache( swapperFactory, maxPages, tracer, cursorTracerSupplier, versionContextSupplier, jobScheduler );
+        T pageCache = fixture.createPageCache( swapperFactory, maxPages, tracer, versionContextSupplier, jobScheduler );
         pageCachePageSize = pageCache.pageSize();
         recordsPerFilePage = pageCachePageSize / recordSize;
         recordCount = 5 * maxPages * recordsPerFilePage;
         filePageSize = recordsPerFilePage * recordSize;
-        bufA = ByteBuffers.allocate( recordSize );
+        bufA = ByteBuffers.allocate( recordSize, INSTANCE );
         return pageCache;
     }
 
-    protected T createPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer,
-                                 PageCursorTracerSupplier cursorTracerSupplier, VersionContextSupplier versionContextSupplier )
+    protected T createPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer, VersionContextSupplier versionContextSupplier )
     {
-        PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory();
-        swapperFactory.open( fs );
-        return createPageCache( swapperFactory, maxPages, tracer, cursorTracerSupplier, versionContextSupplier );
+        PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory( fs );
+        return createPageCache( swapperFactory, maxPages, tracer, versionContextSupplier );
     }
 
-    protected T createPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer,
-            PageCursorTracerSupplier cursorTracerSupplier )
+    protected T createPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer )
     {
-        return createPageCache( fs, maxPages, tracer, cursorTracerSupplier, EmptyVersionContextSupplier.EMPTY );
+        return createPageCache( fs, maxPages, tracer, EmptyVersionContextSupplier.EMPTY );
     }
 
-    protected final T getPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer,
-                                    PageCursorTracerSupplier cursorTracerSupplier )
+    protected final T getPageCache( FileSystemAbstraction fs, int maxPages, PageCacheTracer tracer )
     {
         if ( pageCache != null )
         {
             tearDownPageCache( pageCache );
         }
-        pageCache = createPageCache( fs, maxPages, tracer, cursorTracerSupplier, EmptyVersionContextSupplier.EMPTY );
+        pageCache = createPageCache( fs, maxPages, tracer, EmptyVersionContextSupplier.EMPTY );
         return pageCache;
     }
 
     protected void configureStandardPageCache()
     {
-        getPageCache( fs, maxPages, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL );
+        getPageCache( fs, maxPages, PageCacheTracer.NULL );
     }
 
     protected final void tearDownPageCache( T pageCache )
@@ -190,8 +183,8 @@ public abstract class PageCacheTestSupport<T extends PageCache>
      */
     protected void verifyRecordsMatchExpected( PageCursor cursor ) throws IOException
     {
-        ByteBuffer expectedPageContents = ByteBuffers.allocate( filePageSize );
-        ByteBuffer actualPageContents = ByteBuffers.allocate( filePageSize );
+        ByteBuffer expectedPageContents = ByteBuffers.allocate( filePageSize, INSTANCE );
+        ByteBuffer actualPageContents = ByteBuffers.allocate( filePageSize, INSTANCE );
         byte[] record = new byte[recordSize];
         long pageId = cursor.getCurrentPageId();
         for ( int i = 0; i < recordsPerFilePage; i++ )
@@ -220,7 +213,7 @@ public abstract class PageCacheTestSupport<T extends PageCache>
      */
     protected void verifyRecordsMatchExpected( long pageId, int offset, ByteBuffer actualPageContents )
     {
-        ByteBuffer expectedPageContents = ByteBuffers.allocate( filePageSize );
+        ByteBuffer expectedPageContents = ByteBuffers.allocate( filePageSize, INSTANCE );
         for ( int i = 0; i < recordsPerFilePage; i++ )
         {
             long recordId = (pageId * recordsPerFilePage) + i;
@@ -248,13 +241,8 @@ public abstract class PageCacheTestSupport<T extends PageCache>
     protected void assertRecords( long pageId, byte[] actualBytes, byte[] expectedBytes )
     {
         int estimatedPageId = estimateId( actualBytes );
-        assertThat(
-                "Page id: " + pageId + " " +
-                "(based on record data, it should have been " +
-                estimatedPageId + ", a difference of " +
-                Math.abs( pageId - estimatedPageId ) + ")",
-                actualBytes,
-                byteArray( expectedBytes ) );
+        assertThat( actualBytes ).as( "Page id: " + pageId + " " + "(based on record data, it should have been " + estimatedPageId +
+                ", a difference of " + Math.abs( pageId - estimatedPageId ) + ")" ).containsExactly( expectedBytes );
     }
 
     protected int estimateId( byte[] record )
@@ -291,7 +279,7 @@ public abstract class PageCacheTestSupport<T extends PageCache>
     protected void generateFileWithRecords( WritableByteChannel channel, int recordCount, int recordSize )
             throws IOException
     {
-        ByteBuffer buf = ByteBuffers.allocate( recordSize );
+        ByteBuffer buf = ByteBuffers.allocate( recordSize, INSTANCE );
         for ( int i = 0; i < recordCount; i++ )
         {
             generateRecordForId( i, buf );
@@ -327,8 +315,8 @@ public abstract class PageCacheTestSupport<T extends PageCache>
 
     protected void verifyRecordsInFile( ReadableByteChannel channel, int recordCount ) throws IOException
     {
-        ByteBuffer buf = ByteBuffers.allocate( recordSize );
-        ByteBuffer observation = ByteBuffers.allocate( recordSize );
+        ByteBuffer buf = ByteBuffers.allocate( recordSize, INSTANCE );
+        ByteBuffer observation = ByteBuffers.allocate( recordSize, INSTANCE );
         for ( int i = 0; i < recordCount; i++ )
         {
             generateRecordForId( i, buf );
@@ -345,9 +333,8 @@ public abstract class PageCacheTestSupport<T extends PageCache>
 
     public abstract static class Fixture<T extends PageCache>
     {
-        public abstract T createPageCache( PageSwapperFactory swapperFactory, int maxPages,
-                                           PageCacheTracer tracer, PageCursorTracerSupplier cursorTracerSupplier,
-                                           VersionContextSupplier contextSupplier, JobScheduler jobScheduler );
+        public abstract T createPageCache( PageSwapperFactory swapperFactory, int maxPages, PageCacheTracer tracer, VersionContextSupplier contextSupplier,
+                JobScheduler jobScheduler );
 
         public abstract void tearDownPageCache( T pageCache );
 

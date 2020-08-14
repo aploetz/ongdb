@@ -19,23 +19,26 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * For every row in left, set that row as the argument, and produce all rows from right
-  *
-  * for ( leftRow <- left ) {
-  *   right.setArgument( leftRow )
-  *   for ( rightRow <- right ) {
-  *     produce rightRow
-  *   }
-  * }
-  */
+ * For every row in left, set that row as the argument, and produce all rows from right
+ *
+ * for ( leftRow <- left ) {
+ *   right.setArgument( leftRow )
+ *   for ( rightRow <- right ) {
+ *     produce rightRow
+ *   }
+ * }
+ */
 case class Apply(left: LogicalPlan, right: LogicalPlan)(implicit idGen: IdGen)
   extends LogicalPlan(idGen) with ApplyPlan {
 
-  val lhs = Some(left)
-  val rhs = Some(right)
+  val lhs: Option[LogicalPlan] = Some(left)
+  val rhs: Option[LogicalPlan] = Some(right)
+
+  def createNew(left: LogicalPlan, right: LogicalPlan, idGen: IdGen): Apply =
+    Apply(left, right)(idGen)
 
   override val availableSymbols: Set[String] = left.availableSymbols ++ right.availableSymbols
 }

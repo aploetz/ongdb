@@ -19,25 +19,27 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.mockito.Mockito.{never, verify, when}
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.when
 import org.mockito.internal.stubbing.defaultanswers.ReturnsMocks
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class SkipPipeTest extends CypherFunSuite {
   test("skip 0 should not actually pull from the input") {
     // Given
-    val inputIterator = mock[Iterator[ExecutionContext]](new ReturnsMocks)
+    val inputIterator = mock[Iterator[CypherRow]](new ReturnsMocks)
 
     when(inputIterator.isEmpty).thenReturn(false)
 
     val src: Pipe = new DummyPipe(inputIterator)
-    val limitPipe = SkipPipe(src, Literal(0))()
+    val skipPipe = SkipPipe(src, Literal(0))()
 
     // When
-    limitPipe.createResults(QueryStateHelper.empty)
+    skipPipe.createResults(QueryStateHelper.empty)
 
     // Then
     verify(inputIterator, never()).next()

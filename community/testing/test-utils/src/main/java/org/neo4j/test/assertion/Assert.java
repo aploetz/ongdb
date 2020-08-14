@@ -19,20 +19,30 @@
  */
 package org.neo4j.test.assertion;
 
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
-import org.hamcrest.StringDescription;
+import org.assertj.core.api.Condition;
+import org.awaitility.core.ConditionFactory;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
+import org.neo4j.function.Suppliers;
 import org.neo4j.function.ThrowingAction;
-import org.neo4j.function.ThrowingSupplier;
 import org.neo4j.internal.helpers.ArrayUtil;
 import org.neo4j.internal.helpers.Strings;
 
-import static org.hamcrest.Matchers.containsString;
+import static java.time.Duration.ZERO;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static org.apache.commons.lang3.StringUtils.EMPTY;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.neo4j.test.conditions.Conditions.condition;
 
 public final class Assert
 {
@@ -40,49 +50,19 @@ public final class Assert
     {
     }
 
-    public static <E extends Exception> void assertException( ThrowingAction<E> f, Class<?> typeOfException )
+    public static <E extends Exception> void awaitUntilAsserted( ThrowingAction<E> condition )
     {
-        assertException( f, typeOfException, (Matcher<String>) null );
+        awaitUntilAsserted( null, condition );
     }
 
-    public static <E extends Exception> void assertException( ThrowingAction<E> f, Class<?> typeOfException,
-            String partOfMessage )
+    public static <E extends Exception> void awaitUntilAsserted( String alias, ThrowingAction<E> condition )
     {
-        assertException( f, typeOfException, partOfMessage == null ? null : containsString( partOfMessage ) );
-    }
-
-    public static <E extends Exception> void assertException( ThrowingAction<E> f, Class<?> typeOfException,
-            Matcher<String> messageMatcher )
-    {
-        try
-        {
-            f.apply();
-            throw new AssertionError( "Expected exception of type " + typeOfException + ", but no exception was thrown" );
-        }
-        catch ( Exception e )
-        {
-            if ( typeOfException.isInstance( e ) )
-            {
-                if ( messageMatcher != null )
-                {
-                    String message = e.getMessage();
-                    if ( !messageMatcher.matches( message ) )
-                    {
-                        StringBuilder sb = new StringBuilder();
-                        Description description = new StringDescription( sb );
-                        messageMatcher.describeTo( description );
-                        description.appendText( System.lineSeparator() );
-                        description.appendText( "but " );
-                        messageMatcher.describeMismatch( message, description );
-                        throw new AssertionError( "Exception (attached as cause) did not match expected message '" + sb + "'.", e );
-                    }
-                }
-            }
-            else
-            {
-                throw new AssertionError( "Expected exception of type '" + typeOfException + "', but instead got the attached cause.", e );
-            }
-        }
+        await( alias )
+                .atMost( 1, MINUTES )
+                .pollDelay( ZERO )
+                .pollInterval( 50, MILLISECONDS )
+                .pollInSameThread()
+                .untilAsserted( condition::apply );
     }
 
     public static void assertObjectOrArrayEquals( Object expected, Object actual )
@@ -108,56 +88,57 @@ public final class Assert
         }
     }
 
-    public static <T, E extends Exception> void assertEventually(
-            ThrowingSupplier<T, E> actual, Matcher<? super T> matcher, long timeout, TimeUnit timeUnit
-    ) throws E, InterruptedException
+    public static <T> void assertEventually( Callable<T> actual, Predicate<? super T> predicate, long timeout, TimeUnit timeUnit )
     {
-        assertEventually( ignored -> "", actual, matcher, timeout, timeUnit );
+        assertEventually( EMPTY, actual, condition( predicate ), timeout, timeUnit );
     }
 
-    public static <T, E extends Exception> void assertEventually(
-            String reason, ThrowingSupplier<T, E> actual, Matcher<? super T> matcher, long timeout, TimeUnit timeUnit
-    ) throws E, InterruptedException
+    public static <T> void assertEventually( Callable<T> actual, Condition<? super T> condition, long timeout, TimeUnit timeUnit )
     {
-        assertEventually( ignored -> reason, actual, matcher, timeout, timeUnit );
+        assertEventually( EMPTY, actual, condition, timeout, timeUnit );
     }
 
-    public static <T, E extends Exception> void assertEventually(
-            Function<T, String> reason, ThrowingSupplier<T, E> actual, Matcher<? super T> matcher, long timeout, TimeUnit timeUnit
-    ) throws E, InterruptedException
+    public static <T> void assertEventually( String message, Callable<T> actual, Condition<? super T> condition, long timeout, TimeUnit timeUnit )
     {
-        long endTimeMillis = System.currentTimeMillis() + timeUnit.toMillis( timeout );
+        awaitCondition( message, timeout, timeUnit ).untilAsserted( () -> assertThat( actual.call() ).satisfies( condition ) );
+    }
 
-        T last;
-        boolean matched;
+    public static <T> void assertEventually( String message, Callable<T> actual, Predicate<? super T> predicate, long timeout, TimeUnit timeUnit )
+    {
+        awaitCondition( message, timeout, timeUnit ).untilAsserted( () -> assertThat( actual.call() ).satisfies( condition( predicate ) ) );
+    }
 
-        do
-        {
-            long sampleTime = System.currentTimeMillis();
+    public static <T> void assertEventually( Supplier<String> messageSupplier, Callable<T> actual, Condition<? super T> condition, long timeout,
+            TimeUnit timeUnit )
+    {
+        assertEventually( ignore -> messageSupplier.get(), actual, condition, timeout, timeUnit );
+    }
 
-            last = actual.get();
-            matched = matcher.matches( last );
+    public static <T> void assertEventually( Function<T,String> messageGenerator, Callable<T> actual, Condition<? super T> condition, long timeout,
+            TimeUnit timeUnit )
+    {
+        awaitCondition( "await condition", timeout, timeUnit ).untilAsserted( () -> {
+            var value = actual.call();
+            assertThat( value ).as( messageGenerator.apply( value ) ).satisfies( condition );
+        } );
+    }
 
-            if ( matched || sampleTime > endTimeMillis )
-            {
-                break;
-            }
+    public static <T extends Throwable> void assertEventuallyThrows(
+            String message, Class<T> expectedType, Executable actual, long timeout, TimeUnit timeUnit )
+    {
+        assertEventuallyThrows( Suppliers.singleton( message ), expectedType, actual, timeout, timeUnit );
+    }
 
-            Thread.sleep( 10 );
-        } while ( true );
+    public static <T extends Throwable> void assertEventuallyThrows(
+            Supplier<String> messageGenerator, Class<T> expectedType, Executable actual, long timeout, TimeUnit timeUnit )
+    {
+        awaitCondition( "should throw", timeout, timeUnit ).untilAsserted( () -> assertThrows( expectedType, actual, messageGenerator ) );
+    }
 
-        if ( !matched )
-        {
-            Description description = new StringDescription();
-            description.appendText( reason.apply( last ) )
-                    .appendText( "\nExpected: " )
-                    .appendDescriptionOf( matcher )
-                    .appendText( "\n     but: " );
-            matcher.describeMismatch( last, description );
-
-            throw new AssertionError( "Timeout hit (" + timeout + " " + timeUnit.toString().toLowerCase() +
-                    ") while waiting for condition to match: " + description.toString() );
-        }
+    private static ConditionFactory awaitCondition( String alias, long timeout, TimeUnit timeUnit )
+    {
+        return await( alias ).atMost( timeout, timeUnit )
+                .pollDelay( 10, MILLISECONDS ).pollInSameThread();
     }
 
     private static AssertionError newAssertionError( String message, Object expected, Object actual )

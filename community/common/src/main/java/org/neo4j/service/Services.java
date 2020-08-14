@@ -44,7 +44,7 @@ import static org.neo4j.util.Preconditions.checkArgument;
  */
 public final class Services
 {
-    private static final boolean printServiceLoaderStackTraces = flag( Services.class, "printServiceLoaderStackTraces", false );
+    private static final boolean PRINT_SERVICE_LOADER_STACK_TRACES = flag( Services.class, "printServiceLoaderStackTraces", false );
 
     private Services()
     {
@@ -150,7 +150,7 @@ public final class Services
             }
             catch ( ServiceConfigurationError e )
             {
-                if ( printServiceLoaderStackTraces )
+                if ( PRINT_SERVICE_LOADER_STACK_TRACES )
                 {
                     e.printStackTrace();
                 }

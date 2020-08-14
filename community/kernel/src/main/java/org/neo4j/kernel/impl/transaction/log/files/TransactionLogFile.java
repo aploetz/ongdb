@@ -26,8 +26,16 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.io.ByteUnit;
 import org.neo4j.io.IOUtils;
+<<<<<<< HEAD
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.BufferScope;
+=======
+import org.neo4j.io.fs.DelegatingStoreChannel;
+import org.neo4j.io.fs.FileSystemAbstraction;
+import org.neo4j.io.memory.NativeScopedBuffer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.transaction.log.FlushablePositionAwareChecksumChannel;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.LogVersionBridge;
@@ -40,6 +48,7 @@ import org.neo4j.kernel.impl.transaction.log.ReaderLogVersionBridge;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.LogVersionRepository;
 
 import static java.lang.Math.min;
@@ -50,15 +59,25 @@ import static java.lang.Runtime.getRuntime;
  */
 class TransactionLogFile extends LifecycleAdapter implements LogFile
 {
+    private static final String TRANSACTION_LOG_FILE_ROTATION_TAG = "transactionLogFileRotation";
     private final AtomicLong rotateAtSize;
     private final LogFiles logFiles;
     private final TransactionLogFilesContext context;
     private final LogVersionBridge readerLogVersionBridge;
+<<<<<<< HEAD
     private BufferScope bufferScope;
     private PositionAwarePhysicalFlushableChecksumChannel writer;
     private LogVersionRepository logVersionRepository;
 
     private volatile PhysicalLogVersionedStoreChannel channel;
+=======
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
+
+    private volatile PhysicalLogVersionedStoreChannel channel;
+    private PositionAwarePhysicalFlushableChecksumChannel writer;
+    private LogVersionRepository logVersionRepository;
+>>>>>>> neo4j/4.1
 
     TransactionLogFile( LogFiles logFiles, TransactionLogFilesContext context )
     {
@@ -66,6 +85,8 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
         this.context = context;
         this.logFiles = logFiles;
         this.readerLogVersionBridge = new ReaderLogVersionBridge( logFiles );
+        this.pageCacheTracer = context.getDatabaseTracers().getPageCacheTracer();
+        memoryTracker = context.getMemoryTracker();
     }
 
     @Override
@@ -83,8 +104,12 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
         //try to set position
         seekChannelPosition( currentLogVersion );
 
+<<<<<<< HEAD
         bufferScope = new BufferScope( calculateLogBufferSize() );
         writer = new PositionAwarePhysicalFlushableChecksumChannel( channel, bufferScope.buffer );
+=======
+        writer = new PositionAwarePhysicalFlushableChecksumChannel( channel, new NativeScopedBuffer( calculateLogBufferSize(), memoryTracker ) );
+>>>>>>> neo4j/4.1
     }
 
     private void seekChannelPosition( long currentLogVersion ) throws IOException
@@ -116,16 +141,18 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     private LogPosition scanToEndOfLastLogEntry() throws IOException
     {
         // scroll all over possible checkpoints
-        ReadAheadLogChannel readAheadLogChannel = new ReadAheadLogChannel( channel );
-        LogEntryReader logEntryReader = context.getLogEntryReader();
-        LogEntry entry;
-        do
+        try ( ReadAheadLogChannel readAheadLogChannel = new ReadAheadLogChannel( new UncloseableChannel( channel ), memoryTracker ) )
         {
-            // seek to the end the records.
-            entry = logEntryReader.readLogEntry( readAheadLogChannel );
+            LogEntryReader logEntryReader = context.getLogEntryReader();
+            LogEntry entry;
+            do
+            {
+                // seek to the end the records.
+                entry = logEntryReader.readLogEntry( readAheadLogChannel );
+            }
+            while ( entry != null );
+            return logEntryReader.lastPosition();
         }
-        while ( entry != null );
-        return logEntryReader.lastPosition();
     }
 
     private void jumpToTheLastClosedTxPosition( long currentLogVersion ) throws IOException
@@ -156,7 +183,11 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     @Override
     public void shutdown() throws IOException
     {
+<<<<<<< HEAD
         IOUtils.closeAll( writer, bufferScope );
+=======
+        IOUtils.closeAll( writer );
+>>>>>>> neo4j/4.1
     }
 
     @Override
@@ -172,9 +203,12 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     @Override
     public synchronized File rotate() throws IOException
     {
-        channel = rotate( channel );
-        writer.setChannel( channel );
-        return channel.getFile();
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( TRANSACTION_LOG_FILE_ROTATION_TAG ) )
+        {
+            channel = rotate( channel, cursorTracer );
+            writer.setChannel( channel );
+            return channel.getFile();
+        }
     }
 
     /**
@@ -185,7 +219,7 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
      *
      * Steps during rotation are:
      * <ol>
-     * <li>1: Increment log version, {@link LogVersionRepository#incrementAndGetVersion()} (also flushes the store)</li>
+     * <li>1: Increment log version, {@link LogVersionRepository#incrementAndGetVersion(PageCursorTracer)} (also flushes the store)</li>
      * <li>2: Flush current log</li>
      * <li>3: Create new log file</li>
      * <li>4: Write header</li>
@@ -216,16 +250,17 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
      * </ol>
      *
      * @param currentLog current {@link LogVersionedStoreChannel channel} to flush and close.
+     * @param cursorTracer underlying page cursor tracer.
      * @return the channel of the newly opened/created log file.
      * @throws IOException if an error regarding closing or opening log files occur.
      */
-    private PhysicalLogVersionedStoreChannel rotate( LogVersionedStoreChannel currentLog ) throws IOException
+    private PhysicalLogVersionedStoreChannel rotate( LogVersionedStoreChannel currentLog, PageCursorTracer cursorTracer ) throws IOException
     {
         /*
          * The store is now flushed. If we fail now the recovery code will open the
          * current log file and replay everything. That's unnecessary but totally ok.
          */
-        long newLogVersion = logVersionRepository.incrementAndGetVersion();
+        long newLogVersion = logVersionRepository.incrementAndGetVersion( cursorTracer );
         /*
          * Rotation can happen at any point, although not concurrently with an append,
          * although an append may have (most likely actually) left at least some bytes left
@@ -266,7 +301,7 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     {
         PhysicalLogVersionedStoreChannel logChannel = logFiles.openForVersion( position.getLogVersion() );
         logChannel.position( position.getByteOffset() );
-        return new ReadAheadLogChannel( logChannel, logVersionBridge );
+        return new ReadAheadLogChannel( logChannel, logVersionBridge, memoryTracker );
     }
 
     @Override
@@ -293,5 +328,31 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     private static int calculateLogBufferSize()
     {
         return (int) ByteUnit.kibiBytes( min( (getRuntime().availableProcessors() / 4) + 1, 8 ) * 512 );
+    }
+
+    private static class UncloseableChannel extends DelegatingStoreChannel<LogVersionedStoreChannel> implements LogVersionedStoreChannel
+    {
+        UncloseableChannel( LogVersionedStoreChannel channel )
+        {
+            super( channel );
+        }
+
+        @Override
+        public long getVersion()
+        {
+            return delegate.getVersion();
+        }
+
+        @Override
+        public byte getLogFormatVersion()
+        {
+            return delegate.getLogFormatVersion();
+        }
+
+        @Override
+        public void close() throws IOException
+        {
+            // do not close since channel is shared
+        }
     }
 }

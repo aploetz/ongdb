@@ -84,18 +84,12 @@ public class Neo4jError
 
     public boolean shouldSerializeStackTrace()
     {
-        switch ( status.code().classification() )
-        {
-        case ClientError:
-            return false;
-        default:
-            return true;
-        }
+        return status.code().classification() != Status.Classification.ClientError;
     }
 
     public String getStackTraceAsString()
     {
-        StringWriter stringWriter = new StringWriter(  );
+        StringWriter stringWriter = new StringWriter();
         PrintWriter printWriter = new PrintWriter( stringWriter );
         cause.printStackTrace( printWriter );
         return stringWriter.toString();

@@ -25,9 +25,13 @@ import org.neo4j.values.AnyValue;
 import org.neo4j.values.ValueMapper;
 
 import static java.lang.String.format;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.sizeOf;
 
 public class ShortArray extends IntegralArray
 {
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance( ShortArray.class );
+
     private final short[] value;
 
     ShortArray( short[] value )
@@ -111,7 +115,7 @@ public class ShortArray extends IntegralArray
     @Override
     public short[] asObjectCopy()
     {
-        return value.clone();
+        return Arrays.copyOf( value, value.length );
     }
 
     @Override
@@ -146,8 +150,8 @@ public class ShortArray extends IntegralArray
     }
 
     @Override
-    long sizePerItem()
+    public long estimatedHeapUsage()
     {
-        return Short.BYTES;
+        return SHALLOW_SIZE + sizeOf( value );
     }
 }

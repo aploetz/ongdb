@@ -26,8 +26,10 @@ import org.neo4j.annotations.api.IgnoreApiCheck;
 import org.neo4j.bolt.dbapi.BoltGraphDatabaseManagementServiceSPI;
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.configuration.Config;
 import org.neo4j.configuration.helpers.NormalizedDatabaseName;
 import org.neo4j.dbms.api.DatabaseManagementService;
+import org.neo4j.dbms.database.DatabaseContext;
 import org.neo4j.dbms.database.DatabaseManager;
 import org.neo4j.dbms.database.SystemGraphInitializer;
 import org.neo4j.exceptions.KernelException;
@@ -46,11 +48,14 @@ import org.neo4j.kernel.api.security.provider.SecurityProvider;
 import org.neo4j.kernel.database.DatabaseStartupController;
 import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.kernel.impl.constraints.ConstraintSemantics;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
 import org.neo4j.kernel.impl.transaction.stats.DatabaseTransactionStats;
 import org.neo4j.kernel.impl.transaction.stats.GlobalTransactionStats;
 import org.neo4j.kernel.impl.transaction.stats.TransactionCounters;
 import org.neo4j.kernel.impl.util.watcher.DefaultFileDeletionListenerFactory;
+import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.procedure.builtin.BuiltInDbmsProcedures;
@@ -77,7 +82,6 @@ public abstract class AbstractEditionModule
     protected IOLimiter ioLimiter;
     protected Function<DatabaseLayout,DatabaseLayoutWatcher> watcherServiceFactory;
     protected SecurityProvider securityProvider;
-    protected GlobalProcedures globalProcedures;
 
     public abstract EditionDatabaseComponents createDatabaseComponents( NamedDatabaseId namedDatabaseId );
 
@@ -103,12 +107,6 @@ public abstract class AbstractEditionModule
         registerEditionSpecificProcedures( globalProcedures, databaseManager );
         BaseRoutingProcedureInstaller routingProcedureInstaller = createRoutingProcedureInstaller( globalModule, databaseManager );
         routingProcedureInstaller.install( globalProcedures );
-        this.globalProcedures = globalProcedures;
-    }
-
-    public GlobalProcedures getGlobalProcedures()
-    {
-        return globalProcedures;
     }
 
     protected abstract void registerEditionSpecificProcedures( GlobalProcedures globalProcedures, DatabaseManager<?> databaseManager )
@@ -116,7 +114,7 @@ public abstract class AbstractEditionModule
 
     protected abstract BaseRoutingProcedureInstaller createRoutingProcedureInstaller( GlobalModule globalModule, DatabaseManager<?> databaseManager );
 
-    public abstract DatabaseManager<?> createDatabaseManager( GlobalModule globalModule );
+    public abstract <DB extends DatabaseContext> DatabaseManager<DB> createDatabaseManager( GlobalModule globalModule );
 
     public abstract SystemGraphInitializer createSystemGraphInitializer( GlobalModule globalModule, DatabaseManager<?> databaseManager );
 
@@ -172,6 +170,8 @@ public abstract class AbstractEditionModule
      */
     public abstract QueryEngineProvider getQueryEngineProvider();
 
+    public abstract void bootstrapFabricServices();
+
     public abstract BoltGraphDatabaseManagementServiceSPI createBoltDatabaseManagementServiceProvider( Dependencies dependencies,
             DatabaseManagementService managementService, Monitors monitors, SystemNanoClock clock, LogService logService );
 
@@ -180,5 +180,13 @@ public abstract class AbstractEditionModule
         return dependencyResolver.resolveDependency( AuthManager.class );
     }
 
+    public AuthManager getBoltInClusterAuthManager()
+    {
+        return securityProvider.inClusterAuthManager();
+    }
+
     public abstract DatabaseStartupController getDatabaseStartupController();
+
+    public abstract Lifecycle createWebServer( DatabaseManagementService managementService, Dependencies globalDependencies,
+            Config config, LogProvider userLogProvider, DbmsInfo dbmsInfo );
 }

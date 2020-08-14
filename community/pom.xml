@@ -50,7 +50,6 @@
     <module>csv</module>
     <module>logging</module>
     <module>security</module>
-    <module>neo4j-slf4j</module>
     <module>codegen</module>
     <module>index</module>
     <module>kernel</module>
@@ -78,6 +77,10 @@
     <module>neo4j-exceptions</module>
     <module>layout</module>
     <module>push-to-cloud</module>
+<<<<<<< HEAD
+=======
+    <module>fabric</module>
+>>>>>>> neo4j/4.1
   </modules>
 
   <licenses>

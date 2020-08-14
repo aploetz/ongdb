@@ -19,24 +19,32 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.interpreted._
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.runtime.LenientCreateRelationship
+import org.neo4j.cypher.internal.runtime.Operations
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.interpreted.IsMap
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue, LenientCreateRelationship, Operations, QueryContext, _}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.exceptions.{CypherTypeException, InternalException, InvalidSemanticsException}
+import org.neo4j.cypher.internal.runtime.makeValueNeoSafe
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.exceptions.CypherTypeException
+import org.neo4j.exceptions.InternalException
+import org.neo4j.exceptions.InvalidSemanticsException
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
-import org.neo4j.values.virtual.{NodeValue, RelationshipValue}
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 /**
-  * Extends PipeWithSource with methods for setting properties and labels on entities.
-  */
+ * Extends PipeWithSource with methods for setting properties and labels on entities.
+ */
 abstract class BaseCreatePipe(src: Pipe) extends PipeWithSource(src) {
 
   /**
-    * Set properties on node by delegating to `setProperty`.
-    */
-  protected def setProperties(context: ExecutionContext,
+   * Set properties on node by delegating to `setProperty`.
+   */
+  protected def setProperties(context: CypherRow,
                               state: QueryState,
                               entityId: Long,
                               properties: Expression,
@@ -54,8 +62,8 @@ abstract class BaseCreatePipe(src: Pipe) extends PipeWithSource(src) {
   }
 
   /**
-    * Set property on node, or call `handleNoValue` if value is `NO_VALUE`.
-    */
+   * Set property on node, or call `handleNoValue` if value is `NO_VALUE`.
+   */
   protected def setProperty(entityId: Long,
                             key: String,
                             value: AnyValue,
@@ -71,22 +79,22 @@ abstract class BaseCreatePipe(src: Pipe) extends PipeWithSource(src) {
   }
 
   /**
-    * Callback for when setProperty encounters a NO_VALUE
-    *
-    * @param key the property key associated with the NO_VALUE
-    */
+   * Callback for when setProperty encounters a NO_VALUE
+   *
+   * @param key the property key associated with the NO_VALUE
+   */
   protected def handleNoValue(key: String): Unit
 }
 
 /**
-  * Extend BaseCreatePipe with methods to create nodes and relationships from commands.
-  */
+ * Extend BaseCreatePipe with methods to create nodes and relationships from commands.
+ */
 abstract class EntityCreatePipe(src: Pipe) extends BaseCreatePipe(src) {
 
   /**
-    * Create node from command.
-    */
-  protected def createNode(context: ExecutionContext,
+   * Create node from command.
+   */
+  protected def createNode(context: CypherRow,
                            state: QueryState,
                            data: CreateNodeCommand): (String, NodeValue) = {
     val labelIds = data.labels.map(_.getOrCreateId(state.query)).toArray
@@ -96,9 +104,9 @@ abstract class EntityCreatePipe(src: Pipe) extends BaseCreatePipe(src) {
   }
 
   /**
-    * Create relationship from command.
-    */
-  protected def createRelationship(context: ExecutionContext,
+   * Create relationship from command.
+   */
+  protected def createRelationship(context: CypherRow,
                                    state: QueryState,
                                    data: CreateRelationshipCommand): (String, AnyValue) = {
     val start = getNode(context, data.idName, data.startNode, state.lenientCreateRelationship)
@@ -116,7 +124,7 @@ abstract class EntityCreatePipe(src: Pipe) extends BaseCreatePipe(src) {
     data.idName -> relationship
   }
 
-  private def getNode(row: ExecutionContext, relName: String, name: String, lenient: Boolean): NodeValue =
+  private def getNode(row: CypherRow, relName: String, name: String, lenient: Boolean): NodeValue =
     row.getByName(name) match {
       case n: NodeValue => n
       case IsNoValue() =>
@@ -127,14 +135,12 @@ abstract class EntityCreatePipe(src: Pipe) extends BaseCreatePipe(src) {
 }
 
 /**
-  * Creates nodes and relationships from the constructor commands.
-  */
+ * Creates nodes and relationships from the constructor commands.
+ */
 case class CreatePipe(src: Pipe, nodes: Array[CreateNodeCommand], relationships: Array[CreateRelationshipCommand])
                      (val id: Id = Id.INVALID_ID) extends EntityCreatePipe(src) {
-  nodes.foreach(_.properties.foreach(_.registerOwningPipe(this)))
-  relationships.foreach(_.properties.foreach(_.registerOwningPipe(this)))
 
-  override def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  override def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] =
     input.map(row => {
       nodes.foreach { nodeCommand =>
         val (key, node) = createNode(row, state, nodeCommand)
@@ -165,17 +171,15 @@ case class CreateRelationshipCommand(idName: String,
                                      properties: Option[Expression])
 
 /**
-  * Create a node corresponding to the constructor command.
-  *
-  * Differs from CreatePipe in that it throws on NO_VALUE properties. Merge cannot use null properties,
-  * * since in that case the match part will not find the result of the create.
-  */
+ * Create a node corresponding to the constructor command.
+ *
+ * Differs from CreatePipe in that it throws on NO_VALUE properties. Merge cannot use null properties,
+ * * since in that case the match part will not find the result of the create.
+ */
 case class MergeCreateNodePipe(src: Pipe, data: CreateNodeCommand)
                               (val id: Id = Id.INVALID_ID) extends EntityCreatePipe(src) {
 
-  data.properties.foreach(_.registerOwningPipe(this))
-
-  override def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  override def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] =
     input.map(inRow => {
       val (idName, node) = createNode(inRow, state, data)
       inRow.copyWith(idName, node)
@@ -187,17 +191,16 @@ case class MergeCreateNodePipe(src: Pipe, data: CreateNodeCommand)
 }
 
 /**
-  * Create a relationship corresponding to the constructor command.
-  *
-  * Differs from CreatePipe in that it throws on NO_VALUE properties. Merge cannot use null properties,
-  * since in that case the match part will not find the result of the create.
-  */
+ * Create a relationship corresponding to the constructor command.
+ *
+ * Differs from CreatePipe in that it throws on NO_VALUE properties. Merge cannot use null properties,
+ * since in that case the match part will not find the result of the create.
+ */
 case class MergeCreateRelationshipPipe(src: Pipe, data: CreateRelationshipCommand)
                                       (val id: Id = Id.INVALID_ID)
   extends EntityCreatePipe(src) {
-  data.properties.foreach(_.registerOwningPipe(this))
 
-  override def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  override def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] =
     input.map(inRow => {
       val (idName, relationship) = createRelationship(inRow, state, data)
       inRow.copyWith(idName, relationship)

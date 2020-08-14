@@ -39,7 +39,6 @@ public class LinearHistoryPageCacheTracerTest
         {
             harness.setUseAdversarialIO( true );
             harness.setTracer( linearTracers.getPageCacheTracer() );
-            harness.setCursorTracerSupplier( linearTracers.getCursorTracerSupplier() );
             harness.setCommandCount( 100 );
             harness.setConcurrencyLevel( 2 );
             harness.setPreparation( ( pageCache, fs, files ) -> linearTracers.processHistory( hEvent -> {} ) );

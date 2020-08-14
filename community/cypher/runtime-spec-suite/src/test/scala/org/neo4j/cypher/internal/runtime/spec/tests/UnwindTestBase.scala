@@ -20,12 +20,14 @@
 package org.neo4j.cypher.internal.runtime.spec.tests
 
 import java.util
-import java.util.Collections
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 
 abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
                                                           edition: Edition[CONTEXT],
@@ -142,7 +144,7 @@ abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
 
   test("should unwind a variable") {
     // given
-    val input: InputValues = inputValues(
+    val input = inputValues(
       Array(util.Arrays.asList(10, 20, 30)),
       Array(util.Arrays.asList(100, 200, 300)))
 
@@ -171,7 +173,12 @@ abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("a", "b")
       .apply()
+<<<<<<< HEAD
       .|.limit(limit) // assuming this won't be fused
+=======
+      .|.limit(limit)
+      .|.nonFuseable()
+>>>>>>> neo4j/4.1
       .|.unwind("range(1, 10) AS b")
       .|.argument("a")
       .input(variables = Seq("a"))
@@ -197,7 +204,12 @@ abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("a", "b", "c")
       .apply()
+<<<<<<< HEAD
       .|.limit(limit) // assuming this won't be fused
+=======
+      .|.limit(limit)
+      .|.nonFuseable()
+>>>>>>> neo4j/4.1
       .|.unwind("range(-a*10, -a*10 + 10) AS c")
       .|.unwind("range( a*10,  a*10 + 10) AS b")
       .|.argument("a")

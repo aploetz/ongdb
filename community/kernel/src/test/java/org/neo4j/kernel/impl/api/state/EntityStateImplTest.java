@@ -25,13 +25,13 @@ import java.util.Iterator;
 
 import org.neo4j.internal.helpers.collection.Iterators;
 import org.neo4j.kernel.impl.util.collection.OnHeapCollectionsFactory;
+import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.storageengine.api.PropertyKeyValue;
 import org.neo4j.storageengine.api.StorageProperty;
 import org.neo4j.values.storable.Values;
 
 import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,7 +41,7 @@ class EntityStateImplTest
     void shouldListAddedProperties()
     {
         // Given
-        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE );
+        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE, EmptyMemoryTracker.INSTANCE );
         state.addProperty( 1, Values.of( "Hello" ) );
         state.addProperty( 2, Values.of( "Hello" ) );
         state.removeProperty( 1 );
@@ -50,15 +50,14 @@ class EntityStateImplTest
         Iterator<StorageProperty> added = state.addedProperties();
 
         // Then
-        assertThat( Iterators.asList( added ),
-                equalTo( asList( new PropertyKeyValue( 2, Values.of( "Hello" ) ) ) ) );
+        assertThat( Iterators.asList( added ) ).isEqualTo( asList( new PropertyKeyValue( 2, Values.of( "Hello" ) ) ) );
     }
 
     @Test
     void shouldListAddedPropertiesEvenIfPropertiesHaveBeenReplaced()
     {
         // Given
-        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE );
+        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE, EmptyMemoryTracker.INSTANCE );
         state.addProperty( 1, Values.of( "Hello" ) );
         state.addProperty( 1, Values.of( "WAT" ) );
         state.addProperty( 2, Values.of( "Hello" ) );
@@ -67,26 +66,22 @@ class EntityStateImplTest
         Iterator<StorageProperty> added = state.addedProperties();
 
         // Then
-        assertThat( Iterators.asList( added ),
-                equalTo( asList(
-                        new PropertyKeyValue( 1, Values.of( "WAT" ) ),
-                        new PropertyKeyValue( 2, Values.of( "Hello" ) ) )
-                ) );
+        assertThat( Iterators.asList( added ) ).isEqualTo(
+                asList( new PropertyKeyValue( 1, Values.of( "WAT" ) ), new PropertyKeyValue( 2, Values.of( "Hello" ) ) ) );
     }
 
     @Test
     void shouldConvertAddRemoveToChange()
     {
         // Given
-        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE );
+        EntityStateImpl state = new EntityStateImpl( 1, OnHeapCollectionsFactory.INSTANCE, EmptyMemoryTracker.INSTANCE );
 
         // When
         state.removeProperty( 4 );
         state.addProperty( 4, Values.of( "another value" ) );
 
         // Then
-        assertThat( Iterators.asList( state.changedProperties() ),
-                equalTo( asList( new PropertyKeyValue( 4, Values.of( "another value" ) ) ) ) );
+        assertThat( Iterators.asList( state.changedProperties() ) ).isEqualTo( asList( new PropertyKeyValue( 4, Values.of( "another value" ) ) ) );
         assertFalse( state.addedProperties().hasNext() );
         assertTrue( state.removedProperties().isEmpty() );
     }

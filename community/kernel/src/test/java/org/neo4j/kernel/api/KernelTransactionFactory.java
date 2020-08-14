@@ -24,13 +24,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.neo4j.collection.Dependencies;
 import org.neo4j.collection.pool.Pool;
 import org.neo4j.configuration.Config;
-import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.schema.SchemaState;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.api.procedure.GlobalProcedures;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.TestDatabaseIdRepository;
 import org.neo4j.kernel.impl.api.KernelTransactionImplementation;
 import org.neo4j.kernel.impl.api.LeaseService;
@@ -46,18 +46,17 @@ import org.neo4j.kernel.impl.locking.SimpleStatementLocks;
 import org.neo4j.kernel.impl.locking.StatementLocks;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
-import org.neo4j.lock.LockTracer;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.time.Clocks;
 
+import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo.EMBEDDED_CONNECTION;
-import static org.neo4j.kernel.impl.transaction.tracing.TransactionTracer.NULL;
 import static org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier.ON_HEAP;
 import static org.neo4j.test.rule.DatabaseRule.mockedTokenHolders;
 
@@ -77,7 +76,7 @@ public class KernelTransactionFactory
     {
     }
 
-    private static Instances kernelTransactionWithInternals( LoginContext loginContext ) throws KernelException
+    private static Instances kernelTransactionWithInternals( LoginContext loginContext )
     {
         StorageEngine storageEngine = mock( StorageEngine.class );
         StorageReader storageReader = mock( StorageReader.class );
@@ -90,21 +89,27 @@ public class KernelTransactionFactory
                         mock( ConstraintIndexCreator.class ), mock( GlobalProcedures.class ),
                         mock( TransactionRepresentationCommitProcess.class ), mock( TransactionMonitor.class ),
                         mock( Pool.class ), Clocks.nanoClock(), new AtomicReference<>( CpuClock.NOT_AVAILABLE ),
-                        new AtomicReference<>( HeapAllocation.NOT_AVAILABLE ), NULL, LockTracer.NONE, PageCursorTracerSupplier.NULL, storageEngine,
+                        mock( DatabaseTracers.class, RETURNS_MOCKS ), storageEngine,
                         new CanWrite(), EmptyVersionContextSupplier.EMPTY, ON_HEAP,
                         new StandardConstraintSemantics(), mock( SchemaState.class ), mockedTokenHolders(),
+<<<<<<< HEAD
                         mock( IndexingService.class ), mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies,
                         new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES );
+=======
+                        mock( IndexingService.class ), mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ),
+                        mock( IndexStatisticsStore.class ), dependencies, new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES,
+                        MemoryPools.NO_TRACKING );
+>>>>>>> neo4j/4.1
 
         StatementLocks statementLocks = new SimpleStatementLocks( new NoOpClient() );
 
-        transaction.initialize( 0, 0, statementLocks, KernelTransaction.Type.implicit,
+        transaction.initialize( 0, 0, statementLocks, KernelTransaction.Type.IMPLICIT,
                 loginContext.authorize( LoginContext.IdLookup.EMPTY, DEFAULT_DATABASE_NAME ), 0L, 1L, EMBEDDED_CONNECTION );
 
         return new Instances( transaction );
     }
 
-    static KernelTransaction kernelTransaction( LoginContext loginContext ) throws KernelException
+    static KernelTransaction kernelTransaction( LoginContext loginContext )
     {
         return kernelTransactionWithInternals( loginContext ).transaction;
     }

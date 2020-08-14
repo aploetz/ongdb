@@ -20,7 +20,6 @@
 package org.neo4j.io.pagecache.tracing.linear;
 
 import org.neo4j.io.pagecache.PageSwapper;
-import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.PinEvent;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
@@ -35,10 +34,12 @@ import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 public class LinearHistoryPageCursorTracer implements PageCursorTracer
 {
     private LinearHistoryTracer tracer;
+    private final String tag;
 
-    LinearHistoryPageCursorTracer( LinearHistoryTracer tracer )
+    LinearHistoryPageCursorTracer( LinearHistoryTracer tracer, String tag )
     {
         this.tracer = tracer;
+        this.tag = tag;
     }
 
     @Override
@@ -108,14 +109,14 @@ public class LinearHistoryPageCursorTracer implements PageCursorTracer
     }
 
     @Override
-    public void init( PageCacheTracer tracer )
+    public void reportEvents()
     {
         // nothing to do
     }
 
     @Override
-    public void reportEvents()
+    public String getTag()
     {
-        // nothing to do
+        return tag;
     }
 }

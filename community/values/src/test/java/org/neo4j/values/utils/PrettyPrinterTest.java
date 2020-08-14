@@ -45,9 +45,10 @@ import org.neo4j.values.virtual.RelationshipReference;
 import org.neo4j.values.virtual.RelationshipValue;
 import org.neo4j.values.virtual.VirtualValues;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.neo4j.values.AnyValueWriter.EntityMode.FULL;
+import static org.neo4j.values.AnyValueWriter.EntityMode.REFERENCE;
 import static org.neo4j.values.storable.DateTimeValue.datetime;
 import static org.neo4j.values.storable.DateValue.date;
 import static org.neo4j.values.storable.DurationValue.duration;
@@ -73,7 +74,7 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42)" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42)" );
     }
 
     @Test
@@ -88,7 +89,22 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42 :L1:L2:L3 {bar: [1337, \"baz\"], foo: 42})" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42 :L1:L2:L3 {bar: [1337, \"baz\"], foo: 42})" );
+    }
+
+    @Test
+    void shouldHandleNodeValueAsReference()
+    {
+        // Given
+        NodeValue node = VirtualValues.nodeValue( 42L, Values.stringArray( "L1", "L2", "L3" ),
+                                                  props( "foo", intValue( 42 ), "bar", list( intValue( 1337 ), stringValue( "baz" ) ) ) );
+        PrettyPrinter printer = new PrettyPrinter( REFERENCE );
+
+        // When
+        node.writeTo( printer );
+
+        // Then
+        assertThat( printer.value() ).isEqualTo( "(id=42)" );
     }
 
     @Test
@@ -103,7 +119,7 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42 {bar: [1337, \"baz\"], foo: 42})" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42 {bar: [1337, \"baz\"], foo: 42})" );
     }
 
     @Test
@@ -117,7 +133,7 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42 :L1:L2:L3)" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42 :L1:L2:L3)" );
     }
 
     @Test
@@ -131,11 +147,11 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42)" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42)" );
     }
 
     @Test
-    void shouldHandleEdgeReference()
+    void shouldHandleRelationshipReference()
     {
         // Given
         RelationshipReference rel = VirtualValues.relationship( 42L );
@@ -145,28 +161,45 @@ class PrettyPrinterTest
         rel.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "-[id=42]-" ) );
+        assertThat( printer.value() ).isEqualTo( "-[id=42]-" );
     }
 
     @Test
-    void shouldHandleEdgeValue()
+    void shouldHandleRelationshipValue()
     {
         // Given
         NodeValue startNode = VirtualValues.nodeValue( 1L, Values.stringArray( "L" ), EMPTY_MAP );
         NodeValue endNode = VirtualValues.nodeValue( 2L, Values.stringArray( "L" ), EMPTY_MAP );
         RelationshipValue rel = VirtualValues.relationshipValue( 42L, startNode, endNode, stringValue( "R" ),
-                props( "foo", intValue( 42 ), "bar", list( intValue( 1337 ), stringValue( "baz" ) ) ) );
+                                                                 props( "foo", intValue( 42 ), "bar", list( intValue( 1337 ), stringValue( "baz" ) ) ) );
         PrettyPrinter printer = new PrettyPrinter();
 
         // When
         rel.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "-[id=42 :R {bar: [1337, \"baz\"], foo: 42}]-" ) );
+        assertThat( printer.value() ).isEqualTo( "-[id=42 :R {bar: [1337, \"baz\"], foo: 42}]-" );
     }
 
     @Test
-    void shouldHandleEdgeValueWithoutProperties()
+    void shouldHandleRelationshipValueAsReference()
+    {
+        // Given
+        NodeValue startNode = VirtualValues.nodeValue( 1L, Values.stringArray( "L" ), EMPTY_MAP );
+        NodeValue endNode = VirtualValues.nodeValue( 2L, Values.stringArray( "L" ), EMPTY_MAP );
+        RelationshipValue rel = VirtualValues.relationshipValue( 42L, startNode, endNode, stringValue( "R" ),
+                                                                 props( "foo", intValue( 42 ), "bar", list( intValue( 1337 ), stringValue( "baz" ) ) ) );
+        PrettyPrinter printer = new PrettyPrinter( REFERENCE );
+
+        // When
+        rel.writeTo( printer );
+
+        // Then
+        assertThat( printer.value() ).isEqualTo( "-[id=42]-" );
+    }
+
+    @Test
+    void shouldHandleRelationshipValueWithoutProperties()
     {
         NodeValue startNode = VirtualValues.nodeValue( 1L, Values.stringArray( "L" ), EMPTY_MAP );
         NodeValue endNode = VirtualValues.nodeValue( 2L, Values.stringArray( "L" ), EMPTY_MAP );
@@ -178,11 +211,11 @@ class PrettyPrinterTest
         rel.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "-[id=42 :R]-" ) );
+        assertThat( printer.value() ).isEqualTo( "-[id=42 :R]-" );
     }
 
     @Test
-    void shouldHandleEdgeValueWithoutLabelsNorProperties()
+    void shouldHandleRelationshipValueWithoutLabelsNorProperties()
     {
         // Given
         NodeValue node = VirtualValues.nodeValue( 42L, Values.stringArray(), EMPTY_MAP );
@@ -192,7 +225,7 @@ class PrettyPrinterTest
         node.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=42)" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=42)" );
     }
 
     @Test
@@ -210,7 +243,7 @@ class PrettyPrinterTest
         path.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "(id=1 :L)-[id=42 :R]->(id=2 :L)" ) );
+        assertThat( printer.value() ).isEqualTo( "(id=1 :L)-[id=42 :R]->(id=2 :L)" );
     }
 
     @Test
@@ -224,7 +257,7 @@ class PrettyPrinterTest
         mapValue.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "{k1: 42}" ) );
+        assertThat( printer.value() ).isEqualTo( "{k1: 42}" );
     }
 
     @Test
@@ -238,7 +271,7 @@ class PrettyPrinterTest
         list.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "[\"foo\", 42]" ) );
+        assertThat( printer.value() ).isEqualTo( "[\"foo\", 42]" );
     }
 
     @Test
@@ -252,7 +285,7 @@ class PrettyPrinterTest
         array.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "[\"a\", \"b\", \"c\"]" ) );
+        assertThat( printer.value() ).isEqualTo( "[\"a\", \"b\", \"c\"]" );
     }
 
     @Test
@@ -266,7 +299,7 @@ class PrettyPrinterTest
         array.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "[true, false, true]" ) );
+        assertThat( printer.value() ).isEqualTo( "[true, false, true]" );
     }
 
     @Test
@@ -280,7 +313,7 @@ class PrettyPrinterTest
         array.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "[2, 3, 42]" ) );
+        assertThat( printer.value() ).isEqualTo( "[2, 3, 42]" );
     }
 
     @Test
@@ -293,7 +326,7 @@ class PrettyPrinterTest
         Values.NO_VALUE.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "<null>" ) );
+        assertThat( printer.value() ).isEqualTo( "<null>" );
     }
 
     @Test
@@ -307,10 +340,8 @@ class PrettyPrinterTest
         pointValue.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "{geometry: {type: \"Point\", coordinates: [11.0, 12.0], " +
-                                              "crs: {type: link, properties: " +
-                                              "{href: \"http://spatialreference.org/ref/sr-org/7203/\", code: " +
-                                              "7203}}}}" ) );
+        assertThat( printer.value() ).isEqualTo( "{geometry: {type: \"Point\", coordinates: [11.0, 12.0], " + "crs: {type: link, properties: " +
+                "{href: \"http://spatialreference.org/ref/sr-org/7203/\", code: " + "7203}}}}" );
     }
 
     @Test
@@ -318,13 +349,13 @@ class PrettyPrinterTest
     {
         // Given
         TextValue hello = stringValue( "(ツ)" );
-        PrettyPrinter printer = new PrettyPrinter( "__" );
+        PrettyPrinter printer = new PrettyPrinter( "__", FULL );
 
         // When
         hello.writeTo( printer );
 
         // Then
-        assertThat( printer.value(), equalTo( "__(ツ)__" ) );
+        assertThat( printer.value() ).isEqualTo( "__(ツ)__" );
     }
 
     @Test
@@ -385,7 +416,7 @@ class PrettyPrinterTest
     @Test
     void shouldHandleDateTimeWithTimeZoneId()
     {
-        DateTimeValue datetime = datetime( 2045, 2, 7, 12, 00, 40, 999888999, "Europe/London" );
+        DateTimeValue datetime = datetime( 2045, 2, 7, 12, 0, 40, 999888999, "Europe/London" );
         PrettyPrinter printer = new PrettyPrinter();
 
         datetime.writeTo( printer );

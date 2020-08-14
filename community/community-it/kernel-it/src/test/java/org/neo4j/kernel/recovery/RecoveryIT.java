@@ -19,12 +19,14 @@
  */
 package org.neo4j.kernel.recovery;
 
-import org.junit.jupiter.api.Test;
-
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.Test;
+>>>>>>> neo4j/4.1
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.DatabaseStateService;
 import org.neo4j.dbms.api.DatabaseManagementService;
@@ -32,16 +34,28 @@ import org.neo4j.dbms.database.DatabaseStartAbortedException;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.schema.IndexType;
+import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
+import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.availability.CompositeDatabaseAvailabilityGuard;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.extension.context.ExtensionContext;
+<<<<<<< HEAD
+=======
+import org.neo4j.kernel.impl.coreapi.InternalTransaction;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.storemigration.LegacyTransactionLogsLocator;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.ReadableLogChannel;
@@ -51,23 +65,27 @@ import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.files.LogFile;
 import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
+import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+<<<<<<< HEAD
+=======
+import org.neo4j.lock.LockTracer;
+>>>>>>> neo4j/4.1
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.monitoring.Monitors;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
 
 import static java.lang.String.valueOf;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,12 +95,18 @@ import static org.neo4j.configuration.Config.defaults;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.fail_on_missing_files;
 import static org.neo4j.configuration.GraphDatabaseSettings.logical_log_rotation_threshold;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
+import static org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store;
+import static org.neo4j.internal.kernel.api.IndexQuery.fulltextSearch;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.database.DatabaseTracers.EMPTY;
 import static org.neo4j.kernel.impl.store.MetaDataStore.Position.LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP;
 import static org.neo4j.kernel.impl.store.MetaDataStore.getRecord;
-import static org.neo4j.kernel.recovery.Recovery.isRecoveryRequired;
 import static org.neo4j.kernel.recovery.Recovery.performRecovery;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -99,27 +123,33 @@ class RecoveryIT
     private DatabaseLayout databaseLayout;
     private TestDatabaseManagementServiceBuilder builder;
     private DatabaseManagementService managementService;
+    private StorageEngineFactory storageEngineFactory;
+
+    boolean enableRelationshipTypeScanStore()
+    {
+        return false;
+    }
 
     @Test
-    void recoveryRequiredOnDatabaseWithoutCorrectCheckpoints() throws Exception
+    void recoveryRequiredOnDatabaseWithoutCorrectCheckpoints() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
         generateSomeData( database );
         managementService.shutdown();
         removeLastCheckpointRecordFromLastLogFile();
 
-        assertTrue( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertTrue( isRecoveryRequired( databaseLayout ) );
     }
 
     @Test
     void recoveryNotRequiredWhenDatabaseNotFound() throws Exception
     {
         DatabaseLayout absentDatabase = neo4jLayout.databaseLayout( "absent" );
-        assertFalse( isRecoveryRequired( fileSystem, absentDatabase, defaults() ) );
+        assertFalse( isRecoveryRequired( absentDatabase ) );
     }
 
     @Test
-    void recoverEmptyDatabase() throws Exception
+    void recoverEmptyDatabase() throws Throwable
     {
         createDatabase();
         managementService.shutdown();
@@ -129,7 +159,7 @@ class RecoveryIT
     }
 
     @Test
-    void recoverDatabaseWithNodes() throws Exception
+    void recoverDatabaseWithNodes() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
 
@@ -155,7 +185,38 @@ class RecoveryIT
     }
 
     @Test
-    void recoverDatabaseWithNodesAndRelationshipsAndRelationshipTypes() throws Exception
+    void tracePageCacheAccessOnDatabaseRecovery() throws Throwable
+    {
+        GraphDatabaseService database = createDatabase();
+
+        int numberOfNodes = 10;
+        for ( int i = 0; i < numberOfNodes; i++ )
+        {
+            createSingleNode( database );
+        }
+        managementService.shutdown();
+        removeLastCheckpointRecordFromLastLogFile();
+
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var tracers = new DatabaseTracers( DatabaseTracer.NULL, LockTracer.NONE, pageCacheTracer );
+        recoverDatabase( tracers );
+
+        assertThat( pageCacheTracer.pins() ).isEqualTo( pageCacheTracer.unpins() );
+        assertThat( pageCacheTracer.hits() + pageCacheTracer.faults() ).isEqualTo( pageCacheTracer.pins() );
+
+        GraphDatabaseService recoveredDatabase = createDatabase();
+        try ( Transaction tx = recoveredDatabase.beginTx() )
+        {
+            assertEquals( numberOfNodes, count( tx.getAllNodes() ) );
+        }
+        finally
+        {
+            managementService.shutdown();
+        }
+    }
+
+    @Test
+    void recoverDatabaseWithNodesAndRelationshipsAndRelationshipTypes() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
 
@@ -190,7 +251,7 @@ class RecoveryIT
     }
 
     @Test
-    void recoverDatabaseWithProperties() throws Exception
+    void recoverDatabaseWithProperties() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
 
@@ -228,7 +289,7 @@ class RecoveryIT
     }
 
     @Test
-    void recoverDatabaseWithIndex() throws Exception
+    void recoverDatabaseWithIndex() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
 
@@ -245,11 +306,7 @@ class RecoveryIT
             transaction.schema().constraintFor( stopMarker ).assertPropertyIsUnique( stopProperty ).create();
             transaction.commit();
         }
-        try ( Transaction transaction = database.beginTx() )
-        {
-            transaction.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
-            transaction.commit();
-        }
+        awaitIndexesOnline( database );
 
         for ( int i = 0; i < numberOfRelationships; i++ )
         {
@@ -289,7 +346,63 @@ class RecoveryIT
     }
 
     @Test
-    void recoverDatabaseWithFirstTransactionLogFileWithoutShutdownCheckpoint() throws Exception
+    void recoverDatabaseWithRelationshipIndex() throws Throwable
+    {
+        GraphDatabaseService database = createDatabase();
+
+        int numberOfRelationships = 10;
+        RelationshipType type = RelationshipType.withName( "TYPE" );
+        String property = "prop";
+        String indexName = "my index";
+
+        try ( Transaction transaction = database.beginTx() )
+        {
+            transaction.schema().indexFor( type ).on( property ).withIndexType( IndexType.FULLTEXT ).withName( indexName ).create();
+            transaction.commit();
+        }
+        awaitIndexesOnline( database );
+
+        try ( Transaction transaction = database.beginTx() )
+        {
+            Node start = transaction.createNode();
+            Node stop = transaction.createNode();
+            for ( int i = 0; i < numberOfRelationships; i++ )
+            {
+                Relationship relationship = start.createRelationshipTo( stop, type );
+                relationship.setProperty( property, "value" );
+            }
+            transaction.commit();
+        }
+        managementService.shutdown();
+        removeLastCheckpointRecordFromLastLogFile();
+
+        recoverDatabase();
+
+        GraphDatabaseAPI recoveredDatabase = createDatabase();
+        awaitIndexesOnline( recoveredDatabase );
+        try ( Transaction transaction = recoveredDatabase.beginTx() )
+        {
+            KernelTransaction ktx = ((InternalTransaction) transaction).kernelTransaction();
+            IndexDescriptor index = ktx.schemaRead().indexGetForName( indexName );
+            int relationshipsInIndex = 0;
+            try ( RelationshipIndexCursor cursor = ktx.cursors().allocateRelationshipIndexCursor( ktx.pageCursorTracer() ) )
+            {
+                ktx.dataRead().relationshipIndexSeek( index, cursor, unconstrained(), fulltextSearch( "*" ) );
+                while ( cursor.next() )
+                {
+                    relationshipsInIndex++;
+                }
+            }
+            assertEquals( numberOfRelationships, relationshipsInIndex );
+        }
+        finally
+        {
+            managementService.shutdown();
+        }
+    }
+
+    @Test
+    void recoverDatabaseWithFirstTransactionLogFileWithoutShutdownCheckpoint() throws Throwable
     {
         GraphDatabaseService database = createDatabase();
         generateSomeData( database );
@@ -298,17 +411,17 @@ class RecoveryIT
         removeLastCheckpointRecordFromLastLogFile();
 
         assertEquals( 0, countCheckPointsInTransactionLogs() );
-        assertTrue( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertTrue( isRecoveryRequired( databaseLayout ) );
 
         startStopDatabase();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         // we will have 2 checkpoints: first will be created after successful recovery and another on shutdown
         assertEquals( 2, countCheckPointsInTransactionLogs() );
     }
 
     @Test
-    void failToStartDatabaseWithRemovedTransactionLogs() throws Exception
+    void failToStartDatabaseWithRemovedTransactionLogs() throws Throwable
     {
         GraphDatabaseAPI database = createDatabase();
         generateSomeData( database );
@@ -323,7 +436,7 @@ class RecoveryIT
 
             var failure = dbStateService.causeOfFailure( restartedDb.databaseId() );
             assertTrue( failure.isPresent() );
-            assertThat( getRootCause( failure.get() ).getMessage(), containsString( "Transaction logs are missing and recovery is not possible." ) );
+            assertThat( getRootCause( failure.get() ).getMessage() ).contains( "Transaction logs are missing and recovery is not possible." );
         }
         finally
         {
@@ -359,9 +472,14 @@ class RecoveryIT
 
             var failure = dbStateService.causeOfFailure( restartedDb.databaseId() );
             assertTrue( failure.isPresent() );
+<<<<<<< HEAD
             assertThat( getRootCause( failure.get() ).getMessage(), containsString( "Transaction logs are missing and recovery is not possible." ) );
             AssertableLogProvider.MessageMatcher messageMatcher = logProvider.formattedMessageMatcher();
             messageMatcher.assertContains( txLogFiles[0].getName() );
+=======
+            assertThat( failure.get() ).hasRootCauseMessage( "Transaction logs are missing and recovery is not possible." );
+            assertThat( logProvider.serialize() ).contains( txLogFiles[0].getName() );
+>>>>>>> neo4j/4.1
         }
         finally
         {
@@ -370,20 +488,24 @@ class RecoveryIT
     }
 
     @Test
+<<<<<<< HEAD
     void startDatabaseWithRemovedSingleTransactionLogFile() throws Exception
+=======
+    void startDatabaseWithRemovedSingleTransactionLogFile() throws Throwable
+>>>>>>> neo4j/4.1
     {
         GraphDatabaseAPI database = createDatabase();
         PageCache pageCache = getDatabasePageCache( database );
         generateSomeData( database );
 
-        assertEquals( -1, getRecord( pageCache, database.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP ) );
+        assertEquals( -1, getRecord( pageCache, database.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP, NULL ) );
 
         managementService.shutdown();
 
         removeTransactionLogs();
 
         startStopDatabaseWithForcedRecovery();
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         // we will have 2 checkpoints: first will be created as part of recovery and another on shutdown
         assertEquals( 2, countCheckPointsInTransactionLogs() );
 
@@ -391,13 +513,9 @@ class RecoveryIT
     }
 
     @Test
-    void startDatabaseWithRemovedMultipleTransactionLogFiles() throws Exception
+    void startDatabaseWithRemovedMultipleTransactionLogFiles() throws Throwable
     {
-        DatabaseManagementService managementService =
-                new TestDatabaseManagementServiceBuilder( neo4jLayout )
-                        .setConfig( logical_log_rotation_threshold, ByteUnit.mebiBytes( 1 ) )
-                        .build();
-        GraphDatabaseService database = managementService.database( DEFAULT_DATABASE_NAME );
+        GraphDatabaseService database = createDatabase( ByteUnit.mebiBytes( 1 ) );
         while ( countTransactionLogFiles() < 5 )
         {
             generateSomeData( database );
@@ -408,19 +526,15 @@ class RecoveryIT
 
         startStopDatabaseWithForcedRecovery();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         // we will have 2 checkpoints: first will be created as part of recovery and another on shutdown
         assertEquals( 2, countCheckPointsInTransactionLogs() );
     }
 
     @Test
-    void killAndStartDatabaseAfterTransactionLogsRemoval() throws Exception
+    void killAndStartDatabaseAfterTransactionLogsRemoval() throws Throwable
     {
-        DatabaseManagementService managementService =
-                new TestDatabaseManagementServiceBuilder( neo4jLayout )
-                        .setConfig( logical_log_rotation_threshold, ByteUnit.mebiBytes( 1 ) )
-                        .build();
-        GraphDatabaseService database = managementService.database( DEFAULT_DATABASE_NAME );
+        GraphDatabaseService database = createDatabase( ByteUnit.mebiBytes( 1 ) );
         while ( countTransactionLogFiles() < 5 )
         {
             generateSomeData( database );
@@ -428,7 +542,7 @@ class RecoveryIT
         managementService.shutdown();
 
         removeTransactionLogs();
-        assertTrue( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertTrue( isRecoveryRequired( databaseLayout ) );
         assertEquals( 0, countTransactionLogFiles() );
 
         DatabaseManagementService forcedRecoveryManagementService = forcedRecoveryManagement();
@@ -442,19 +556,15 @@ class RecoveryIT
 
         startStopDatabase();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         // we will have 3 checkpoints: one from logs before recovery, second will be created as part of recovery and another on shutdown
         assertEquals( 3, countCheckPointsInTransactionLogs() );
     }
 
     @Test
-    void killAndStartDatabaseAfterTransactionLogsRemovalWithSeveralFilesWithoutCheckpoint() throws Exception
+    void killAndStartDatabaseAfterTransactionLogsRemovalWithSeveralFilesWithoutCheckpoint() throws Throwable
     {
-        DatabaseManagementService managementService =
-                new TestDatabaseManagementServiceBuilder( neo4jLayout )
-                        .setConfig( logical_log_rotation_threshold, ByteUnit.mebiBytes( 1 ) )
-                        .build();
-        GraphDatabaseService database = managementService.database( DEFAULT_DATABASE_NAME );
+        GraphDatabaseService database = createDatabase( ByteUnit.mebiBytes( 1 ) );
         while ( countTransactionLogFiles() < 5 )
         {
             generateSomeData( database );
@@ -465,7 +575,7 @@ class RecoveryIT
 
         assertEquals( 4, countTransactionLogFiles() );
         assertEquals( 0, countCheckPointsInTransactionLogs() );
-        assertTrue( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertTrue( isRecoveryRequired( databaseLayout ) );
 
         startStopDatabase();
         assertEquals( 2, countCheckPointsInTransactionLogs() );
@@ -474,19 +584,16 @@ class RecoveryIT
 
         startStopDatabase();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         // we will have 2 checkpoints: first will be created as part of recovery and another on shutdown
         assertEquals( 2, countCheckPointsInTransactionLogs() );
     }
 
     @Test
-    void startDatabaseAfterTransactionLogsRemovalAndKillAfterRecovery() throws Exception
+    void startDatabaseAfterTransactionLogsRemovalAndKillAfterRecovery() throws Throwable
     {
-        DatabaseManagementService managementService =
-                new TestDatabaseManagementServiceBuilder( neo4jLayout )
-                        .setConfig( logical_log_rotation_threshold, ByteUnit.mebiBytes( 1 ) )
-                        .build();
-        GraphDatabaseService database = managementService.database( DEFAULT_DATABASE_NAME );
+        long logThreshold = ByteUnit.mebiBytes( 1 );
+        GraphDatabaseService database = createDatabase( logThreshold );
         while ( countTransactionLogFiles() < 5 )
         {
             generateSomeData( database );
@@ -497,7 +604,7 @@ class RecoveryIT
 
         assertEquals( 4, countTransactionLogFiles() );
         assertEquals( 0, countCheckPointsInTransactionLogs() );
-        assertTrue( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertTrue( isRecoveryRequired( databaseLayout ) );
 
         startStopDatabase();
         assertEquals( 2, countCheckPointsInTransactionLogs() );
@@ -505,24 +612,26 @@ class RecoveryIT
 
         startStopDatabase();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
-        // we will have 2 checkpoints here because offset in both of them will be the same and 2 will be truncated instead since truncation is based on position
+        assertFalse( isRecoveryRequired( databaseLayout ) );
+        // we will have 2 checkpoints here because offset in both of them will be the same
+        // and 2 will be truncated instead since truncation is based on position
         // next start-stop cycle will have transaction between so we will have 3 checkpoints as expected.
         assertEquals( 2, countCheckPointsInTransactionLogs() );
         removeLastCheckpointRecordFromLastLogFile();
+        builder = null; // Reset log rotation threshold setting to avoid immediate rotation on `createSingleNode()`.
 
-        GraphDatabaseService service = createDatabase();
+        GraphDatabaseService service = createDatabase( logThreshold * 2 ); // Bigger log, to avoid rotation.
         createSingleNode( service );
         this.managementService.shutdown();
         removeLastCheckpointRecordFromLastLogFile();
         startStopDatabase();
 
-        assertFalse( isRecoveryRequired( fileSystem, databaseLayout, defaults() ) );
+        assertFalse( isRecoveryRequired( databaseLayout ) );
         assertEquals( 3, countCheckPointsInTransactionLogs() );
     }
 
     @Test
-    void recoverDatabaseWithoutOneIdFile() throws Exception
+    void recoverDatabaseWithoutOneIdFile() throws Throwable
     {
         GraphDatabaseAPI db = createDatabase();
         generateSomeData( db );
@@ -530,16 +639,16 @@ class RecoveryIT
         managementService.shutdown();
 
         fileSystem.deleteFileOrThrow( layout.idRelationshipStore() );
-        assertTrue( isRecoveryRequired( fileSystem, layout, defaults() ) );
+        assertTrue( isRecoveryRequired( layout ) );
 
-        performRecovery( fileSystem, pageCache, defaults(), layout );
-        assertFalse( isRecoveryRequired( fileSystem, layout, defaults() ) );
+        performRecovery( fileSystem, pageCache, EMPTY, defaults(), layout, INSTANCE );
+        assertFalse( isRecoveryRequired( layout ) );
 
         assertTrue( fileSystem.fileExists( layout.idRelationshipStore() ) );
     }
 
     @Test
-    void recoverDatabaseWithoutIdFiles() throws Exception
+    void recoverDatabaseWithoutIdFiles() throws Throwable
     {
         GraphDatabaseAPI db = createDatabase();
         generateSomeData( db );
@@ -550,10 +659,10 @@ class RecoveryIT
         {
             fileSystem.deleteFileOrThrow( idFile );
         }
-        assertTrue( isRecoveryRequired( fileSystem, layout, defaults() ) );
+        assertTrue( isRecoveryRequired( layout ) );
 
-        performRecovery( fileSystem, pageCache, defaults(), layout );
-        assertFalse( isRecoveryRequired( fileSystem, layout, defaults() ) );
+        recoverDatabase();
+        assertFalse( isRecoveryRequired( layout ) );
 
         for ( File idFile : layout.idFiles() )
         {
@@ -562,7 +671,7 @@ class RecoveryIT
     }
 
     @Test
-    void cancelRecoveryInTheMiddle() throws Exception
+    void cancelRecoveryInTheMiddle() throws Throwable
     {
         GraphDatabaseAPI db = createDatabase();
         generateSomeData( db );
@@ -570,29 +679,64 @@ class RecoveryIT
         managementService.shutdown();
 
         removeLastCheckpointRecordFromLastLogFile();
-        assertTrue( isRecoveryRequired( fileSystem, layout, defaults() ) );
+        assertTrue( isRecoveryRequired( layout ) );
 
         Monitors monitors = new Monitors();
+        var guardExtensionFactory = new GlobalGuardConsumerTestExtensionFactory();
         var recoveryMonitor = new RecoveryMonitor()
         {
+            private final AtomicBoolean reverseCompleted = new AtomicBoolean();
+            private final AtomicBoolean recoveryCompleted = new AtomicBoolean();
+
             @Override
             public void reverseStoreRecoveryCompleted( long lowestRecoveredTxId )
             {
-                GlobalGuardConsumer.globalGuard.stop();
+                guardExtensionFactory.getProvidedGuardConsumer().globalGuard.stop();
+                reverseCompleted.set( true );
+            }
+
+            @Override
+            public void recoveryCompleted( int numberOfRecoveredTransactions, long recoveryTimeInMilliseconds )
+            {
+                recoveryCompleted.set( true );
+            }
+
+            public boolean isReverseCompleted()
+            {
+                return reverseCompleted.get();
+            }
+
+            public boolean isRecoveryCompleted()
+            {
+                return recoveryCompleted.get();
             }
         };
         monitors.addMonitorListener( recoveryMonitor );
-        var service = new TestDatabaseManagementServiceBuilder( layout.getNeo4jLayout() )
-                .addExtension( new GlobalGuardConsumerTestExtensionFactory() )
+        var service = builderWithRelationshipTypeScanStoreSet( layout.getNeo4jLayout() )
+                .addExtension( guardExtensionFactory )
                 .setMonitors( monitors ).build();
         try
         {
-            var e = assertThrows( Exception.class, () -> service.database( DEFAULT_DATABASE_NAME ).beginTx() );
-            assertThat( getRootCause( e ), instanceOf( DatabaseStartAbortedException.class ) );
+            var database = service.database( layout.getDatabaseName() );
+            assertTrue( recoveryMonitor.isReverseCompleted() );
+            assertFalse( recoveryMonitor.isRecoveryCompleted() );
+            assertFalse( guardExtensionFactory.getProvidedGuardConsumer().globalGuard.isAvailable() );
+            assertFalse( database.isAvailable( 0 ) );
+            var e = assertThrows( Exception.class, database::beginTx );
+            assertThat( getRootCause( e ) ).isInstanceOf( DatabaseStartAbortedException.class );
         }
         finally
         {
             service.shutdown();
+        }
+    }
+
+    private static void awaitIndexesOnline( GraphDatabaseService database )
+    {
+        try ( Transaction transaction = database.beginTx() )
+        {
+            transaction.schema().awaitIndexesOnline( 10, MINUTES );
+            transaction.commit();
         }
     }
 
@@ -607,15 +751,33 @@ class RecoveryIT
 
     private void startStopDatabase()
     {
-        createDatabase();
+        GraphDatabaseService db = createDatabase();
+        db.beginTx().close();
         managementService.shutdown();
     }
 
     private void recoverDatabase() throws Exception
     {
-        assertTrue( isRecoveryRequired( databaseLayout, defaults() ) );
-        performRecovery( databaseLayout );
-        assertFalse( isRecoveryRequired( databaseLayout, defaults() ) );
+        recoverDatabase( EMPTY );
+    }
+
+    private void recoverDatabase( DatabaseTracers databaseTracers ) throws Exception
+    {
+        Config config = Config.newBuilder().set( enable_relationship_type_scan_store, enableRelationshipTypeScanStore() ).build();
+        assertTrue( isRecoveryRequired( databaseLayout, config ) );
+        performRecovery( fileSystem, pageCache, databaseTracers, config, databaseLayout, INSTANCE );
+        assertFalse( isRecoveryRequired( databaseLayout, config ) );
+    }
+
+    private boolean isRecoveryRequired( DatabaseLayout layout ) throws Exception
+    {
+        Config config = Config.newBuilder().set( enable_relationship_type_scan_store, enableRelationshipTypeScanStore() ).build();
+        return isRecoveryRequired( layout, config );
+    }
+
+    private boolean isRecoveryRequired( DatabaseLayout layout, Config config ) throws Exception
+    {
+        return Recovery.isRecoveryRequired( fileSystem, layout, config, INSTANCE );
     }
 
     private int countCheckPointsInTransactionLogs() throws IOException
@@ -624,7 +786,7 @@ class RecoveryIT
 
         LogFiles logFiles = buildLogFiles();
         LogFile transactionLogFile = logFiles.getLogFile();
-        VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader();
+        VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
         LogPosition startPosition = logFiles.extractHeader( logFiles.getHighestLogVersion() ).getStartPosition();
         try ( ReadableLogChannel reader = transactionLogFile.getReader( startPosition ) )
         {
@@ -644,7 +806,10 @@ class RecoveryIT
 
     private LogFiles buildLogFiles() throws IOException
     {
-        return LogFilesBuilder.logFilesBasedOnlyBuilder( databaseLayout.getTransactionLogsDirectory(), fileSystem ).build();
+        return LogFilesBuilder
+                .logFilesBasedOnlyBuilder( databaseLayout.getTransactionLogsDirectory(), fileSystem )
+                .withCommandReaderFactory( StorageEngineFactory.selectStorageEngine().commandReaderFactory() )
+                .build();
     }
 
     private void removeTransactionLogs() throws IOException
@@ -683,7 +848,7 @@ class RecoveryIT
 
         LogFiles logFiles = buildLogFiles();
         LogFile transactionLogFile = logFiles.getLogFile();
-        VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader();
+        VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
         LogPosition startPosition = logFiles.extractHeader( logFiles.getHighestLogVersion() ).getStartPosition();
         try ( ReadableLogChannel reader = transactionLogFile.getReader( startPosition ) )
         {
@@ -724,9 +889,32 @@ class RecoveryIT
 
     private GraphDatabaseAPI createDatabase()
     {
+<<<<<<< HEAD
         createBuilder();
         managementService = builder.build();
         return (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
+=======
+        return createDatabase( logical_log_rotation_threshold.defaultValue() );
+    }
+
+    private GraphDatabaseAPI createDatabase( long logThreshold )
+    {
+        createBuilder( logThreshold );
+        managementService = builder.build();
+        GraphDatabaseAPI database = (GraphDatabaseAPI) managementService.database( databaseLayout.getDatabaseName() );
+        storageEngineFactory = database.getDependencyResolver().resolveDependency( StorageEngineFactory.class );
+        return database;
+    }
+
+    private void createBuilder( long logThreshold )
+    {
+        if ( builder == null )
+        {
+            builder = builderWithRelationshipTypeScanStoreSet()
+                    .setConfig( preallocate_logical_logs, false )
+                    .setConfig( logical_log_rotation_threshold, logThreshold );
+        }
+>>>>>>> neo4j/4.1
     }
 
     private void createBuilder()
@@ -746,7 +934,20 @@ class RecoveryIT
 
     private DatabaseManagementService forcedRecoveryManagement()
     {
-        return new TestDatabaseManagementServiceBuilder( neo4jLayout ).setConfig( fail_on_missing_files, false ).build();
+        return builderWithRelationshipTypeScanStoreSet()
+                .setConfig( fail_on_missing_files, false )
+                .build();
+    }
+
+    private TestDatabaseManagementServiceBuilder builderWithRelationshipTypeScanStoreSet()
+    {
+        return builderWithRelationshipTypeScanStoreSet( neo4jLayout );
+    }
+
+    private TestDatabaseManagementServiceBuilder builderWithRelationshipTypeScanStoreSet( Neo4jLayout neo4jLayout )
+    {
+        return new TestDatabaseManagementServiceBuilder( neo4jLayout )
+                .setConfig( enable_relationship_type_scan_store, enableRelationshipTypeScanStore() );
     }
 
     private PageCache getDatabasePageCache( GraphDatabaseAPI databaseAPI )
@@ -760,8 +961,13 @@ class RecoveryIT
         try
         {
             PageCache restartedCache = getDatabasePageCache( restartedDatabase );
+<<<<<<< HEAD
             assertThat( getRecord( restartedCache, databaseAPI.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP ),
                     greaterThan( 0L ) );
+=======
+            final long record = getRecord( restartedCache, databaseAPI.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP, NULL );
+            assertThat( record ).isGreaterThan( 0L );
+>>>>>>> neo4j/4.1
         }
         finally
         {
@@ -769,12 +975,14 @@ class RecoveryIT
         }
     }
 
-    private static class GlobalGuardConsumerTestExtensionFactory extends ExtensionFactory<GlobalGuardConsumerTestExtensionFactory.Dependencies>
+    interface Dependencies
     {
-        interface Dependencies
-        {
-            CompositeDatabaseAvailabilityGuard globalGuard();
-        }
+        CompositeDatabaseAvailabilityGuard globalGuard();
+    }
+
+    private static class GlobalGuardConsumerTestExtensionFactory extends ExtensionFactory<Dependencies>
+    {
+        private GlobalGuardConsumer providedConsumer;
 
         GlobalGuardConsumerTestExtensionFactory()
         {
@@ -784,15 +992,21 @@ class RecoveryIT
         @Override
         public Lifecycle newInstance( ExtensionContext context, Dependencies dependencies )
         {
-            return new GlobalGuardConsumer( dependencies );
+            providedConsumer = new GlobalGuardConsumer( dependencies );
+            return providedConsumer;
+        }
+
+        public GlobalGuardConsumer getProvidedGuardConsumer()
+        {
+            return providedConsumer;
         }
     }
 
     private static class GlobalGuardConsumer extends LifecycleAdapter
     {
-        private static CompositeDatabaseAvailabilityGuard globalGuard;
+        private final CompositeDatabaseAvailabilityGuard globalGuard;
 
-        GlobalGuardConsumer( GlobalGuardConsumerTestExtensionFactory.Dependencies dependencies )
+        GlobalGuardConsumer( Dependencies dependencies )
         {
             globalGuard = dependencies.globalGuard();
         }

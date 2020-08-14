@@ -19,9 +19,6 @@
  */
 package org.neo4j.bolt.security.auth;
 
-import org.hamcrest.BaseMatcher;
-import org.hamcrest.Description;
-import org.hamcrest.TypeSafeMatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,12 +31,11 @@ import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.impl.security.User;
 import org.neo4j.server.security.auth.RateLimitedAuthenticationStrategy;
 import org.neo4j.server.security.systemgraph.BasicSystemGraphRealm;
-import org.neo4j.server.security.systemgraph.SecurityGraphInitializer;
+import org.neo4j.server.security.systemgraph.SystemGraphRealmHelper;
 import org.neo4j.time.Clocks;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,7 +57,7 @@ class BasicAuthenticationTest
         AuthenticationResult result = authentication.authenticate( map( "scheme", "basic", "principal", "mike", "credentials", password( "secret2" ) ) );
 
         // Then
-        assertThat( result.getLoginContext().subject().username(), equalTo( "mike" ) );
+        assertThat( result.getLoginContext().subject().username() ).isEqualTo( "mike" );
     }
 
     @Test
@@ -98,7 +94,7 @@ class BasicAuthenticationTest
             }
             catch ( AuthenticationException e )
             {
-                assertThat( e.status(), equalTo( Status.Security.Unauthorized ) );
+                assertThat( e.status() ).isEqualTo( Status.Security.Unauthorized );
             }
         }
 
@@ -117,7 +113,7 @@ class BasicAuthenticationTest
         authentication.authenticate( map( "scheme", "basic", "principal", "mike", "credentials", password ) );
 
         // Then
-        assertThat( password, isCleared() );
+        assertThat( password ).containsOnly( 0 );
     }
 
     @Test
@@ -154,74 +150,12 @@ class BasicAuthenticationTest
     private static Authentication createAuthentication( int maxFailedAttempts ) throws Exception
     {
         Config config = Config.defaults( GraphDatabaseSettings.auth_max_failed_attempts, maxFailedAttempts );
-        BasicSystemGraphRealm realm = spy( new BasicSystemGraphRealm( SecurityGraphInitializer.NO_OP, null, new SecureHasher(),
-                new RateLimitedAuthenticationStrategy( Clocks.systemClock(), config ), true ) );
+        SystemGraphRealmHelper realmHelper = spy( new SystemGraphRealmHelper( null, new SecureHasher() ) );
+        BasicSystemGraphRealm realm = new BasicSystemGraphRealm( realmHelper, new RateLimitedAuthenticationStrategy( Clocks.systemClock(), config ) );
         Authentication authentication = new BasicAuthentication( realm );
-        doReturn( new User.Builder( "bob", credentialFor( "secret" ) ).withRequiredPasswordChange( true ).build() ).when( realm ).getUser( "bob" );
-        doReturn( new User.Builder( "mike", credentialFor( "secret2" ) ).build() ).when( realm ).getUser( "mike" );
+        doReturn( new User.Builder( "bob", credentialFor( "secret" ) ).withRequiredPasswordChange( true ).build() ).when( realmHelper ).getUser( "bob" );
+        doReturn( new User.Builder( "mike", credentialFor( "secret2" ) ).build() ).when( realmHelper ).getUser( "mike" );
 
         return authentication;
-    }
-
-    static class HasStatus extends TypeSafeMatcher<Status.HasStatus>
-    {
-        private final Status status;
-
-        HasStatus( Status status )
-        {
-            this.status = status;
-        }
-
-        @Override
-        protected boolean matchesSafely( Status.HasStatus item )
-        {
-            return item.status() == status;
-        }
-
-        @Override
-        public void describeTo( Description description )
-        {
-            description.appendText( "expects status " )
-                    .appendValue( status );
-        }
-
-        @Override
-        protected void describeMismatchSafely( Status.HasStatus item, Description mismatchDescription )
-        {
-            mismatchDescription.appendText( "was " )
-                    .appendValue( item.status() );
-        }
-    }
-
-    private static CredentialsClearedMatcher isCleared()
-    {
-        return new CredentialsClearedMatcher();
-    }
-
-    static class CredentialsClearedMatcher extends BaseMatcher<byte[]>
-    {
-        @Override
-        public boolean matches( Object o )
-        {
-            if ( o instanceof byte[] )
-            {
-                byte[] bytes = (byte[]) o;
-                for ( byte aByte : bytes )
-                {
-                    if ( aByte != (byte) 0 )
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            return false;
-        }
-
-        @Override
-        public void describeTo( Description description )
-        {
-            description.appendText( "Byte array should contain only zeroes" );
-        }
     }
 }

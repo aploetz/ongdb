@@ -39,7 +39,7 @@ import org.apache.commons.lang3.exception.CloneFailedException;
  *     and wasn't there when it was loaded from the store</li>
  * </ul>
  */
-public abstract class AbstractBaseRecord implements Cloneable
+public abstract class AbstractBaseRecord
 {
     public static final int NO_ID = -1;
     private long id;
@@ -62,6 +62,17 @@ public abstract class AbstractBaseRecord implements Cloneable
     {
         this.id = id;
         clear();
+    }
+
+    public AbstractBaseRecord( AbstractBaseRecord other )
+    {
+        this.id = other.id;
+        this.secondaryUnitId = other.secondaryUnitId;
+        this.requiresSecondaryUnit = other.requiresSecondaryUnit;
+        this.inUse = other.inUse;
+        this.created = other.created;
+        this.createdSecondaryUnit = other.createdSecondaryUnit;
+        this.useFixedReferences = other.useFixedReferences;
     }
 
     protected AbstractBaseRecord initialize( boolean inUse )
@@ -88,6 +99,11 @@ public abstract class AbstractBaseRecord implements Cloneable
         requiresSecondaryUnit = false;
         createdSecondaryUnit = false;
         useFixedReferences = false;
+    }
+
+    public AbstractBaseRecord copy()
+    {
+        throw new UnsupportedOperationException( getClass().getSimpleName() + " is not copyable." );
     }
 
     public long getId()
@@ -214,6 +230,7 @@ public abstract class AbstractBaseRecord implements Cloneable
         return id == other.id && inUse == other.inUse;
     }
 
+<<<<<<< HEAD
     @Override
     public AbstractBaseRecord clone()
     {
@@ -227,6 +244,8 @@ public abstract class AbstractBaseRecord implements Cloneable
         }
     }
 
+=======
+>>>>>>> neo4j/4.1
     /**
      * @return information about secondary unit, like so:
      * <ul>

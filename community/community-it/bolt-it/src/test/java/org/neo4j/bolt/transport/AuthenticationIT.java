@@ -19,14 +19,11 @@
  */
 package org.neo4j.bolt.transport;
 
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
-import org.hamcrest.Matchers;
-import org.hamcrest.TypeSafeMatcher;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.RuleChain;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,59 +36,68 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 import org.neo4j.bolt.AbstractBoltTransportsTest;
-import org.neo4j.bolt.BoltServer;
 import org.neo4j.bolt.messaging.ResponseMessage;
+import org.neo4j.bolt.packstream.Neo4jPack;
+import org.neo4j.bolt.runtime.DefaultBoltConnection;
 import org.neo4j.bolt.testing.client.TransportConnection;
 import org.neo4j.bolt.v3.messaging.response.FailureMessage;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.graphdb.config.Setting;
-import org.neo4j.internal.helpers.HostnamePort;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.impl.util.ValueUtils;
-import org.neo4j.kernel.internal.Version;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
-import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
+import org.neo4j.test.extension.Inject;
+import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.VirtualValues;
 
 import static java.util.Collections.singletonList;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasKey;
-import static org.junit.Assert.fail;
-import static org.neo4j.bolt.testing.MessageMatchers.msgFailure;
-import static org.neo4j.bolt.testing.MessageMatchers.msgIgnored;
-import static org.neo4j.bolt.testing.MessageMatchers.msgSuccess;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.neo4j.bolt.testing.MessageConditions.msgFailure;
+import static org.neo4j.bolt.testing.MessageConditions.msgIgnored;
+import static org.neo4j.bolt.testing.MessageConditions.msgSuccess;
 import static org.neo4j.bolt.testing.TransportTestUtil.ResponseMatcherOptionality.OPTIONAL;
 import static org.neo4j.bolt.testing.TransportTestUtil.ResponseMatcherOptionality.REQUIRED;
 import static org.neo4j.bolt.testing.TransportTestUtil.eventuallyDisconnects;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 import static org.neo4j.test.assertion.Assert.assertEventually;
+import static org.neo4j.test.conditions.Conditions.TRUE;
 
+@EphemeralTestDirectoryExtension
+@Neo4jWithSocketExtension
 public class AuthenticationIT extends AbstractBoltTransportsTest
 {
-    protected EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
     protected final AssertableLogProvider logProvider = new AssertableLogProvider();
-    protected Neo4jWithSocket server =
-            new Neo4jWithSocket( getClass(), getTestGraphDatabaseFactory(), fsRule, getSettingsFunction() );
 
-    @Rule
-    public RuleChain ruleChain = RuleChain.outerRule( fsRule ).around( server );
+    @Inject
+    private Neo4jWithSocket server;
 
     protected TestDatabaseManagementServiceBuilder getTestGraphDatabaseFactory()
     {
         return new TestDatabaseManagementServiceBuilder().setUserLogProvider( logProvider );
+    }
+
+    @BeforeEach
+    public void setup( TestInfo testInfo ) throws IOException
+    {
+        server.setGraphDatabaseFactory( getTestGraphDatabaseFactory() );
+        server.setConfigure( getSettingsFunction() );
+        server.init( testInfo );
+        address = server.lookupDefaultConnector();
+    }
+
+    @AfterEach
+    public void cleanup()
+    {
+        server.shutdownDatabase();
     }
 
     @Override
@@ -103,26 +109,25 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
         };
     }
 
-    private HostnamePort address;
-
-    @Before
-    public void setup()
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldRespondWithCredentialsExpiredOnFirstUse(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
-        address = server.lookupDefaultConnector();
-    }
+        initParameters( connectionClass, neo4jPack, name );
 
-    @Test
-    public void shouldRespondWithCredentialsExpiredOnFirstUse() throws Throwable
-    {
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess(
-                allOf( hasEntry( Matchers.is( "credentials_expired" ), Matchers.equalTo( true ) ), hasKey( "server" ), hasKey( "connection_id" ) ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                msgSuccess( message -> assertThat( message )
+                            .containsEntry( "credentials_expired", true )
+                            .containsKeys( "server", "connection_id" )
+                ) ) );
 
         verifyConnectionOpen();
     }
@@ -130,52 +135,66 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
     private void verifyConnectionOpen() throws IOException
     {
         connection.send( util.defaultReset() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
     }
 
-    @Test
-    public void shouldFailIfWrongCredentials() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfWrongCredentials(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "wrong", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "The client is unauthorized due to authentication failure." ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
-        assertEventually( ignore -> "Matching log call not found in\n" + logProvider.serialize(),
-                this::authFailureLoggedToUserLog, is( true ), 30, SECONDS );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
+        assertEventually( () -> "Matching log call not found in\n" + logProvider.serialize(), this::authFailureLoggedToUserLog, TRUE, 30, SECONDS );
     }
 
     private boolean authFailureLoggedToUserLog()
     {
-        String boltPackageName = BoltServer.class.getPackage().getName();
-        return logProvider.containsMatchingLogCall( inLog( containsString( boltPackageName ) )
-                .warn( containsString( "The client is unauthorized due to authentication failure." ) ) );
+        try
+        {
+            assertThat( logProvider ).forClass( DefaultBoltConnection.class ).forLevel( WARN )
+                    .containsMessages( "The client is unauthorized due to authentication failure." );
+            return true;
+        }
+        catch ( AssertionError e )
+        {
+            return false;
+        }
     }
 
-    @Test
-    public void shouldFailIfWrongCredentialsFollowingSuccessfulLogin() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfWrongCredentialsFollowingSuccessfulLogin(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
 
         // change password
         connection.send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "secret" ),
                 SYSTEM_DATABASE_NAME ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
 
         // When login again with the new password
         reconnect();
@@ -185,8 +204,8 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
                                 map( "principal", "neo4j", "credentials", "secret", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
 
         // When login again with the wrong password
         reconnect();
@@ -196,81 +215,101 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
                                 map( "principal", "neo4j", "credentials", "wrong", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "The client is unauthorized due to authentication failure." ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    @Test
-    public void shouldFailIfMalformedAuthTokenWrongType() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfMalformedAuthTokenWrongType(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", singletonList( "neo4j" ), "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "Unsupported authentication token, the value associated with the key `principal` " +
                 "must be a String but was: ArrayList" ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    @Test
-    public void shouldFailIfMalformedAuthTokenMissingKey() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfMalformedAuthTokenMissingKey(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "this-should-have-been-credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "Unsupported authentication token, missing key `credentials`" ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    @Test
-    public void shouldFailIfMalformedAuthTokenMissingScheme() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfMalformedAuthTokenMissingScheme(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "Unsupported authentication token, missing key `scheme`" ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    @Test
-    public void shouldFailIfMalformedAuthTokenUnknownScheme() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailIfMalformedAuthTokenUnknownScheme(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "unknown" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "Unsupported authentication token, scheme 'unknown' is not supported." ) ) );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    @Test
-    public void shouldFailDifferentlyIfTooManyFailedAuthAttempts() throws Exception
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailDifferentlyIfTooManyFailedAuthAttempts(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // Given
         final long timeout = System.currentTimeMillis() + 60_000;
         FailureMessage failureMessage = null;
@@ -321,38 +360,42 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
             }
         }
 
-        assertThat( failureMessage.status(), equalTo( Status.Security.AuthenticationRateLimit ) );
-        assertThat( failureMessage.message(),
-                containsString( "The client has provided incorrect authentication details too many times in a row." ) );
+        assertThat( failureMessage.status() ).isEqualTo( Status.Security.AuthenticationRateLimit );
+        assertThat( failureMessage.message() ).contains( "The client has provided incorrect authentication details too many times in a row." );
     }
 
-    @Test
-    public void shouldBeAbleToChangePasswordUsingSystemCommand() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldBeAbleToChangePasswordUsingSystemCommand(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess(
-                allOf( hasEntry( Matchers.is( "credentials_expired" ), Matchers.equalTo( true ) ), hasKey( "server" ), hasKey( "connection_id" ) ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                msgSuccess( message -> assertThat( message ).containsEntry( "credentials_expired", true )
+                .containsKeys( "server", "connection_id" ) ) ) );
 
         // When
         connection.send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "secret" ),
                 SYSTEM_DATABASE_NAME ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
 
         // If I reconnect I cannot use the old password
         reconnect();
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.Security.Unauthorized,
                 "The client is unauthorized due to authentication failure." ) ) );
 
         // But the new password works fine
@@ -360,86 +403,99 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "secret", "scheme", "basic" ) ) );
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgSuccess() ) );
     }
 
-    @Test
-    public void shouldFailWhenReusingTheSamePassword() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailWhenReusingTheSamePassword( Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess(
-                allOf( hasEntry( Matchers.is( "credentials_expired" ), Matchers.equalTo( true ) ), hasKey( "server" ), hasKey( "connection_id" ) ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                msgSuccess( message -> assertThat( message ).containsEntry( "credentials_expired", true )
+                                .containsKeys( "server", "connection_id" ) ) ) );
 
         // When
         connection.send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "neo4j" ),
                 SYSTEM_DATABASE_NAME ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.General.InvalidArguments,
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.General.InvalidArguments,
                 "Old password and new password cannot be the same." ) ) );
 
         // However you should also be able to recover
         connection.send( util.defaultReset() )
                 .send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "abc" ),
                         SYSTEM_DATABASE_NAME ) );
-        assertThat( connection, util.eventuallyReceives( msgIgnored(), msgSuccess(), msgSuccess(), msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgIgnored(), msgSuccess(), msgSuccess(), msgSuccess() ) );
     }
 
-    @Test
-    public void shouldFailWhenSubmittingEmptyPassword() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldFailWhenSubmittingEmptyPassword( Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess(
-                allOf( hasEntry( Matchers.is( "credentials_expired" ), Matchers.equalTo( true ) ), hasKey( "server" ), hasKey( "connection_id" ) ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                msgSuccess( message -> assertThat( message ).containsEntry( "credentials_expired", true )
+                                .containsKeys( "server", "connection_id" ) ) ) );
 
         // When
         connection.send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "" ),
                 SYSTEM_DATABASE_NAME ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceives( msgFailure( Status.General.InvalidArguments,
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgFailure( Status.General.InvalidArguments,
                 "A password cannot be empty." ) ) );
 
         // However you should also be able to recover
         connection.send( util.defaultReset() )
                 .send( util.defaultRunAutoCommitTx( "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO $password", singletonMap( "password", "abc" ),
                         SYSTEM_DATABASE_NAME ) );
-        assertThat( connection, util.eventuallyReceives( msgIgnored(), msgSuccess(), msgSuccess(), msgSuccess() ) );
+        assertThat( connection ).satisfies( util.eventuallyReceives( msgIgnored(), msgSuccess(), msgSuccess(), msgSuccess() ) );
     }
 
-    @Test
-    public void shouldNotBeAbleToReadWhenPasswordChangeRequired() throws Throwable
+    @ParameterizedTest( name = "{displayName} {2}" )
+    @MethodSource( "argumentsProvider" )
+    public void shouldNotBeAbleToReadWhenPasswordChangeRequired(
+            Class<? extends TransportConnection> connectionClass, Neo4jPack neo4jPack, String name ) throws Exception
     {
+        initParameters( connectionClass, neo4jPack, name );
+
         // When
         connection.connect( address )
                 .send( util.defaultAcceptedVersions() )
                 .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "neo4j", "scheme", "basic" ) ) );
 
         // Then
-        assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-        assertThat( connection, util.eventuallyReceives( msgSuccess(
-                allOf( hasEntry( Matchers.is( "credentials_expired" ), Matchers.equalTo( true ) ), hasKey( "server" ), hasKey( "connection_id" ) ) ) ) );
+        assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+        assertThat( connection ).satisfies( util.eventuallyReceives(
+                msgSuccess( message -> assertThat( message ).containsEntry( "credentials_expired", true )
+                                .containsKeys( "server", "connection_id" ) ) ) );
 
         // When
         connection.send( util.defaultRunAutoCommitTx( "MATCH (n) RETURN n" ) );
 
         // Then
-        Matcher<ResponseMessage> expectedFailureMessage = msgFailure( Status.Security.CredentialsExpired,
+        Consumer<ResponseMessage> expectedFailureMessage = msgFailure( Status.Security.CredentialsExpired,
                 "The credentials you provided were valid, but must be changed before you can use this instance." );
-        assertThat( connection,
+        assertThat( connection ).satisfies(
                 // Compiled runtime triggers the AuthorizationViolation exception on the PULL_N message, which means the RUN message will
                 // give a Success response. This should not matter much since RUN + PULL_N are always sent together.
                 util.eventuallyReceivesWithOptionalPrecedingMessages(
@@ -448,30 +504,23 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
                 )
         );
 
-        assertThat( connection, eventuallyDisconnects() );
+        assertThat( connection ).satisfies( eventuallyDisconnects() );
     }
 
-    class FailureMsgMatcher extends TypeSafeMatcher<ResponseMessage>
+    static class FailureMsgMatcher implements Consumer<ResponseMessage>
     {
         FailureMessage specialMessage;
 
         @Override
-        public void describeTo( Description description )
+        public void accept( ResponseMessage responseMessage )
         {
-            description.appendText( "FAILURE" );
-        }
-
-        @Override
-        protected boolean matchesSafely( ResponseMessage t )
-        {
-            assertThat( t, instanceOf( FailureMessage.class ) );
-            FailureMessage msg = (FailureMessage) t;
+            assertThat( responseMessage ).isInstanceOf( FailureMessage.class );
+            FailureMessage msg = (FailureMessage) responseMessage;
             if ( !msg.status().equals( Status.Security.Unauthorized ) ||
-                 !msg.message().contains( "The client is unauthorized due to authentication failure." ) )
+                    !msg.message().contains( "The client is unauthorized due to authentication failure." ) )
             {
                 specialMessage = msg;
             }
-            return true;
         }
     }
 
@@ -492,9 +541,9 @@ public class AuthenticationIT extends AbstractBoltTransportsTest
             connection.connect( address ).send( util.defaultAcceptedVersions() )
                     .send( util.defaultAuth( map( "principal", "neo4j", "credentials", "WHAT_WAS_THE_PASSWORD_AGAIN", "scheme", "basic" ) ) );
 
-            assertThat( connection, util.eventuallyReceivesSelectedProtocolVersion() );
-            assertThat( connection, util.eventuallyReceives( failureRecorder ) );
-            assertThat( connection, eventuallyDisconnects() );
+            assertThat( connection ).satisfies( util.eventuallyReceivesSelectedProtocolVersion() );
+            assertThat( connection ).satisfies( util.eventuallyReceives( failureRecorder ) );
+            assertThat( connection ).satisfies( eventuallyDisconnects() );
         }
         catch ( Exception ex )
         {

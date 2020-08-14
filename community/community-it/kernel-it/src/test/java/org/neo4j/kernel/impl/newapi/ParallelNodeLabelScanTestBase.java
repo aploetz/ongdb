@@ -19,14 +19,12 @@
  */
 package org.neo4j.kernel.impl.newapi;
 
-
 import org.eclipse.collections.api.list.primitive.LongList;
 import org.eclipse.collections.api.list.primitive.MutableLongList;
 import org.eclipse.collections.api.set.primitive.LongSet;
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
 import org.eclipse.collections.impl.factory.primitive.LongLists;
 import org.eclipse.collections.impl.factory.primitive.LongSets;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -49,11 +47,12 @@ import org.neo4j.internal.kernel.api.TokenWrite;
 import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.kernel.api.KernelTransaction;
 
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.newapi.TestUtils.assertDistinct;
 import static org.neo4j.kernel.impl.newapi.TestUtils.concat;
 import static org.neo4j.kernel.impl.newapi.TestUtils.randomBatchWorker;
@@ -110,7 +109,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
     @Test
     void shouldScanASubsetOfNodes()
     {
-        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor() )
+        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor( NULL ) )
         {
             for ( int label : ALL_LABELS )
             {
@@ -123,7 +122,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
                     found.add( nodes.nodeReference() );
                 }
 
-                assertThat( found.size(), Matchers.greaterThan( 0 ) );
+                assertThat( found.size() ).isGreaterThan( 0 );
 
                 if ( label == FOO_LABEL )
                 {
@@ -147,7 +146,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
     @Test
     void shouldHandleSizeHintOverflow()
     {
-        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor() )
+        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor( NULL ) )
         {
             // when
             Scan<NodeLabelIndexCursor> scan = read.nodeLabelScan( FOO_LABEL );
@@ -168,7 +167,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
     @Test
     void shouldFailForSizeHintZero()
     {
-        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor() )
+        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor( NULL ) )
         {
             // given
             Scan<NodeLabelIndexCursor> scan = read.nodeLabelScan( FOO_LABEL );
@@ -182,7 +181,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
     void shouldScanAllNodesInBatches()
     {
         // given
-        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor() )
+        try ( NodeLabelIndexCursor nodes = cursors.allocateNodeLabelIndexCursor( NULL ) )
         {
             // when
             Scan<NodeLabelIndexCursor> scan = read.nodeLabelScan( FOO_LABEL );
@@ -213,7 +212,7 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
         try
         {
             // when
-            Supplier<NodeLabelIndexCursor> allocateCursor = cursors::allocateNodeLabelIndexCursor;
+            Supplier<NodeLabelIndexCursor> allocateCursor = () -> cursors.allocateNodeLabelIndexCursor( NULL );
             Future<LongList> future1 =
                     service.submit( singleBatchWorker( scan, allocateCursor, NODE_GET, NUMBER_OF_NODES ) );
             Future<LongList> future2 =
@@ -250,18 +249,18 @@ public abstract class ParallelNodeLabelScanTestBase<G extends KernelAPIReadTestS
         try
         {
             // when
-            ArrayList<Future<LongList>> futures = new ArrayList<>();
+            List<Future<LongList>> futures = new ArrayList<>();
             for ( int i = 0; i < 10; i++ )
             {
                 futures.add(
-                        service.submit( randomBatchWorker( scan, cursors::allocateNodeLabelIndexCursor, NODE_GET ) ) );
+                        service.submit( randomBatchWorker( scan, () -> cursors.allocateNodeLabelIndexCursor( NULL ), NODE_GET ) ) );
             }
 
             // then
             List<LongList> lists = futures.stream().map( TestUtils::unsafeGet ).collect( Collectors.toList() );
 
             assertDistinct( lists );
-            assertEquals( FOO_NODES, LongSets.immutable.withAll(  concat( lists ) ) );
+            assertEquals( FOO_NODES, LongSets.immutable.withAll( concat( lists ) ) );
         }
         finally
         {

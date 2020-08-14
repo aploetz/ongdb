@@ -36,6 +36,8 @@ import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestDirectoryExtension
 class StoreScanChunkIT
@@ -64,11 +66,11 @@ class StoreScanChunkIT
         }
     }
 
-    private class TestStoreScanChunk extends StoreScanChunk<StorageNodeCursor>
+    private static class TestStoreScanChunk extends StoreScanChunk<StorageNodeCursor>
     {
         TestStoreScanChunk( RecordStorageReader storageReader, boolean requiresPropertyMigration )
         {
-            super( storageReader.allocateNodeCursor(), storageReader, requiresPropertyMigration );
+            super( storageReader.allocateNodeCursor( NULL ), storageReader, requiresPropertyMigration, NULL, INSTANCE );
         }
 
         @Override

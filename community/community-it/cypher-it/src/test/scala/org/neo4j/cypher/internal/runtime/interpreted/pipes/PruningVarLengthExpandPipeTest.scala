@@ -20,22 +20,21 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import org.neo4j.cypher.GraphDatabaseFunSuite
-import org.neo4j.cypher.internal.runtime.interpreted.ExecutionContextHelper._
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.MapCypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper.withQueryState
-import org.neo4j.cypher.internal.runtime.interpreted.ValueComparisonHelper.beEquivalentTo
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Literal, Property, Variable}
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{Equals, Predicate, True}
-import org.neo4j.cypher.internal.runtime.interpreted.commands.values.UnresolvedProperty
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.PruningVarLengthExpandPipeTest.createVarLengthPredicate
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, MapExecutionContext}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
 import org.neo4j.graphdb.Node
 import org.neo4j.internal.kernel.api.security.LoginContext
 import org.neo4j.kernel.api.KernelTransaction.Type
-import org.neo4j.kernel.impl.query.{QuerySubscriber, QuerySubscriberAdapter}
-import org.neo4j.kernel.impl.util.ValueUtils._
+import org.neo4j.kernel.impl.query.QuerySubscriber
+import org.neo4j.kernel.impl.query.QuerySubscriberAdapter
 import org.neo4j.values.AnyValue
-import org.neo4j.values.virtual.{NodeValue, RelationshipValue}
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 import scala.collection.immutable.IndexedSeq
 import scala.collection.mutable
@@ -45,6 +44,7 @@ import scala.util.Random
 class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
   val types = RelationshipTypes(Array.empty[String])
 
+<<<<<<< HEAD
   test("should register owning pipe") {
     val src = new FakePipe(Iterator.empty)
     val pred1 = True()
@@ -56,6 +56,8 @@ class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
     pred2.owningPipe should equal(pipeUnderTest)
   }
 
+=======
+>>>>>>> neo4j/4.1
   test("random and compare") {
     // runs DistinctVarExpand and VarExpand side-by-side and checks that the reachable nodes are the same
     val POPULATION: Int = 1 * 1000
@@ -75,14 +77,14 @@ class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
   private def setUpGraph(seed: Long, POPULATION: Int, friendCount: Int = 50): IndexedSeq[Node] = {
     val r = new Random(seed)
 
-    var tx = graph.beginTransaction(Type.`implicit`, LoginContext.AUTH_DISABLED)
+    var tx = graph.beginTransaction(Type.IMPLICIT, LoginContext.AUTH_DISABLED)
     var count = 0
 
     def checkAndSwitch(): Unit = {
       count += 1
       if (count == 1000) {
         tx.commit()
-        tx = graph.beginTransaction(Type.`implicit`, LoginContext.AUTH_DISABLED)
+        tx = graph.beginTransaction(Type.IMPLICIT, LoginContext.AUTH_DISABLED)
         count = 0
       }
     }
@@ -123,23 +125,15 @@ class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
       })
     }
 
-    val records = ArrayBuffer.empty[ExecutionContext]
+    val records = ArrayBuffer.empty[CypherRow]
     val subscriber: QuerySubscriber = new QuerySubscriberAdapter {
       private var record: mutable.Map[String, AnyValue] = mutable.Map.empty
-      private var currentOffset = -1
 
-      override def onRecord(): Unit = currentOffset = 0
-
-      override def onField(value: AnyValue): Unit = {
-        try {
-          record.put(columns(currentOffset), value)
-        } finally {
-          currentOffset += 1
-        }
+      override def onField(offset: Int, value: AnyValue): Unit = {
+          record.put(columns(offset), value)
       }
       override def onRecordCompleted(): Unit = {
-        currentOffset = -1
-        records.append(new MapExecutionContext(record))
+        records.append(new MapCypherRow(record))
         record =  mutable.Map.empty
       }
     }
@@ -190,13 +184,13 @@ class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
 object PruningVarLengthExpandPipeTest {
   def createVarLengthPredicate(nodePredicate: Predicate, relationshipPredicate: Predicate): VarLengthPredicate = {
     new VarLengthPredicate {
-      override def filterNode(row: ExecutionContext, state: QueryState)(node: NodeValue): Boolean = {
+      override def filterNode(row: CypherRow, state: QueryState)(node: NodeValue): Boolean = {
         val cp = row.copyWith("to", node)
         val result = nodePredicate.isTrue(cp, state)
         result
       }
 
-      override def filterRelationship(row: ExecutionContext, state: QueryState)(rel: RelationshipValue): Boolean = {
+      override def filterRelationship(row: CypherRow, state: QueryState)(rel: RelationshipValue): Boolean = {
         val cp = row.copyWith("r", rel)
         val result = relationshipPredicate.isTrue(cp, state)
         result

@@ -53,6 +53,10 @@ import org.neo4j.kernel.impl.store.record.TokenRecord;
 import org.neo4j.storageengine.api.CommandsToApply;
 import org.neo4j.values.storable.Values;
 
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+
 public class Commands
 {
     private Commands()
@@ -88,7 +92,8 @@ public class Commands
     {
         RelationshipRecord before = new RelationshipRecord( id );
         before.setInUse( false );
-        RelationshipRecord after = new RelationshipRecord( id, startNode, endNode, type );
+        RelationshipRecord after = new RelationshipRecord( id );
+        after.setLinks( startNode, endNode, type );
         after.setInUse( true );
         after.setCreated();
         return new RelationshipCommand( before, after );
@@ -133,8 +138,9 @@ public class Commands
     public static RelationshipGroupCommand createRelationshipGroup( long id, int type )
     {
         RelationshipGroupRecord before = new RelationshipGroupRecord( id );
-        RelationshipGroupRecord after = new RelationshipGroupRecord( id, type );
-        after.setInUse( true );
+        RelationshipGroupRecord after = new RelationshipGroupRecord( id )
+                .initialize( true, type, NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(), NULL_REFERENCE.longValue(),
+                        NULL_REFERENCE.longValue() );
         after.setCreated();
         return new RelationshipGroupCommand( before, after );
     }
@@ -156,7 +162,7 @@ public class Commands
         PropertyBlock block = new PropertyBlock();
         if ( valueRecordIds.length == 0 )
         {
-            PropertyStore.encodeValue( block, key, Values.of( 123 ), null, null, true );
+            PropertyStore.encodeValue( block, key, Values.of( 123 ), null, null, true, NULL, INSTANCE );
         }
         else
         {

@@ -50,9 +50,13 @@ public final class FulltextIndexProceduresUtil
     {
     }
 
-    public static String asCypherStringsList( String... args )
+    public static String asStrList( String... args )
     {
-        return Arrays.stream( args ).map( s -> "\"" + s + "\"" ).collect( Collectors.joining( ", ", "[", "]" ) );
+        if ( args.length == 0 )
+        {
+            return "[]";
+        }
+        return Arrays.stream( args ).collect( Collectors.joining( "\", \"", "[\"", "\"]" ) );
     }
 
     public static Map<String,Value> asProcedureConfigMap( String analyzer, boolean eventuallyConsistent )

@@ -19,14 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.logical.plans.IndexOrder
+import org.neo4j.cypher.internal.logical.plans.IndexedProperty
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsNoValue
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.logical.plans.{IndexOrder, IndexedProperty}
-import org.neo4j.internal.kernel.api.{IndexReadSession, NodeValueIndexCursor}
-import org.neo4j.values.storable.{TextValue, Values}
-import org.neo4j.cypher.internal.v4_0.expressions.{CachedProperty, LabelToken}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.CypherTypeException
+import org.neo4j.internal.kernel.api.IndexReadSession
+import org.neo4j.internal.kernel.api.NodeValueIndexCursor
+import org.neo4j.values.storable.TextValue
 
 abstract class AbstractNodeIndexStringScanPipe(ident: String,
                                                label: LabelToken,
@@ -38,10 +42,8 @@ abstract class AbstractNodeIndexStringScanPipe(ident: String,
   override val indexCachedProperties: Array[CachedProperty] = Array(property.asCachedProperty(ident))
   protected val needsValues = indexPropertyIndices.nonEmpty
 
-  valueExpr.registerOwningPipe(this)
-
-  override protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
-    val baseContext = state.newExecutionContext(executionContextFactory)
+  override protected def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
+    val baseContext = state.newExecutionContextWithInitialContext(executionContextFactory)
     val value = valueExpr(baseContext, state)
 
     val resultNodes = value match {

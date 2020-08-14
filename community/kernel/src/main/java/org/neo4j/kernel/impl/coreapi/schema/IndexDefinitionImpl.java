@@ -19,11 +19,7 @@
  */
 package org.neo4j.kernel.impl.coreapi.schema;
 
-import org.eclipse.collections.api.tuple.Pair;
-import org.eclipse.collections.impl.factory.Maps;
-
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Map;
 
 import org.neo4j.graphdb.ConstraintViolationException;
@@ -36,7 +32,6 @@ import org.neo4j.graphdb.schema.IndexType;
 import org.neo4j.hashing.HashFunction;
 import org.neo4j.internal.schema.IndexConfig;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.values.storable.Value;
 
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.joining;
@@ -45,8 +40,8 @@ import static org.neo4j.internal.helpers.collection.Iterables.stream;
 public class IndexDefinitionImpl implements IndexDefinition
 {
     private final InternalSchemaActions actions;
-
     private final IndexDescriptor indexReference;
+    private final String description; // This allows toString() to work after transaction has been closed.
     private final Label[] labels;
     private final RelationshipType[] relTypes;
     private final String[] propertyKeys;
@@ -54,27 +49,28 @@ public class IndexDefinitionImpl implements IndexDefinition
 
     public IndexDefinitionImpl( InternalSchemaActions actions, IndexDescriptor ref, Label[] labels, String[] propertyKeys, boolean constraintIndex )
     {
+        actions.assertInOpenTransaction();
         this.actions = actions;
         this.indexReference = ref;
+        this.description = actions.getUserDescription( ref );
         this.labels = labels;
         this.relTypes = null;
         this.propertyKeys = propertyKeys;
         this.constraintIndex = constraintIndex;
 
-        assertInUnterminatedTransaction();
     }
 
-    public IndexDefinitionImpl( InternalSchemaActions actions, IndexDescriptor ref, RelationshipType[] relTypes, String[] propertyKeys,
-            boolean constraintIndex )
+    public IndexDefinitionImpl(
+            InternalSchemaActions actions, IndexDescriptor ref, RelationshipType[] relTypes, String[] propertyKeys, boolean constraintIndex )
     {
+        actions.assertInOpenTransaction();
         this.actions = actions;
         this.indexReference = ref;
+        this.description = actions.getUserDescription( ref );
         this.labels = null;
         this.relTypes = relTypes;
         this.propertyKeys = propertyKeys;
         this.constraintIndex = constraintIndex;
-
-        assertInUnterminatedTransaction();
     }
 
     public IndexDescriptor getIndexReference()
@@ -85,7 +81,7 @@ public class IndexDefinitionImpl implements IndexDefinition
     @Override
     public Iterable<Label> getLabels()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         assertIsNodeIndex();
         return Arrays.asList( labels );
     }
@@ -93,7 +89,7 @@ public class IndexDefinitionImpl implements IndexDefinition
     @Override
     public Iterable<RelationshipType> getRelationshipTypes()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         assertIsRelationshipIndex();
         return Arrays.asList( relTypes );
     }
@@ -101,7 +97,7 @@ public class IndexDefinitionImpl implements IndexDefinition
     @Override
     public Iterable<String> getPropertyKeys()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return asList( propertyKeys );
     }
 
@@ -120,7 +116,7 @@ public class IndexDefinitionImpl implements IndexDefinition
      */
     String[] getPropertyKeysArrayShared()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return propertyKeys;
     }
 
@@ -168,14 +164,14 @@ public class IndexDefinitionImpl implements IndexDefinition
     @Override
     public boolean isConstraintIndex()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return constraintIndex;
     }
 
     @Override
     public boolean isNodeIndex()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return internalIsNodeIndex();
     }
 
@@ -187,21 +183,21 @@ public class IndexDefinitionImpl implements IndexDefinition
     @Override
     public boolean isRelationshipIndex()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return relTypes != null;
     }
 
     @Override
     public boolean isMultiTokenIndex()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return internalIsNodeIndex() ? labels.length > 1 : relTypes.length > 1;
     }
 
     @Override
     public boolean isCompositeIndex()
     {
-        assertInUnterminatedTransaction();
+        actions.assertInOpenTransaction();
         return propertyKeys.length > 1;
     }
 
@@ -216,17 +212,7 @@ public class IndexDefinitionImpl implements IndexDefinition
     public Map<IndexSetting,Object> getIndexConfiguration()
     {
         IndexConfig indexConfig = indexReference.getIndexConfig();
-        Map<IndexSetting,Object> asMap = Maps.mutable.of();
-        for ( Pair<String,Value> entry : indexConfig.entries() )
-        {
-            IndexSetting key = IndexSettingUtil.fromString( entry.getOne() );
-            if ( key != null )
-            {
-                Object value = entry.getTwo().asObjectCopy();
-                asMap.put( key, value );
-            }
-        }
-        return Collections.unmodifiableMap( asMap );
+        return IndexSettingUtil.toIndexSettingObjectMapFromIndexConfig( indexConfig );
     }
 
     @Override
@@ -311,17 +297,12 @@ public class IndexDefinitionImpl implements IndexDefinition
             entityTokens = Arrays.stream( relTypes ).map( RelationshipType::name ).collect( joining( "," ) );
         }
         return "IndexDefinition[" + entityTokenType + ":" + entityTokens + " on:" + String.join( ",", propertyKeys ) + "]" +
-                (indexReference == null ? "" : " (" + indexReference + ")");
+                (description == null ? "" : " (" + description + ")");
     }
 
     static String labelNameList( Iterable<Label> labels, String prefix, String postfix )
     {
         return stream( labels ).map( Label::name ).collect( joining( ", ", prefix, postfix ) );
-    }
-
-    private void assertInUnterminatedTransaction()
-    {
-        actions.assertInOpenTransaction();
     }
 
     private void assertIsNodeIndex()

@@ -21,25 +21,25 @@ package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import java.util.Comparator
 
-import org.neo4j.cypher.internal.DefaultComparatorTopTable
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.collection.DefaultComparatorTopTable
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.values.storable.NumberValue
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 case class PartialTopNPipe(source: Pipe,
                            countExpression: Expression,
-                           prefixComparator: Comparator[ExecutionContext],
-                           suffixComparator: Comparator[ExecutionContext])
+                           prefixComparator: Comparator[ReadableRow],
+                           suffixComparator: Comparator[ReadableRow])
                           (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source: Pipe) with OrderedInputPipe {
 
-  countExpression.registerOwningPipe(this)
-
   override def getReceiver(state: QueryState): OrderedChunkReceiver = throw new IllegalStateException()
 
+<<<<<<< HEAD
   class TopNReceiver(var remainingLimit: Long, state: QueryState) extends OrderedChunkReceiver {
     private val buffer = new java.util.ArrayList[ExecutionContext]()
     private var topTable: DefaultComparatorTopTable[ExecutionContext] = _
@@ -47,10 +47,24 @@ case class PartialTopNPipe(source: Pipe,
     override def clear(): Unit = {
       buffer.forEach(state.memoryTracker.deallocated)
       buffer.clear()
+=======
+  class PartialTopNReceiver(var remainingLimit: Long, state: QueryState) extends OrderedChunkReceiver {
+    private val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
+    private val rowsMemoryTracker = memoryTracker.getScopedMemoryTracker
+    private val topTable = new DefaultComparatorTopTable[CypherRow](suffixComparator, remainingLimit, memoryTracker)
+
+    override def clear(): Unit = {
+      topTable.reset(remainingLimit)
+      rowsMemoryTracker.reset()
+>>>>>>> neo4j/4.1
     }
 
-    override def isSameChunk(first: ExecutionContext, current: ExecutionContext): Boolean = prefixComparator.compare(first, current) == 0
+    override def close(): Unit = {
+      topTable.close()
+      rowsMemoryTracker.close()
+    }
 
+<<<<<<< HEAD
     override def processRow(row: ExecutionContext): Unit = {
       // add to either Buffer or TopTable
       if (remainingLimit > 0) {
@@ -76,26 +90,30 @@ case class PartialTopNPipe(source: Pipe,
         }
         // Add the current row to the TopTable
         topTable.add(row)
+=======
+    override def isSameChunk(first: CypherRow, current: CypherRow): Boolean = prefixComparator.compare(first, current) == 0
+
+    override def processRow(row: CypherRow): Unit = {
+      val evictedRow = topTable.addAndGetEvicted(row)
+      if (row ne evictedRow) {
+        rowsMemoryTracker.allocateHeap(row.estimatedHeapUsage)
+        if (evictedRow != null)
+          rowsMemoryTracker.releaseHeap(evictedRow.estimatedHeapUsage)
+>>>>>>> neo4j/4.1
       }
+
+      remainingLimit = math.max(0, remainingLimit - 1)
     }
 
-    override def result(): Iterator[ExecutionContext] = {
-      if (topTable == null) {
-        if (buffer.size() > 1) {
-          // Sort the buffered chunk
-          buffer.sort(suffixComparator)
-        }
-        buffer.iterator().asScala
-      } else {
-        topTable.sort()
-        topTable.iterator().asScala
-      }
+    override def result(): Iterator[CypherRow] = {
+      topTable.sort()
+      topTable.iterator().asScala
     }
 
     override def processNextChunk: Boolean = remainingLimit > 0
   }
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     if (input.isEmpty) {
       Iterator.empty
     } else {
@@ -109,7 +127,11 @@ case class PartialTopNPipe(source: Pipe,
 
         // We have to re-attach the already read first row to the iterator
         val restoredInput = Iterator.single(first) ++ input
+<<<<<<< HEAD
         val receiver = new TopNReceiver(longCount, state)
+=======
+        val receiver = new PartialTopNReceiver(longCount, state)
+>>>>>>> neo4j/4.1
         internalCreateResultsWithReceiver(restoredInput, state, receiver)
       }
     }
@@ -120,11 +142,11 @@ case class PartialTopNPipe(source: Pipe,
  * Special case for when we only have one element, in this case it is no idea to store
  * an array, instead just store a single value.
  */
-case class PartialTop1Pipe(source: Pipe, prefixComparator: Comparator[ExecutionContext], suffixComparator: Comparator[ExecutionContext])
+case class PartialTop1Pipe(source: Pipe, prefixComparator: Comparator[ReadableRow], suffixComparator: Comparator[ReadableRow])
                           (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: Iterator[CypherRow],
+                                               state: QueryState): Iterator[CypherRow] = {
     if (input.isEmpty) {
       Iterator.empty
     } else {
@@ -153,18 +175,18 @@ case class PartialTop1Pipe(source: Pipe, prefixComparator: Comparator[ExecutionC
 /*
  * Special case for when we only want one element, and all others that have the same value (tied for first place)
  */
-case class PartialTop1WithTiesPipe(source: Pipe, prefixComparator: Comparator[ExecutionContext], suffixComparator: Comparator[ExecutionContext])
+case class PartialTop1WithTiesPipe(source: Pipe, prefixComparator: Comparator[ReadableRow], suffixComparator: Comparator[ReadableRow])
                                   (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: Iterator[CypherRow],
+                                               state: QueryState): Iterator[CypherRow] = {
     if (input.isEmpty) {
       Iterator.empty
     } else {
       val first = input.next()
       var current = first
       var best = first
-      var matchingRows = init(best)
+      val matchingRows = init(best)
 
       while (current != null) {
         if (input.hasNext) {
@@ -194,8 +216,8 @@ case class PartialTop1WithTiesPipe(source: Pipe, prefixComparator: Comparator[Ex
   }
 
   @inline
-  private def init(first: ExecutionContext) = {
-    val builder = Vector.newBuilder[ExecutionContext]
+  private def init(first: CypherRow) = {
+    val builder = Vector.newBuilder[CypherRow]
     builder += first
     builder
   }

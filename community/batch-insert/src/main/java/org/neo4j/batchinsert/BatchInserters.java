@@ -30,6 +30,10 @@ import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.service.Services;
 
+import static java.lang.Boolean.FALSE;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
+import static org.neo4j.kernel.database.DatabaseTracers.EMPTY;
+
 /**
  * Provides instances of {@link BatchInserter}.
  */
@@ -51,7 +55,7 @@ public final class BatchInserters
 
     public static BatchInserter inserter( DatabaseLayout databaseLayout, FileSystemAbstraction fs ) throws IOException
     {
-        return inserter( databaseLayout, fs, Config.defaults(), loadExtension() );
+        return inserter( databaseLayout, fs, Config.defaults( preallocate_logical_logs, FALSE ), loadExtension() );
     }
 
     public static BatchInserter inserter( DatabaseLayout databaseLayout, Config config ) throws IOException
@@ -70,14 +74,14 @@ public final class BatchInserters
             Config config, Iterable<ExtensionFactory<?>> extensions ) throws IOException
     {
         DefaultFileSystemAbstraction fileSystem = createFileSystem();
-        BatchInserterImpl inserter = new BatchInserterImpl( databaseLayout, fileSystem, config, extensions );
+        BatchInserterImpl inserter = new BatchInserterImpl( databaseLayout, fileSystem, config, extensions, EMPTY );
         return new FileSystemClosingBatchInserter( inserter, fileSystem );
     }
 
     public static BatchInserter inserter( DatabaseLayout layout, FileSystemAbstraction fileSystem, Config config,
             Iterable<ExtensionFactory<?>> extensions ) throws IOException
     {
-        return new BatchInserterImpl( layout, fileSystem, config, extensions );
+        return new BatchInserterImpl( layout, fileSystem, config, extensions, EMPTY );
     }
 
     private static DefaultFileSystemAbstraction createFileSystem()

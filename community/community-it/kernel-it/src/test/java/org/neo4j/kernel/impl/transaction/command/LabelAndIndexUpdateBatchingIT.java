@@ -19,7 +19,7 @@
  */
 package org.neo4j.kernel.impl.transaction.command;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -32,21 +32,22 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.helpers.collection.Visitor;
 import org.neo4j.internal.recordstorage.Command.NodeCommand;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.TransactionCommitProcess;
 import org.neo4j.kernel.impl.api.TransactionToApply;
 import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.log.LogicalTransactionStore;
 import org.neo4j.kernel.impl.transaction.log.TransactionCursor;
+import org.neo4j.kernel.impl.transaction.tracing.CommitEvent;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 
 import static java.util.stream.Collectors.toList;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.internal.helpers.collection.Iterators.singleOrNull;
-import static org.neo4j.kernel.impl.transaction.tracing.CommitEvent.NULL;
 import static org.neo4j.storageengine.api.TransactionApplicationMode.EXTERNAL;
 
 /**
@@ -58,14 +59,13 @@ import static org.neo4j.storageengine.api.TransactionApplicationMode.EXTERNAL;
  * the batch state, to be applied at the end of the batch. Hence the node would be forgotten when the
  * index was being built.
  */
-public class LabelAndIndexUpdateBatchingIT
+class LabelAndIndexUpdateBatchingIT
 {
     private static final String PROPERTY_KEY = "key";
     private static final Label LABEL = Label.label( "label" );
-    private DatabaseManagementService managementService;
 
     @Test
-    public void indexShouldIncludeNodesCreatedPreviouslyInBatch() throws Exception
+    void indexShouldIncludeNodesCreatedPreviouslyInBatch() throws Exception
     {
         // GIVEN a transaction stream leading up to this issue
         // perform the transactions from db-level and extract the transactions as commands
@@ -73,7 +73,7 @@ public class LabelAndIndexUpdateBatchingIT
 
         // a bunch of nodes (to have the index population later on to decide to use label scan for population)
         List<TransactionRepresentation> transactions;
-        managementService = new TestDatabaseManagementServiceBuilder().impermanent().build();
+        DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder().impermanent().build();
         GraphDatabaseAPI db = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
         String nodeN = "our guy";
         String otherNode = "just to create the tokens";
@@ -109,23 +109,20 @@ public class LabelAndIndexUpdateBatchingIT
 
         managementService = new TestDatabaseManagementServiceBuilder().impermanent().build();
         db = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
-        TransactionCommitProcess commitProcess =
-                db.getDependencyResolver().resolveDependency( TransactionCommitProcess.class );
+        TransactionCommitProcess commitProcess = db.getDependencyResolver().resolveDependency( TransactionCommitProcess.class );
         try
         {
             int cutoffIndex = findCutoffIndex( transactions );
-            commitProcess.commit( toApply( transactions.subList( 0, cutoffIndex ) ), NULL, EXTERNAL );
+            commitProcess.commit( toApply( transactions.subList( 0, cutoffIndex ) ), CommitEvent.NULL, EXTERNAL );
 
             // WHEN applying the two transactions (node N and the constraint) in the same batch
-            commitProcess.commit( toApply( transactions.subList( cutoffIndex, transactions.size() ) ), NULL, EXTERNAL );
+            commitProcess.commit( toApply( transactions.subList( cutoffIndex, transactions.size() ) ), CommitEvent.NULL, EXTERNAL );
 
             // THEN node N should've ended up in the index too
             try ( Transaction tx = db.beginTx() )
             {
-                assertNotNull( "Verification node not found",
-                        singleOrNull( tx.findNodes( LABEL, PROPERTY_KEY, otherNode ) ) ); // just to verify
-                assertNotNull( "Node N not found",
-                        singleOrNull( tx.findNodes( LABEL, PROPERTY_KEY, nodeN ) ) );
+                assertNotNull( singleOrNull( tx.findNodes( LABEL, PROPERTY_KEY, otherNode ) ), "Verification node not found" ); // just to verify
+                assertNotNull( singleOrNull( tx.findNodes( LABEL, PROPERTY_KEY, nodeN ) ), "Node N not found" );
                 tx.commit();
             }
         }
@@ -160,7 +157,7 @@ public class LabelAndIndexUpdateBatchingIT
         TransactionToApply last = null;
         for ( TransactionRepresentation transactionRepresentation : transactions )
         {
-            TransactionToApply transaction = new TransactionToApply( transactionRepresentation );
+            TransactionToApply transaction = new TransactionToApply( transactionRepresentation, PageCursorTracer.NULL );
             if ( first == null )
             {
                 first = last = transaction;

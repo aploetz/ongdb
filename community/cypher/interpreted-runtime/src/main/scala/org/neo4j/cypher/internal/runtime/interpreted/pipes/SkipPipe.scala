@@ -19,9 +19,10 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, NumericHelper}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NumericHelper
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.InvalidArgumentException
 import org.neo4j.values.storable.FloatingPointValue
 
@@ -29,15 +30,13 @@ case class SkipPipe(source: Pipe, exp: Expression)
                    (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  exp.registerOwningPipe(this)
-
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    val skipNumber = NumericHelper.asNumber(exp(state.newExecutionContext(executionContextFactory), state))
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val skipNumber = NumericHelper.evaluateStaticallyKnownNumber(exp, state)
     if (skipNumber.isInstanceOf[FloatingPointValue]) {
       val skip = skipNumber.doubleValue()
       throw new InvalidArgumentException(s"SKIP: Invalid input. '$skip' is not a valid value. Must be a non-negative integer.")
     }
-    val skip = skipNumber.longValue().toInt
+    val skip = skipNumber.longValue()
 
     if (skip < 0) {
       throw new InvalidArgumentException(s"SKIP: Invalid input. '$skip' is not a valid value. Must be a non-negative integer.")
@@ -46,6 +45,18 @@ case class SkipPipe(source: Pipe, exp: Expression)
     if(input.isEmpty)
       return Iterator.empty
 
-    input.drop(skip)
+    SkipPipe.drop(skip, input)
+  }
+
+}
+
+object SkipPipe {
+  def drop[T](n: Long, iterator: Iterator[T]): Iterator[T] = {
+    var j = 0L
+    while (j < n && iterator.hasNext) {
+      iterator.next()
+      j += 1
+    }
+    iterator
   }
 }

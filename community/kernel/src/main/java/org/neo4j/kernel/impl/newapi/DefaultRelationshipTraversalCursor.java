@@ -22,15 +22,15 @@ package org.neo4j.kernel.impl.newapi;
 import org.eclipse.collections.api.iterator.LongIterator;
 import org.eclipse.collections.impl.iterator.ImmutableEmptyLongIterator;
 
+import org.neo4j.internal.kernel.api.KernelReadTracer;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
 import org.neo4j.internal.kernel.api.security.AccessMode;
-import org.neo4j.storageengine.api.RelationshipDirection;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.storageengine.api.StorageRelationshipTraversalCursor;
 import org.neo4j.storageengine.api.txstate.NodeState;
 
 import static java.lang.String.format;
-import static org.neo4j.internal.kernel.api.TokenRead.ANY_RELATIONSHIP_TYPE;
 import static org.neo4j.kernel.impl.newapi.Read.NO_ID;
 
 class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<StorageRelationshipTraversalCursor>
@@ -39,6 +39,7 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     private final CursorPool<DefaultRelationshipTraversalCursor> pool;
     private final DefaultNodeCursor nodeCursor;
     private LongIterator addedRelationships;
+<<<<<<< HEAD
     private int type = ANY_RELATIONSHIP_TYPE;
     private RelationshipDirection direction;
     private boolean lazySelection;
@@ -47,6 +48,14 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
 
     DefaultRelationshipTraversalCursor( CursorPool<DefaultRelationshipTraversalCursor> pool, StorageRelationshipTraversalCursor storeCursor,
                                         DefaultNodeCursor nodeCursor )
+=======
+    private long originNodeReference;
+    private RelationshipSelection selection;
+    private AccessMode mode;
+
+    DefaultRelationshipTraversalCursor( CursorPool<DefaultRelationshipTraversalCursor> pool, StorageRelationshipTraversalCursor storeCursor,
+            DefaultNodeCursor nodeCursor )
+>>>>>>> neo4j/4.1
     {
         super( storeCursor );
         this.pool = pool;
@@ -54,67 +63,44 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     }
 
     /**
-     * Initializes this cursor to traverse over all relationships.
-     * @param nodeReference reference to the origin node.
-     * @param reference reference to the place to start traversing these relationships.
-     * @param nodeIsDense whether or not the origin node is dense.
-     * @param read reference to {@link Read}.
-     */
-    void init( long nodeReference, long reference, boolean nodeIsDense, Read read )
-    {
-        // For lazily initialized filtering the type/direction will be null, which is what the storage cursor should get in this scenario
-        this.storeCursor.init( nodeReference, reference, nodeIsDense );
-        init( read );
-        this.addedRelationships = ImmutableEmptyLongIterator.INSTANCE;
-        this.filterInitialized = true;
-    }
-
-    /**
-     * Initializes this cursor to traverse over relationships of a specific type and direction.
-     * In cases where the {@code reference} have been exposed to the client and comes back via
-     * {@link org.neo4j.internal.kernel.api.Read#relationships(long, long, RelationshipTraversalCursor)} the type/direction is unknown at this point,
-     * i.e. {@code type} is {@link Read#NO_ID}. In this case whatever type/direction if the first relationship read from storage will be used
-     * to initialize tx-state iterator with. This is part of the contract of exposing detached references.
+     * Initializes this cursor to traverse over relationships, with a reference that was earlier retrieved from {@link NodeCursor#relationshipsReference()}.
      *
      * @param nodeReference reference to the origin node.
      * @param reference reference to the place to start traversing these relationships.
-     * @param type relationship type. May be {@link Read#NO_ID}, where it will be initialized to the type of first relationship read from storage later.
-     * @param direction relationship direction, relative to {@code nodeReference}. May be {@code null}, where it will be initialized to the direction
-     * of first relationship read from storage later.
-     * @param nodeIsDense whether or not the origin node is dense.
      * @param read reference to {@link Read}.
      */
-    void init( long nodeReference, long reference, int type, RelationshipDirection direction, boolean nodeIsDense, Read read )
+    void init( long nodeReference, long reference, RelationshipSelection selection, Read read )
     {
-        this.type = type;
-        this.direction = direction;
-        this.lazySelection = type == NO_ID;
-        this.storeCursor.init( nodeReference, reference, type, direction, nodeIsDense );
+        this.originNodeReference = nodeReference;
+        this.selection = selection;
+        this.storeCursor.init( nodeReference, reference, selection );
         init( read );
         this.addedRelationships = ImmutableEmptyLongIterator.INSTANCE;
-        this.filterInitialized = !lazySelection;
     }
 
-    @Override
-    public Position suspend()
+    /**
+     * Initializes this cursor to traverse over relationships, directly from the {@link NodeCursor}.
+     *
+     * @param nodeCursor {@link NodeCursor} at the origin node.
+     * @param read reference to {@link Read}.
+     */
+    void init( DefaultNodeCursor nodeCursor, RelationshipSelection selection, Read read )
     {
-        throw new UnsupportedOperationException( "not implemented" );
+        this.originNodeReference = nodeCursor.nodeReference();
+        this.selection = selection;
+        nodeCursor.storeCursor.relationships( storeCursor, selection );
+        init( read );
+        this.addedRelationships = ImmutableEmptyLongIterator.INSTANCE;
     }
 
     @Override
-    public void resume( Position position )
+    public void otherNode( NodeCursor cursor )
     {
-        throw new UnsupportedOperationException( "not implemented" );
+        read.singleNode( otherNodeReference(), cursor );
     }
 
     @Override
-    public void neighbour( NodeCursor cursor )
-    {
-        read.singleNode( neighbourNodeReference(), cursor );
-    }
-
-    @Override
-    public long neighbourNodeReference()
+    public long otherNodeReference()
     {
         if ( currentAddedInTx != NO_ID )
         {
@@ -141,13 +127,13 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     @Override
     public long originNodeReference()
     {
-        // This will be correct regardless of currentAddedInTx set or not
-        return storeCursor.originNodeReference();
+        return originNodeReference;
     }
 
     @Override
     public boolean next()
     {
+<<<<<<< HEAD
         boolean hasChanges;
 
         if ( !filterInitialized )
@@ -167,6 +153,9 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
         {
             hasChanges = hasChanges();
         }
+=======
+        boolean hasChanges = hasChanges();
+>>>>>>> neo4j/4.1
 
         // tx-state relationships
         if ( hasChanges )
@@ -191,16 +180,20 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
             boolean skip = hasChanges && read.txState().relationshipIsDeletedInThisTx( storeCursor.entityReference() );
             if ( !skip && allowed() )
             {
+<<<<<<< HEAD
                 if ( tracer != null )
                 {
                     tracer.onRelationship( relationshipReference() );
                 }
+=======
+>>>>>>> neo4j/4.1
                 return true;
             }
         }
         return false;
     }
 
+<<<<<<< HEAD
     private boolean allowed()
     {
         if ( mode == null )
@@ -218,18 +211,39 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
         }
         read.singleNode( storeCursor.neighbourNodeReference(), nodeCursor );
         return nodeCursor.next();
+=======
+    @Override
+    public void setTracer( KernelReadTracer tracer )
+    {
+        super.setTracer( tracer );
+        storeCursor.setTracer( tracer );
     }
 
-    private void setupFilterStateIfNeeded()
+    @Override
+    public void removeTracer()
     {
-        if ( !filterInitialized && lazySelection )
+        storeCursor.removeTracer();
+        super.removeTracer();
+    }
+
+    private boolean allowed()
+    {
+        if ( mode == null )
         {
-            storeCursor.next();
-            type = storeCursor.type();
-            direction = RelationshipDirection.directionOfStrict( storeCursor.originNodeReference(), storeCursor.sourceNodeReference(),
-                    storeCursor.targetNodeReference() );
-            filterInitialized = true;
+            mode = read.ktx.securityContext().mode();
         }
+        return mode.allowsTraverseRelType( storeCursor.type() ) && allowedToSeeEndNode( mode );
+>>>>>>> neo4j/4.1
+    }
+
+    private boolean allowedToSeeEndNode( AccessMode mode )
+    {
+        if ( mode.allowsTraverseAllLabels() )
+        {
+            return true;
+        }
+        read.singleNode( storeCursor.neighbourNodeReference(), nodeCursor );
+        return nodeCursor.next();
     }
 
     @Override
@@ -238,10 +252,14 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
         if ( !isClosed() )
         {
             read = null;
+<<<<<<< HEAD
             type = ANY_RELATIONSHIP_TYPE;
             direction = null;
             filterInitialized = false;
             lazySelection = false;
+=======
+            selection = null;
+>>>>>>> neo4j/4.1
             mode = null;
             storeCursor.close();
 
@@ -252,11 +270,8 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     @Override
     protected void collectAddedTxStateSnapshot()
     {
-        setupFilterStateIfNeeded();
-        NodeState nodeState = read.txState().getNodeState( storeCursor.originNodeReference() );
-        addedRelationships = type != NO_ID ?
-                             nodeState.getAddedRelationships( direction, type ) :
-                             nodeState.getAddedRelationships();
+        NodeState nodeState = read.txState().getNodeState( originNodeReference );
+        addedRelationships = selection.addedRelationship( nodeState );
     }
 
     @Override
@@ -282,7 +297,7 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
         else
         {
             return "RelationshipTraversalCursor[id=" + storeCursor.entityReference() +
-                    ", " + storeCursor.toString() + "]";
+                    ", " + storeCursor + "]";
         }
     }
 }

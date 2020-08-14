@@ -47,6 +47,7 @@ import org.neo4j.kernel.impl.query.TransactionalContext;
 import org.neo4j.kernel.impl.util.DefaultValueMapper;
 import org.neo4j.util.VisibleForTesting;
 import org.neo4j.values.AnyValue;
+import org.neo4j.values.ValueMapper;
 
 /**
  * A {@link QuerySubscriber} that implements the {@link Result} interface.
@@ -56,7 +57,7 @@ import org.neo4j.values.AnyValue;
  */
 public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Object>> implements QuerySubscriber, Result
 {
-    private final DefaultValueMapper valueMapper;
+    private final ValueMapper<Object> valueMapper;
     private final TransactionalContext context;
     private QueryExecution execution;
     private AnyValue[] currentRecord;
@@ -66,12 +67,16 @@ public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Obj
     private Exception visitException;
     private List<Map<String,Object>> materializeResult;
     private Iterator<Map<String,Object>> materializedIterator;
-    private int currentOffset = -1;
 
     public ResultSubscriber( TransactionalContext context )
     {
+        this( context, new DefaultValueMapper( context.transaction() ) );
+    }
+
+    public ResultSubscriber( TransactionalContext context, ValueMapper<Object> valueMapper )
+    {
         this.context = context;
-        this.valueMapper = new DefaultValueMapper( context.transaction() );
+        this.valueMapper = valueMapper;
     }
 
     public void init( QueryExecution execution )
@@ -83,7 +88,7 @@ public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Obj
     public void materialize( QueryExecution execution )
     {
        this.execution = execution;
-       this.materializeResult = new ArrayList<>(  );
+       this.materializeResult = new ArrayList<>();
        fetchResults( Long.MAX_VALUE );
     }
 
@@ -97,19 +102,18 @@ public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Obj
     @Override
     public void onRecord()
     {
-        currentOffset = 0;
+        //do nothing
     }
 
     @Override
-    public void onField( AnyValue value )
+    public void onField( int offset, AnyValue value )
     {
-        currentRecord[currentOffset++] = value;
+        currentRecord[offset] = value;
     }
 
     @Override
     public void onRecordCompleted()
     {
-        currentOffset = -1;
         //We are coming from a call to accept
         if ( visitor != null )
         {
@@ -324,7 +328,7 @@ public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Obj
         assertNoErrors();
         if ( hasNewValues() )
         {
-            HashMap<String,Object> record = createPublicRecord();
+            Map<String,Object> record = createPublicRecord();
             markAsRead();
             return record;
         }
@@ -363,10 +367,10 @@ public class ResultSubscriber extends PrefetchingResourceIterator<Map<String,Obj
         }
     }
 
-    private HashMap<String,Object> createPublicRecord()
+    private Map<String,Object> createPublicRecord()
     {
         String[] fieldNames = execution.fieldNames();
-        HashMap<String,Object> result = new HashMap<>();
+        Map<String,Object> result = new HashMap<>( (int) (Math.ceil( fieldNames.length * 1.33 )) );
 
         try
         {

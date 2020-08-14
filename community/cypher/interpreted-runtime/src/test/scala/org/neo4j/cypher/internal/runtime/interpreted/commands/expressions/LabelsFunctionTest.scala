@@ -19,11 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.ImplicitValueConversion._
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ImplicitValueConversion.toNodeValue
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.graphdb.Node
 import org.neo4j.values.storable.Values.stringValue
 import org.neo4j.values.virtual.VirtualValues.list
@@ -40,7 +41,7 @@ class LabelsFunctionTest extends CypherFunSuite {
     when(queryContext.getLabelsForNode(1337L, null)).thenReturn(list(stringValue("bambi")))
 
     val state = QueryStateHelper.emptyWith(query = queryContext)
-    val ctx = ExecutionContext(mutable.Map("n" -> node))
+    val ctx = CypherRow(mutable.Map("n" -> node))
 
     // WHEN
     val result = LabelsFunction(Variable("n"))(ctx, state)

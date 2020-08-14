@@ -20,7 +20,6 @@
 package org.neo4j.kernel.api.impl.schema.reader;
 
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MultiTermQuery;
 import org.apache.lucene.search.TermRangeQuery;
@@ -32,13 +31,13 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.configuration.Config;
-import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
+import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.kernel.api.impl.index.collector.DocValuesCollector;
+import org.neo4j.kernel.api.impl.index.partition.Neo4jIndexSearcher;
 import org.neo4j.kernel.api.impl.index.partition.PartitionSearcher;
 import org.neo4j.kernel.api.impl.schema.TaskCoordinator;
 import org.neo4j.kernel.api.impl.schema.sampler.NonUniqueLuceneIndexSampler;
@@ -48,22 +47,23 @@ import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
 import org.neo4j.kernel.impl.index.schema.NodeValueIterator;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.kernel.api.IndexQuery.range;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.values.storable.Values.stringValue;
 
 class SimpleIndexReaderTest
 {
     private static final SchemaDescriptor SCHEMA = SchemaDescriptor.forLabel( 0, 0 );
     private final PartitionSearcher partitionSearcher = mock( PartitionSearcher.class );
-    private final IndexSearcher indexSearcher = mock( IndexSearcher.class );
+    private final Neo4jIndexSearcher indexSearcher = mock( Neo4jIndexSearcher.class );
     private final IndexSamplingConfig samplingConfig = new IndexSamplingConfig( Config.defaults() );
     private final TaskCoordinator taskCoordinator = new TaskCoordinator( 0, TimeUnit.MILLISECONDS );
 
@@ -136,7 +136,7 @@ class SimpleIndexReaderTest
     {
         IndexReader simpleIndexReader = getUniqueSimpleReader();
 
-        simpleIndexReader.countIndexedNodes( 2, new int[] {3}, Values.of( "testValue" ) );
+        simpleIndexReader.countIndexedNodes( 2, NULL, new int[] {3}, Values.of( "testValue" ) );
 
         verify( indexSearcher ).search( any( BooleanQuery.class ), any( TotalHitCountCollector.class ) );
     }
@@ -145,19 +145,19 @@ class SimpleIndexReaderTest
     void uniqueIndexSamplerForUniqueIndex()
     {
         SimpleIndexReader uniqueSimpleReader = getUniqueSimpleReader();
-        assertThat( uniqueSimpleReader.createSampler(), instanceOf( UniqueLuceneIndexSampler.class ) );
+        assertThat( uniqueSimpleReader.createSampler() ).isInstanceOf( UniqueLuceneIndexSampler.class );
     }
 
     @Test
     void nonUniqueIndexSamplerForNonUniqueIndex()
     {
         SimpleIndexReader uniqueSimpleReader = getNonUniqueSimpleReader();
-        assertThat( uniqueSimpleReader.createSampler(), instanceOf( NonUniqueLuceneIndexSampler.class ) );
+        assertThat( uniqueSimpleReader.createSampler() ).isInstanceOf( NonUniqueLuceneIndexSampler.class );
     }
 
     private void doQuery( IndexReader reader, IndexQuery query ) throws IndexNotApplicableKernelException
     {
-        reader.query( NULL_CONTEXT, new NodeValueIterator(), IndexOrder.NONE, false, query );
+        reader.query( NULL_CONTEXT, new NodeValueIterator(), unconstrained(), query );
     }
 
     private SimpleIndexReader getNonUniqueSimpleReader()

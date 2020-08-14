@@ -22,10 +22,13 @@ package org.neo4j.cypher.internal.compiler.planner.logical.steps
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
 import org.neo4j.cypher.internal.compiler.planner.logical.QueryGraphProducer
 import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NodeCountFromCountStore
+import org.neo4j.cypher.internal.logical.plans.RelationshipCountFromCountStore
 import org.neo4j.cypher.internal.planner.spi.PlanContext
-import org.neo4j.cypher.internal.logical.plans.{LogicalPlan, NodeCountFromCountStore, RelationshipCountFromCountStore}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 
 class countStorePlannerTest extends CypherFunSuite with LogicalPlanningTestSupport with QueryGraphProducer {
 
@@ -162,9 +165,30 @@ class countStorePlannerTest extends CypherFunSuite with LogicalPlanningTestSuppo
   }
 
   test("should not plan a count for rel count with both ended labels and rel type") {
-
     val context = newMockedLogicalPlanningContextWithFakeAttributes(mock[PlanContext])
     val plannerQuery = producePlannerQuery("MATCH (:Label1)<-[r:X]-(:Label2)", "r")
+
+    countStorePlanner(plannerQuery, context) should notBeCountPlan
+  }
+
+  test("should not plan a count when node variable is a dependency") {
+    val context = newMockedLogicalPlanningContextWithFakeAttributes(mock[PlanContext])
+    val plannerQuery = {
+      val plannerQuery = producePlannerQuery("MATCH (n:Label)", "n")
+      val qg = plannerQuery.queryGraph
+      plannerQuery.withQueryGraph(qg.addArgumentId("n"))
+    }
+
+    countStorePlanner(plannerQuery, context) should notBeCountPlan
+  }
+
+  test("should not plan a count when rel variable is a dependency") {
+    val context = newMockedLogicalPlanningContextWithFakeAttributes(mock[PlanContext])
+    val plannerQuery = {
+      val plannerQuery = producePlannerQuery("MATCH (n)-[r:REL]->(m)", "r")
+      val qg = plannerQuery.queryGraph
+      plannerQuery.withQueryGraph(qg.addArgumentId("r"))
+    }
 
     countStorePlanner(plannerQuery, context) should notBeCountPlan
   }

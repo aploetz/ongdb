@@ -38,24 +38,22 @@ import org.neo4j.io.pagecache.tracing.FlushEventOpportunity;
 import org.neo4j.io.pagecache.tracing.MajorFlushEvent;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.PageFaultEvent;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 
-import static org.neo4j.util.FeatureToggles.flag;
+import static org.neo4j.util.FeatureToggles.getInteger;
 
 final class MuninnPagedFile extends PageList implements PagedFile, Flushable
 {
     static final int UNMAPPED_TTE = -1;
-    private static final boolean USE_DIRECT_IO = flag( MuninnPagedFile.class, "useDirectIO", false );
-    private static final int translationTableChunkSizePower = Integer.getInteger(
-            "org.neo4j.io.pagecache.impl.muninn.MuninnPagedFile.translationTableChunkSizePower", 12 );
+    private static final int maxChunkGrowth = getInteger( MuninnPagedFile.class, "maxChunkGrowth", 16 ); // One chunk is 32 MiB, by default.
+    private static final int translationTableChunkSizePower = getInteger( MuninnPagedFile.class, "translationTableChunkSizePower", 12 );
     private static final int translationTableChunkSize = 1 << translationTableChunkSizePower;
     private static final long translationTableChunkSizeMask = translationTableChunkSize - 1;
     private static final int translationTableChunkArrayBase = UnsafeUtil.arrayBaseOffset( int[].class );
     private static final int translationTableChunkArrayScale = UnsafeUtil.arrayIndexScale( int[].class );
 
-    private static final long headerStateOffset =
-            UnsafeUtil.getFieldOffset( MuninnPagedFile.class, "headerState" );
+    private static final long headerStateOffset = UnsafeUtil.getFieldOffset( MuninnPagedFile.class, "headerState" );
     private static final int headerStateRefCountShift = 48;
     private static final int headerStateRefCountMax = 0x7FFF;
     private static final long headerStateRefCountMask = 0x7FFF_0000_0000_0000L;
@@ -109,25 +107,20 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
      * @param filePageSize file page size
      * @param swapperFactory page cache swapper factory
      * @param pageCacheTracer global page cache tracer
-     * @param pageCursorTracerSupplier supplier of thread local (transaction local) page cursor tracer that will provide
-     * thread local page cache statistics
      * @param versionContextSupplier supplier of thread local (transaction local) version context that will provide
      * access to thread local version context
      * @param createIfNotExists should create file if it does not exists
      * @param truncateExisting should truncate file if it exists
-     * @param noChannelStriping when true, overrides channel striping behaviour,
-     * setting it to a single channel per mapped file.
      * @throws IOException If the {@link PageSwapper} could not be created.
      */
-    MuninnPagedFile( File file, MuninnPageCache pageCache, int filePageSize, PageSwapperFactory swapperFactory,
-            PageCacheTracer pageCacheTracer, PageCursorTracerSupplier pageCursorTracerSupplier,
-            VersionContextSupplier versionContextSupplier, boolean createIfNotExists, boolean truncateExisting,
-            boolean noChannelStriping ) throws IOException
+    MuninnPagedFile( File file, MuninnPageCache pageCache, int filePageSize, PageSwapperFactory swapperFactory, PageCacheTracer pageCacheTracer,
+            VersionContextSupplier versionContextSupplier, boolean createIfNotExists, boolean truncateExisting, boolean useDirectIo )
+            throws IOException
     {
         super( pageCache.pages );
         this.pageCache = pageCache;
         this.filePageSize = filePageSize;
-        this.cursorFactory = new CursorFactory( this, pageCursorTracerSupplier, pageCacheTracer, versionContextSupplier );
+        this.cursorFactory = new CursorFactory( this, versionContextSupplier );
         this.pageCacheTracer = pageCacheTracer;
         this.pageFaultLatches = new LatchMap();
 
@@ -148,14 +141,14 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
         // filled with UNMAPPED_TTE values, and then finally assigns the new outer array to the translationTable field
         // and releases the resize lock.
         PageEvictionCallback onEviction = this::evictPage;
-        swapper = swapperFactory.createPageSwapper( file, filePageSize, onEviction, createIfNotExists, noChannelStriping, USE_DIRECT_IO );
+        swapper = swapperFactory.createPageSwapper( file, filePageSize, onEviction, createIfNotExists, useDirectIo );
         if ( truncateExisting )
         {
             swapper.truncate();
         }
         long lastPageId = swapper.getLastPageId();
 
-        int initialChunks = 1 + computeChunkId( lastPageId );
+        int initialChunks = Math.max( 1 + computeChunkId( lastPageId ), 1 ); // At least one initial chunk. Always enough for the whole file.
         int[][] tt = new int[initialChunks][];
         for ( int i = 0; i < initialChunks; i++ )
         {
@@ -174,17 +167,17 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
     }
 
     @Override
-    public PageCursor io( long pageId, int pf_flags )
+    public PageCursor io( long pageId, int pf_flags, PageCursorTracer tracer )
     {
         int lockFlags = pf_flags & PF_LOCK_MASK;
         MuninnPageCursor cursor;
         if ( lockFlags == PF_SHARED_READ_LOCK )
         {
-            cursor = cursorFactory.takeReadCursor( pageId, pf_flags );
+            cursor = cursorFactory.takeReadCursor( pageId, pf_flags, tracer );
         }
         else if ( lockFlags == PF_SHARED_WRITE_LOCK )
         {
-            cursor = cursorFactory.takeWriteCursor( pageId, pf_flags );
+            cursor = cursorFactory.takeWriteCursor( pageId, pf_flags, tracer );
         }
         else
         {
@@ -192,6 +185,10 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
         }
 
         cursor.rewind();
+        if ( ( pf_flags & PF_READ_AHEAD ) == PF_READ_AHEAD && ( pf_flags & PF_NO_FAULT ) != PF_NO_FAULT )
+        {
+            pageCache.startPreFetching( cursor, cursorFactory );
+        }
         return cursor;
     }
 
@@ -572,7 +569,7 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
         return UnsafeUtil.getLongVolatile( this, headerStateOffset );
     }
 
-    private long refCountOf( long state )
+    private static long refCountOf( long state )
     {
         return (state & headerStateRefCountMask) >>> headerStateRefCountShift;
     }
@@ -730,6 +727,15 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
             }
             tt = ntt;
             translationTable = tt;
+            if ( swapper.canAllocate() )
+            {
+                // Hint to the file system that we've grown our file.
+                // This should reduce our tendency to fragment files.
+                long newFileSize = tt.length; // New number of chunks.
+                newFileSize *= translationTableChunkSize; // Pages per chunk.
+                newFileSize *= filePageSize; // Bytes per page.
+                pageCache.allocateFileAsync( swapper, newFileSize );
+            }
         }
         return tt;
     }
@@ -743,8 +749,9 @@ final class MuninnPagedFile extends PageList implements PagedFile, Flushable
 
     private int computeNewRootTableLength( int maxChunkId )
     {
-        // Grow by approx. 10% but always by at least one full chunk.
-        return 1 + (int) (maxChunkId * 1.1);
+        // Grow by approximate 10% but always by at least one full chunk, and no more than maxChunkGrowth (16 by default, equivalent to 512 MiB).
+        int next = 1 + (int) (maxChunkId * 1.1);
+        return Math.min( next, maxChunkId + maxChunkGrowth );
     }
 
     static int computeChunkId( long filePageId )

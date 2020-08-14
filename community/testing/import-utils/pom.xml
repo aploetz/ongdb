@@ -84,6 +84,7 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-launcher</artifactId>
             <version>${junit.platform.version}</version>
@@ -97,6 +98,10 @@
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-random-values</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-random-values</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
     </dependencies>

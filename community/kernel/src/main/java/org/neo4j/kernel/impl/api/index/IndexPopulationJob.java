@@ -22,18 +22,21 @@ package org.neo4j.kernel.impl.api.index;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.memory.ByteBufferFactory;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.impl.index.schema.UnsafeDirectByteBufferAllocator;
-import org.neo4j.memory.ThreadSafePeakMemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.memory.ThreadSafePeakMemoryTracker;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.util.concurrent.Runnables;
 
-import static java.lang.Thread.currentThread;
 import static org.neo4j.kernel.impl.index.schema.BlockBasedIndexPopulator.parseBlockSize;
 
 /**
@@ -44,28 +47,34 @@ import static org.neo4j.kernel.impl.index.schema.BlockBasedIndexPopulator.parseB
  */
 public class IndexPopulationJob implements Runnable
 {
+    private static final String INDEX_POPULATION_TAG = "indexPopulationJob";
     private final IndexingService.Monitor monitor;
     private final boolean verifyBeforeFlipping;
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
     private final ByteBufferFactory bufferFactory;
-    private final ThreadSafePeakMemoryAllocationTracker memoryAllocationTracker;
+    private final ThreadSafePeakMemoryTracker memoryAllocationTracker;
     private final MultipleIndexPopulator multiPopulator;
     private final CountDownLatch doneSignal = new CountDownLatch( 1 );
 
     private volatile StoreScan<IndexPopulationFailedKernelException> storeScan;
-    private volatile boolean cancelled;
+    private volatile boolean stopped;
     /**
      * The {@link JobHandle} that represents the scheduling of this index population job.
      * This is used in the cancellation of the job.
      */
-    private volatile JobHandle jobHandle;
+    private volatile JobHandle<?> jobHandle;
 
-    public IndexPopulationJob( MultipleIndexPopulator multiPopulator, IndexingService.Monitor monitor, boolean verifyBeforeFlipping )
+    public IndexPopulationJob( MultipleIndexPopulator multiPopulator, IndexingService.Monitor monitor, boolean verifyBeforeFlipping,
+            PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
         this.multiPopulator = multiPopulator;
         this.monitor = monitor;
         this.verifyBeforeFlipping = verifyBeforeFlipping;
-        this.memoryAllocationTracker = new ThreadSafePeakMemoryAllocationTracker();
-        this.bufferFactory = new ByteBufferFactory( () -> new UnsafeDirectByteBufferAllocator( memoryAllocationTracker ), parseBlockSize() );
+        this.pageCacheTracer = pageCacheTracer;
+        this.memoryTracker = memoryTracker;
+        this.memoryAllocationTracker = new ThreadSafePeakMemoryTracker();
+        this.bufferFactory = new ByteBufferFactory( UnsafeDirectByteBufferAllocator::new, parseBlockSize() );
     }
 
     /**
@@ -93,8 +102,7 @@ public class IndexPopulationJob implements Runnable
     @Override
     public void run()
     {
-        String oldThreadName = currentThread().getName();
-        try
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INDEX_POPULATION_TAG ) )
         {
             if ( !multiPopulator.hasPopulators() )
             {
@@ -105,43 +113,41 @@ public class IndexPopulationJob implements Runnable
                 throw new IllegalStateException( "Population already started." );
             }
 
-            currentThread().setName( "Index populator" );
             try
             {
-                multiPopulator.create();
-                multiPopulator.resetIndexCounts();
+                multiPopulator.create( cursorTracer );
+                multiPopulator.resetIndexCounts( cursorTracer );
 
                 monitor.indexPopulationScanStarting();
-                indexAllEntities();
+                indexAllEntities( cursorTracer );
                 monitor.indexPopulationScanComplete();
-                if ( cancelled )
+                if ( stopped )
                 {
-                    multiPopulator.cancel();
+                    multiPopulator.stop( cursorTracer );
                     // We remain in POPULATING state
                     return;
                 }
-                multiPopulator.flipAfterPopulation( verifyBeforeFlipping );
+                multiPopulator.flipAfterStoreScan( verifyBeforeFlipping, cursorTracer );
             }
             catch ( Throwable t )
             {
-                multiPopulator.fail( t );
+                multiPopulator.cancel( t, cursorTracer );
             }
         }
         finally
         {
             // will only close "additional" resources, not the actual populators, since that's managed by flip
             Runnables.runAll( "Failed to close resources in IndexPopulationJob",
-                    () -> multiPopulator.close( true ),
-                    () -> monitor.populationJobCompleted( memoryAllocationTracker.peakMemoryUsage() ),
+                    multiPopulator::close,
                     bufferFactory::close,
-                    doneSignal::countDown,
-                    () -> currentThread().setName( oldThreadName ) );
+                    () -> monitor.populationJobCompleted( memoryAllocationTracker.peakMemoryUsage() ),
+                    doneSignal::countDown );
         }
     }
 
-    private void indexAllEntities() throws IndexPopulationFailedKernelException
+    private void indexAllEntities( PageCursorTracer cursorTracer ) throws IndexPopulationFailedKernelException
     {
-        storeScan = multiPopulator.indexAllEntities();
+        storeScan = multiPopulator.createStoreScan( cursorTracer );
         storeScan.run();
     }
 
@@ -156,23 +162,36 @@ public class IndexPopulationJob implements Runnable
         return indexPopulation.progress( storeScanProgress );
     }
 
-    public void cancel()
+    /**
+     * Signal to stop index population.
+     * All populating indexes will remain in {@link InternalIndexState#POPULATING populating state} to be rebuilt on next db start up.
+     * Asynchronous call, need to {@link #awaitCompletion(long, TimeUnit) await completion}.
+     */
+    public void stop()
     {
         // Stop the population
         if ( storeScan != null )
         {
-            cancelled = true;
+            stopped = true;
             storeScan.stop();
             jobHandle.cancel();
             monitor.populationCancelled();
         }
     }
 
-    void cancelPopulation( MultipleIndexPopulator.IndexPopulation population )
+    /**
+     * Stop population of specific index. Index will remain in {@link InternalIndexState#POPULATING populating state} to be rebuilt on next db start up.
+     * @param population {@link MultipleIndexPopulator.IndexPopulation} to be stopped.
+     */
+    void stop( MultipleIndexPopulator.IndexPopulation population, PageCursorTracer cursorTracer )
     {
-        multiPopulator.cancelIndexPopulation( population );
+        multiPopulator.stop( population, cursorTracer );
     }
 
+    /**
+     * Stop population of specific index and drop it.
+     * @param population {@link MultipleIndexPopulator.IndexPopulation} to be dropped.
+     */
     void dropPopulation( MultipleIndexPopulator.IndexPopulation population )
     {
         multiPopulator.dropIndexPopulation( population );
@@ -216,6 +235,8 @@ public class IndexPopulationJob implements Runnable
 
     /**
      * Assign the job-handle that was created when this index population job was scheduled.
+     * This makes it possible to {@link JobHandle#cancel() cancel} the scheduled index population,
+     * making it never start, through {@link IndexPopulationJob#stop()}.
      */
     public void setHandle( JobHandle handle )
     {
@@ -225,5 +246,10 @@ public class IndexPopulationJob implements Runnable
     public ByteBufferFactory bufferFactory()
     {
         return bufferFactory;
+    }
+
+    public MemoryTracker getMemoryTracker()
+    {
+        return memoryTracker;
     }
 }

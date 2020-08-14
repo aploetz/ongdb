@@ -33,12 +33,15 @@ import org.neo4j.internal.nativeimpl.NativeAccessProvider;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
-import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.storageengine.api.CommandReaderFactory;
 import org.neo4j.storageengine.api.LogVersionRepository;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.api.StoreId;
@@ -63,8 +66,12 @@ import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_
  */
 public class LogFilesBuilder
 {
+    private static final String READ_ONLY_TRANSACTION_STORE_READER_TAG = "readOnlyTransactionStoreReader";
+    private static final String READ_ONLY_LOG_VERSION_READER_TAG = "readOnlyLogVersionReader";
+
     private boolean readOnly;
     private PageCache pageCache;
+    private CommandReaderFactory commandReaderFactory = CommandReaderFactory.NO_COMMANDS;
     private DatabaseLayout databaseLayout;
     private File logsDirectory;
     private Config config;
@@ -79,7 +86,8 @@ public class LogFilesBuilder
     private Supplier<LogPosition> lastClosedPositionSupplier;
     private String logFileName = TransactionLogFilesHelper.DEFAULT_NAME;
     private boolean fileBasedOperationsOnly;
-    private DatabaseTracer databaseTracer = DatabaseTracer.NULL;
+    private DatabaseTracers databaseTracers = DatabaseTracers.EMPTY;
+    private MemoryTracker memoryTracker = EmptyMemoryTracker.INSTANCE;
     private StoreId storeId;
     private NativeAccess nativeAccess;
 
@@ -105,11 +113,13 @@ public class LogFilesBuilder
      * Build log files that can access and operate only on active set of log files without ability to
      * rotate and create any new one. Appending to current log file still possible.
      * Store and external components access available in read only mode.
+     *
      * @param databaseLayout store directory
      * @param fileSystem log file system
      * @param pageCache page cache for read only store info access
      */
-    public static LogFilesBuilder activeFilesBuilder( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem, PageCache pageCache )
+    public static LogFilesBuilder activeFilesBuilder( DatabaseLayout databaseLayout,
+            FileSystemAbstraction fileSystem, PageCache pageCache )
     {
         LogFilesBuilder builder = builder( databaseLayout, fileSystem );
         builder.pageCache = pageCache;
@@ -193,9 +203,15 @@ public class LogFilesBuilder
         return this;
     }
 
-    public LogFilesBuilder withDatabaseTracer( DatabaseTracer databaseTracer )
+    public LogFilesBuilder withDatabaseTracers( DatabaseTracers databaseTracers )
     {
-        this.databaseTracer = databaseTracer;
+        this.databaseTracers = databaseTracers;
+        return this;
+    }
+
+    public LogFilesBuilder withMemoryTracker( MemoryTracker memoryTracker )
+    {
+        this.memoryTracker = memoryTracker;
         return this;
     }
 
@@ -211,6 +227,15 @@ public class LogFilesBuilder
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public LogFilesBuilder withCommandReaderFactory( CommandReaderFactory commandReaderFactory )
+    {
+        this.commandReaderFactory = commandReaderFactory;
+        return this;
+    }
+
+>>>>>>> neo4j/4.1
     public LogFilesBuilder withLogsDirectory( File logsDirectory )
     {
         this.logsDirectory = logsDirectory;
@@ -238,7 +263,8 @@ public class LogFilesBuilder
     {
         if ( logEntryReader == null )
         {
-            logEntryReader = new VersionAwareLogEntryReader();
+            requireNonNull( commandReaderFactory );
+            logEntryReader = new VersionAwareLogEntryReader( commandReaderFactory );
         }
         if ( config == null )
         {
@@ -258,7 +284,7 @@ public class LogFilesBuilder
 
         return new TransactionLogFilesContext( rotationThreshold, tryPreallocateTransactionLogs, logEntryReader, lastCommittedIdSupplier,
                 committingTransactionIdSupplier, lastClosedTransactionPositionSupplier, logVersionRepositorySupplier, fileSystem,
-                logProvider, databaseTracer, storeIdSupplier, nativeAccess );
+                logProvider, databaseTracers, storeIdSupplier, nativeAccess, memoryTracker );
     }
 
     private NativeAccess getNativeAccess()
@@ -464,13 +490,21 @@ public class LogFilesBuilder
     private TransactionIdStore readOnlyTransactionIdStore() throws IOException
     {
         StorageEngineFactory storageEngineFactory = StorageEngineFactory.selectStorageEngine();
-        return storageEngineFactory.readOnlyTransactionIdStore( fileSystem, databaseLayout, pageCache );
+        var pageCacheTracer = databaseTracers.getPageCacheTracer();
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( READ_ONLY_TRANSACTION_STORE_READER_TAG ) )
+        {
+            return storageEngineFactory.readOnlyTransactionIdStore( fileSystem, databaseLayout, pageCache, cursorTracer );
+        }
     }
 
     private LogVersionRepository readOnlyLogVersionRepository() throws IOException
     {
         StorageEngineFactory storageEngineFactory = StorageEngineFactory.selectStorageEngine();
-        return storageEngineFactory.readOnlyLogVersionRepository( databaseLayout, pageCache );
+        var pageCacheTracer = databaseTracers.getPageCacheTracer();
+        try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( READ_ONLY_LOG_VERSION_READER_TAG ) )
+        {
+            return storageEngineFactory.readOnlyLogVersionRepository( databaseLayout, pageCache, cursorTracer );
+        }
     }
 
     private <T> T resolveDependency( Class<T> clazz )

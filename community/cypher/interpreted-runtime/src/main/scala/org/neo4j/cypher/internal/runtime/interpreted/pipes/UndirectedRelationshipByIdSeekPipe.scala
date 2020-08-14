@@ -19,19 +19,17 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.attribution.Id
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 case class UndirectedRelationshipByIdSeekPipe(ident: String, relIdExpr: SeekArgs, toNode: String, fromNode: String)
                                              (val id: Id = Id.INVALID_ID) extends Pipe {
 
-  relIdExpr.registerOwningPipe(this)
-
-  protected override def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
-    val ctx = state.newExecutionContext(executionContextFactory)
-    val relIds = relIdExpr.expressions(ctx, state).dropNoValues()
+  protected override def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
+    val ctx = state.newExecutionContextWithInitialContext(executionContextFactory)
+    val relIds = relIdExpr.expressions(ctx, state)
     new UndirectedRelationshipIdSeekIterator(
       ident,
       fromNode,

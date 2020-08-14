@@ -20,6 +20,7 @@
 package org.neo4j.internal.id.indexed;
 
 import org.eclipse.collections.api.list.primitive.MutableLongList;
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.impl.factory.primitive.LongLists;
 
 import java.io.File;
@@ -47,19 +48,23 @@ import org.neo4j.internal.id.IdType;
 import org.neo4j.internal.id.IdValidator;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 import static java.lang.String.format;
 import static org.apache.commons.lang3.ArrayUtils.EMPTY_LONG_ARRAY;
+import static org.eclipse.collections.impl.factory.Sets.immutable;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_READER;
 import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_WRITER;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.io.IOUtils.closeAllUnchecked;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.util.FeatureToggles.flag;
 
 /**
  * At the heart of this free-list sits a {@link GBPTree}, containing all deleted and freed ids. The tree is used as a bit-set and since it's
  * sorted then it can be later extended to allocate multiple consecutive ids. Another design feature of this free-list is that it's crash-safe,
- * that is if the {@link #marker()} is only used for applying committed data.
+ * that is if the {@link #marker(PageCursorTracer)} is only used for applying committed data.
  */
 public class IndexedIdGenerator implements IdGenerator
 {
@@ -191,8 +196,8 @@ public class IndexedIdGenerator implements IdGenerator
 
     /**
      * Default value whether or not to strictly prioritize ids from freelist, as opposed to allocating from high id.
-     * Given a scenario where there are multiple concurrent calls to {@link #nextId()} or {@link #nextIdBatch(int)} and there are
-     * free ids on the freelist, some perhaps cached, some not. Thread noticing that there are no free ids cached will try to acquire scanner lock and if
+     * Given a scenario where there are multiple concurrent calls to {@link #nextId(PageCursorTracer)} or {@link #nextIdBatch(int, PageCursorTracer)} and there
+     * are free ids on the freelist, some perhaps cached, some not. Thread noticing that there are no free ids cached will try to acquire scanner lock and if
      * it succeeds it will perform a scan and place found free ids in the cache and return. Otherwise:
      * <ul>
      *     <li>If {@code false}: thread will allocate from high id and return, to not block id allocation request.</li>
@@ -237,7 +242,7 @@ public class IndexedIdGenerator implements IdGenerator
     private final GBPTree<IdRangeKey,IdRange> tree;
 
     /**
-     * Cache of free ids to be handed out from {@link #nextId()}. Populated by {@link FreeIdScanner}.
+     * Cache of free ids to be handed out from {@link #nextId(PageCursorTracer)}. Populated by {@link FreeIdScanner}.
      */
     private final ConcurrentLongQueue cache;
 
@@ -268,7 +273,7 @@ public class IndexedIdGenerator implements IdGenerator
     private final IdRangeLayout layout;
 
     /**
-     * Scans the stored ids and places into cache for quick access in {@link #nextId()}.
+     * Scans the stored ids and places into cache for quick access in {@link #nextId(PageCursorTracer)}.
      */
     private final FreeIdScanner scanner;
 
@@ -295,7 +300,8 @@ public class IndexedIdGenerator implements IdGenerator
     private final long generation;
 
     /**
-     * Internal state kept between constructor and {@link #start(FreeIds)}, whether or not to rebuild the id generator from the supplied {@link FreeIds}.
+     * Internal state kept between constructor and {@link #start(FreeIds, PageCursorTracer)},
+     * whether or not to rebuild the id generator from the supplied {@link FreeIds}.
      */
     private final boolean needsRebuild;
 
@@ -308,8 +314,10 @@ public class IndexedIdGenerator implements IdGenerator
     private final boolean readOnly;
 
     /**
-     * {@code false} after construction and before a call to {@link IdGenerator#start(FreeIds)}, where false means that operations made this freelist
-     * is to be treated as recovery operations. After a call to {@link IdGenerator#start(FreeIds)} the operations are to be treated as normal operations.
+     * {@code false} after construction and before a call to {@link IdGenerator#start(FreeIds, PageCursorTracer)},
+     * where false means that operations made this freelist
+     * is to be treated as recovery operations. After a call to {@link IdGenerator#start(FreeIds, PageCursorTracer)}
+     * the operations are to be treated as normal operations.
      */
     private volatile boolean started;
 
@@ -318,6 +326,7 @@ public class IndexedIdGenerator implements IdGenerator
 
     private final Monitor monitor;
 
+<<<<<<< HEAD
     public IndexedIdGenerator( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector,
             IdType idType, boolean allowLargeIdCaches, LongSupplier initialHighId, long maxId, boolean readOnly, OpenOption... openOptions )
     {
@@ -326,6 +335,25 @@ public class IndexedIdGenerator implements IdGenerator
 
     public IndexedIdGenerator( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IdType idType,
             boolean allowLargeIdCaches, LongSupplier initialHighId, long maxId, boolean readOnly, Monitor monitor, OpenOption... openOptions )
+=======
+    public IndexedIdGenerator( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IdType idType,
+            boolean allowLargeIdCaches, LongSupplier initialHighId, long maxId, boolean readOnly, PageCursorTracer cursorTracer )
+    {
+        this( pageCache, file, recoveryCleanupWorkCollector, idType, allowLargeIdCaches, initialHighId, maxId, readOnly, cursorTracer, immutable.empty() );
+    }
+
+    public IndexedIdGenerator( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IdType idType,
+            boolean allowLargeIdCaches, LongSupplier initialHighId, long maxId, boolean readOnly, PageCursorTracer cursorTracer,
+            ImmutableSet<OpenOption> openOptions )
+    {
+        this( pageCache, file, recoveryCleanupWorkCollector, idType, allowLargeIdCaches, initialHighId, maxId, readOnly, cursorTracer, NO_MONITOR,
+                openOptions );
+    }
+
+    public IndexedIdGenerator( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, IdType idType,
+            boolean allowLargeIdCaches, LongSupplier initialHighId, long maxId, boolean readOnly, PageCursorTracer cursorTracer, Monitor monitor,
+            ImmutableSet<OpenOption> openOptions )
+>>>>>>> neo4j/4.1
     {
         this.file = file;
         this.readOnly = readOnly;
@@ -338,7 +366,7 @@ public class IndexedIdGenerator implements IdGenerator
         this.defaultMerger = new IdRangeMerger( false, monitor );
         this.recoveryMerger = new IdRangeMerger( true, monitor );
 
-        Optional<HeaderReader> header = readHeader( pageCache, file );
+        Optional<HeaderReader> header = readHeader( pageCache, file, cursorTracer );
         // We check generation here too since we could get into this scenario:
         // 1. start on existing store, but with missing .id file so that it gets created
         // 2. rebuild will happen in start(), but perhaps the db was shut down or killed before or during start()
@@ -370,17 +398,25 @@ public class IndexedIdGenerator implements IdGenerator
 
         boolean strictlyPrioritizeFreelist = flag( IndexedIdGenerator.class, STRICTLY_PRIORITIZE_FREELIST_NAME, STRICTLY_PRIORITIZE_FREELIST_DEFAULT );
         this.scanner = readOnly ? null : new FreeIdScanner( idsPerEntry, tree, cache, atLeastOneIdOnFreelist,
+<<<<<<< HEAD
                 () -> lockAndInstantiateMarker( true ), generation, strictlyPrioritizeFreelist );
+=======
+                tracer -> lockAndInstantiateMarker( true, tracer ), generation, strictlyPrioritizeFreelist );
+>>>>>>> neo4j/4.1
     }
 
     private GBPTree<IdRangeKey,IdRange> instantiateTree( PageCache pageCache, File file, RecoveryCleanupWorkCollector recoveryCleanupWorkCollector,
-            boolean readOnly, OpenOption[] openOptions )
+            boolean readOnly, ImmutableSet<OpenOption> openOptions )
     {
         try
         {
             final HeaderWriter headerWriter = new HeaderWriter( highId::get, highestWrittenId::get, STARTING_GENERATION, idsPerEntry );
             return new GBPTree<>( pageCache, file, layout, 0, GBPTree.NO_MONITOR, NO_HEADER_READER, headerWriter, recoveryCleanupWorkCollector,
+<<<<<<< HEAD
                     readOnly, openOptions );
+=======
+                    readOnly, NULL, openOptions );
+>>>>>>> neo4j/4.1
         }
         catch ( TreeFileNotFoundException e )
         {
@@ -390,14 +426,14 @@ public class IndexedIdGenerator implements IdGenerator
     }
 
     @Override
-    public long nextId()
+    public long nextId( PageCursorTracer cursorTracer )
     {
         assertNotReadOnly();
         // To try and minimize the gap where the cache is empty and scanner is trying to find more to put in the cache
         // we can see if the cache is starting to dry out and if so do a scan right here.
         // There may be multiple allocation requests doing this, but it should be very cheap:
         // comparing two ints, reading an AtomicBoolean and trying to CAS an AtomicBoolean.
-        maintenance();
+        maintenance( cursorTracer );
 
         // try get from cache
         long id = cache.takeOrDefault( NO_ID );
@@ -424,7 +460,7 @@ public class IndexedIdGenerator implements IdGenerator
     }
 
     @Override
-    public org.neo4j.internal.id.IdRange nextIdBatch( int size )
+    public org.neo4j.internal.id.IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
     {
         long prev = -1;
         long startOfRange = -1;
@@ -432,7 +468,7 @@ public class IndexedIdGenerator implements IdGenerator
         MutableLongList other = null;
         for ( int i = 0; i < size; i++ )
         {
-            long id = nextId();
+            long id = nextId( cursorTracer );
             if ( other != null )
             {
                 other.add( id );
@@ -464,7 +500,11 @@ public class IndexedIdGenerator implements IdGenerator
     }
 
     @Override
+<<<<<<< HEAD
     public Marker marker()
+=======
+    public Marker marker( PageCursorTracer cursorTracer )
+>>>>>>> neo4j/4.1
     {
         if ( !started && needsRebuild )
         {
@@ -472,16 +512,27 @@ public class IndexedIdGenerator implements IdGenerator
             return NOOP_MARKER;
         }
 
+<<<<<<< HEAD
         return lockAndInstantiateMarker( true );
     }
 
     IdRangeMarker lockAndInstantiateMarker( boolean bridgeIdGaps )
+=======
+        return lockAndInstantiateMarker( true, cursorTracer );
+    }
+
+    IdRangeMarker lockAndInstantiateMarker( boolean bridgeIdGaps, PageCursorTracer cursorTracer )
+>>>>>>> neo4j/4.1
     {
         assertNotReadOnly();
         commitAndReuseLock.lock();
         try
         {
+<<<<<<< HEAD
             return new IdRangeMarker( idsPerEntry, layout, tree.writer(), commitAndReuseLock,
+=======
+            return new IdRangeMarker( idsPerEntry, layout, tree.writer( cursorTracer ), commitAndReuseLock,
+>>>>>>> neo4j/4.1
                     started ? defaultMerger : recoveryMerger,
                     started, atLeastOneIdOnFreelist, generation, highestWrittenId, bridgeIdGaps, monitor );
         }
@@ -520,25 +571,29 @@ public class IndexedIdGenerator implements IdGenerator
     }
 
     @Override
-    public void start( FreeIds freeIdsForRebuild ) throws IOException
+    public void start( FreeIds freeIdsForRebuild, PageCursorTracer cursorTracer ) throws IOException
     {
         if ( needsRebuild )
         {
             assertNotReadOnly();
             // This id generator was created right now, it needs to be populated with all free ids from its owning store so that it's in sync
+<<<<<<< HEAD
             try ( IdRangeMarker idRangeMarker = lockAndInstantiateMarker( false ) )
+=======
+            try ( IdRangeMarker idRangeMarker = lockAndInstantiateMarker( false, cursorTracer ) )
+>>>>>>> neo4j/4.1
             {
                 // We can mark the ids as free right away since this is before started which means we get the very liberal merger
-                long highestFreeId = freeIdsForRebuild.accept( id ->
+                long highestId = freeIdsForRebuild.accept( id ->
                 {
                     idRangeMarker.markDeleted( id );
                     idRangeMarker.markFree( id );
                 } );
-                highId.set( highestFreeId + 1 );
-                highestWrittenId.set( highestFreeId );
+                highId.set( highestId + 1 );
+                highestWrittenId.set( highestId );
             }
             // We can checkpoint here since the free ids we read are committed
-            checkpoint( IOLimiter.UNLIMITED );
+            checkpoint( IOLimiter.UNLIMITED, cursorTracer );
             atLeastOneIdOnFreelist.set( true );
         }
 
@@ -546,34 +601,42 @@ public class IndexedIdGenerator implements IdGenerator
 
         // After potentially recovery has been run and everything is prepared to get going let's call maintenance,
         // which will fill the ID buffers right away before any request comes to the db.
-        maintenance();
+        maintenance( cursorTracer );
     }
 
     @Override
-    public void checkpoint( IOLimiter ioLimiter )
+    public void checkpoint( IOLimiter ioLimiter, PageCursorTracer cursorTracer )
     {
+<<<<<<< HEAD
         tree.checkpoint( ioLimiter, new HeaderWriter( highId::get, highestWrittenId::get, generation, idsPerEntry ) );
+=======
+        tree.checkpoint( ioLimiter, new HeaderWriter( highId::get, highestWrittenId::get, generation, idsPerEntry ), cursorTracer );
+>>>>>>> neo4j/4.1
         monitor.checkpoint( highestWrittenId.get(), highId.get() );
     }
 
     @Override
-    public void maintenance()
+    public void maintenance( PageCursorTracer cursorTracer )
     {
         if ( !readOnly && cache.size() < cacheOptimisticRefillThreshold )
         {
             // We're just helping other allocation requests and avoiding unwanted sliding of highId here
-            scanner.tryLoadFreeIdsIntoCache();
+            scanner.tryLoadFreeIdsIntoCache( cursorTracer );
         }
     }
 
     @Override
-    public void clearCache()
+    public void clearCache( PageCursorTracer cursorTracer )
     {
         if ( !readOnly )
         {
             // Make the scanner clear it because it needs to coordinate with the scan lock
             monitor.clearingCache();
+<<<<<<< HEAD
             scanner.clearCache();
+=======
+            scanner.clearCache( cursorTracer );
+>>>>>>> neo4j/4.1
             monitor.clearedCache();
         }
     }
@@ -623,12 +686,12 @@ public class IndexedIdGenerator implements IdGenerator
      * @return {@link Optional} with the data embedded inside the {@link HeaderReader} if the id generator existed and the header was read correctly,
      * otherwise {@link Optional#empty()}.
      */
-    private static Optional<HeaderReader> readHeader( PageCache pageCache, File file )
+    private static Optional<HeaderReader> readHeader( PageCache pageCache, File file, PageCursorTracer cursorTracer )
     {
         try
         {
             HeaderReader headerReader = new HeaderReader();
-            GBPTree.readHeader( pageCache, file, headerReader );
+            GBPTree.readHeader( pageCache, file, headerReader, cursorTracer );
             return Optional.of( headerReader );
         }
         catch ( NoSuchFileException e )
@@ -647,46 +710,57 @@ public class IndexedIdGenerator implements IdGenerator
      *
      * @param pageCache {@link PageCache} to map id generator in.
      * @param file {@link File} pointing to the id generator.
+     * @param cacheTracer underlying page cache tracer
      * @throws IOException if the file was missing or some other I/O error occurred.
      */
-    public static void dump( PageCache pageCache, File file ) throws IOException
+    public static void dump( PageCache pageCache, File file, PageCacheTracer cacheTracer ) throws IOException
     {
+<<<<<<< HEAD
         HeaderReader header = readHeader( pageCache, file ).orElseThrow( () -> new NoSuchFileException( file.getAbsolutePath() ) );
         IdRangeLayout layout = new IdRangeLayout( header.idsPerEntry );
         try ( GBPTree<IdRangeKey,IdRange> tree = new GBPTree<>( pageCache, file, layout, 0, GBPTree.NO_MONITOR, NO_HEADER_READER, NO_HEADER_WRITER,
                 immediate(), true ) )
+=======
+        try ( var cursorTracer = cacheTracer.createPageCursorTracer( "IndexDump" ) )
+>>>>>>> neo4j/4.1
         {
-            tree.visit( new GBPTreeVisitor.Adaptor<>()
+            HeaderReader header = readHeader( pageCache, file, cursorTracer ).orElseThrow( () -> new NoSuchFileException( file.getAbsolutePath() ) );
+            IdRangeLayout layout = new IdRangeLayout( header.idsPerEntry );
+            try ( GBPTree<IdRangeKey,IdRange> tree = new GBPTree<>( pageCache, file, layout, 0, GBPTree.NO_MONITOR, NO_HEADER_READER, NO_HEADER_WRITER,
+                    immediate(), true, cacheTracer, immutable.empty() ) )
             {
-                private IdRangeKey key;
-
-                @Override
-                public void key( IdRangeKey key, boolean isLeaf )
+                tree.visit( new GBPTreeVisitor.Adaptor<>()
                 {
-                    this.key = key;
-                }
+                    private IdRangeKey key;
 
-                @Override
-                public void value( IdRange value )
-                {
-                    System.out.println( format( "%s [%d]", value.toString(), key.getIdRangeIdx() ) );
-                }
-            } );
-            System.out.println( header );
+                    @Override
+                    public void key( IdRangeKey key, boolean isLeaf, long offloadId )
+                    {
+                        this.key = key;
+                    }
+
+                    @Override
+                    public void value( IdRange value )
+                    {
+                        System.out.println( format( "%s [%d]", value, key.getIdRangeIdx() ) );
+                    }
+                }, cursorTracer );
+                System.out.println( header );
+            }
         }
     }
 
     @Override
-    public boolean consistencyCheck( ReporterFactory reporterFactory )
+    public boolean consistencyCheck( ReporterFactory reporterFactory, PageCursorTracer cursorTracer )
     {
-        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ) );
+        return consistencyCheck( reporterFactory.getClass( GBPTreeConsistencyCheckVisitor.class ), cursorTracer );
     }
 
-    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<IdRangeKey> visitor )
+    private boolean consistencyCheck( GBPTreeConsistencyCheckVisitor<IdRangeKey> visitor, PageCursorTracer cursorTracer )
     {
         try
         {
-            return tree.consistencyCheck( visitor );
+            return tree.consistencyCheck( visitor, cursorTracer );
         }
         catch ( IOException e )
         {

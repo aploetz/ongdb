@@ -23,18 +23,33 @@ import org.neo4j.kernel.api.query.ExecutingQuery;
 
 public interface QueryExecutionMonitor
 {
-    void start( ExecutingQuery query );
+    void startProcessing( ExecutingQuery query );
 
-    void endFailure( ExecutingQuery query , Throwable failure );
+    void startExecution( ExecutingQuery query );
 
+<<<<<<< HEAD
     void endFailure( ExecutingQuery query , String reason );
 
     void endSuccess( ExecutingQuery query  );
+=======
+    void endFailure( ExecutingQuery query, Throwable failure );
+
+    void endFailure( ExecutingQuery query, String reason );
+
+    void endSuccess( ExecutingQuery query );
+
+    default void beforeEnd( ExecutingQuery query, boolean success ) {}
+>>>>>>> neo4j/4.1
 
     QueryExecutionMonitor NO_OP = new QueryExecutionMonitor()
     {
         @Override
-        public void start( ExecutingQuery query )
+        public void startProcessing( ExecutingQuery query )
+        {
+        }
+
+        @Override
+        public void startExecution( ExecutingQuery query )
         {
         }
 
@@ -50,6 +65,11 @@ public interface QueryExecutionMonitor
 
         @Override
         public void endSuccess( ExecutingQuery query )
+        {
+        }
+
+        @Override
+        public void beforeEnd( ExecutingQuery query, boolean success )
         {
         }
     };

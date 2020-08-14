@@ -19,10 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.values.storable.Values.{NO_VALUE, stringValue}
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.stringValue
 
 class SimpleCaseTest extends CypherFunSuite {
 
@@ -33,7 +34,7 @@ class SimpleCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("one"))
@@ -47,7 +48,7 @@ class SimpleCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("two"))
@@ -61,7 +62,7 @@ class SimpleCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(NO_VALUE)
@@ -75,7 +76,7 @@ class SimpleCaseTest extends CypherFunSuite {
     ) defaultsTo "default"
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("default"))
@@ -89,7 +90,7 @@ class SimpleCaseTest extends CypherFunSuite {
     ) defaultsTo "default"
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     assert(result == stringValue("default"))

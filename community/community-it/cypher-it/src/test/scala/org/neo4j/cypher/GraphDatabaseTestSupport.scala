@@ -24,13 +24,26 @@ import java.nio.file.Files
 
 import org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME
 import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
 import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherTestSupport
+=======
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherTestSupport
+>>>>>>> neo4j/4.1
 import org.neo4j.dbms.api.DatabaseManagementService
-import org.neo4j.graphdb._
+import org.neo4j.graphdb.GraphDatabaseService
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.Relationship
+import org.neo4j.graphdb.RelationshipType
+import org.neo4j.graphdb.Transaction
+import org.neo4j.graphdb.TransactionFailureException
 import org.neo4j.graphdb.config.Setting
 import org.neo4j.internal.kernel.api.TokenRead
-import org.neo4j.internal.kernel.api.procs._
+import org.neo4j.internal.kernel.api.procs.ProcedureSignature
+import org.neo4j.internal.kernel.api.procs.QualifiedName
+import org.neo4j.internal.kernel.api.procs.UserFunctionSignature
 import org.neo4j.internal.kernel.api.security.LoginContext
 import org.neo4j.kernel.GraphDatabaseQueryService
 import org.neo4j.kernel.api.Kernel
@@ -48,8 +61,9 @@ import org.neo4j.test.TestDatabaseManagementServiceBuilder
 import org.scalatest.matchers.MatchResult
 import org.scalatest.matchers.Matcher
 
-import scala.collection.JavaConverters._
-import scala.collection.Map
+import scala.collection.JavaConverters.asScalaIteratorConverter
+import scala.collection.JavaConverters.iterableAsScalaIterableConverter
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 trait GraphDatabaseTestSupport extends CypherTestSupport with GraphIcing {
   self: CypherFunSuite  =>
@@ -88,11 +102,11 @@ trait GraphDatabaseTestSupport extends CypherTestSupport with GraphIcing {
   }
 
   // Runs code inside of a transaction. Will mark the transaction as successful if no exception is thrown
-  protected def inTestTx[T](f: InternalTransaction => T, txType: Type = Type.`implicit`): T = withTx(f, txType)
+  protected def inTestTx[T](f: InternalTransaction => T, txType: Type = Type.IMPLICIT): T = withTx(f, txType)
 
   protected def inTestTx[T](f: => T): T = inTestTx(_ => f)
 
-  protected def withTx[T](f: InternalTransaction => T, txType: Type = Type.`implicit`): T = {
+  protected def withTx[T](f: InternalTransaction => T, txType: Type = Type.IMPLICIT): T = {
     if (tx == null) {
       graph.withTx(f, txType)
     } else {

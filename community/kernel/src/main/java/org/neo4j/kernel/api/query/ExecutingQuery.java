@@ -22,10 +22,9 @@ package org.neo4j.kernel.api.query;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -45,7 +44,6 @@ import org.neo4j.values.virtual.MapValue;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.atomic.AtomicLongFieldUpdater.newUpdater;
-import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
 
 /**
  * Represents a currently running query.
@@ -62,40 +60,35 @@ public class ExecutingQuery
     private final MapValue rawQueryParameters;
     private final long startTimeNanos;
     private final long startTimestampMillis;
-    private final NamedDatabaseId namedDatabaseId;
-    private final LongSupplier hitsSupplier;
-    private final LongSupplier faultsSupplier;
+    private final Map<String,Object> transactionAnnotationData;
+    private final long threadExecutingTheQueryId;
+    @SuppressWarnings( {"unused", "FieldCanBeLocal"} )
+    private final String threadExecutingTheQueryName;
+    private final SystemNanoClock clock;
+    private final CpuClock cpuClock;
+    private final long cpuTimeNanosWhenQueryStarted;
+
     /** Uses write barrier of {@link #status}. */
+    private CompilerInfo compilerInfo;
     private long compilationCompletedNanos;
     private String obfuscatedQueryText;
     private MapValue obfuscatedQueryParameters;
     private QueryExecutionType.QueryType queryType;
     private Supplier<ExecutionPlanDescription> planDescriptionSupplier;
-    private final long threadExecutingTheQueryId;
-    @SuppressWarnings( {"unused", "FieldCanBeLocal"} )
-    private final String threadExecutingTheQueryName;
-    private final LongSupplier activeLockCount;
-    private final long initialActiveLocks;
-    private final SystemNanoClock clock;
-    private final CpuClock cpuClock;
-    private final long cpuTimeNanosWhenQueryStarted;
-    private final Map<String,Object> transactionAnnotationData;
-    /** Uses write barrier of {@link #status}. */
-    private CompilerInfo compilerInfo;
-    private volatile ExecutingQueryStatus status = SimpleState.planning();
+    private volatile ExecutingQueryStatus status = SimpleState.parsing();
+
     /** Updated through {@link #WAIT_TIME} */
     @SuppressWarnings( "unused" )
     private volatile long waitTimeNanos;
-    private OptionalMemoryTracker memoryTracker = OptionalMemoryTracker.NONE;
 
-    public ExecutingQuery( long queryId, ClientConnectionInfo clientConnection, NamedDatabaseId namedDatabaseId, String username, String queryText,
-            MapValue queryParameters, Map<String,Object> transactionAnnotationData, LongSupplier activeLockCount,
-            LongSupplier hitsSupplier, LongSupplier faultsSupplier,
-            long threadExecutingTheQueryId, String threadExecutingTheQueryName, SystemNanoClock clock, CpuClock cpuClock )
+    private OptionalMemoryTracker memoryTracker;
+    private TransactionBinding transactionBinding = TransactionBinding.EMPTY;
+
+    public ExecutingQuery(
+            long queryId, ClientConnectionInfo clientConnection, String username, String queryText, MapValue queryParameters,
+            Map<String,Object> transactionAnnotationData,
+            long threadExecutingTheQueryId, String threadExecutingTheQueryName, SystemNanoClock clock, CpuClock cpuClock, boolean trackQueryAllocations )
     {
-        this.namedDatabaseId = namedDatabaseId;
-        this.hitsSupplier = hitsSupplier;
-        this.faultsSupplier = faultsSupplier;
         // Capture timestamps first
         this.cpuTimeNanosWhenQueryStarted = cpuClock.cpuTimeNanos( threadExecutingTheQueryId );
         this.startTimeNanos = clock.nanos();
@@ -104,24 +97,101 @@ public class ExecutingQuery
         this.queryId = queryId;
         this.clientConnection = clientConnection;
         this.username = username;
-
         this.rawQueryText = queryText;
         this.rawQueryParameters = queryParameters;
         this.transactionAnnotationData = transactionAnnotationData;
-        this.activeLockCount = activeLockCount;
-        this.initialActiveLocks = activeLockCount.getAsLong();
         this.threadExecutingTheQueryId = threadExecutingTheQueryId;
         this.threadExecutingTheQueryName = threadExecutingTheQueryName;
-        this.cpuClock = cpuClock;
         this.clock = clock;
+        this.cpuClock = cpuClock;
+        this.memoryTracker = trackQueryAllocations ? OptionalMemoryTracker.ZERO : OptionalMemoryTracker.NONE;
+    }
+
+    // NOTE: test/benchmarking constructor
+    public ExecutingQuery(
+            long queryId, ClientConnectionInfo clientConnection, NamedDatabaseId namedDatabaseId, String username, String queryText, MapValue queryParameters,
+            Map<String,Object> transactionAnnotationData, LongSupplier activeLockCount, LongSupplier hitsSupplier, LongSupplier faultsSupplier,
+            long threadExecutingTheQueryId, String threadExecutingTheQueryName, SystemNanoClock clock, CpuClock cpuClock, boolean trackQueryAllocations )
+    {
+        this(
+                queryId,
+                clientConnection,
+                username,
+                queryText,
+                queryParameters,
+                transactionAnnotationData,
+                threadExecutingTheQueryId,
+                threadExecutingTheQueryName,
+                clock,
+                cpuClock,
+                trackQueryAllocations
+        );
+        onTransactionBound( new TransactionBinding( namedDatabaseId, hitsSupplier, faultsSupplier, activeLockCount ) );
+    }
+
+    public static class TransactionBinding
+    {
+        private final NamedDatabaseId namedDatabaseId;
+        private final LongSupplier hitsSupplier;
+        private final LongSupplier faultsSupplier;
+        private final LongSupplier activeLockCount;
+        private final long initialActiveLocks;
+
+        public TransactionBinding( NamedDatabaseId namedDatabaseId,
+                                   LongSupplier hitsSupplier,
+                                   LongSupplier faultsSupplier,
+                                   LongSupplier activeLockCount )
+        {
+            this.namedDatabaseId = namedDatabaseId;
+            this.hitsSupplier = hitsSupplier;
+            this.faultsSupplier = faultsSupplier;
+            this.activeLockCount = activeLockCount;
+            this.initialActiveLocks = activeLockCount.getAsLong();
+        }
+
+        public static final TransactionBinding EMPTY =
+                new TransactionBinding( null, () -> 0L, () -> 0L, () -> 0L );
     }
 
     // update state
+
+<<<<<<< HEAD
+    public void onCompilationCompleted( CompilerInfo compilerInfo,
+                                        QueryExecutionType.QueryType queryType,
+                                        Supplier<ExecutionPlanDescription> planDescriptionSupplier )
+    {
+=======
+    public void onTransactionBound( TransactionBinding transactionBinding )
+    {
+        this.transactionBinding = transactionBinding;
+    }
+
+    public void onObfuscatorReady( QueryObfuscator queryObfuscator )
+    {
+        if ( status != SimpleState.parsing() ) // might get called multiple times due to caching and/or internal queries
+        {
+            return;
+        }
+
+        try
+        {
+            obfuscatedQueryText = queryObfuscator.obfuscateText( rawQueryText );
+            obfuscatedQueryParameters = queryObfuscator.obfuscateParameters( rawQueryParameters );
+        }
+        catch ( Exception ignore )
+        {
+            obfuscatedQueryText = null;
+            obfuscatedQueryParameters = null;
+        }
+
+        this.status = SimpleState.planning();
+    }
 
     public void onCompilationCompleted( CompilerInfo compilerInfo,
                                         QueryExecutionType.QueryType queryType,
                                         Supplier<ExecutionPlanDescription> planDescriptionSupplier )
     {
+>>>>>>> neo4j/4.1
         assertExpectedStatus( SimpleState.planning() );
 
         this.compilerInfo = compilerInfo;
@@ -148,7 +218,13 @@ public class ExecutingQuery
         this.planDescriptionSupplier = null;
         this.queryType = null;
         this.memoryTracker = OptionalMemoryTracker.NONE;
+<<<<<<< HEAD
         this.status = SimpleState.planning();
+=======
+        this.obfuscatedQueryParameters = null;
+        this.obfuscatedQueryText = null;
+        this.status = SimpleState.parsing();
+>>>>>>> neo4j/4.1
     }
 
     public LockTracer lockTracer()
@@ -165,26 +241,30 @@ public class ExecutingQuery
         long waitTimeNanos;
         long currentTimeNanos;
         long cpuTimeNanos;
+        String queryText;
+        MapValue queryParameters;
         do
         {
             status = this.status; // read barrier, must be first
             waitTimeNanos = this.waitTimeNanos; // the reason for the retry loop: don't count the wait time twice
             cpuTimeNanos = cpuClock.cpuTimeNanos( threadExecutingTheQueryId );
             currentTimeNanos = clock.nanos(); // capture the time as close to the snapshot as possible
+            queryText = this.obfuscatedQueryText;
+            queryParameters = this.obfuscatedQueryParameters;
         }
         while ( this.status != status );
         // guarded by barrier - unused if status is planning, stable otherwise
         long compilationCompletedNanos = this.compilationCompletedNanos;
         // guarded by barrier - like compilationCompletedNanos
-        CompilerInfo planner = status.isPlanning() ? null : this.compilerInfo;
+        CompilerInfo planner = status.isParsingOrPlanning() ? null : this.compilerInfo;
         List<ActiveLock> waitingOnLocks = status.isWaitingOnLocks() ? status.waitingOnLocks() : Collections.emptyList();
         // activeLockCount is not atomic to capture, so we capture it after the most sensitive part.
-        long totalActiveLocks = this.activeLockCount.getAsLong();
+        long totalActiveLocks = transactionBinding.activeLockCount.getAsLong();
         // just needs to be captured at some point...
-        PageCounterValues pageCounters = new PageCounterValues( hitsSupplier, faultsSupplier );
+        PageCounterValues pageCounters = new PageCounterValues( transactionBinding.hitsSupplier, transactionBinding.faultsSupplier );
 
         // - at this point we are done capturing the "live" state, and can start computing the snapshot -
-        long compilationTimeNanos = (status.isPlanning() ? currentTimeNanos : compilationCompletedNanos) - startTimeNanos;
+        long compilationTimeNanos = (status.isParsingOrPlanning() ? currentTimeNanos : compilationCompletedNanos) - startTimeNanos;
         long elapsedTimeNanos = currentTimeNanos - startTimeNanos;
         cpuTimeNanos -= cpuTimeNanosWhenQueryStarted;
         waitTimeNanos += status.waitTimeNanos( currentTimeNanos );
@@ -200,8 +280,10 @@ public class ExecutingQuery
                 status.name(),
                 status.toMap( currentTimeNanos ),
                 waitingOnLocks,
-                totalActiveLocks - initialActiveLocks,
-                memoryTracker.totalAllocatedMemory()
+                totalActiveLocks - transactionBinding.initialActiveLocks,
+                memoryTracker.totalAllocatedMemory(),
+                Optional.ofNullable( queryText ),
+                Optional.ofNullable( queryParameters )
         );
     }
 
@@ -253,14 +335,14 @@ public class ExecutingQuery
         return username;
     }
 
-    public String queryText()
+    public String rawQueryText()
     {
-        if ( queryNeedsObfuscation() )
-        {
-            obfuscateQuery();
-            return obfuscatedQueryText;
-        }
         return rawQueryText;
+    }
+
+    public MapValue rawQueryParameters()
+    {
+        return rawQueryParameters;
     }
 
     Supplier<ExecutionPlanDescription> planDescriptionSupplier()
@@ -268,19 +350,9 @@ public class ExecutingQuery
         return planDescriptionSupplier;
     }
 
-    public MapValue queryParameters()
+    public Optional<NamedDatabaseId> databaseId()
     {
-        if ( queryNeedsObfuscation() )
-        {
-            obfuscateQuery();
-            return obfuscatedQueryParameters;
-        }
-        return rawQueryParameters;
-    }
-
-    public NamedDatabaseId databaseId()
-    {
-        return namedDatabaseId;
+        return Optional.ofNullable( transactionBinding.namedDatabaseId );
     }
 
     public long startTimestampMillis()
@@ -336,24 +408,11 @@ public class ExecutingQuery
         status = waiting.previousStatus();
     }
 
-    private boolean queryNeedsObfuscation()
+    private void assertExpectedStatus( ExecutingQueryStatus expectedStatus )
     {
-        return queryType == QueryExecutionType.QueryType.DBMS || queryType == null || namedDatabaseId.equals( NAMED_SYSTEM_DATABASE_ID );
-    }
-
-    private void obfuscateQuery()
-    {
-        if ( obfuscatedQueryText == null )
+        if ( status != expectedStatus )
         {
-            Set<String> passwordParams = new HashSet<>();
-            // security procedures can be run on both user and system database currently
-            this.obfuscatedQueryText = QueryObfuscation.obfuscateText( rawQueryText, passwordParams );
-            if ( namedDatabaseId.equals( NAMED_SYSTEM_DATABASE_ID ) )
-            {
-                // check for system commands
-                this.obfuscatedQueryText = QueryObfuscation.obfuscateSystemCommand( obfuscatedQueryText, passwordParams );
-            }
-            this.obfuscatedQueryParameters = QueryObfuscation.obfuscateParams( rawQueryParameters, passwordParams );
+            throw new IllegalStateException( String.format( "Expected query in '%s' state, actual state is '%s'.", expectedStatus.name(), status.name() ) );
         }
     }
 

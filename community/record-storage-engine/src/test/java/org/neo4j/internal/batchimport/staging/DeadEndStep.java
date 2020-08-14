@@ -20,16 +20,19 @@
 package org.neo4j.internal.batchimport.staging;
 
 import org.neo4j.internal.batchimport.Configuration;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 
 public class DeadEndStep extends ProcessorStep<Object>
 {
     public DeadEndStep( StageControl control )
     {
-        super( control, "END", Configuration.DEFAULT, 1 );
+        super( control, "END", Configuration.DEFAULT, 1, NULL );
     }
 
     @Override
-    protected void process( Object batch, BatchSender sender )
+    protected void process( Object batch, BatchSender sender, PageCursorTracer cursorTracer )
     {
     }
 }

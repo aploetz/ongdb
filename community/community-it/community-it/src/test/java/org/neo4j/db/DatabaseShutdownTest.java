@@ -19,6 +19,7 @@
  */
 package org.neo4j.db;
 
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -42,16 +43,18 @@ import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.lifecycle.LifecycleStatus;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.EphemeralNeo4jLayoutExtension;
 import org.neo4j.test.extension.Inject;
+import org.neo4j.time.SystemNanoClock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -106,24 +109,24 @@ class DatabaseShutdownTest
         @Override
         protected DatabaseManagementService newDatabaseManagementService( Config config, ExternalDependencies dependencies )
         {
-            return new DatabaseManagementServiceFactory( DatabaseInfo.COMMUNITY, CommunityEditionModule::new )
+            return new DatabaseManagementServiceFactory( DbmsInfo.COMMUNITY, CommunityEditionModule::new )
             {
 
                 @Override
                 protected GlobalModule createGlobalModule( Config config, ExternalDependencies dependencies )
                 {
-                    GlobalModule globalModule = new GlobalModule( config, databaseInfo, dependencies )
+                    GlobalModule globalModule = new GlobalModule( config, dbmsInfo, dependencies )
                     {
                         @Override
                         protected PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, LogService logging, Tracers tracers,
-                                JobScheduler jobScheduler )
+                                JobScheduler jobScheduler, SystemNanoClock clock, MemoryPools memoryPools )
                         {
-                            PageCache pageCache = super.createPageCache( fileSystem, config, logging, tracers, jobScheduler );
+                            PageCache pageCache = super.createPageCache( fileSystem, config, logging, tracers, jobScheduler, clock, memoryPools );
                             return new DelegatingPageCache( pageCache )
                             {
                                 @Override
-                                public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize, OpenOption... openOptions )
-                                        throws IOException
+                                public PagedFile map( File file, VersionContextSupplier versionContextSupplier, int pageSize,
+                                        ImmutableSet<OpenOption> openOptions ) throws IOException
                                 {
                                     PagedFile pagedFile = super.map( file, versionContextSupplier, pageSize, openOptions );
                                     return new DelegatingPagedFile( pagedFile )

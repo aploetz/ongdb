@@ -9,7 +9,11 @@
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-kernel</artifactId>
+=======
+    <artifactId>neo4j-kernel</artifactId>
+>>>>>>> neo4j/4.1
 
     <name>ONgDB - Graph Database Kernel</name>
     <description>
@@ -24,9 +28,10 @@
         <licensing.prepend.text>licensing/notice-gpl-prefix.txt</licensing.prepend.text>
         <moduleName>org.neo4j.kernel</moduleName>
         <default.jupiter.test.mode>concurrent</default.jupiter.test.mode>
+        <test.runner.jvm.settings.additional>
+            -javaagent:${settings.localRepository}/com/github/jbellis/jamm/${jamm.version}/jamm-${jamm.version}.jar
+        </test.runner.jvm.settings.additional>
     </properties>
-
-    <packaging>jar</packaging>
 
     <scm>
         <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
@@ -54,6 +59,7 @@
         </license>
     </licenses>
 
+<<<<<<< HEAD
     <build>
         <plugins>
             <plugin>
@@ -73,6 +79,8 @@
         </plugins>
     </build>
 
+=======
+>>>>>>> neo4j/4.1
     <dependencies>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
@@ -89,6 +97,7 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-procedure-api</artifactId>
             <version>${project.version}</version>
@@ -96,6 +105,10 @@
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-storage-engine-api</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-storage-engine-api</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -124,6 +137,7 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-csv</artifactId>
             <version>${project.version}</version>
@@ -131,6 +145,10 @@
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-logging</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-logging</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -159,6 +177,7 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-ssl</artifactId>
             <version>${project.version}</version>
@@ -166,6 +185,10 @@
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-id-generator</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-id-generator</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -190,6 +213,14 @@
             <groupId>org.jctools</groupId>
             <artifactId>jctools-core</artifactId>
         </dependency>
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>com.github.jbellis</groupId>
+            <artifactId>jamm</artifactId>
+            <scope>test</scope>
+        </dependency>
+>>>>>>> neo4j/4.1
 
         <!-- test dependencies -->
         <dependency>
@@ -199,6 +230,10 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.hamcrest</groupId>
@@ -269,8 +304,20 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-lucene-index</artifactId>
+=======
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-label-index</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-lucene-index</artifactId>
+>>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

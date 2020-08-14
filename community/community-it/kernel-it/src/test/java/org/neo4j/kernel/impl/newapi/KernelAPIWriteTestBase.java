@@ -67,10 +67,20 @@ public abstract class KernelAPIWriteTestBase<WriteSupport extends KernelAPIWrite
         if ( testSupport == null )
         {
             testSupport = newTestSupport();
-            testSupport.setup( testDirectory.homeDir() );
+            testSupport.setup( testDirectory.homeDir(), this::createSystemGraph );
             graphDb = testSupport.graphBackdoor();
         }
         testSupport.clearGraph();
+    }
+
+    /**
+     * Setup privileges in the system graph which all test in the class will be using. The graph is only built once,
+     * regardless of the number of tests.
+     *
+     * @param graphDb a graph API which should be used to build the system test graph
+     */
+    public void createSystemGraph( GraphDatabaseService graphDb )
+    {
     }
 
     protected KernelTransaction beginTransaction() throws TransactionFailureException
@@ -81,7 +91,11 @@ public abstract class KernelAPIWriteTestBase<WriteSupport extends KernelAPIWrite
     protected KernelTransaction beginTransaction( LoginContext loginContext ) throws TransactionFailureException
     {
         Kernel kernel = testSupport.kernelToTest();
+<<<<<<< HEAD
         return kernel.beginTransaction( KernelTransaction.Type.implicit, loginContext );
+=======
+        return kernel.beginTransaction( KernelTransaction.Type.IMPLICIT, loginContext );
+>>>>>>> neo4j/4.1
     }
 
     @AfterAll

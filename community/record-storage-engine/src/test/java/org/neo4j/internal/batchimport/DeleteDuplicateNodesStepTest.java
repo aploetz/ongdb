@@ -23,19 +23,21 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.neo4j.collection.PrimitiveLongCollections;
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.batchimport.staging.SimpleStageControl;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.AbstractDynamicStore;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
@@ -54,8 +56,12 @@ import org.neo4j.test.extension.RandomExtension;
 import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 import org.neo4j.test.rule.RandomRule;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.neo4j.collection.PrimitiveLongCollections.iterator;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @EphemeralPageCacheExtension
 @EphemeralNeo4jLayoutExtension
@@ -77,7 +83,7 @@ class DeleteDuplicateNodesStepTest
     void before()
     {
         var storeFactory = new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fs, immediate() ),
-                pageCache, fs, NullLogProvider.getInstance() );
+                pageCache, fs, NullLogProvider.getInstance(), PageCacheTracer.NULL );
         neoStores = storeFactory.openAllNeoStores( true );
     }
 
@@ -107,7 +113,7 @@ class DeleteDuplicateNodesStepTest
         long[] duplicateNodeIds = randomNodes( ids );
         SimpleStageControl control = new SimpleStageControl();
         try ( DeleteDuplicateNodesStep step = new DeleteDuplicateNodesStep( control, Configuration.DEFAULT,
-                PrimitiveLongCollections.iterator( duplicateNodeIds ), neoStores.getNodeStore(), neoStores.getPropertyStore(), monitor ) )
+                iterator( duplicateNodeIds ), neoStores.getNodeStore(), neoStores.getPropertyStore(), monitor, PageCacheTracer.NULL ) )
         {
             control.steps( step );
             startAndAwaitCompletionOf( step );
@@ -124,18 +130,18 @@ class DeleteDuplicateNodesStepTest
             expectedNodes += stride;
 
             // Verify node record
-            assertEquals( expectedToBeInUse, neoStores.getNodeStore().isInUse( entity.node.getId() ) );
+            assertEquals( expectedToBeInUse, neoStores.getNodeStore().isInUse( entity.node.getId(), NULL ) );
 
             // Verify label records
             for ( DynamicRecord labelRecord : entity.node.getDynamicLabelRecords() )
             {
-                assertEquals( expectedToBeInUse, neoStores.getNodeStore().getDynamicLabelStore().isInUse( labelRecord.getId() ) );
+                assertEquals( expectedToBeInUse, neoStores.getNodeStore().getDynamicLabelStore().isInUse( labelRecord.getId(), NULL ) );
             }
 
             // Verify property records
             for ( PropertyRecord propertyRecord : entity.properties )
             {
-                assertEquals( expectedToBeInUse, neoStores.getPropertyStore().isInUse( propertyRecord.getId() ) );
+                assertEquals( expectedToBeInUse, neoStores.getPropertyStore().isInUse( propertyRecord.getId(), NULL ) );
                 for ( PropertyBlock property : propertyRecord )
                 {
                     // Verify property dynamic value records
@@ -152,7 +158,7 @@ class DeleteDuplicateNodesStepTest
                             break;
                         default: throw new IllegalArgumentException( propertyRecord + " " + property );
                         }
-                        assertEquals( expectedToBeInUse, valueStore.isInUse( valueRecord.getId() ) );
+                        assertEquals( expectedToBeInUse, valueStore.isInUse( valueRecord.getId(), NULL ) );
                     }
                     expectedProperties += stride;
                 }
@@ -161,6 +167,34 @@ class DeleteDuplicateNodesStepTest
 
         assertEquals( expectedNodes, monitor.nodesImported() );
         assertEquals( expectedProperties, monitor.propertiesImported() );
+    }
+
+    @Test
+    void tracePageCacheAccessOnNodeDeduplication() throws Exception
+    {
+        // given
+        Ids[] ids = new Ids[10];
+        DataImporter.Monitor monitor = new DataImporter.Monitor();
+        for ( int i = 0; i < ids.length; i++ )
+        {
+            ids[i] = createNode( monitor, neoStores, 1, 1 );
+        }
+
+        long[] duplicateNodeIds = randomNodes( ids );
+        SimpleStageControl control = new SimpleStageControl();
+        var cacheTracer = new DefaultPageCacheTracer();
+        try ( DeleteDuplicateNodesStep step = new DeleteDuplicateNodesStep( control, Configuration.DEFAULT,
+                iterator( duplicateNodeIds ), neoStores.getNodeStore(), neoStores.getPropertyStore(), monitor, cacheTracer ) )
+        {
+            control.steps( step );
+            startAndAwaitCompletionOf( step );
+        }
+        control.assertHealthy();
+
+        int expectedEventNumber = duplicateNodeIds.length * 2; // at least 2 events per node is expected since property size is dynamic random thingy
+        assertThat( cacheTracer.pins() ).isGreaterThanOrEqualTo( expectedEventNumber );
+        assertThat( cacheTracer.unpins() ).isGreaterThanOrEqualTo( expectedEventNumber );
+        assertThat( cacheTracer.hits() ).isGreaterThanOrEqualTo( expectedEventNumber );
     }
 
     private long[] randomNodes( Ids[] ids )
@@ -200,15 +234,15 @@ class DeleteDuplicateNodesStepTest
         PropertyStore propertyStore = neoStores.getPropertyStore();
         NodeStore nodeStore = neoStores.getNodeStore();
         NodeRecord nodeRecord = nodeStore.newRecord();
-        nodeRecord.setId( nodeStore.nextId() );
+        nodeRecord.setId( nodeStore.nextId( NULL ) );
         nodeRecord.setInUse( true );
-        NodeLabelsField.parseLabelsField( nodeRecord ).put( labelIds( labelCount ), nodeStore, nodeStore.getDynamicLabelStore() );
+        NodeLabelsField.parseLabelsField( nodeRecord ).put( labelIds( labelCount ), nodeStore, nodeStore.getDynamicLabelStore(), NULL, INSTANCE );
         PropertyRecord[] propertyRecords = createPropertyChain( nodeRecord, propertyCount, propertyStore );
         if ( propertyRecords.length > 0 )
         {
             nodeRecord.setNextProp( propertyRecords[0].getId() );
         }
-        nodeStore.updateRecord( nodeRecord );
+        nodeStore.updateRecord( nodeRecord, NULL );
         monitor.nodesImported( 1 );
         monitor.propertiesImported( propertyCount );
         return new Ids( nodeRecord, propertyRecords );
@@ -223,12 +257,12 @@ class DeleteDuplicateNodesStepTest
         for ( int i = 0; i < numberOfProperties; i++ )
         {
             PropertyBlock block = new PropertyBlock();
-            propertyStore.encodeValue( block, i, random.nextValue() );
+            propertyStore.encodeValue( block, i, random.nextValue(), NULL, INSTANCE );
             if ( current == null || block.getValueBlocks().length > space )
             {
                 PropertyRecord next = propertyStore.newRecord();
                 nodeRecord.setIdTo( next );
-                next.setId( propertyStore.nextId() );
+                next.setId( propertyStore.nextId( NULL ) );
                 if ( current != null )
                 {
                     next.setPrevProp( current.getId() );
@@ -242,7 +276,7 @@ class DeleteDuplicateNodesStepTest
             current.addPropertyBlock( block );
             space -= block.getValueBlocks().length;
         }
-        records.forEach( propertyStore::updateRecord );
+        records.forEach( record -> propertyStore.updateRecord( record, NULL ) );
         return records.toArray( new PropertyRecord[0] );
     }
 

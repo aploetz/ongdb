@@ -19,6 +19,8 @@
  */
 package org.neo4j.internal.kernel.api.security;
 
+import java.util.Locale;
+
 public enum PrivilegeAction
 {
     // Database actions
@@ -31,8 +33,14 @@ public enum PrivilegeAction
     /** Read properties of element */
     READ,
 
-    /** Create, update and delete elements and properties */
-    WRITE,
+    /** Set and remove labels from nodes */
+    SET_LABEL,
+    REMOVE_LABEL,
+
+    CREATE_ELEMENT,
+    DELETE_ELEMENT,
+
+    SET_PROPERTY,
 
     /** Execute procedure/view with elevated access */
     EXECUTE,
@@ -50,9 +58,9 @@ public enum PrivilegeAction
     STOP_DATABASE,
 
     SHOW_TRANSACTION,
-    KILL_TRANSACTION,
+    TERMINATE_TRANSACTION,
     SHOW_CONNECTION,
-    KILL_CONNECTION,
+    TERMINATE_CONNECTION,
 
     // DBMS actions
     CREATE_DATABASE,
@@ -60,7 +68,8 @@ public enum PrivilegeAction
 
     SHOW_USER,
     CREATE_USER,
-    ALTER_USER,
+    SET_USER_STATUS,
+    SET_PASSWORDS,
     DROP_USER,
 
     SHOW_ROLE,
@@ -70,27 +79,29 @@ public enum PrivilegeAction
     REMOVE_ROLE,
 
     SHOW_PRIVILEGE,
-    GRANT_PRIVILEGE,
-    DENY_PRIVILEGE,
-    REVOKE_PRIVILEGE,
+    ASSIGN_PRIVILEGE,
+    REMOVE_PRIVILEGE,
+
+    ADMIN_PROCEDURE,
 
     // Some grouping actions that represent super-sets of other actions
 
     ADMIN
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
-                    return USER_MANAGEMENT.satisfies( action ) ||
-                           ROLE_MANAGEMENT.satisfies( action ) ||
-                           PRIVILEGE_MANAGEMENT.satisfies( action ) ||
+                    return DBMS_ACTIONS.satisfies( action ) ||
                            TRANSACTION_MANAGEMENT.satisfies( action ) ||
-                           DATABASE_MANAGEMENT.satisfies( action ) ||
+                           START_DATABASE.satisfies( action ) ||
+                           STOP_DATABASE.satisfies( action ) ||
                            this == action;
                 }
             },
 
     TOKEN
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
@@ -105,8 +116,9 @@ public enum PrivilegeAction
                 }
             },
 
-    SCHEMA
+    CONSTRAINT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     return INDEX.satisfies( action ) || CONSTRAINT.satisfies( action ) || this == action;
@@ -130,6 +142,10 @@ public enum PrivilegeAction
 
     INDEX
             {
+<<<<<<< HEAD
+=======
+                @Override
+>>>>>>> neo4j/4.1
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
@@ -145,14 +161,13 @@ public enum PrivilegeAction
 
     DATABASE_MANAGEMENT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
                     {
                     case CREATE_DATABASE:
                     case DROP_DATABASE:
-                    case START_DATABASE:
-                    case STOP_DATABASE:
                         return true;
                     default:
                         return this == action;
@@ -162,14 +177,15 @@ public enum PrivilegeAction
 
     TRANSACTION_MANAGEMENT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
                     {
                     case SHOW_TRANSACTION:
-                    case KILL_TRANSACTION:
+                    case TERMINATE_TRANSACTION:
                     case SHOW_CONNECTION:
-                    case KILL_CONNECTION:
+                    case TERMINATE_CONNECTION:
                         return true;
                     default:
                         return this == action;
@@ -179,14 +195,30 @@ public enum PrivilegeAction
 
     USER_MANAGEMENT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
                     {
                     case SHOW_USER:
                     case CREATE_USER:
-                    case ALTER_USER:
                     case DROP_USER:
+                        return true;
+                    default:
+                        return ALTER_USER.satisfies( action ) || this == action;
+                    }
+                }
+            },
+
+    ALTER_USER
+            {
+                @Override
+                public boolean satisfies( PrivilegeAction action )
+                {
+                    switch ( action )
+                    {
+                    case SET_USER_STATUS:
+                    case SET_PASSWORDS:
                         return true;
                     default:
                         return this == action;
@@ -196,6 +228,7 @@ public enum PrivilegeAction
 
     ROLE_MANAGEMENT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
@@ -214,14 +247,70 @@ public enum PrivilegeAction
 
     PRIVILEGE_MANAGEMENT
             {
+                @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
                     {
                     case SHOW_PRIVILEGE:
-                    case GRANT_PRIVILEGE:
-                    case DENY_PRIVILEGE:
-                    case REVOKE_PRIVILEGE:
+                    case ASSIGN_PRIVILEGE:
+                    case REMOVE_PRIVILEGE:
+                        return true;
+                    default:
+                        return this == action;
+                    }
+                }
+            },
+
+    /** MATCH element and read labels and properties */
+    MATCH
+            {
+                @Override
+                public boolean satisfies( PrivilegeAction action )
+                {
+                    switch ( action )
+                    {
+                    case READ:
+                    case TRAVERSE:
+                        return true;
+                    default:
+                        return this == action;
+                    }
+                }
+            },
+
+    /** Create, update and delete elements and properties */
+    WRITE
+            {
+                @Override
+                public boolean satisfies( PrivilegeAction action )
+                {
+                    switch ( action )
+                    {
+                    case SET_LABEL:
+                    case REMOVE_LABEL:
+                    case CREATE_ELEMENT:
+                    case DELETE_ELEMENT:
+                    case SET_PROPERTY:
+                        return true;
+                    default:
+                        return this == action;
+                    }
+                }
+    },
+
+    MERGE
+            {
+                @Override
+                public boolean satisfies( PrivilegeAction action )
+                {
+                    switch ( action )
+                    {
+                    case MATCH:
+                    case TRAVERSE:
+                    case READ:
+                    case CREATE_ELEMENT:
+                    case SET_PROPERTY:
                         return true;
                     default:
                         return this == action;
@@ -237,11 +326,11 @@ public enum PrivilegeAction
                     switch ( action )
                     {
                     case READ:
-                    case WRITE:
                     case TRAVERSE:
+                    case MATCH:
                         return true;
                     default:
-                        return this == action;
+                        return WRITE.satisfies( action ) || this == action;
                     }
                 }
             },
@@ -251,23 +340,31 @@ public enum PrivilegeAction
                 @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
-                    switch ( action )
-                    {
-                    case ACCESS:
-                    case EXECUTE:
-                        return true;
-                    default:
-                        return SCHEMA.satisfies( action ) ||
-                               TOKEN.satisfies( action ) ||
-                               GRAPH_ACTIONS.satisfies( action ) ||
-                               this == action;
-                    }
+                    return action == PrivilegeAction.ACCESS ||
+                           INDEX.satisfies( action ) ||
+                           CONSTRAINT.satisfies( action ) ||
+                           TOKEN.satisfies( action ) ||
+                           this == action;
+                }
+            },
+
+    DBMS_ACTIONS
+            {
+                @Override
+                public boolean satisfies( PrivilegeAction action )
+                {
+                    return ROLE_MANAGEMENT.satisfies( action ) ||
+                           USER_MANAGEMENT.satisfies( action ) ||
+                           DATABASE_MANAGEMENT.satisfies( action ) ||
+                           PRIVILEGE_MANAGEMENT.satisfies( action ) ||
+                           ADMIN_PROCEDURE == action ||
+                           this == action;
                 }
             };
 
     /**
-     * @return true if this action satifies the specified action. For example any broad-scope action satisfies many other actions, but a narrow scope action
-     * satifies only itself.
+     * @return true if this action satisfies the specified action. For example any broad-scope action satisfies many other actions, but a narrow scope action
+     * satisfies only itself.
      */
     public boolean satisfies( PrivilegeAction action )
     {
@@ -277,7 +374,19 @@ public enum PrivilegeAction
     @Override
     public String toString()
     {
-        return super.toString().toLowerCase();
+        return super.toString().toLowerCase( Locale.ROOT );
+    }
+
+    public static PrivilegeAction from( String name )
+    {
+        try
+        {
+            return PrivilegeAction.valueOf( name.toUpperCase( Locale.ROOT ) );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            return null;
+        }
     }
 
     public static PrivilegeAction from( String name )

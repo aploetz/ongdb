@@ -38,11 +38,23 @@ public abstract class TokenRecord extends AbstractBaseRecord
         super( id );
     }
 
+    public TokenRecord( TokenRecord other )
+    {
+        super( other );
+        this.nameId = other.nameId;
+        this.nameRecords = new ArrayList<>( other.nameRecords.size() );
+        for ( DynamicRecord record : other.nameRecords )
+        {
+            this.nameRecords.add( new DynamicRecord( record ) );
+        }
+        this.internal = other.internal;
+    }
+
     public TokenRecord initialize( boolean inUse, int nameId )
     {
         super.initialize( inUse );
         this.nameId = nameId;
-        this.nameRecords = new ArrayList<>();
+        this.nameRecords = new ArrayList<>( 1 );
         return this;
     }
 
@@ -123,7 +135,7 @@ public abstract class TokenRecord extends AbstractBaseRecord
     @Override
     public String toString()
     {
-        StringBuilder buf = new StringBuilder( simpleName() + '[' );
+        StringBuilder buf = new StringBuilder().append( simpleName() ).append( '[' );
         buf.append( getId() ).append( ',' ).append( inUse() ? "in" : "no" ).append( " use" );
         buf.append( ",nameId=" ).append( nameId );
         buf.append( ",internal=" ).append( internal );
@@ -144,6 +156,7 @@ public abstract class TokenRecord extends AbstractBaseRecord
     {
         // default: nothing additional
     }
+<<<<<<< HEAD
 
     @Override
     public TokenRecord clone()
@@ -156,4 +169,6 @@ public abstract class TokenRecord extends AbstractBaseRecord
         }
         return clone;
     }
+=======
+>>>>>>> neo4j/4.1
 }

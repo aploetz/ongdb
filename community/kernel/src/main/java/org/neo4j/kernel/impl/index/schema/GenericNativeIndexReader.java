@@ -28,11 +28,11 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.IndexQuery.ExactPredicate;
 import org.neo4j.internal.kernel.api.IndexQuery.RangePredicate;
 import org.neo4j.internal.kernel.api.IndexQuery.StringPrefixPredicate;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.QueryContext;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
-import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.api.index.BridgingIndexProgressor;
+import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.impl.index.schema.config.IndexSpecificSpaceFillingCurveSettings;
 import org.neo4j.values.storable.CoordinateReferenceSystem;
 import org.neo4j.values.storable.Value;
@@ -72,25 +72,26 @@ class GenericNativeIndexReader extends NativeIndexReader<GenericKey,NativeIndexV
     }
 
     @Override
-    void validateQuery( IndexOrder indexOrder, IndexQuery[] predicates )
+    void validateQuery( IndexQueryConstraints constraints, IndexQuery[] predicates )
     {
-        QueryValidator.validateOrder( GenericNativeIndexProvider.CAPABILITY, indexOrder, predicates );
+        QueryValidator.validateOrder( GenericNativeIndexProvider.CAPABILITY, constraints.order(), predicates );
         QueryValidator.validateCompositeQuery( predicates );
     }
 
     @Override
-    public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
+    public void query( QueryContext context, IndexProgressor.EntityValueClient client, IndexQueryConstraints constraints,
+            IndexQuery... query )
     {
         IndexQuery.GeometryRangePredicate geometryRangePredicate = getGeometryRangePredicateIfAny( query );
         if ( geometryRangePredicate != null )
         {
-            validateQuery( indexOrder, query );
+            validateQuery( constraints, query );
             try
             {
                 // If there's a GeometryRangeQuery among the predicates then this query changes from a straight-forward: build from/to and seek...
                 // into a query that is split into multiple sub-queries. Predicates both before and after will have to be accompanied each sub-query.
                 BridgingIndexProgressor multiProgressor = new BridgingIndexProgressor( client, descriptor.schema().getPropertyIds() );
-                client.initialize( descriptor, multiProgressor, query, indexOrder, needsValues, false );
+                client.initialize( descriptor, multiProgressor, query, constraints, false );
                 double[] from = geometryRangePredicate.from() == null ? null : geometryRangePredicate.from().coordinate();
                 double[] to = geometryRangePredicate.to() == null ? null : geometryRangePredicate.to().coordinate();
                 CoordinateReferenceSystem crs = geometryRangePredicate.crs();
@@ -104,18 +105,18 @@ class GenericNativeIndexReader extends NativeIndexReader<GenericKey,NativeIndexV
                     GenericKey treeKeyTo = layout.newKey();
                     initializeFromToKeys( treeKeyFrom, treeKeyTo );
                     boolean needFiltering = initializeRangeForGeometrySubQuery( treeKeyFrom, treeKeyTo, query, crs, range );
-                    startSeekForInitializedRange( multiProgressor, treeKeyFrom, treeKeyTo, query, indexOrder, needFiltering, needsValues );
+                    startSeekForInitializedRange( multiProgressor, treeKeyFrom, treeKeyTo, query, constraints, needFiltering, context.cursorTracer() );
                 }
             }
             catch ( IllegalArgumentException e )
             {
                 // Invalid query ranges will cause this state (eg. min>max)
-                client.initialize( descriptor, IndexProgressor.EMPTY, query, indexOrder, needsValues, false );
+                client.initialize( descriptor, IndexProgressor.EMPTY, query, constraints, false );
             }
         }
         else
         {
-            super.query( context, client, indexOrder, needsValues, query );
+            super.query( context, client, constraints, query );
         }
     }
 

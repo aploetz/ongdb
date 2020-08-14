@@ -30,6 +30,7 @@ import java.lang.annotation.Target;
  * <li>Any external applications must only use types that are explicitly marked with {@code PublicApi}</li>
  */
 @Target( {ElementType.TYPE} )
+@Retention( RetentionPolicy.RUNTIME )
 public @interface PublicApi
 {
 }

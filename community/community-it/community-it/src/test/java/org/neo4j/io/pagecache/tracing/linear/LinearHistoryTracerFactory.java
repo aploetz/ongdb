@@ -28,7 +28,6 @@ public class LinearHistoryTracerFactory
     public static LinearTracers pageCacheTracer()
     {
         LinearHistoryTracer tracer = new LinearHistoryTracer();
-        return new LinearTracers( new LinearHistoryPageCacheTracer( tracer ),
-                () -> new LinearHistoryPageCursorTracer( tracer ), tracer );
+        return new LinearTracers( new LinearHistoryPageCacheTracer( tracer ), tracer );
     }
 }

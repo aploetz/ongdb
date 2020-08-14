@@ -19,8 +19,8 @@
  */
 package org.neo4j.kernel.api.impl.fulltext;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -31,19 +31,17 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.test.Race;
-import org.neo4j.test.rule.RepeatRule;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.graphdb.schema.IndexType.FULLTEXT;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 
 /**
- * Concurrent updates and index changes should result in valid state, and not create conflicts or exceptions during
- * commit.
+ * Concurrent updates and index changes should result in valid state, and not create conflicts or exceptions during commit.
  */
-public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSupport
+class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSupport
 {
     private final int aliceThreads = 1;
     private final int bobThreads = 1;
@@ -52,13 +50,7 @@ public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSuppo
     private CountDownLatch aliceLatch = new CountDownLatch( 2 );
     private CountDownLatch bobLatch = new CountDownLatch( 2 );
 
-    @Override
-    protected RepeatRule createRepeatRule()
-    {
-        return new RepeatRule( false, 1 );
-    }
-
-    @Before
+    @BeforeEach
     public void createRace()
     {
         race = new Race();
@@ -87,9 +79,9 @@ public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSuppo
         {
             KernelTransaction ktx = kernelTransaction( tx );
             IndexReadSession index = ktx.dataRead().indexReadSession( ktx.schemaRead().indexGetForName( "nodes" ) );
-            try ( NodeValueIndexCursor bobCursor = ktx.cursors().allocateNodeValueIndexCursor() )
+            try ( NodeValueIndexCursor bobCursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() ) )
             {
-                ktx.dataRead().nodeIndexSeek( index, bobCursor, IndexOrder.NONE, false, IndexQuery.fulltextSearch( "bob" ) );
+                ktx.dataRead().nodeIndexSeek( index, bobCursor, unconstrained(), IndexQuery.fulltextSearch( "bob" ) );
                 int bobCount = 0;
                 while ( bobCursor.next() )
                 {
@@ -97,9 +89,9 @@ public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSuppo
                 }
                 assertEquals( bobThreads * nodesCreatedPerThread, bobCount );
             }
-            try ( NodeValueIndexCursor aliceCursor = ktx.cursors().allocateNodeValueIndexCursor() )
+            try ( NodeValueIndexCursor aliceCursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() ) )
             {
-                ktx.dataRead().nodeIndexSeek( index, aliceCursor, IndexOrder.NONE, false, IndexQuery.fulltextSearch( "alice" ) );
+                ktx.dataRead().nodeIndexSeek( index, aliceCursor, unconstrained(), IndexQuery.fulltextSearch( "alice" ) );
                 int aliceCount = 0;
                 while ( aliceCursor.next() )
                 {
@@ -151,7 +143,7 @@ public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSuppo
     }
 
     @Test
-    public void labelledNodesCoreAPI() throws Throwable
+    void labelledNodesCoreAPI() throws Throwable
     {
         createInitialIndex();
 
@@ -170,7 +162,7 @@ public class ConcurrentLuceneFulltextUpdaterTest extends LuceneFulltextTestSuppo
     }
 
     @Test
-    public void labelledNodesCypherCurrent() throws Throwable
+    void labelledNodesCypherCurrent() throws Throwable
     {
         createInitialIndex();
 

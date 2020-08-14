@@ -34,13 +34,14 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.helpers.collection.LongRange;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.MyRelTypes;
 import org.neo4j.kernel.impl.store.RelationshipStore;
-import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
 
 class RelationshipChainCheckerTest extends CheckerTestBase
 {
@@ -116,10 +117,10 @@ class RelationshipChainCheckerTest extends CheckerTestBase
             relationship.setFirstNode( set.longIterator().next() );
         }, report ->
         {
-            report.targetNextReferencesOtherNodes( any() );
+            report.sourceNextDoesNotReferenceBack( any() );
             report.sourceNextReferencesOtherNodes( any() );
-            report.sourcePrevDoesNotReferenceBack( any() );
             report.sourcePrevReferencesOtherNodes( any() );
+            report.targetPrevReferencesOtherNodes( any() );
         } );
     }
 
@@ -134,10 +135,10 @@ class RelationshipChainCheckerTest extends CheckerTestBase
             relationship.setSecondNode( set.longIterator().next() );
         }, report ->
         {
-            report.sourceNextReferencesOtherNodes( any() );
+            report.targetNextDoesNotReferenceBack( any() );
             report.targetNextReferencesOtherNodes( any() );
             report.targetPrevReferencesOtherNodes( any() );
-            report.targetPrevDoesNotReferenceBack( any() );
+            report.sourcePrevReferencesOtherNodes( any() );
         } );
     }
 
@@ -190,9 +191,10 @@ class RelationshipChainCheckerTest extends CheckerTestBase
 
         RelationshipStore relationshipStore = context( numberOfThreads() ).neoStores.getRelationshipStore();
         RelationshipRecord arbitraryRelationship =
-                relationshipStore.getRecord( relationshipIds[relationshipIds.length / 2], relationshipStore.newRecord(), RecordLoad.NORMAL );
+                relationshipStore.getRecord( relationshipIds[relationshipIds.length / 2], relationshipStore.newRecord(), NORMAL,
+                        PageCursorTracer.NULL );
         vandal.accept( arbitraryRelationship );
-        relationshipStore.updateRecord( arbitraryRelationship );
+        relationshipStore.updateRecord( arbitraryRelationship, PageCursorTracer.NULL );
 
         // when
         check();
@@ -223,13 +225,13 @@ class RelationshipChainCheckerTest extends CheckerTestBase
             tx.commit();
         }
 
-        try ( AutoCloseable tx = tx() )
+        try ( var tx = tx() )
         {
-            RelationshipRecord first = relationshipStore.getRecord( firstRelationshipId, relationshipStore.newRecord(), RecordLoad.NORMAL );
-            RelationshipRecord second = relationshipStore.getRecord( secondRelationshipId, relationshipStore.newRecord(), RecordLoad.NORMAL );
+            RelationshipRecord first = relationshipStore.getRecord( firstRelationshipId, relationshipStore.newRecord(), NORMAL, PageCursorTracer.NULL );
+            RelationshipRecord second = relationshipStore.getRecord( secondRelationshipId, relationshipStore.newRecord(), NORMAL, PageCursorTracer.NULL );
             vandal.accept( first, second );
-            relationshipStore.updateRecord( first );
-            relationshipStore.updateRecord( second );
+            relationshipStore.updateRecord( first, PageCursorTracer.NULL );
+            relationshipStore.updateRecord( second, PageCursorTracer.NULL );
         }
 
         // when

@@ -19,28 +19,17 @@
  */
 package org.neo4j.cypher
 
-import java.lang.Boolean.TRUE
-import java.util.Optional
-
-import org.neo4j.configuration.GraphDatabaseSettings
-import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
-import org.neo4j.dbms.database.DatabaseContext
-import org.neo4j.graphdb.config.Setting
+import org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME
 import org.neo4j.kernel.api.security.AuthManager
-
-import scala.collection.Map
 
 abstract class CommunityAdministrationCommandAcceptanceTestBase extends ExecutionEngineFunSuite with GraphDatabaseTestSupport {
 
-  def authManager: AuthManager = graph.getDependencyResolver.resolveDependency(classOf[AuthManager])
-
-  override def databaseConfig(): Map[Setting[_], Object] = Map(GraphDatabaseSettings.auth_enabled -> TRUE)
-
-  def selectDatabase(name: String): Unit = {
-    graphOps = managementService.database(name)
-    graph = new GraphDatabaseCypherService(graphOps)
-    eengine = ExecutionEngineHelper.createEngine(graph)
+  override protected def initTest() {
+    super.initTest()
+    selectDatabase(SYSTEM_DATABASE_NAME)
   }
+
+  def authManager: AuthManager = graph.getDependencyResolver.resolveDependency(classOf[AuthManager])
 
   def assertFailure(command: String, errorMsg: String): Unit = {
     the[Exception] thrownBy {

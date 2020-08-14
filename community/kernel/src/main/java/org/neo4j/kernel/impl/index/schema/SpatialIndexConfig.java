@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.neo4j.gis.spatial.index.Envelope;
 import org.neo4j.graphdb.schema.IndexSettingImpl;
+import org.neo4j.graphdb.schema.IndexSettingUtil;
 import org.neo4j.internal.schema.IndexConfig;
 import org.neo4j.kernel.impl.index.schema.config.SpaceFillingCurveSettings;
 import org.neo4j.values.storable.CoordinateReferenceSystem;
@@ -63,9 +64,8 @@ public final class SpatialIndexConfig
 
     public static void addSpatialConfig( Map<String,Value> map, CoordinateReferenceSystem crs, double[] min, double[] max )
     {
-        String crsName = crs.getName();
-        String minKey = IndexConfig.spatialMinSettingForCrs( crs ).getSettingName();
-        String maxKey = IndexConfig.spatialMaxSettingForCrs( crs ).getSettingName();
+        String minKey = IndexSettingUtil.spatialMinSettingForCrs( crs ).getSettingName();
+        String maxKey = IndexSettingUtil.spatialMaxSettingForCrs( crs ).getSettingName();
         map.put( minKey, Values.doubleArray( min ) );
         map.put( maxKey, Values.doubleArray( max ) );
     }
@@ -82,9 +82,9 @@ public final class SpatialIndexConfig
     {
         Map<String,Value> spatialConfig = new HashMap<>();
         addSpatialConfig( spatialConfig, crs, settings );
-        for ( String key : spatialConfig.keySet() )
+        for ( var entry : spatialConfig.entrySet() )
         {
-            indexConfig = indexConfig.withIfAbsent( key, spatialConfig.get( key ) );
+            indexConfig = indexConfig.withIfAbsent( entry.getKey(), entry.getValue() );
         }
         return indexConfig;
     }
@@ -110,8 +110,8 @@ public final class SpatialIndexConfig
 
     private static SpaceFillingCurveSettings settingFromIndexConfig( IndexConfig indexConfig, CoordinateReferenceSystem crs )
     {
-        final double[] min = asDoubleArray( indexConfig.get( IndexConfig.spatialMinSettingForCrs( crs ) ) );
-        final double[] max = asDoubleArray( indexConfig.get( IndexConfig.spatialMaxSettingForCrs( crs ) ) );
+        final double[] min = asDoubleArray( indexConfig.get( IndexSettingUtil.spatialMinSettingForCrs( crs ).getSettingName() ) );
+        final double[] max = asDoubleArray( indexConfig.get( IndexSettingUtil.spatialMaxSettingForCrs( crs ).getSettingName() ) );
         final Envelope envelope = new Envelope( min, max );
         return new SpaceFillingCurveSettings( crs.getDimension(), envelope );
     }

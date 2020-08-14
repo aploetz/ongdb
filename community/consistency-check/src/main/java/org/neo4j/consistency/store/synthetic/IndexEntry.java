@@ -51,9 +51,15 @@ public class IndexEntry extends AbstractBaseRecord
     }
 
     @Override
+<<<<<<< HEAD
     public final AbstractBaseRecord clone()
     {
         throw new CloneFailedException( "Synthetic records cannot be cloned." );
+=======
+    public IndexEntry copy()
+    {
+        throw new UnsupportedOperationException( "Synthetic records cannot be copied." );
+>>>>>>> neo4j/4.1
     }
 
     @Override

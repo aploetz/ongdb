@@ -19,13 +19,13 @@
  */
 package org.neo4j.kernel.impl.index.schema;
 
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.junit.Before;
 import org.junit.Rule;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.OpenOption;
-import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -42,6 +42,7 @@ import org.neo4j.configuration.Config;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.index.schema.config.IndexSpecificSpaceFillingCurveSettings;
 import org.neo4j.test.FormatCompatibilityVerifier;
 import org.neo4j.test.rule.PageCacheRule;
@@ -56,6 +57,9 @@ import org.neo4j.values.storable.TimeValue;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.WRITE;
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class GenericKeyStateFormatTest extends FormatCompatibilityVerifier
@@ -281,12 +285,10 @@ public class GenericKeyStateFormatTest extends FormatCompatibilityVerifier
 
     private void withCursor( File storeFile, boolean create, Consumer<PageCursor> cursorConsumer ) throws IOException
     {
-        OpenOption[] openOptions = create ?
-                                   new OpenOption[]{StandardOpenOption.WRITE, StandardOpenOption.CREATE} :
-                                   new OpenOption[]{StandardOpenOption.WRITE};
+        ImmutableSet<OpenOption> openOptions = create ? immutable.of( WRITE, CREATE) : immutable.of( WRITE );
         try ( PageCache pageCache = pageCacheRule.getPageCache( globalFs.get() );
               PagedFile pagedFile = pageCache.map( storeFile, pageCache.pageSize(), openOptions );
-              PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK ) )
+              PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_WRITE_LOCK, PageCursorTracer.NULL ) )
         {
             cursor.next();
             cursorConsumer.accept( cursor );

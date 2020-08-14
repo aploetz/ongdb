@@ -19,9 +19,13 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.idp
 
-import org.neo4j.cypher.internal.compiler.planner.logical._
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.compiler.planner.logical.PatternExpressionSolving
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryGraphSolver
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryPlannerKit
 import org.neo4j.cypher.internal.compiler.planner.logical.steps.planShortestPaths
-import org.neo4j.cypher.internal.ir.{InterestingOrder, QueryGraph}
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 
 import scala.annotation.tailrec
@@ -37,7 +41,7 @@ trait IDPQueryGraphSolverMonitor extends IDPSolverMonitor {
 }
 
 object IDPQueryGraphSolver {
-  val VERBOSE = java.lang.Boolean.getBoolean("pickBestPlan.VERBOSE")
+  val VERBOSE: Boolean = java.lang.Boolean.getBoolean("pickBestPlan.VERBOSE")
 }
 
 /**
@@ -51,7 +55,7 @@ case class IDPQueryGraphSolver(singleComponentSolver: SingleComponentPlannerTrai
                                cartesianProductsOrValueJoins: JoinDisconnectedQueryGraphComponents,
                                monitor: IDPQueryGraphSolverMonitor) extends QueryGraphSolver with PatternExpressionSolving {
 
-  private implicit val x = singleComponentSolver
+  private implicit val x: SingleComponentPlannerTrait = singleComponentSolver
 
   override def plan(queryGraph: QueryGraph, interestingOrder: InterestingOrder, context: LogicalPlanningContext): LogicalPlan = {
     val kit = kitWithShortestPathSupport(context.config.toKit(interestingOrder, context), context)
@@ -70,7 +74,7 @@ case class IDPQueryGraphSolver(singleComponentSolver: SingleComponentPlannerTrai
   private def selectShortestPath(kit: QueryPlannerKit, initialPlan: LogicalPlan, qg: QueryGraph, context: LogicalPlanningContext): LogicalPlan =
     qg.shortestPathPatterns.foldLeft(kit.select(initialPlan, qg)) {
       case (plan, sp) if sp.isFindableFrom(plan.availableSymbols) =>
-        val shortestPath = planShortestPaths(plan, qg, sp, kit.interestingOrder, context)
+        val shortestPath = planShortestPaths(plan, qg, sp, context)
         kit.select(shortestPath, qg)
       case (plan, _) => plan
     }
@@ -113,8 +117,8 @@ case class IDPQueryGraphSolver(singleComponentSolver: SingleComponentPlannerTrai
     }
 
     val (resultingPlans, optionalMatches) = recurse(plans, qg.optionalMatches)
-    assert(resultingPlans.size == 1)
-    assert(optionalMatches.isEmpty)
+    require(resultingPlans.size == 1)
+    require(optionalMatches.isEmpty)
     resultingPlans.head.plan
   }
 }

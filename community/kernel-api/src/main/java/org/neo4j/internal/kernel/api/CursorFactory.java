@@ -19,6 +19,9 @@
  */
 package org.neo4j.internal.kernel.api;
 
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
+
 /**
  * Allocates Cursors. To read data from the Kernel, Cursors are needed. A Cursor factory let's the Kernel consumer
  * allocate all types of cursors, which can then be reused for multiple read operations.
@@ -27,31 +30,31 @@ public interface CursorFactory
 {
     // entities
 
-    NodeCursor allocateNodeCursor();
+    NodeCursor allocateNodeCursor( PageCursorTracer cursorTracer );
 
-    NodeCursor allocateFullAccessNodeCursor();
+    NodeCursor allocateFullAccessNodeCursor( PageCursorTracer cursorTracer );
 
-    RelationshipScanCursor allocateRelationshipScanCursor();
+    RelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer );
 
-    RelationshipScanCursor allocateFullAccessRelationshipScanCursor();
-
-    RelationshipTraversalCursor allocateRelationshipTraversalCursor();
-
-    // properties
-
-    PropertyCursor allocatePropertyCursor();
-
-    PropertyCursor allocateFullAccessPropertyCursor();
+    RelationshipScanCursor allocateFullAccessRelationshipScanCursor( PageCursorTracer cursorTracer );
 
     // traversal
 
-    RelationshipGroupCursor allocateRelationshipGroupCursor();
+    RelationshipTraversalCursor allocateRelationshipTraversalCursor( PageCursorTracer cursorTracer );
+
+    // properties
+
+    PropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker );
+
+    PropertyCursor allocateFullAccessPropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker );
 
     // schema indexes
 
-    NodeValueIndexCursor allocateNodeValueIndexCursor();
+    NodeValueIndexCursor allocateNodeValueIndexCursor( PageCursorTracer cursorTracer );
 
-    NodeLabelIndexCursor allocateNodeLabelIndexCursor();
+    NodeLabelIndexCursor allocateNodeLabelIndexCursor( PageCursorTracer cursorTracer );
 
-    RelationshipIndexCursor allocateRelationshipIndexCursor();
+    RelationshipIndexCursor allocateRelationshipIndexCursor( PageCursorTracer cursorTracer );
+
+    RelationshipTypeIndexCursor allocateRelationshipTypeIndexCursor();
 }

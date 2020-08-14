@@ -26,17 +26,17 @@ import org.junit.jupiter.api.condition.OS;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.UUID;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.Files;
+
+import org.neo4j.test.extension.DisabledForRoot;
 
 import static java.lang.String.format;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.core.Is.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.neo4j.internal.helpers.Numbers.isPowerOfTwo;
 import static org.neo4j.io.fs.DefaultFileSystemAbstraction.UNABLE_TO_CREATE_DIRECTORY_FORMAT;
 import static org.neo4j.io.fs.FileSystemAbstraction.INVALID_FILE_DESCRIPTOR;
@@ -57,7 +57,7 @@ public class DefaultFileSystemAbstractionTest extends FileSystemAbstractionTest
         try ( StoreChannel storeChannel = fsa.write( testFile ) )
         {
             int fileDescriptor = fsa.getFileDescriptor( storeChannel );
-            assertThat( fileDescriptor, greaterThan( 0 ) );
+            assertThat( fileDescriptor ).isGreaterThan( 0 );
         }
     }
 
@@ -69,7 +69,7 @@ public class DefaultFileSystemAbstractionTest extends FileSystemAbstractionTest
         try ( StoreChannel storeChannel = fsa.write( testFile ) )
         {
             int fileDescriptor = fsa.getFileDescriptor( storeChannel );
-            assertThat( fileDescriptor, equalTo( INVALID_FILE_DESCRIPTOR ) );
+            assertThat( fileDescriptor ).isEqualTo( INVALID_FILE_DESCRIPTOR );
         }
     }
 
@@ -83,7 +83,7 @@ public class DefaultFileSystemAbstractionTest extends FileSystemAbstractionTest
             escapedChannel = storeChannel;
         }
         int fileDescriptor = fsa.getFileDescriptor( escapedChannel );
-        assertThat( fileDescriptor, equalTo( INVALID_FILE_DESCRIPTOR ) );
+        assertThat( fileDescriptor ).isEqualTo( INVALID_FILE_DESCRIPTOR );
     }
 
     @Test
@@ -92,24 +92,25 @@ public class DefaultFileSystemAbstractionTest extends FileSystemAbstractionTest
         var testFile = testDirectory.createFile( "testBlock" );
         long blockSize = fsa.getBlockSize( testFile );
         assertTrue( isPowerOfTwo( blockSize ), "Observed block size: " + blockSize );
-        assertThat( blockSize, greaterThanOrEqualTo( 512L ) );
+        assertThat( blockSize ).isGreaterThanOrEqualTo( 512L );
     }
 
     @Test
-    void shouldFailGracefullyWhenPathCannotBeCreated()
+    // Windows doesn't seem to be able to set a directory read only without complex ACLs
+    @DisabledOnOs( OS.WINDOWS )
+    @DisabledForRoot
+    void shouldFailGracefullyWhenPathCannotBeCreated() throws Exception
     {
-        path = new File( testDirectory.homeDir(), String.valueOf( UUID.randomUUID() ) )
-        {
-            @Override
-            public boolean mkdirs()
-            {
-                return false;
-            }
-        };
+        Files.createDirectories( path.toPath() );
+        assertTrue( fsa.fileExists( path ) );
+        assumeTrue( path.setWritable( false ) );
+        path = new File( path, "some_file" );
 
         IOException exception = assertThrows( IOException.class, () -> fsa.mkdirs( path ) );
-        assertFalse( fsa.fileExists( path ) );
+        assertFalse( fsa.isDirectory( path ) );
         String expectedMessage = format( UNABLE_TO_CREATE_DIRECTORY_FORMAT, path );
-        assertThat( exception.getMessage(), is( expectedMessage ) );
+        assertThat( exception.getMessage() ).isEqualTo( expectedMessage );
+        Throwable cause = exception.getCause();
+        assertThat( cause ).isInstanceOf( AccessDeniedException.class );
     }
 }

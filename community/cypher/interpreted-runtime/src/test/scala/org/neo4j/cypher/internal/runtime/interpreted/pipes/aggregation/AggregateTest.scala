@@ -19,9 +19,10 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, Variable}
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
 import org.neo4j.values.AnyValue
 
 trait AggregateTest {
@@ -31,7 +32,7 @@ trait AggregateTest {
     val state = QueryStateHelper.empty
 
     val func: AggregationFunction = createAggregator(Variable("x"))
-    values.foreach(value => func(ExecutionContext.from("x" -> value), state))
+    values.foreach(value => func(CypherRow.from("x" -> value), state))
     func.result(state)
   }
 }

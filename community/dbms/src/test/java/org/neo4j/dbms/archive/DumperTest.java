@@ -33,6 +33,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 import org.neo4j.function.Predicates;
+import org.neo4j.test.extension.DisabledForRoot;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
@@ -88,11 +89,12 @@ class DumperTest
         Files.write( archive.getParent(), new byte[0] );
         FileSystemException exception =
                 assertThrows( FileSystemException.class, () -> new Dumper().dump( directory, directory, archive, GZIP, Predicates.alwaysFalse() ) );
-        assertEquals( archive.getParent().toString() + ": Not a directory", exception.getMessage() );
+        assertEquals( archive.getParent() + ": Not a directory", exception.getMessage() );
     }
 
     @Test
     @DisabledOnOs( OS.WINDOWS )
+    @DisabledForRoot
     void shouldGiveAClearErrorMessageIfTheArchivesParentDirectoryIsNotWritable() throws IOException
     {
         Path directory = testDirectory.directory( "a-directory" ).toPath();

@@ -21,10 +21,14 @@ package org.neo4j.cypher
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{BOTH, INCOMING, OUTGOING}
-import org.scalacheck.Gen._
-import org.scalacheck.{Gen, Shrink}
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.SemanticDirection.BOTH
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
+import org.scalacheck.Gen
+import org.scalacheck.Gen.alphaLowerChar
+import org.scalacheck.Gen.alphaUpperChar
+import org.scalacheck.Shrink
 import org.scalatest.prop.PropertyChecks
 
 trait PatternGen extends PropertyChecks {

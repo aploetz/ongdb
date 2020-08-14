@@ -20,10 +20,17 @@
 package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.planner.logical.steps.projection
-import org.neo4j.cypher.internal.ir.InterestingOrder.{FullSatisfaction, NoSatisfaction, Satisfaction}
-import org.neo4j.cypher.internal.ir.{InterestingOrder, ProvidedOrder}
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, Variable}
-import org.neo4j.cypher.internal.logical.plans.{Ascending, ColumnOrder, Descending, LogicalPlan}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder.FullSatisfaction
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder.NoSatisfaction
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder.Satisfaction
+import org.neo4j.cypher.internal.ir.ordering.ProvidedOrder
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.ColumnOrder
+import org.neo4j.cypher.internal.logical.plans.Descending
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 
 case class SortColumnsWithProjections(columnOrder: ColumnOrder, providedOrderColumn: ProvidedOrder.Column,
                                       projections: Map[String, Expression], unaliasedProjections: Option[(String, Expression)])
@@ -72,7 +79,7 @@ object SortPlanner {
     def projected(plan: LogicalPlan, projections: Map[String, Expression], updateSolved: Boolean = true): LogicalPlan = {
       val projectionDeps = projections.flatMap(e => e._2.dependencies)
       if (projections.nonEmpty && projectionDeps.forall(e => plan.availableSymbols.contains(e.name)))
-        projection(plan, projections, if (updateSolved) projections else Map.empty, interestingOrder, context)
+        projection(plan, projections, if (updateSolved) projections else Map.empty, context)
       else
         plan
     }
@@ -105,11 +112,11 @@ object SortPlanner {
     if (sortColumns.forall(column => projected2.availableSymbols.contains(column.id))) {
       if (satisfiedPrefix.isEmpty) {
         // Full sort required
-        Some(context.logicalPlanProducer.planSort(projected2, sortColumns, ProvidedOrder(providedOrderColumns), interestingOrder, context))
+        Some(context.logicalPlanProducer.planSort(projected2, sortColumns, providedOrderColumns, interestingOrder, context))
       } else {
         // Partial sort suffices
         val (prefixColumnOrders, suffixColumnOrders) = sortColumns.splitAt(satisfiedPrefix.length)
-        Some(context.logicalPlanProducer.planPartialSort(projected2, prefixColumnOrders, suffixColumnOrders, ProvidedOrder(providedOrderColumns), interestingOrder, context))
+        Some(context.logicalPlanProducer.planPartialSort(projected2, prefixColumnOrders, suffixColumnOrders, providedOrderColumns, interestingOrder, context))
       }
     } else {
       None

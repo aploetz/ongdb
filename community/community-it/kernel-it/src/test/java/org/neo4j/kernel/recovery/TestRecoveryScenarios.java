@@ -57,7 +57,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.kernel.api.KernelTransaction.Type.explicit;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.api.KernelTransaction.Type.EXPLICIT;
 import static org.neo4j.token.api.TokenConstants.ANY_LABEL;
 
 @ExtendWith( EphemeralFileSystemExtension.class )
@@ -186,7 +187,7 @@ class TestRecoveryScenarios
         // THEN
         // -- really the problem was that recovery threw exception, so mostly assert that.
         Kernel kernel = db.getDependencyResolver().resolveDependency( Kernel.class );
-        try ( KernelTransaction tx = kernel.beginTransaction( explicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( EXPLICIT, LoginContext.AUTH_DISABLED ) )
         {
             assertEquals( 0, tx.dataRead().countsForNode( ANY_LABEL ) );
             final TokenHolder holder = db.getDependencyResolver().resolveDependency( TokenHolders.class ).labelTokens();
@@ -269,8 +270,7 @@ class TestRecoveryScenarios
                     @Override
                     void flush( GraphDatabaseAPI db ) throws IOException
                     {
-                        IOLimiter limiter = IOLimiter.UNLIMITED;
-                        db.getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class ).flushAndForce( limiter );
+                        db.getDependencyResolver().resolveDependency( CheckPointerImpl.ForceOperation.class ).flushAndForce( IOLimiter.UNLIMITED, NULL );
                     }
                 },
         FLUSH_PAGE_CACHE

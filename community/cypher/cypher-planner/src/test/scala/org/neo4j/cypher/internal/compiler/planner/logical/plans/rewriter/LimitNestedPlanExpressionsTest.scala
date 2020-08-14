@@ -20,52 +20,60 @@
 package org.neo4j.cypher.internal.compiler.planner.logical.plans.rewriter
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.logical.plans.{Argument, DoNotIncludeTies, Limit, LogicalPlan, NestedPlanExpression}
-import org.neo4j.cypher.internal.v4_0.expressions.{Add, ContainerIndex, ListSlice, SignedDecimalIntegerLiteral, StringLiteral}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.expressions.Add
+import org.neo4j.cypher.internal.expressions.ContainerIndex
+import org.neo4j.cypher.internal.expressions.ListSlice
+import org.neo4j.cypher.internal.expressions.SignedDecimalIntegerLiteral
+import org.neo4j.cypher.internal.expressions.StringLiteral
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.DoNotIncludeTies
+import org.neo4j.cypher.internal.logical.plans.Limit
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NestedPlanCollectExpression
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class LimitNestedPlanExpressionsTest extends CypherFunSuite with LogicalPlanningTestSupport {
   private val rewriter = limitNestedPlanExpressions(idGen)
 
   test("should rewrite Nested plan in Head function") {
     val argument: LogicalPlan = Argument(Set("a"))
-    val nestedPlan = NestedPlanExpression(argument, StringLiteral("a")(pos))(pos)
+    val nestedPlan = NestedPlanCollectExpression(argument, StringLiteral("a")(pos))(pos)
     val head = function("head", nestedPlan)
 
     head.endoRewrite(rewriter) should equal(
-      function("head", NestedPlanExpression(Limit(argument, SignedDecimalIntegerLiteral("1")(pos), DoNotIncludeTies), StringLiteral("a")(pos))(pos))
+      function("head", NestedPlanCollectExpression(Limit(argument, SignedDecimalIntegerLiteral("1")(pos), DoNotIncludeTies), StringLiteral("a")(pos))(pos))
     )
   }
 
   test("should rewrite Nested plan in container index") {
     val argument: LogicalPlan = Argument(Set("a"))
-    val nestedPlan = NestedPlanExpression(argument, StringLiteral("a")(pos))(pos)
+    val nestedPlan = NestedPlanCollectExpression(argument, StringLiteral("a")(pos))(pos)
     val ci = ContainerIndex(nestedPlan, SignedDecimalIntegerLiteral("3")(pos))(pos)
 
     ci.endoRewrite(rewriter) should equal(
-      ContainerIndex(NestedPlanExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("3")(pos))(pos), DoNotIncludeTies),
+      ContainerIndex(NestedPlanCollectExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("3")(pos))(pos), DoNotIncludeTies),
         StringLiteral("a")(pos))(pos), SignedDecimalIntegerLiteral("3")(pos))(pos)
     )
   }
 
   test("should rewrite Nested plan in list slice to") {
     val argument: LogicalPlan = Argument(Set("a"))
-    val nestedPlan = NestedPlanExpression(argument, StringLiteral("a")(pos))(pos)
+    val nestedPlan = NestedPlanCollectExpression(argument, StringLiteral("a")(pos))(pos)
     val ls = ListSlice(nestedPlan, None, Some(SignedDecimalIntegerLiteral("4")(pos)))(pos)
 
     ls.endoRewrite(rewriter) should equal(
-      ListSlice(NestedPlanExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("4")(pos))(pos), DoNotIncludeTies),
+      ListSlice(NestedPlanCollectExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("4")(pos))(pos), DoNotIncludeTies),
         StringLiteral("a")(pos))(pos), None, Some(SignedDecimalIntegerLiteral("4")(pos)))(pos)
     )
   }
 
   test("should rewrite Nested plan in list slice from/to") {
     val argument: LogicalPlan = Argument(Set("a"))
-    val nestedPlan = NestedPlanExpression(argument, StringLiteral("a")(pos))(pos)
+    val nestedPlan = NestedPlanCollectExpression(argument, StringLiteral("a")(pos))(pos)
     val ls = ListSlice(nestedPlan, Some(SignedDecimalIntegerLiteral("2")(pos)), Some(SignedDecimalIntegerLiteral("4")(pos)))(pos)
 
     ls.endoRewrite(rewriter) should equal(
-      ListSlice(NestedPlanExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("4")(pos))(pos), DoNotIncludeTies),
+      ListSlice(NestedPlanCollectExpression(Limit(argument, Add(SignedDecimalIntegerLiteral("1")(pos), SignedDecimalIntegerLiteral("4")(pos))(pos), DoNotIncludeTies),
         StringLiteral("a")(pos))(pos), Some(SignedDecimalIntegerLiteral("2")(pos)), Some(SignedDecimalIntegerLiteral("4")(pos)))(pos)
     )
   }

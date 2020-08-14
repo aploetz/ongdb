@@ -23,7 +23,6 @@ import java.util.function.Function;
 import java.util.function.LongFunction;
 
 import org.neo4j.common.DependencyResolver;
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.database.DatabaseConfig;
 import org.neo4j.function.Factory;
@@ -42,7 +41,7 @@ import org.neo4j.kernel.impl.api.CommitProcessFactory;
 import org.neo4j.kernel.impl.api.LeaseService;
 import org.neo4j.kernel.impl.constraints.ConstraintSemantics;
 import org.neo4j.kernel.impl.factory.AccessCapabilityFactory;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.StatementLocksFactory;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
@@ -51,9 +50,10 @@ import org.neo4j.kernel.impl.transaction.stats.DatabaseTransactionStats;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.internal.event.GlobalTransactionEventListeners;
 import org.neo4j.kernel.internal.locker.FileLockerService;
+import org.neo4j.kernel.monitoring.DatabaseEventListeners;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.internal.DatabaseLogService;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
 import org.neo4j.monitoring.DatabaseHealth;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.scheduler.JobScheduler;
@@ -76,8 +76,6 @@ public interface DatabaseCreationContext
     DatabaseLogService getDatabaseLogService();
 
     JobScheduler getScheduler();
-
-    TokenNameLookup getTokenNameLookup();
 
     DependencyResolver getGlobalDependencies();
 
@@ -117,7 +115,7 @@ public interface DatabaseCreationContext
 
     IdController getIdController();
 
-    DatabaseInfo getDatabaseInfo();
+    DbmsInfo getDbmsInfo();
 
     VersionContextSupplier getVersionContextSupplier();
 
@@ -140,4 +138,8 @@ public interface DatabaseCreationContext
     LeaseService getLeaseService();
 
     DatabaseStartupController getStartupController();
+
+    GlobalMemoryGroupTracker getTransactionsMemoryPool();
+
+    GlobalMemoryGroupTracker getOtherMemoryPool();
 }

@@ -39,7 +39,6 @@ Apache Software License, Version 2.0
   @firebase/util
   @firebase/webchannel-wrapper
   Apache Commons Lang
-  Apache Commons Text
   ascli
   aws-sign2
   bytebuffer
@@ -50,13 +49,13 @@ Apache Software License, Version 2.0
   forever-agent
   grpc
   Java Concurrency Tools Core Library
+  Jettison
   long
-  Lucene codecs
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
   neo4j-driver
-  Netty/All-in-One
   oauth-sign
   picocli - a mighty tiny Command Line Interface
   protobufjs
@@ -87,10 +86,6 @@ BSD License
 BSD License 2-clause
   tar-pack
   uri-js
-
-Bouncy Castle License
-  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
-  Bouncy Castle Provider
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API

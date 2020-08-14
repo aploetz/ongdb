@@ -19,19 +19,24 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.logical.plans.{Ascending, Descending}
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Descending
+import org.neo4j.cypher.internal.runtime.TestSubscriber
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.exceptions.ArithmeticException
 import org.neo4j.graphdb.Node
 import org.neo4j.values.storable.Values
 import org.neo4j.values.virtual.VirtualNodeValue
 
 abstract class OptionalTestBase[CONTEXT <: RuntimeContext](
-  edition: Edition[CONTEXT],
-  runtime: CypherRuntime[CONTEXT],
-  sizeHint: Int
-) extends RuntimeTestSuite[CONTEXT](edition, runtime) {
+                                                            edition: Edition[CONTEXT],
+                                                            runtime: CypherRuntime[CONTEXT],
+                                                            val sizeHint: Int
+                                                          ) extends RuntimeTestSuite[CONTEXT](edition, runtime) {
 
   test("should optional expand") {
     // given
@@ -253,7 +258,7 @@ abstract class OptionalTestBase[CONTEXT <: RuntimeContext](
       .input(variables = Seq("x"))
       .build()
 
-    val subscriber = new TestSubscriber
+    val subscriber = TestSubscriber.concurrent
     val runtimeResult = execute(logicalQuery, runtime, stream, subscriber)
 
     runtimeResult.request(1)
@@ -262,23 +267,6 @@ abstract class OptionalTestBase[CONTEXT <: RuntimeContext](
     // then
     subscriber.allSeen should have size 1
     stream.hasMore should be(true)
-  }
-
-  test("should cancel outstanding work") {
-    // given
-    val stream = batchedInputValues(10, (0 until sizeHint).map(Array[Any](_)): _*).stream()
-
-    // when
-    val logicalQuery = new LogicalQueryBuilder(this)
-      .produceResults("x")
-      .filter("x / 0 == 0")
-      .optional()
-      .input(variables = Seq("x"))
-      .build()
-
-    intercept[ArithmeticException] {
-      consume(execute(logicalQuery, runtime, stream))
-    }
   }
 
   test("should support optional under nested apply with sort after apply") {
@@ -316,4 +304,51 @@ abstract class OptionalTestBase[CONTEXT <: RuntimeContext](
 
     runtimeResult should beColumns("x", "y", "z").withRows(inOrder(expectedInOrder))
   }
+
+  test("should work on top of distinct") {
+    // given
+    val stream = batchedInputValues(10, (0 until sizeHint).map(Array[Any](_)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .optional()
+      .distinct("x AS x")
+      .input(variables = Seq("x"))
+      .build()
+
+    val subscriber = TestSubscriber.concurrent
+    val runtimeResult = execute(logicalQuery, runtime, stream, subscriber)
+
+    runtimeResult.request(1)
+    runtimeResult.await()
+
+    // then
+    subscriber.allSeen should have size 1
+    stream.hasMore should be(true)
+  }
+
+}
+
+// Supported by interpreted, slotted, pipelined
+trait OptionalFailureTestBase[CONTEXT <: RuntimeContext] {
+  self: OptionalTestBase[CONTEXT] =>
+
+  test("should cancel outstanding work") {
+    // given
+    val stream = batchedInputValues(10, (0 until sizeHint).map(Array[Any](_)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .filter("x / 0 == 0")
+      .optional()
+      .input(variables = Seq("x"))
+      .build()
+
+    intercept[ArithmeticException] {
+      consume(execute(logicalQuery, runtime, stream))
+    }
+  }
+
 }

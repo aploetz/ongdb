@@ -20,7 +20,6 @@
 package org.neo4j.kernel.api.impl.fulltext;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.search.BooleanQuery;
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
 import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet;
 
@@ -28,6 +27,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongPredicate;
 
 import org.neo4j.common.EntityType;
 import org.neo4j.internal.kernel.api.CursorFactory;
@@ -38,12 +38,10 @@ import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.IOUtils;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.impl.index.SearcherReference;
-import org.neo4j.kernel.api.impl.index.collector.ValuesIterator;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
-
-import static java.util.Arrays.asList;
-import static org.neo4j.kernel.api.impl.fulltext.ScoreEntityIterator.mergeIterators;
 
 /**
  * Manages the transaction state of a specific individual fulltext index, in a given transaction.
@@ -76,32 +74,33 @@ class FulltextIndexTransactionState implements Closeable
         txStateVisitor = new FulltextIndexTransactionStateVisitor( descriptor, propertyNames, modifiedEntityIdsInThisTransaction, writer );
     }
 
-    void maybeUpdate( QueryContext context )
+    SearcherReference maybeUpdate( QueryContext context, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         if ( currentSearcher == null || lastUpdateRevision != context.getTransactionStateOrNull().getDataRevision() )
         {
             try
             {
-                updateSearcher( context );
+                updateSearcher( context, cursorTracer, memoryTracker );
             }
             catch ( Exception e )
             {
                 throw new RuntimeException( "Could not update fulltext schema index transaction state.", e );
             }
         }
+        return currentSearcher;
     }
 
-    private void updateSearcher( QueryContext context ) throws Exception
+    private void updateSearcher( QueryContext context, PageCursorTracer cursorTracer, MemoryTracker memoryTracker ) throws Exception
     {
         Read read = context.getRead();
         CursorFactory cursors = context.cursors();
         ReadableTransactionState state = context.getTransactionStateOrNull();
-        modifiedEntityIdsInThisTransaction.clear(); // Clear this so we don't filter out entities who have had their changes reversed since last time.
+        modifiedEntityIdsInThisTransaction.clear(); // Clear this, so we don't filter out entities who have had their changes reversed since last time.
         writer.resetWriterState();
 
-        try ( NodeCursor nodeCursor = visitingNodes ? cursors.allocateFullAccessNodeCursor() : null;
-              RelationshipScanCursor relationshipCursor = visitingNodes ? null : cursors.allocateRelationshipScanCursor();
-              PropertyCursor propertyCursor = cursors.allocateFullAccessPropertyCursor() )
+        try ( NodeCursor nodeCursor = visitingNodes ? cursors.allocateFullAccessNodeCursor( cursorTracer ) : null;
+              RelationshipScanCursor relationshipCursor = visitingNodes ? null : cursors.allocateRelationshipScanCursor( cursorTracer );
+              PropertyCursor propertyCursor = cursors.allocateFullAccessPropertyCursor( cursorTracer, memoryTracker ) )
         {
             state.accept( txStateVisitor.init( read, nodeCursor, relationshipCursor, propertyCursor ) );
         }
@@ -117,10 +116,8 @@ class FulltextIndexTransactionState implements Closeable
         IOUtils.closeAll( toCloseLater );
     }
 
-    public ValuesIterator filter( ValuesIterator iterator, BooleanQuery query )
+    public LongPredicate isModifiedInTransactionPredicate()
     {
-        iterator = ScoreEntityIterator.filter( iterator, entityId -> !modifiedEntityIdsInThisTransaction.contains( entityId ) );
-        iterator = mergeIterators( asList( iterator, FulltextIndexReader.searchLucene( currentSearcher, query ) ) );
-        return iterator;
+        return modifiedEntityIdsInThisTransaction::contains;
     }
 }

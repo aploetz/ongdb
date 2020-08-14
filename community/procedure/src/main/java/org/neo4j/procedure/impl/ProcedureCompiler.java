@@ -122,7 +122,7 @@ class ProcedureCompiler
             //used for proper error handling
             assertValidConstructor( fcnDefinition );
 
-            ArrayList<CallableUserFunction> out = new ArrayList<>( functionMethods.size() );
+            List<CallableUserFunction> out = new ArrayList<>( functionMethods.size() );
             for ( Method method : functionMethods )
             {
                 String valueName = method.getAnnotation( UserFunction.class ).value();
@@ -167,7 +167,7 @@ class ProcedureCompiler
 
             assertValidConstructor( fcnDefinition );
 
-            ArrayList<CallableUserAggregationFunction> out = new ArrayList<>( methods.size() );
+            List<CallableUserAggregationFunction> out = new ArrayList<>( methods.size() );
             for ( Method method : methods )
             {
                 String valueName = method.getAnnotation( UserAggregationFunction.class ).value();
@@ -214,7 +214,7 @@ class ProcedureCompiler
             }
 
             assertValidConstructor( procDefinition );
-            ArrayList<CallableProcedure> out = new ArrayList<>( procedureMethods.size() );
+            List<CallableProcedure> out = new ArrayList<>( procedureMethods.size() );
             for ( Method method : procedureMethods )
             {
                 String valueName = method.getAnnotation( Procedure.class ).value();
@@ -246,7 +246,7 @@ class ProcedureCompiler
     }
 
     private CallableProcedure compileProcedure( Class<?> procDefinition, Method method,
-            String warning, boolean fullAccess, QualifiedName procName  )
+            String warning, boolean fullAccess, QualifiedName procName )
             throws ProcedureException
     {
         List<FieldSignature> inputSignature = inputSignatureDeterminer.signatureFor( method );
@@ -488,8 +488,8 @@ class ProcedureCompiler
 
     private QualifiedName extractName( Class<?> procDefinition, Method m, String valueName, String definedName )
     {
-        String procName = definedName.trim().isEmpty() ? valueName : definedName;
-        if ( !procName.trim().isEmpty() )
+        String procName = definedName.isBlank() ? valueName : definedName;
+        if ( !procName.isBlank() )
         {
             String[] split = procName.split( "\\." );
             if ( split.length == 1 )

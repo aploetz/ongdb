@@ -19,15 +19,21 @@
  */
 package org.neo4j.cypher.internal.procs
 
+import org.neo4j.cypher.internal.ExecutionEngine
+import org.neo4j.cypher.internal.ExecutionPlan
+import org.neo4j.cypher.internal.RuntimeName
+import org.neo4j.cypher.internal.SystemCommandRuntimeName
 import org.neo4j.cypher.internal.plandescription.Argument
 import org.neo4j.cypher.internal.result.InternalExecutionResult
-import org.neo4j.cypher.internal.runtime.{ExecutionMode, InputDataStream, ProfileMode}
-import org.neo4j.cypher.internal.v4_0.util.InternalNotification
-import org.neo4j.cypher.internal.{ExecutionEngine, ExecutionPlan, RuntimeName, SystemCommandRuntimeName}
+import org.neo4j.cypher.internal.runtime.ExecutionMode
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.ProfileMode
+import org.neo4j.cypher.internal.util.InternalNotification
 import org.neo4j.cypher.result.RuntimeResult
 import org.neo4j.graphdb.QueryStatistics
 import org.neo4j.graphdb.Transaction
 import org.neo4j.internal.kernel.api.security.AccessMode
+import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.kernel.api.KernelTransaction
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.kernel.impl.query.TransactionalContext
@@ -35,13 +41,21 @@ import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.MapValue
 
 /**
-  * Execution plan for performing system commands, i.e. creating databases or showing roles and users.
-  */
+ * Execution plan for performing system commands, i.e. creating databases or showing roles and users.
+ */
 case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: ExecutionEngine, query: String, systemParams: MapValue,
+<<<<<<< HEAD
                                       queryHandler: QueryHandler = QueryHandler.handleError(identity),
                                       source: Option[ExecutionPlan] = None,
                                       checkCredentialsExpired: Boolean = true,
                                       parameterGenerator: Transaction => MapValue = _ => MapValue.EMPTY)
+=======
+                                      queryHandler: QueryHandler = QueryHandler.handleError((t, _) => t),
+                                      source: Option[ExecutionPlan] = None,
+                                      checkCredentialsExpired: Boolean = true,
+                                      parameterGenerator: (Transaction, SecurityContext) => MapValue = (_, _) => MapValue.EMPTY,
+                                      parameterConverter: (Transaction, MapValue) => MapValue = (_, p) => p)
+>>>>>>> neo4j/4.1
   extends ChainedExecutionPlan(source) {
 
   override def runSpecific(ctx: SystemUpdateCountingQueryContext,
@@ -55,6 +69,7 @@ case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: Execu
 
     var revertAccessModeChange: KernelTransaction.Revertable = null
     try {
+<<<<<<< HEAD
       if (checkCredentialsExpired) tc.securityContext().assertCredentialsNotExpired()
       val fullReadAccess = tc.securityContext().withMode(AccessMode.Static.READ)
       revertAccessModeChange = tc.kernelTransaction().overrideWith(fullReadAccess)
@@ -62,6 +77,16 @@ case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: Execu
       val updatedSystemParams = systemParams.updatedWith(parameterGenerator.apply(tc.transaction()))
       val systemSubscriber = new SystemCommandQuerySubscriber(ctx, subscriber, queryHandler)
       val execution = normalExecutionEngine.executeSubQuery(query, updatedSystemParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
+=======
+      val securityContext = tc.securityContext()
+      if (checkCredentialsExpired) securityContext.assertCredentialsNotExpired()
+      val fullReadAccess = securityContext.withMode(AccessMode.Static.READ)
+      revertAccessModeChange = tc.kernelTransaction().overrideWith(fullReadAccess)
+      val tx = tc.transaction()
+      val updatedParams = parameterConverter(tx, safeMergeParameters(systemParams, params, parameterGenerator.apply(tx, securityContext)))
+      val systemSubscriber = new SystemCommandQuerySubscriber(ctx, subscriber, queryHandler, updatedParams)
+      val execution = normalExecutionEngine.executeSubQuery(query, updatedParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
+>>>>>>> neo4j/4.1
       systemSubscriber.assertNotFailed()
 
       if (systemSubscriber.shouldIgnoreResult()) {
@@ -82,14 +107,13 @@ case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: Execu
 }
 
 /**
-  * A wrapping QuerySubscriber that overrides the error handling to allow custom error messages for SystemCommands instead of the inner errors.
-  * It also makes sure to return QueryStatistics that don't leak information about the system graph like how many nodes we created for a command etc.
-  */
-class SystemCommandQuerySubscriber(ctx: SystemUpdateCountingQueryContext, inner: QuerySubscriber, queryHandler: QueryHandler) extends QuerySubscriber {
+ * A wrapping QuerySubscriber that overrides the error handling to allow custom error messages for SystemCommands instead of the inner errors.
+ * It also makes sure to return QueryStatistics that don't leak information about the system graph like how many nodes we created for a command etc.
+ */
+class SystemCommandQuerySubscriber(ctx: SystemUpdateCountingQueryContext, inner: QuerySubscriber, queryHandler: QueryHandler, params: MapValue) extends QuerySubscriber {
   @volatile private var empty = true
   @volatile private var ignore = false
   @volatile private var failed: Option[Throwable] = None
-  private var currentOffset = -1
 
   override def onResult(numberOfFields: Int): Unit = if (failed.isEmpty) {
     inner.onResult(numberOfFields)
@@ -97,7 +121,7 @@ class SystemCommandQuerySubscriber(ctx: SystemUpdateCountingQueryContext, inner:
 
   override def onResultCompleted(statistics: QueryStatistics): Unit = {
     if (empty) {
-      queryHandler.onNoResults().foreach {
+      queryHandler.onNoResults(params).foreach {
         case Left(error) =>
           inner.onError(error)
           failed = Some(error)
@@ -114,7 +138,6 @@ class SystemCommandQuerySubscriber(ctx: SystemUpdateCountingQueryContext, inner:
   }
 
   override def onRecord(): Unit = {
-    currentOffset = 0
     if (failed.isEmpty) {
       empty = false
       inner.onRecord()
@@ -122,29 +145,24 @@ class SystemCommandQuerySubscriber(ctx: SystemUpdateCountingQueryContext, inner:
   }
 
   override def onRecordCompleted(): Unit = if (failed.isEmpty) {
-    currentOffset = -1
     inner.onRecordCompleted()
   }
 
-  override def onField(value: AnyValue): Unit = {
-    try {
-      queryHandler.onResult(currentOffset, value).foreach {
-        case Left(error) =>
-          inner.onError(error)
-          failed = Some(error)
-        case Right(_) =>
-          ignore = true
-      }
-      if (failed.isEmpty) {
-        inner.onField(value)
-      }
-    } finally {
-      currentOffset += 1
+  override def onField(offset: Int, value: AnyValue): Unit = {
+    queryHandler.onResult(offset, value, params).foreach {
+      case Left(error) =>
+        inner.onError(error)
+        failed = Some(error)
+      case Right(_) =>
+        ignore = true
+    }
+    if (failed.isEmpty) {
+      inner.onField(offset, value)
     }
   }
 
   override def onError(throwable: Throwable): Unit = {
-    val handledError = queryHandler.onError(throwable)
+    val handledError = queryHandler.onError(throwable, params)
     inner.onError(handledError)
     failed = Some(handledError)
   }

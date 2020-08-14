@@ -44,8 +44,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.internal.schema.IndexPrototype.forSchema;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.api.impl.schema.LuceneIndexProvider.DESCRIPTOR;
 import static org.neo4j.kernel.api.index.IndexDirectoryStructure.directoriesByProvider;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestDirectoryExtension
 class LuceneIndexProviderTest
@@ -71,7 +73,8 @@ class LuceneIndexProviderTest
         LuceneIndexProvider readOnlyIndexProvider =
                 getLuceneIndexProvider( readOnlyConfig, new DirectoryFactory.InMemoryDirectoryFactory(), fileSystem, graphDbDir );
         assertThrows( UnsupportedOperationException.class,
-                () -> readOnlyIndexProvider.getPopulator( descriptor, new IndexSamplingConfig( readOnlyConfig ), heapBufferFactory( 1024 ) ) );
+                () -> readOnlyIndexProvider.getPopulator( descriptor, new IndexSamplingConfig( readOnlyConfig ),
+                        heapBufferFactory( 1024 ), INSTANCE ) );
     }
 
     @Test
@@ -96,7 +99,7 @@ class LuceneIndexProviderTest
                 new DirectoryFactory.InMemoryDirectoryFactory(), fileSystem, graphDbDir );
 
         assertThrows( UnsupportedOperationException.class,
-                () -> getIndexAccessor( readOnlyConfig, readOnlyIndexProvider ).newUpdater( IndexUpdateMode.ONLINE ) );
+                () -> getIndexAccessor( readOnlyConfig, readOnlyIndexProvider ).newUpdater( IndexUpdateMode.ONLINE, NULL ) );
     }
 
     @Test
@@ -109,7 +112,7 @@ class LuceneIndexProviderTest
                 new DirectoryFactory.InMemoryDirectoryFactory(), fileSystem, graphDbDir );
 
         // We assert that 'force' does not throw an exception
-        getIndexAccessor( readOnlyConfig, readOnlyIndexProvider ).force( IOLimiter.UNLIMITED );
+        getIndexAccessor( readOnlyConfig, readOnlyIndexProvider ).force( IOLimiter.UNLIMITED, NULL );
     }
 
     private void createEmptySchemaIndex( DirectoryFactory directoryFactory ) throws IOException

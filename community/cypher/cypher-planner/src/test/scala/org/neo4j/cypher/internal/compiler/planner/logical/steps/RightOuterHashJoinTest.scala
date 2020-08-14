@@ -19,17 +19,24 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.compiler.planner._
-import org.neo4j.cypher.internal.compiler.planner.logical.{ExpressionEvaluator, PlanMatchHelp}
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.ast.Hint
+import org.neo4j.cypher.internal.ast.UsingJoinHint
+import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
+import org.neo4j.cypher.internal.compiler.planner.logical.ExpressionEvaluator
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
-import org.neo4j.cypher.internal.ir.{PatternRelationship, QueryGraph, SimplePatternLength, InterestingOrder}
+import org.neo4j.cypher.internal.compiler.planner.logical.PlanMatchHelp
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.RightOuterHashJoin
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.logical.plans.{AllNodesScan, LogicalPlan, RightOuterHashJoin}
-import org.neo4j.cypher.internal.v4_0.ast.{Hint, UsingJoinHint}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.Cost
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.Cost
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class RightOuterHashJoinTest extends CypherFunSuite with LogicalPlanningTestSupport with PlanMatchHelp {
 

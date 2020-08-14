@@ -21,6 +21,7 @@ package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
 import org.neo4j.cypher.internal.compiler.planner.logical.CandidateGenerator
 import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.ir.InterestingOrder
 import org.neo4j.cypher.internal.ir.QueryGraph
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
@@ -30,6 +31,28 @@ import org.neo4j.cypher.internal.v4_0.expressions.functions.Exists
 import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.PatternExpressionPatternElementNamer
 import org.neo4j.cypher.internal.v4_0.util.FreshIdNameGenerator
 import org.neo4j.cypher.internal.v4_0.util.UnNamedNameGenerator
+=======
+import org.neo4j.cypher.internal.expressions.ExistsSubClause
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.NodePattern
+import org.neo4j.cypher.internal.expressions.NodePatternExpression
+import org.neo4j.cypher.internal.expressions.Not
+import org.neo4j.cypher.internal.expressions.Ors
+import org.neo4j.cypher.internal.expressions.PatternElement
+import org.neo4j.cypher.internal.expressions.PatternExpression
+import org.neo4j.cypher.internal.expressions.RelationshipChain
+import org.neo4j.cypher.internal.expressions.RelationshipsPattern
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.expressions.functions.Exists
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.helpers.ExpressionConverters.asQueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Solveds
+import org.neo4j.cypher.internal.rewriting.rewriters.PatternExpressionPatternElementNamer
+import org.neo4j.cypher.internal.util.FreshIdNameGenerator
+import org.neo4j.cypher.internal.util.UnNamedNameGenerator
+>>>>>>> neo4j/4.1
 
 case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
 
@@ -46,10 +69,10 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
             val innerPlan = planInnerOfSubquery(lhs, context, interestingOrder, e)
             context.logicalPlanProducer.planAntiSemiApply(lhs, innerPlan, p, context)
           case p@Exists(patternExpression: PatternExpression) =>
-            val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
+            val rhs = rhsPlan(lhs, patternExpression, context)
             context.logicalPlanProducer.planSemiApply(lhs, rhs, p, context)
           case p@Not(Exists(patternExpression: PatternExpression)) =>
-            val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
+            val rhs = rhsPlan(lhs, patternExpression, context)
             context.logicalPlanProducer.planAntiSemiApply(lhs, rhs, p, context)
           case Ors(exprs) =>
             val (patternExpressions, expressions) = exprs.partition {
@@ -70,19 +93,19 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
     val emptyTuple = (Map.empty[PatternElement, Variable], QueryGraph.empty)
     val(namedMap, qg) = e.patternElements.foldLeft(emptyTuple) { (acc, patternElement) =>
       patternElement match {
-      case elem: RelationshipChain =>
-        val patternExpr = PatternExpression(RelationshipsPattern(elem)(elem.position))
-        val (namedExpr, namedMap) = PatternExpressionPatternElementNamer.apply(patternExpr)
-        val qg = extractQG(lhs, namedExpr, context)
+        case elem: RelationshipChain =>
+          val patternExpr = PatternExpression(RelationshipsPattern(elem)(elem.position))
+          val (namedExpr, namedMap) = PatternExpressionPatternElementNamer.apply(patternExpr)
+          val qg = extractQG(lhs, namedExpr, context)
 
-        (acc._1 ++ namedMap, acc._2 ++ qg)
+          (acc._1 ++ namedMap, acc._2 ++ qg)
 
-      case elem: NodePattern =>
-        val patternExpr = NodePatternExpression(List(elem))(elem.position)
-        val (namedExpr, namedMap) = PatternExpressionPatternElementNamer.apply(patternExpr)
-        val qg = extractQG(lhs, namedExpr, context)
+        case elem: NodePattern =>
+          val patternExpr = NodePatternExpression(List(elem))(elem.position)
+          val (namedExpr, namedMap) = PatternExpressionPatternElementNamer.apply(patternExpr)
+          val qg = extractQG(lhs, namedExpr, context)
 
-        (acc._1 ++ namedMap, acc._2 ++ qg)
+          (acc._1 ++ namedMap, acc._2 ++ qg)
       }
     }
 
@@ -96,15 +119,11 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
   }
 
   private def extractQG(source: LogicalPlan, namedExpr: NodePatternExpression, context: LogicalPlanningContext): QueryGraph = {
-    import org.neo4j.cypher.internal.ir.helpers.ExpressionConverters._
-
     val qgArguments = getQueryGraphArguments(source, namedExpr)
     asQueryGraph(namedExpr, context.innerVariableNamer).withArgumentIds(qgArguments)
   }
 
   private def extractQG(source: LogicalPlan, namedExpr: PatternExpression, context: LogicalPlanningContext): QueryGraph = {
-    import org.neo4j.cypher.internal.ir.helpers.ExpressionConverters._
-
     val qgArguments = getQueryGraphArguments(source, namedExpr)
     asQueryGraph(namedExpr, context.innerVariableNamer).withArgumentIds(qgArguments)
   }
@@ -132,15 +151,25 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
                              context: LogicalPlanningContext): (LogicalPlan, Set[Expression]) = {
 
     def planSelect(predicate: Expression, source: LogicalPlan,
+<<<<<<< HEAD
                    func: (LogicalPlan, LogicalPlan, Expression, InterestingOrder, LogicalPlanningContext) => LogicalPlan): (LogicalPlan, Set[Expression]) = {
       val plan = func(lhs, source, onePredicate(expressions ++ letExpression.toSet), interestingOrder, context)
+=======
+                   func: (LogicalPlan, LogicalPlan, Expression, LogicalPlanningContext) => LogicalPlan): (LogicalPlan, Set[Expression]) = {
+      val plan = func(lhs, source, onePredicate(expressions ++ letExpression.toSet), context)
+>>>>>>> neo4j/4.1
       (plan, expressions + predicate)
     }
 
     def planSemiApply(predicate: Expression, innerExpression: Expression, tail: List[Expression], source: LogicalPlan): (LogicalPlan, Set[Expression]) = {
        val (newLhs, newLetExpr) = predicate match {
+<<<<<<< HEAD
         case Not(_) => createLetAntiSemiApply(lhs, source, innerExpression, predicate, expressions, letExpression, interestingOrder, context)
         case _ => createLetSemiApply(lhs, source, innerExpression, expressions, letExpression, interestingOrder, context)
+=======
+        case Not(_) => createLetAntiSemiApply(lhs, source, innerExpression, predicate, expressions, letExpression, context)
+        case _ => createLetSemiApply(lhs, source, innerExpression, expressions, letExpression, context)
+>>>>>>> neo4j/4.1
       }
       val (plan, solvedPredicates) = planPredicates(newLhs, tail.toSet, Set.empty, Some(newLetExpr), interestingOrder, context)
       (plan, solvedPredicates ++ Set(predicate) ++ expressions)
@@ -148,11 +177,19 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
 
     patternExpressions.toList match {
       case (p@Exists(patternExpression: PatternExpression)) :: Nil =>
+<<<<<<< HEAD
         val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
         planSelect(p, rhs, context.logicalPlanProducer.planSelectOrSemiApply)
 
       case (p@Not(Exists(patternExpression: PatternExpression))) :: Nil =>
         val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
+=======
+        val rhs = rhsPlan(lhs, patternExpression, context)
+        planSelect(p, rhs, context.logicalPlanProducer.planSelectOrSemiApply)
+
+      case (p@Not(Exists(patternExpression: PatternExpression))) :: Nil =>
+        val rhs = rhsPlan(lhs, patternExpression, context)
+>>>>>>> neo4j/4.1
         planSelect(p, rhs, context.logicalPlanProducer.planSelectOrAntiSemiApply)
 
       case (e@ExistsSubClause(_, _)) :: Nil =>
@@ -164,11 +201,19 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
         planSelect(p, innerPlan, context.logicalPlanProducer.planSelectOrAntiSemiApply)
 
       case (p@Exists(patternExpression: PatternExpression)) :: tail =>
+<<<<<<< HEAD
         val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
         planSemiApply(p, patternExpression, tail, rhs)
 
       case (p@Not(Exists(patternExpression: PatternExpression))) :: tail =>
         val rhs = rhsPlan(lhs, patternExpression, interestingOrder, context)
+=======
+        val rhs = rhsPlan(lhs, patternExpression, context)
+        planSemiApply(p, patternExpression, tail, rhs)
+
+      case (p@Not(Exists(patternExpression: PatternExpression))) :: tail =>
+        val rhs = rhsPlan(lhs, patternExpression, context)
+>>>>>>> neo4j/4.1
         planSemiApply(p, patternExpression, tail, rhs)
 
       case (e@ExistsSubClause(_, _)) :: tail =>
@@ -189,13 +234,12 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
                                  existsExpression: Expression,
                                  expressions: Set[Expression],
                                  letExpression: Option[Expression],
-                                 interestingOrder: InterestingOrder,
                                  context: LogicalPlanningContext) = {
     val (idName, ident) = freshId(existsExpression)
     if (expressions.isEmpty && letExpression.isEmpty)
       (context.logicalPlanProducer.planLetSemiApply(lhs, rhs, idName, context), ident)
     else
-      (context.logicalPlanProducer.planLetSelectOrSemiApply(lhs, rhs, idName, onePredicate(expressions ++ letExpression.toSet), interestingOrder, context), ident)
+      (context.logicalPlanProducer.planLetSelectOrSemiApply(lhs, rhs, idName, onePredicate(expressions ++ letExpression.toSet), context), ident)
   }
 
   private def createLetAntiSemiApply(lhs: LogicalPlan,
@@ -204,16 +248,15 @@ case object selectPatternPredicates extends CandidateGenerator[LogicalPlan] {
                                      predicate: Expression,
                                      expressions: Set[Expression],
                                      letExpression: Option[Expression],
-                                     interestingOrder: InterestingOrder,
                                      context: LogicalPlanningContext) = {
     val (idName, ident) = freshId(existsExpression)
     if (expressions.isEmpty && letExpression.isEmpty)
       (context.logicalPlanProducer.planLetAntiSemiApply(lhs, rhs, idName, context), ident)
     else
-      (context.logicalPlanProducer.planLetSelectOrAntiSemiApply(lhs, rhs, idName, onePredicate(expressions ++ letExpression.toSet), interestingOrder, context), ident)
+      (context.logicalPlanProducer.planLetSelectOrAntiSemiApply(lhs, rhs, idName, onePredicate(expressions ++ letExpression.toSet), context), ident)
   }
 
-  private def rhsPlan(lhs: LogicalPlan, pattern: PatternExpression, interestingOrder: InterestingOrder, ctx: LogicalPlanningContext) = {
+  private def rhsPlan(lhs: LogicalPlan, pattern: PatternExpression, ctx: LogicalPlanningContext) = {
     val context = ctx.withUpdatedCardinalityInformation(lhs)
     val (plan, _) = context.strategy.planPatternExpression(lhs.availableSymbols, pattern, context)
     plan

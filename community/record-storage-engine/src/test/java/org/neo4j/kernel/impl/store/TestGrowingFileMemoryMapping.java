@@ -27,6 +27,7 @@ import org.neo4j.configuration.Config;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.extension.Inject;
@@ -34,10 +35,10 @@ import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
 
 @PageCacheExtension
@@ -61,32 +62,31 @@ class TestGrowingFileMemoryMapping
         Config config = Config.defaults();
         DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( testDirectory.getFileSystem(), immediate() );
         StoreFactory storeFactory = new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache,
-                testDirectory.getFileSystem(), NullLogProvider.getInstance() );
+                testDirectory.getFileSystem(), NullLogProvider.getInstance(), NULL );
 
         NeoStores neoStores = storeFactory.openAllNeoStores( true );
         NodeStore nodeStore = neoStores.getNodeStore();
 
         // when
         int iterations = 2 * NUMBER_OF_RECORDS;
-        long startingId = nodeStore.nextId();
+        long startingId = nodeStore.nextId( PageCursorTracer.NULL );
         long nodeId = startingId;
         for ( int i = 0; i < iterations; i++ )
         {
-            NodeRecord record = new NodeRecord( nodeId, false, i, 0 );
+            NodeRecord record = new NodeRecord( nodeId ).initialize( false, 0, false, i, 0 );
             record.setInUse( true );
-            nodeStore.updateRecord( record );
-            nodeId = nodeStore.nextId();
+            nodeStore.updateRecord( record, PageCursorTracer.NULL );
+            nodeId = nodeStore.nextId( PageCursorTracer.NULL );
         }
 
         // then
-        NodeRecord record = new NodeRecord( 0, false, 0, 0 );
+        NodeRecord record = new NodeRecord( 0 ).initialize( false, 0, false, 0, 0 );
         for ( int i = 0; i < iterations; i++ )
         {
             record.setId( startingId + i );
-            nodeStore.getRecord( i, record, NORMAL );
+            nodeStore.getRecord( i, record, NORMAL, PageCursorTracer.NULL );
             assertTrue( record.inUse(), "record[" + i + "] should be in use" );
-            assertThat( "record[" + i + "] should have nextRelId of " + i,
-                    record.getNextRel(), is( (long) i ) );
+            assertThat( record.getNextRel() ).as( "record[" + i + "] should have nextRelId of " + i ).isEqualTo( (long) i );
         }
 
         neoStores.close();

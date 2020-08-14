@@ -23,11 +23,11 @@ import org.eclipse.collections.api.iterator.LongIterator;
 
 import java.util.function.LongConsumer;
 
-import org.neo4j.collection.PrimitiveLongCollections;
 import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdRangeIterator;
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.internal.id.IdValidator;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 
@@ -35,10 +35,10 @@ import static org.neo4j.internal.id.IdRangeIterator.VALUE_REPRESENTING_NULL;
 
 /**
  * Exposes batches of ids from a {@link RecordStore} as a {@link LongIterator}.
- * It makes use of {@link IdSequence#nextIdBatch(int)} (with default batch size the number of records per page)
- * and caches that batch, exhausting it in {@link #next()} before getting next batch.
+ * It makes use of {@link IdSequence#nextIdBatch(int, PageCursorTracer)} (with default batch size the number of records per page)
+ * and caches that batch, exhausting it in {@link #nextId(PageCursorTracer)} before getting next batch.
  */
-public class BatchingIdGetter extends PrimitiveLongCollections.AbstractPrimitiveLongBaseIterator implements IdSequence
+public class BatchingIdGetter implements IdSequence
 {
     private final IdSequence source;
     private IdRangeIterator batch;
@@ -56,40 +56,34 @@ public class BatchingIdGetter extends PrimitiveLongCollections.AbstractPrimitive
     }
 
     @Override
-    protected boolean fetchNext()
-    {
-        return next( nextId() );
-    }
-
-    @Override
-    public long nextId()
+    public long nextId( PageCursorTracer cursorTracer )
     {
         long id;
-        if ( batch == null || (id = batch.nextId()) == VALUE_REPRESENTING_NULL )
+        if ( batch == null || (id = batch.nextId( cursorTracer )) == VALUE_REPRESENTING_NULL )
         {
-            IdRange idRange = source.nextIdBatch( batchSize );
+            IdRange idRange = source.nextIdBatch( batchSize, cursorTracer );
             while ( IdValidator.hasReservedIdInRange( idRange.getRangeStart(), idRange.getRangeStart() + idRange.getRangeLength() ) )
             {
-                idRange = source.nextIdBatch( batchSize );
+                idRange = source.nextIdBatch( batchSize, cursorTracer );
             }
             batch = new IdRangeIterator( idRange );
-            id = batch.nextId();
+            id = batch.nextId( cursorTracer );
         }
         return id;
     }
 
     @Override
-    public IdRange nextIdBatch( int size )
+    public IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException();
     }
 
-    void visitUnused( LongConsumer visitor )
+    void visitUnused( LongConsumer visitor, PageCursorTracer cursorTracer )
     {
         if ( batch != null )
         {
             long unusedId;
-            while ( (unusedId = batch.nextId()) != VALUE_REPRESENTING_NULL )
+            while ( (unusedId = batch.nextId( cursorTracer )) != VALUE_REPRESENTING_NULL )
             {
                 visitor.accept( unusedId );
             }

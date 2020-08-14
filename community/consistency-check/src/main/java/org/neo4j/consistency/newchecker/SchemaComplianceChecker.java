@@ -35,19 +35,24 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.recordstorage.RecordStorageReader;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.SchemaDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexReader;
 import org.neo4j.kernel.impl.api.LookupFilter;
 import org.neo4j.kernel.impl.index.schema.NodeValueIterator;
 import org.neo4j.kernel.impl.store.record.PrimitiveRecord;
 import org.neo4j.kernel.impl.transaction.state.storeview.DefaultNodePropertyAccessor;
+<<<<<<< HEAD
+=======
+import org.neo4j.memory.MemoryTracker;
+>>>>>>> neo4j/4.1
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
 import static org.neo4j.consistency.newchecker.RecordLoading.lightClear;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.io.IOUtils.closeAllUnchecked;
 
@@ -57,14 +62,24 @@ class SchemaComplianceChecker implements AutoCloseable
     private final MutableIntSet reportedMissingMandatoryPropertyKeys = new IntHashSet();
     private final IndexAccessors.IndexReaders indexReaders;
     private final Iterable<IndexDescriptor> indexes;
+<<<<<<< HEAD
+=======
+    private final PageCursorTracer cursorTracer;
+>>>>>>> neo4j/4.1
     private final DefaultNodePropertyAccessor propertyAccessor;
 
-    SchemaComplianceChecker( CheckerContext context, MutableIntObjectMap<MutableIntSet> mandatoryProperties, Iterable<IndexDescriptor> indexes )
+    SchemaComplianceChecker( CheckerContext context, MutableIntObjectMap<MutableIntSet> mandatoryProperties, Iterable<IndexDescriptor> indexes,
+            PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         this.mandatoryProperties = mandatoryProperties;
         this.indexReaders = context.indexAccessors.readers();
         this.indexes = indexes;
+<<<<<<< HEAD
         this.propertyAccessor = new DefaultNodePropertyAccessor( new RecordStorageReader( context.neoStores ) );
+=======
+        this.cursorTracer = cursorTracer;
+        this.propertyAccessor = new DefaultNodePropertyAccessor( new RecordStorageReader( context.neoStores ), cursorTracer, memoryTracker );
+>>>>>>> neo4j/4.1
     }
 
     <ENTITY extends PrimitiveRecord> void checkContainsMandatoryProperties( ENTITY entity, long[] entityTokens, IntObjectMap<Value> values,
@@ -94,7 +109,7 @@ class SchemaComplianceChecker implements AutoCloseable
             }
             else
             {
-                long count = reader.countIndexedNodes( entity.getId(), schema.getPropertyIds(), valueArray );
+                long count = reader.countIndexedNodes( entity.getId(), cursorTracer, schema.getPropertyIds(), valueArray );
                 reportIncorrectIndexCount( entity, valueArray, indexRule, count, reportSupplier );
             }
         }
@@ -147,7 +162,7 @@ class SchemaComplianceChecker implements AutoCloseable
         try
         {
             NodeValueIterator iterator = new NodeValueIterator();
-            reader.query( NULL_CONTEXT, iterator, IndexOrder.NONE, false, query );
+            reader.query( NULL_CONTEXT, iterator, unconstrained(), query );
             indexedNodeIds = iterator;
         }
         catch ( IndexNotApplicableKernelException e )
@@ -155,7 +170,11 @@ class SchemaComplianceChecker implements AutoCloseable
             throw new RuntimeException( format( "Consistency checking error: index provider does not support exact query %s", Arrays.toString( query ) ), e );
         }
 
+<<<<<<< HEAD
         return reader.hasFullValuePrecision( query ) ? indexedNodeIds : LookupFilter.exactIndexMatches( propertyAccessor, indexedNodeIds, query );
+=======
+        return reader.hasFullValuePrecision( query ) ? indexedNodeIds : LookupFilter.exactIndexMatches( propertyAccessor, indexedNodeIds, cursorTracer, query );
+>>>>>>> neo4j/4.1
     }
 
     private <ENTITY extends PrimitiveRecord> void reportIncorrectIndexCount( ENTITY entity, Value[] propertyValues, IndexDescriptor indexRule,

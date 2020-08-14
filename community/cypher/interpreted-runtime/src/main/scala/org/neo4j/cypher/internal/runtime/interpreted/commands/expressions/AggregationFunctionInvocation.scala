@@ -20,23 +20,26 @@
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
 import org.neo4j.cypher.internal.logical.plans.UserFunctionSignature
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.UserDefinedAggregator
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.AggregationFunction
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, UserDefinedAggregator}
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 
 case class AggregationFunctionInvocation(signature: UserFunctionSignature, override val arguments: IndexedSeq[Expression])
   extends AggregationExpression {
 
-  override def createAggregationFunction: AggregationFunction = new AggregationFunction {
+  override def createAggregationFunction(_memoryTracker: MemoryTracker): AggregationFunction = new AggregationFunction {
     private var inner: UserDefinedAggregator = _
+    protected val memoryTracker: MemoryTracker = _memoryTracker
 
     override def result(state: QueryState): AnyValue = {
       aggregator(state).result
     }
 
-    override def apply(data: ExecutionContext, state: QueryState): Unit = {
+    override def apply(data: ReadableRow, state: QueryState): Unit = {
       val argValues = arguments.map(arg => {
         arg(data, state)
       })

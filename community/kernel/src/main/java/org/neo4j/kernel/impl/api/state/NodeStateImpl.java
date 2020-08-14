@@ -21,18 +21,20 @@ package org.neo4j.kernel.impl.api.state;
 
 import org.eclipse.collections.api.IntIterable;
 import org.eclipse.collections.api.iterator.LongIterator;
+import org.eclipse.collections.api.set.primitive.MutableIntSet;
 import org.eclipse.collections.impl.factory.primitive.IntSets;
 import org.eclipse.collections.impl.iterator.ImmutableEmptyLongIterator;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Set;
 
+import org.neo4j.collection.trackable.HeapTrackingCollections;
+import org.neo4j.graphdb.Direction;
 import org.neo4j.kernel.impl.api.state.RelationshipChangesForNode.DiffStrategy;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactory;
 import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSets;
-import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSetsImpl;
+import org.neo4j.memory.HeapEstimator;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.RelationshipDirection;
 import org.neo4j.storageengine.api.StorageProperty;
 import org.neo4j.storageengine.api.txstate.LongDiffSets;
@@ -40,9 +42,13 @@ import org.neo4j.storageengine.api.txstate.NodeState;
 import org.neo4j.values.storable.Value;
 
 import static java.util.Collections.emptyIterator;
+import static org.neo4j.kernel.impl.api.state.RelationshipChangesForNode.createRelationshipChangesForNode;
+import static org.neo4j.kernel.impl.util.diffsets.TrackableDiffSets.newMutableLongDiffSets;
 
 class NodeStateImpl extends EntityStateImpl implements NodeState
 {
+    private static final long SHALLOW_SIZE = HeapEstimator.shallowSizeOfInstance( NodeStateImpl.class );
+
     static final NodeState EMPTY = new NodeState()
     {
         @Override
@@ -112,9 +118,27 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
         }
 
         @Override
-        public LongIterator getAddedRelationships( RelationshipDirection direction, int relType )
+        public LongIterator getAddedRelationships( Direction direction )
         {
             return ImmutableEmptyLongIterator.INSTANCE;
+        }
+
+        @Override
+        public LongIterator getAddedRelationships( Direction direction, int relType )
+        {
+            return ImmutableEmptyLongIterator.INSTANCE;
+        }
+
+        @Override
+        public IntIterable getAddedRelationshipTypes()
+        {
+            return IntSets.immutable.empty();
+        }
+
+        @Override
+        public IntIterable getAddedAndRemovedRelationshipTypes()
+        {
+            return IntSets.immutable.empty();
         }
     };
 
@@ -124,9 +148,15 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
 
     private Set<MutableLongDiffSets> indexDiffs;
 
-    NodeStateImpl( long id, CollectionsFactory collectionsFactory )
+    static NodeStateImpl createNodeState( long id, CollectionsFactory collectionsFactory, MemoryTracker memoryTracker )
     {
-        super( id, collectionsFactory );
+        memoryTracker.allocateHeap( SHALLOW_SIZE );
+        return new NodeStateImpl( id, collectionsFactory, memoryTracker );
+    }
+
+    private NodeStateImpl( long id, CollectionsFactory collectionsFactory, MemoryTracker memoryTracker )
+    {
+        super( id, collectionsFactory, memoryTracker );
     }
 
     @Override
@@ -139,7 +169,7 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
     {
         if ( labelDiffSets == null )
         {
-            labelDiffSets = new MutableLongDiffSetsImpl( collectionsFactory );
+            labelDiffSets = newMutableLongDiffSets( collectionsFactory, memoryTracker );
         }
         return labelDiffSets;
     }
@@ -148,7 +178,7 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
     {
         if ( !hasAddedRelationships() )
         {
-            relationshipsAdded = new RelationshipChangesForNode( DiffStrategy.ADD );
+            relationshipsAdded = createRelationshipChangesForNode( DiffStrategy.ADD, memoryTracker );
         }
         relationshipsAdded.addRelationship( relId, typeId, direction );
     }
@@ -166,7 +196,7 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
         }
         if ( !hasRemovedRelationships() )
         {
-            relationshipsRemoved = new RelationshipChangesForNode( DiffStrategy.REMOVE );
+            relationshipsRemoved = createRelationshipChangesForNode( DiffStrategy.REMOVE, memoryTracker );
         }
         relationshipsRemoved.addRelationship( relId, typeId, direction );
     }
@@ -221,7 +251,7 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
     {
         if ( indexDiffs == null )
         {
-            indexDiffs = Collections.newSetFromMap( new IdentityHashMap<>() );
+            indexDiffs = HeapTrackingCollections.newIdentityHashingSet( memoryTracker );
         }
         indexDiffs.add( diff );
     }
@@ -260,9 +290,38 @@ class NodeStateImpl extends EntityStateImpl implements NodeState
     }
 
     @Override
-    public LongIterator getAddedRelationships( RelationshipDirection direction, int relType )
+    public LongIterator getAddedRelationships( Direction direction )
+    {
+        return relationshipsAdded != null ? relationshipsAdded.getRelationships( direction ) :
+               ImmutableEmptyLongIterator.INSTANCE;
+    }
+
+    @Override
+    public LongIterator getAddedRelationships( Direction direction, int relType )
     {
         return relationshipsAdded != null ? relationshipsAdded.getRelationships( direction, relType ) :
                ImmutableEmptyLongIterator.INSTANCE;
+    }
+
+    @Override
+    public IntIterable getAddedRelationshipTypes()
+    {
+        return relationshipsAdded != null ? relationshipsAdded.relationshipTypes() : IntSets.immutable.empty();
+    }
+
+    @Override
+    public IntIterable getAddedAndRemovedRelationshipTypes()
+    {
+        if ( relationshipsAdded == null && relationshipsRemoved == null )
+        {
+            return IntSets.immutable.empty();
+        }
+        if ( relationshipsAdded != null && relationshipsRemoved != null )
+        {
+            MutableIntSet types = IntSets.mutable.withAll( relationshipsAdded.relationshipTypes() );
+            types.addAll( relationshipsRemoved.relationshipTypes() );
+            return types;
+        }
+        return relationshipsAdded != null ? relationshipsAdded.relationshipTypes() : relationshipsRemoved.relationshipTypes();
     }
 }

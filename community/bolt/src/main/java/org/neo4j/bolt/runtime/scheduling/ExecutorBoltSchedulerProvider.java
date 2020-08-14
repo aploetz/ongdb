@@ -25,6 +25,7 @@ import java.util.concurrent.ForkJoinPool;
 import org.neo4j.bolt.BoltChannel;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.connectors.BoltConnector;
+import org.neo4j.configuration.connectors.BoltConnectorInternalSettings;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.internal.LogService;
@@ -44,7 +45,8 @@ public class ExecutorBoltSchedulerProvider extends LifecycleAdapter implements B
 
     private ExecutorService forkJoinThreadPool;
 
-    public ExecutorBoltSchedulerProvider( Config config, ExecutorFactory executorFactory, JobScheduler scheduler, LogService logService )
+    public ExecutorBoltSchedulerProvider( Config config, ExecutorFactory executorFactory, JobScheduler scheduler,
+            LogService logService )
     {
         this.config = config;
         this.executorFactory = executorFactory;
@@ -64,8 +66,9 @@ public class ExecutorBoltSchedulerProvider extends LifecycleAdapter implements B
             this.boltScheduler =
                     new ExecutorBoltScheduler( BoltConnector.NAME, executorFactory, scheduler, logService, config.get( BoltConnector.thread_pool_min_size ),
                             config.get( BoltConnector.thread_pool_max_size ), config.get( BoltConnector.thread_pool_keep_alive ),
-                            config.get( BoltConnector.unsupported_thread_pool_queue_size ), forkJoinThreadPool,
-                            config.get( BoltConnector.thread_pool_shutdown_wait_time ) );
+                            config.get( BoltConnectorInternalSettings.unsupported_thread_pool_queue_size ), forkJoinThreadPool,
+                            config.get( BoltConnector.thread_pool_shutdown_wait_time ),
+                            config.get( BoltConnectorInternalSettings.connection_keep_alive_scheduling_interval ) );
             this.boltScheduler.init();
         }
     }

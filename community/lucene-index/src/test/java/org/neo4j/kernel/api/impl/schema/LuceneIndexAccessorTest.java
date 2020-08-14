@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 class LuceneIndexAccessorTest
 {
@@ -48,31 +49,17 @@ class LuceneIndexAccessorTest
     }
 
     @Test
-    void indexIsDirtyWhenLuceneIndexIsNotValid()
-    {
-        when( schemaIndex.isValid() ).thenReturn( false );
-        assertTrue( accessor.isDirty() );
-    }
-
-    @Test
-    void indexIsCleanWhenLuceneIndexIsValid()
-    {
-        when( schemaIndex.isValid() ).thenReturn( true );
-        assertFalse( accessor.isDirty() );
-    }
-
-    @Test
     void indexIsNotConsistentWhenIndexIsNotValid()
     {
         when( schemaIndex.isValid() ).thenReturn( false );
-        assertFalse( accessor.consistencyCheck( ReporterFactories.noopReporterFactory() ) );
+        assertFalse( accessor.consistencyCheck( ReporterFactories.noopReporterFactory(), NULL ) );
     }
 
     @Test
     void indexIsConsistentWhenIndexIsValid()
     {
         when( schemaIndex.isValid() ).thenReturn( true );
-        assertTrue( accessor.consistencyCheck( ReporterFactories.noopReporterFactory() ) );
+        assertTrue( accessor.consistencyCheck( ReporterFactories.noopReporterFactory(), NULL ) );
     }
 
     @Test
@@ -84,7 +71,7 @@ class LuceneIndexAccessorTest
             called.setTrue();
             return null;
         };
-        assertFalse( accessor.consistencyCheck( new ReporterFactory( handler ) ), "Expected index to be inconsistent" );
+        assertFalse( accessor.consistencyCheck( new ReporterFactory( handler ), NULL ), "Expected index to be inconsistent" );
         assertTrue( called.booleanValue(), "Expected visitor to be called" );
     }
 }

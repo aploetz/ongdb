@@ -19,14 +19,19 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{CoalesceFunction, Expression, Literal, Null}
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.CoalesceFunction
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Null
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 import org.neo4j.values.storable.Values.stringValue
+import org.scalatest.Assertions.fail
 
 class CoalesceTest extends CypherFunSuite {
 
@@ -50,12 +55,11 @@ class CoalesceTest extends CypherFunSuite {
     calc(func) should equal(stringValue("Hunger"))
   }
 
-  private def calc(e: Expression): Any = e(ExecutionContext.empty, QueryStateHelper.empty)
+  private def calc(e: Expression): Any = e(CypherRow.empty, QueryStateHelper.empty)
 }
 
 case class BreakingExpression() extends Expression {
-  override def apply(v1: ExecutionContext, state: QueryState): AnyValue = {
-    import org.scalatest.Assertions._
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
     fail("Coalesce is not lazy")
   }
 

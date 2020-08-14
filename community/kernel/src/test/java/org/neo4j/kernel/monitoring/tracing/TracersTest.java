@@ -24,8 +24,6 @@ import org.junit.jupiter.api.Test;
 
 import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.DefaultPageCursorTracerSupplier;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.kernel.impl.api.tracer.DefaultTracer;
 import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.logging.AssertableLogProvider;
@@ -35,10 +33,9 @@ import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.time.Clocks;
 import org.neo4j.time.SystemNanoClock;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class TracersTest
 {
@@ -59,9 +56,8 @@ class TracersTest
     void mustProduceNullImplementationsWhenRequested()
     {
         Tracers tracers = createTracers( "null" );
-        assertThat( tracers.getPageCacheTracer(), is( PageCacheTracer.NULL ) );
-        assertThat( tracers.getPageCursorTracerSupplier(), is( PageCursorTracerSupplier.NULL ) );
-        assertThat( tracers.getDatabaseTracer(), is( DatabaseTracer.NULL.NULL ) );
+        assertThat( tracers.getPageCacheTracer() ).isEqualTo( PageCacheTracer.NULL );
+        assertThat( tracers.getDatabaseTracer() ).isEqualTo( DatabaseTracer.NULL.NULL );
         assertNoWarning();
     }
 
@@ -96,20 +92,18 @@ class TracersTest
 
     private void assertDefaultImplementation( Tracers tracers )
     {
-        assertThat( tracers.getPageCacheTracer(), instanceOf( DefaultPageCacheTracer.class ) );
-        assertThat( tracers.getDatabaseTracer(), instanceOf( DefaultTracer.class ) );
-        assertThat( tracers.getPageCursorTracerSupplier(), instanceOf( DefaultPageCursorTracerSupplier.class ) );
+        assertThat( tracers.getPageCacheTracer() ).isInstanceOf( DefaultPageCacheTracer.class );
+        assertThat( tracers.getDatabaseTracer() ).isInstanceOf( DefaultTracer.class );
     }
 
     private void assertNoWarning()
     {
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
     }
 
-    private void assertWarning( String implementationName )
+    private void assertWarning( String tracerName )
     {
-        logProvider.assertExactly(
-                AssertableLogProvider.inLog( getClass() ).warn( "Using default tracer implementations instead of '%s'", implementationName )
-        );
+        assertThat( logProvider ).forClass( getClass() ).forLevel( WARN )
+                .containsMessageWithArguments( "Using default tracer implementations instead of '%s'", tracerName );
     }
 }

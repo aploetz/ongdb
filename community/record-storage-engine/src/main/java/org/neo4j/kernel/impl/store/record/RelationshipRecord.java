@@ -23,9 +23,11 @@ import java.util.Objects;
 
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_PROPERTY;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_RELATIONSHIP;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 
 public class RelationshipRecord extends PrimitiveRecord
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( RelationshipRecord.class );
     private long firstNode;
     private long secondNode;
     private int type;
@@ -36,34 +38,23 @@ public class RelationshipRecord extends PrimitiveRecord
     private boolean firstInFirstChain;
     private boolean firstInSecondChain;
 
-    @Deprecated
-    public RelationshipRecord( long id, long firstNode, long secondNode, int type )
-    {
-        this( id );
-        this.firstNode = firstNode;
-        this.secondNode = secondNode;
-        this.type = type;
-    }
-
-    @Deprecated
-    public RelationshipRecord( long id, boolean inUse, long firstNode, long secondNode, int type,
-                               long firstPrevRel, long firstNextRel, long secondPrevRel, long secondNextRel,
-                               boolean firstInFirstChain, boolean firstInSecondChain )
-    {
-        this( id, firstNode, secondNode, type );
-        setInUse( inUse );
-        this.firstPrevRel = firstPrevRel;
-        this.firstNextRel = firstNextRel;
-        this.secondPrevRel = secondPrevRel;
-        this.secondNextRel = secondNextRel;
-        this.firstInFirstChain = firstInFirstChain;
-        this.firstInSecondChain = firstInSecondChain;
-
-    }
-
     public RelationshipRecord( long id )
     {
         super( id );
+    }
+
+    public RelationshipRecord( RelationshipRecord other )
+    {
+        super( other );
+        this.firstNode = other.firstNode;
+        this.secondNode = other.secondNode;
+        this.type = other.type;
+        this.firstPrevRel = other.firstPrevRel;
+        this.firstNextRel = other.firstNextRel;
+        this.secondPrevRel = other.secondPrevRel;
+        this.secondNextRel = other.secondNextRel;
+        this.firstInFirstChain = other.firstInFirstChain;
+        this.firstInSecondChain = other.firstInSecondChain;
     }
 
     public RelationshipRecord initialize( boolean inUse, long nextProp, long firstNode, long secondNode,
@@ -207,9 +198,13 @@ public class RelationshipRecord extends PrimitiveRecord
     }
 
     @Override
+<<<<<<< HEAD
     public RelationshipRecord clone()
+=======
+    public RelationshipRecord copy()
+>>>>>>> neo4j/4.1
     {
-        return (RelationshipRecord) super.clone();
+        return new RelationshipRecord( this );
     }
 
     @Override

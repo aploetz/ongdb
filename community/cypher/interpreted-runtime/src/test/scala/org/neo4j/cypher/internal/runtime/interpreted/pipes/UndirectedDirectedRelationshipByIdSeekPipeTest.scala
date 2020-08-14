@@ -20,13 +20,17 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.RelationshipOperations
+import org.neo4j.cypher.internal.runtime.interpreted.ExecutionContextHelper.RichExecutionContext
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
 import org.neo4j.cypher.internal.runtime.interpreted.ValueComparisonHelper.beEquivalentTo
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{ListLiteral, Literal}
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext, RelationshipOperations}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.values.virtual.{NodeValue, RelationshipValue}
-import org.neo4j.cypher.internal.runtime.interpreted.ExecutionContextHelper._
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ListLiteral
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Literal
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 class UndirectedDirectedRelationshipByIdSeekPipeTest extends CypherFunSuite {
 
@@ -43,9 +47,9 @@ class UndirectedDirectedRelationshipByIdSeekPipeTest extends CypherFunSuite {
     val queryState = QueryStateHelper.emptyWith(query = queryContext)
 
     // when
-    val result: Iterator[ExecutionContext] =
+    val result: Iterator[CypherRow] =
       UndirectedRelationshipByIdSeekPipe("a", SingleSeekArg(Literal(17)), to, from)()
-      .createResults(queryState)
+        .createResults(queryState)
 
     // then
     result.toList should beEquivalentTo(List(
@@ -71,7 +75,7 @@ class UndirectedDirectedRelationshipByIdSeekPipeTest extends CypherFunSuite {
     // whens
     val result =
       UndirectedRelationshipByIdSeekPipe(relName, ManySeekArgs(ListLiteral(Literal(42), Literal(21))), to, from)().
-      createResults(queryState)
+        createResults(queryState)
 
     // then
     result.map(_.toMap).toSet should equal(Set(
@@ -92,7 +96,7 @@ class UndirectedDirectedRelationshipByIdSeekPipeTest extends CypherFunSuite {
     val queryState = QueryStateHelper.emptyWith(query = queryContext)
 
     // when
-    val result: Iterator[ExecutionContext] = UndirectedRelationshipByIdSeekPipe("a", SingleSeekArg(Literal(null)), to, from)().createResults(queryState)
+    val result: Iterator[CypherRow] = UndirectedRelationshipByIdSeekPipe("a", SingleSeekArg(Literal(null)), to, from)().createResults(queryState)
 
     // then
     result.toList should be(empty)

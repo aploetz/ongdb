@@ -35,6 +35,7 @@ import org.neo4j.consistency.RecordType;
 import org.neo4j.consistency.report.ConsistencyReport;
 import org.neo4j.internal.schema.PropertySchemaType;
 import org.neo4j.internal.schema.SchemaDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.DynamicNodeLabels;
 import org.neo4j.kernel.impl.store.DynamicStringStore;
 import org.neo4j.kernel.impl.store.InlineNodeLabels;
@@ -73,7 +74,8 @@ class RecordLoading
         this.neoStores = neoStores;
     }
 
-    static long[] safeGetNodeLabels( CheckerContext context, long nodeId, long labelField, RecordReader<DynamicRecord> labelReader )
+    static long[] safeGetNodeLabels( CheckerContext context, long nodeId, long labelField, RecordReader<DynamicRecord> labelReader,
+            PageCursorTracer cursorTracer )
     {
         if ( !NodeLabelsField.fieldPointsToDynamicRecordOfLabels( labelField ) )
         {
@@ -86,16 +88,20 @@ class RecordLoading
         ConsistencyReport.Reporter reporter = context.reporter;
         RecordLoading recordLoader = context.recordLoader;
         int nodeLabelBlockSize = context.neoStores.getNodeStore().getDynamicLabelStore().getRecordDataSize();
+<<<<<<< HEAD
         if ( safeLoadDynamicRecordChain( record -> records.add( record.clone() ), labelReader, seenRecordIds,
+=======
+        if ( safeLoadDynamicRecordChain( record -> records.add( record.copy() ), labelReader, seenRecordIds,
+>>>>>>> neo4j/4.1
                 NodeLabelsField.firstDynamicLabelRecordId( labelField ), nodeLabelBlockSize,
-                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId ) ).dynamicRecordChainCycle( labelRecord ),
-                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId ) ).dynamicLabelRecordNotInUse( labelRecord ),
-                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId ) ).dynamicLabelRecordNotInUse( labelRecord ),
+                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId, cursorTracer ) ).dynamicRecordChainCycle( labelRecord ),
+                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId, cursorTracer ) ).dynamicLabelRecordNotInUse( labelRecord ),
+                ( id, labelRecord ) -> reporter.forNode( recordLoader.node( nodeId, cursorTracer ) ).dynamicLabelRecordNotInUse( labelRecord ),
                 ( id, labelRecord ) -> reporter.forDynamicBlock( RecordType.NODE_DYNAMIC_LABEL, labelRecord ).emptyBlock(),
                 labelRecord -> reporter.forDynamicBlock( RecordType.NODE_DYNAMIC_LABEL, labelRecord ).recordNotFullReferencesNext(),
                 labelRecord -> reporter.forDynamicBlock( RecordType.NODE_DYNAMIC_LABEL, labelRecord ).invalidLength() ) )
         {
-            return DynamicNodeLabels.getDynamicLabelsArray( records, labelReader.store() );
+            return DynamicNodeLabels.getDynamicLabelsArray( records, labelReader.store(), cursorTracer );
         }
         return null;
     }
@@ -148,42 +154,42 @@ class RecordLoading
         return valueArray;
     }
 
-    NodeRecord node( long id )
+    NodeRecord node( long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( neoStores.getNodeStore(), id );
+        return loadRecord( neoStores.getNodeStore(), id, cursorTracer );
     }
 
-    PropertyRecord property( long id )
+    PropertyRecord property( long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( neoStores.getPropertyStore(), id );
+        return loadRecord( neoStores.getPropertyStore(), id, cursorTracer );
     }
 
-    RelationshipRecord relationship( long id )
+    RelationshipRecord relationship( long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( neoStores.getRelationshipStore(), id );
+        return loadRecord( neoStores.getRelationshipStore(), id, cursorTracer );
     }
 
-    RelationshipRecord relationship( RelationshipRecord into, long id )
+    RelationshipRecord relationship( RelationshipRecord into, long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( neoStores.getRelationshipStore(), into, id );
+        return loadRecord( neoStores.getRelationshipStore(), into, id, cursorTracer );
     }
 
-    RelationshipGroupRecord relationshipGroup( long id )
+    RelationshipGroupRecord relationshipGroup( long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( neoStores.getRelationshipGroupStore(), id );
+        return loadRecord( neoStores.getRelationshipGroupStore(), id, cursorTracer );
     }
 
-    <RECORD extends AbstractBaseRecord> RECORD loadRecord( RecordStore<RECORD> store, long id )
+    <RECORD extends AbstractBaseRecord> RECORD loadRecord( RecordStore<RECORD> store, long id, PageCursorTracer cursorTracer )
     {
-        return loadRecord( store, store.newRecord(), id );
+        return loadRecord( store, store.newRecord(), id, cursorTracer );
     }
 
-    <RECORD extends AbstractBaseRecord> RECORD loadRecord( RecordStore<RECORD> store, RECORD record, long id )
+    <RECORD extends AbstractBaseRecord> RECORD loadRecord( RecordStore<RECORD> store, RECORD record, long id, PageCursorTracer cursorTracer )
     {
-        return store.getRecord( id, record, RecordLoad.FORCE );
+        return store.getRecord( id, record, RecordLoad.FORCE, cursorTracer );
     }
 
-    static <RECORD extends TokenRecord> List<NamedToken> safeLoadTokens( TokenStore<RECORD> tokenStore )
+    static <RECORD extends TokenRecord> List<NamedToken> safeLoadTokens( TokenStore<RECORD> tokenStore, PageCursorTracer cursorTracer )
     {
         long highId = tokenStore.getHighId();
         List<NamedToken> tokens = new ArrayList<>();
@@ -191,8 +197,8 @@ class RecordLoading
         List<DynamicRecord> nameRecords = new ArrayList<>();
         MutableLongSet seenRecordIds = new LongHashSet();
         int nameBlockSize = nameStore.getRecordDataSize();
-        try ( RecordReader<RECORD> tokenReader = new RecordReader<>( tokenStore );
-              RecordReader<DynamicRecord> nameReader = new RecordReader<>( nameStore ) )
+        try ( RecordReader<RECORD> tokenReader = new RecordReader<>( tokenStore, cursorTracer );
+              RecordReader<DynamicRecord> nameReader = new RecordReader<>( nameStore, cursorTracer ) )
         {
             for ( long id = 0; id < highId; id++ )
             {
@@ -201,11 +207,15 @@ class RecordLoading
                 if ( record.inUse() )
                 {
                     String name;
+<<<<<<< HEAD
                     if ( !NULL_REFERENCE.is( record.getNameId() ) && safeLoadDynamicRecordChain( r -> nameRecords.add( r.clone() ),
+=======
+                    if ( !NULL_REFERENCE.is( record.getNameId() ) && safeLoadDynamicRecordChain( r -> nameRecords.add( r.copy() ),
+>>>>>>> neo4j/4.1
                             nameReader, seenRecordIds, record.getNameId(), nameBlockSize ) )
                     {
                         record.addNameRecords( nameRecords );
-                        name = tokenStore.getStringFor( record );
+                        name = tokenStore.getStringFor( record, cursorTracer );
                     }
                     else
                     {
@@ -279,7 +289,7 @@ class RecordLoading
 
     static <RECORD extends AbstractBaseRecord,TOKEN extends TokenRecord> boolean checkValidToken(
             RECORD entity, int token, TokenHolder tokens, TokenStore<TOKEN> tokenStore, BiConsumer<RECORD,Integer> illegalTokenReport,
-            BiConsumer<RECORD,TOKEN> unusedReporter )
+            BiConsumer<RECORD,TOKEN> unusedReporter, PageCursorTracer cursorTracer )
     {
         if ( token < 0 )
         {
@@ -302,7 +312,7 @@ class RecordLoading
                 }
                 catch ( TokenNotFoundException itnfe )
                 {
-                    TOKEN tokenRecord = tokenStore.getRecord( token, tokenStore.newRecord(), RecordLoad.FORCE );
+                    TOKEN tokenRecord = tokenStore.getRecord( token, tokenStore.newRecord(), RecordLoad.FORCE, cursorTracer );
                     unusedReporter.accept( entity, tokenRecord );
                     return false;
                 }

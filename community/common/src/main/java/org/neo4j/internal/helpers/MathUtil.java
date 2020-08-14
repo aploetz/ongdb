@@ -23,7 +23,7 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Comparator;
 
-public class MathUtil
+public final class MathUtil
 {
     public static final double DEFAULT_EPSILON = 1.0E-8;
 
@@ -44,7 +44,7 @@ public class MathUtil
         assert n.length > 0;
 
         double first = n[0];
-        if ( numbersEqual( first, 0 ) )
+        if ( Math.abs( first ) < DEFAULT_EPSILON )
         {
             return 0d;
         }
@@ -52,51 +52,10 @@ public class MathUtil
         return first / total;
     }
 
-    public static boolean numbersEqual( double fpn, long in )
-    {
-        if ( in < 0 )
-        {
-            if ( fpn < 0.0 )
-            {
-                if ( (NON_DOUBLE_LONG & in) == NON_DOUBLE_LONG ) // the high order bits are only sign bits
-                { // no loss of precision if converting the long to a double, so it's safe to compare as double
-                    return fpn == in;
-                }
-                else if ( fpn < Long.MIN_VALUE )
-                { // the double is too big to fit in a long, they cannot be equal
-                    return false;
-                }
-                else if ( (fpn == Math.floor( fpn )) && !Double.isInfinite( fpn ) ) // no decimals
-                { // safe to compare as long
-                    return in == (long) fpn;
-                }
-            }
-        }
-        else
-        {
-            if ( !(fpn < 0.0) )
-            {
-                if ( (NON_DOUBLE_LONG & in) == 0 ) // the high order bits are only sign bits
-                { // no loss of precision if converting the long to a double, so it's safe to compare as double
-                    return fpn == in;
-                }
-                else if ( fpn > Long.MAX_VALUE )
-                { // the double is too big to fit in a long, they cannot be equal
-                    return false;
-                }
-                else if ( (fpn == Math.floor( fpn )) && !Double.isInfinite( fpn ) )  // no decimals
-                { // safe to compare as long
-                    return in == (long) fpn;
-                }
-            }
-        }
-        return false;
-    }
-
     // Tested by PropertyValueComparisonTest
     public static int compareDoubleAgainstLong( double lhs, long rhs )
     {
-        if  ( (NON_DOUBLE_LONG & rhs ) != NON_DOUBLE_LONG )
+        if ( (NON_DOUBLE_LONG & rhs ) != NON_DOUBLE_LONG )
         {
             if ( Double.isNaN( lhs ) )
             {
@@ -160,4 +119,3 @@ public class MathUtil
         }
     }
 }
-

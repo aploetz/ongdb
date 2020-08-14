@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.neo4j.common.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -46,6 +45,8 @@ class ShutdownOnIndexUpdateIT
 {
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private Database database;
 
     private static final String UNIQUE_PROPERTY_NAME = "uniquePropertyName";
     private static final AtomicLong indexProvider = new AtomicLong();
@@ -62,12 +63,10 @@ class ShutdownOnIndexUpdateIT
             Node node = transaction.createNode( CONSTRAINT_INDEX_LABEL );
             node.setProperty( UNIQUE_PROPERTY_NAME, indexProvider.getAndIncrement() );
 
-            DependencyResolver dependencyResolver = db.getDependencyResolver();
-            Database dataSource = dependencyResolver.resolveDependency( Database.class );
-            LifeSupport dataSourceLife = dataSource.getLife();
+            LifeSupport dataSourceLife = database.getLife();
             TransactionCloseListener closeListener = new TransactionCloseListener( transaction );
             dataSourceLife.addLifecycleListener( closeListener );
-            dataSource.stop();
+            database.stop();
 
             assertTrue( closeListener.isTransactionClosed(), "Transaction should be closed and no exception should be thrown." );
         }

@@ -30,8 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.neo4j.internal.helpers.collection.LongRange;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -94,7 +93,7 @@ class ParallelExecutionTest
         Exception e1 = new Exception( "A" );
         Exception e2 = new Exception( "B" );
         Exception e3 = new Exception( "C" );
-        Exception exception = assertThrows( Exception.class, () -> execution.run( getClass().getSimpleName(), () ->
+        Exception executionException = assertThrows( Exception.class, () -> execution.run( getClass().getSimpleName(), () ->
         {
             throw e1;
         }, () ->
@@ -104,10 +103,11 @@ class ParallelExecutionTest
         {
             throw e3;
         } ) );
+        Throwable exception = executionException.getCause();
         Throwable[] suppressed = exception.getSuppressed();
         List<String> messages = List.of( exception.getCause().getMessage(), suppressed[0].getCause().getMessage(), suppressed[1].getCause().getMessage() );
 
-        assertThat("", messages, containsInAnyOrder( "A", "B", "C" ) );
+        assertThat( messages ).contains( "A", "B", "C" );
     }
 
     @Test

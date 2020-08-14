@@ -19,12 +19,14 @@
  */
 package org.neo4j.kernel.impl.newapi;
 
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.platform.commons.util.BlacklistedExceptions;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.opentest4j.AssertionFailedError;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,18 +35,20 @@ import java.util.Iterator;
 import java.util.Optional;
 
 import org.neo4j.collection.Dependencies;
-import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.exceptions.KernelException;
+import org.neo4j.graphdb.security.AuthorizationViolationException;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.collection.Iterators;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.kernel.api.LabelSet;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.internal.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidationException;
 import org.neo4j.internal.kernel.api.helpers.StubNodeCursor;
 import org.neo4j.internal.kernel.api.helpers.TestRelationshipChain;
+import org.neo4j.internal.kernel.api.security.AccessMode;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
@@ -85,18 +89,14 @@ import org.neo4j.storageengine.api.CommandCreationContext;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.StorageSchemaReader;
+import org.neo4j.test.InMemoryTokens;
 import org.neo4j.token.TokenHolders;
 import org.neo4j.token.api.NamedToken;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.containsStringIgnoringCase;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -120,7 +120,9 @@ import static org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory.
 import static org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory.nodeKeyForSchema;
 import static org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory.uniqueForLabel;
 import static org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory.uniqueForSchema;
-import static org.neo4j.kernel.impl.newapi.TwoPhaseNodeForRelationshipLockingTest.returnRelationships;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.kernel.impl.newapi.DetachingRelationshipDeleterTest.returnRelationships;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.rule.DatabaseRule.mockedTokenHolders;
 import static org.neo4j.values.storable.Values.NO_VALUE;
 
@@ -161,13 +163,13 @@ class OperationsTest
         nodeCursor = mock( FullAccessNodeCursor.class );
         propertyCursor = mock( FullAccessPropertyCursor.class );
         relationshipCursor = mock( DefaultRelationshipScanCursor.class );
-        when( cursors.allocateFullAccessNodeCursor() ).thenReturn( nodeCursor );
-        when( cursors.allocateFullAccessPropertyCursor() ).thenReturn( propertyCursor );
-        when( cursors.allocateRelationshipScanCursor() ).thenReturn( relationshipCursor );
+        when( cursors.allocateFullAccessNodeCursor( NULL ) ).thenReturn( nodeCursor );
+        when( cursors.allocateFullAccessPropertyCursor( NULL, INSTANCE ) ).thenReturn( propertyCursor );
+        when( cursors.allocateRelationshipScanCursor( NULL ) ).thenReturn( relationshipCursor );
         StorageEngine engine = mock( StorageEngine.class );
         storageReader = mock( StorageReader.class );
         storageReaderSnapshot = mock( StorageSchemaReader.class );
-        when( storageReader.nodeExists( anyLong() ) ).thenReturn( true );
+        when( storageReader.nodeExists( anyLong(), any() ) ).thenReturn( true );
         when( storageReader.constraintsGetForLabel( anyInt() )).thenReturn( Collections.emptyIterator() );
         when( storageReader.constraintsGetAll() ).thenReturn( Collections.emptyIterator() );
         when( storageReader.schemaSnapshot() ).thenReturn( storageReaderSnapshot );
@@ -177,7 +179,8 @@ class OperationsTest
         var facade = mock( GraphDatabaseFacade.class );
         dependencies.satisfyDependency( facade );
         allStoreHolder = new AllStoreHolder( storageReader, transaction, cursors, mock( GlobalProcedures.class ), mock( SchemaState.class ), indexingService,
-                mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies );
+                mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ), mock( IndexStatisticsStore.class ), NULL, dependencies,
+                Config.defaults(), INSTANCE );
         constraintIndexCreator = mock( ConstraintIndexCreator.class );
         tokenHolders = mockedTokenHolders();
         creationContext = mock( CommandCreationContext.class );
@@ -190,7 +193,7 @@ class OperationsTest
         when( indexingProvidersService.completeConfiguration( any() ) ).thenAnswer( inv -> inv.getArgument( 0 ) );
         operations = new Operations( allStoreHolder, storageReader, mock( IndexTxStateUpdater.class ), creationContext,
                  transaction, new KernelToken( storageReader, creationContext, transaction, tokenHolders ), cursors,
-                constraintIndexCreator, mock( ConstraintSemantics.class ), indexingProvidersService, Config.defaults() );
+                constraintIndexCreator, mock( ConstraintSemantics.class ), indexingProvidersService, Config.defaults(), NULL, INSTANCE );
         operations.initialize();
 
         this.order = inOrder( locks, txState, storageReader, storageReaderSnapshot );
@@ -284,7 +287,7 @@ class OperationsTest
     {
         // given
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
 
         // when
         operations.nodeAddLabel( 123L, 456 );
@@ -299,7 +302,7 @@ class OperationsTest
     {
         // given
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
         when( transaction.hasTxStateWithChanges() ).thenReturn( true );
 
         // when
@@ -315,7 +318,7 @@ class OperationsTest
     {
         // given
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
 
         // when
         int labelId = 456;
@@ -331,7 +334,7 @@ class OperationsTest
     {
         // given
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
         int propertyKeyId = 8;
         Value value = Values.of( 9 );
         when( propertyCursor.next() ).thenReturn( true );
@@ -354,9 +357,9 @@ class OperationsTest
         int unrelatedLabelId = 51;
         int propertyKeyId = 8;
         when( nodeCursor.next() ).thenReturn( true );
-        LabelSet labelSet = mock( LabelSet.class );
-        when( labelSet.all() ).thenReturn( new long[]{relatedLabelId} );
-        when( nodeCursor.labels() ).thenReturn( labelSet );
+        TokenSet tokenSet = mock( TokenSet.class );
+        when( tokenSet.all() ).thenReturn( new long[]{relatedLabelId} );
+        when( nodeCursor.labels() ).thenReturn( tokenSet );
         Value value = Values.of( 9 );
         when( propertyCursor.next() ).thenReturn( true );
         when( propertyCursor.propertyKey() ).thenReturn( propertyKeyId );
@@ -396,7 +399,7 @@ class OperationsTest
     {
         // given
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
         when( transaction.hasTxStateWithChanges() ).thenReturn( true );
         txState.nodeDoCreate( 123 );
         int propertyKeyId = 8;
@@ -433,10 +436,10 @@ class OperationsTest
     {
         // GIVEN
         when( nodeCursor.next() ).thenReturn( true );
-        when( nodeCursor.labels() ).thenReturn( LabelSet.NONE );
+        when( nodeCursor.labels() ).thenReturn( TokenSet.NONE );
 
         // WHEN
-        operations.nodeDelete(  123 );
+        operations.nodeDelete( 123 );
 
         //THEN
         order.verify( locks ).acquireExclusive( LockTracer.NONE, ResourceTypes.NODE, 123 );
@@ -563,8 +566,8 @@ class OperationsTest
         Iterator<ConstraintDescriptor> result = allStoreHolder.constraintsGetAll( );
 
         // then
-        assertThat( Iterators.count( result ), Matchers.is( 2L ) );
-        assertThat( asList( result ), empty() );
+        assertThat( Iterators.count( result ) ).isEqualTo( 2L );
+        assertThat( asList( result ) ).isEmpty();
         order.verify( storageReader ).constraintsGetAll();
         order.verify( locks, atLeastOnce() ).acquireShared( LockTracer.NONE, ResourceTypes.LABEL, labelId );
         order.verify( locks, atLeastOnce() ).acquireShared( LockTracer.NONE, ResourceTypes.RELATIONSHIP_TYPE, relTypeId );
@@ -585,8 +588,8 @@ class OperationsTest
         Iterator<ConstraintDescriptor> result = allStoreHolder.snapshot().constraintsGetAll( );
 
         // then
-        assertThat( Iterators.count( result ), Matchers.is( 2L ) );
-        assertThat( asList( result ), empty() );
+        assertThat( Iterators.count( result ) ).isEqualTo( 2L );
+        assertThat( asList( result ) ).isEmpty();
         verify( storageReaderSnapshot ).constraintsGetAll();
         verifyNoMoreInteractions( locks );
     }
@@ -850,13 +853,13 @@ class OperationsTest
     }
 
     @Test
-    void detachDeleteNodeWithoutRelationshipsExclusivelyLockNode() throws KernelException
+    void detachDeleteNodeWithoutRelationshipsExclusivelyLockNode()
     {
         long nodeId = 1L;
-        returnRelationships( transaction, false, new TestRelationshipChain( nodeId ) );
+        returnRelationships( transaction, new TestRelationshipChain( nodeId ) );
         when( transaction.ambientNodeCursor() ).thenReturn( new StubNodeCursor( false ).withNode( nodeId ) );
         when( nodeCursor.next() ).thenReturn( true );
-        LabelSet labels = mock( LabelSet.class );
+        TokenSet labels = mock( TokenSet.class );
         when( labels.all() ).thenReturn( EMPTY_LONG_ARRAY );
         when( nodeCursor.labels() ).thenReturn( labels );
 
@@ -868,13 +871,12 @@ class OperationsTest
     }
 
     @Test
-    void detachDeleteNodeExclusivelyLockNodes() throws KernelException
+    void detachDeleteNodeExclusivelyLockNodes()
     {
         long nodeId = 1L;
-        returnRelationships( transaction, false,
-                new TestRelationshipChain( nodeId ).outgoing( 1, 2L, 42 ) );
+        returnRelationships( transaction, new TestRelationshipChain( nodeId ).outgoing( 1, 2L, 42 ) );
         when( transaction.ambientNodeCursor() ).thenReturn( new StubNodeCursor( false ).withNode( nodeId ) );
-        LabelSet labels = mock( LabelSet.class );
+        TokenSet labels = mock( TokenSet.class );
         when( labels.all() ).thenReturn( EMPTY_LONG_ARRAY );
         when( nodeCursor.labels() ).thenReturn( labels );
         when( nodeCursor.next() ).thenReturn( true );
@@ -896,7 +898,7 @@ class OperationsTest
         long labelId1 = 1;
         long labelId2 = 2;
         when( nodeCursor.next() ).thenReturn( true );
-        LabelSet labels = mock( LabelSet.class );
+        TokenSet labels = mock( TokenSet.class );
         when( labels.all() ).thenReturn( new long[]{labelId1, labelId2} );
         when( nodeCursor.labels() ).thenReturn( labels );
 
@@ -911,17 +913,17 @@ class OperationsTest
     }
 
     @Test
-    void shouldAcquiredSharedLabelLocksWhenDetachDeletingNode() throws KernelException
+    void shouldAcquiredSharedLabelLocksWhenDetachDeletingNode()
     {
         // given
         long nodeId = 1L;
         long labelId1 = 1;
         long labelId2 = 2;
 
-        returnRelationships( transaction, false, new TestRelationshipChain( nodeId ) );
+        returnRelationships( transaction, new TestRelationshipChain( nodeId ) );
         when( transaction.ambientNodeCursor() ).thenReturn( new StubNodeCursor( false ).withNode( nodeId ) );
         when( nodeCursor.next() ).thenReturn( true );
-        LabelSet labels = mock( LabelSet.class );
+        TokenSet labels = mock( TokenSet.class );
         when( labels.all() ).thenReturn( new long[]{labelId1, labelId2} );
         when( nodeCursor.labels() ).thenReturn( labels );
 
@@ -963,7 +965,7 @@ class OperationsTest
         long labelId2 = 1;
         int propertyKeyId = 5;
         when( nodeCursor.next() ).thenReturn( true );
-        LabelSet labels = mock( LabelSet.class );
+        TokenSet labels = mock( TokenSet.class );
         when( labels.all() ).thenReturn( new long[]{labelId1, labelId2} );
         when( nodeCursor.labels() ).thenReturn( labels );
         when( propertyCursor.next() ).thenReturn( true );
@@ -1000,13 +1002,13 @@ class OperationsTest
                 .stream()
                 .sorted( Comparator.comparing( d -> d.schema().getEntityTokenIds()[0] ) )
                 .toArray( IndexDescriptor[]::new );
-        assertThat( Arrays.toString( indexDescriptors ), indexDescriptors.length, is( 3 ) );
-        assertThat( indexDescriptors[0].toString(), indexDescriptors[0].getId(), is( 1L ) );
-        assertThat( indexDescriptors[1].toString(), indexDescriptors[1].getId(), is( 2L ) );
-        assertThat( indexDescriptors[2].toString(), indexDescriptors[2].getId(), is( 3L ) );
-        assertThat( indexDescriptors[0].toString(), indexDescriptors[0].getName(), is( "index_5c81a58e" ) );
-        assertThat( indexDescriptors[1].toString(), indexDescriptors[1].getName(), is( "index_2813986a" ) );
-        assertThat( indexDescriptors[2].toString(), indexDescriptors[2].getName(), is( "index_edb2dfd3" ) );
+        assertThat( indexDescriptors.length ).as( Arrays.toString( indexDescriptors ) ).isEqualTo( 3 );
+        assertThat( indexDescriptors[0].getId() ).as( indexDescriptors[0].toString() ).isEqualTo( 1L );
+        assertThat( indexDescriptors[1].getId() ).as( indexDescriptors[1].toString() ).isEqualTo( 2L );
+        assertThat( indexDescriptors[2].getId() ).as( indexDescriptors[2].toString() ).isEqualTo( 3L );
+        assertThat( indexDescriptors[0].getName() ).as( indexDescriptors[0].toString() ).isEqualTo( "index_5c81a58e" );
+        assertThat( indexDescriptors[1].getName() ).as( indexDescriptors[1].toString() ).isEqualTo( "index_2813986a" );
+        assertThat( indexDescriptors[2].getName() ).as( indexDescriptors[2].toString() ).isEqualTo( "index_edb2dfd3" );
     }
 
     @Test
@@ -1021,24 +1023,27 @@ class OperationsTest
                     IndexPrototype prototype = i.getArgument( 2 );
                     Optional<String> name = prototype.getName();
                     assertTrue( name.isPresent() );
-                    assertThat( name.get(), is( constraintName ) );
+                    assertThat( name.get() ).isEqualTo( constraintName );
                     return prototype.materialise( 2 );
                 } );
         IndexPrototype prototype = IndexPrototype.uniqueForSchema( schema ).withName( constraintName );
         IndexBackedConstraintDescriptor constraint = operations.uniquePropertyConstraintCreate( prototype ).asIndexBackedConstraint();
-        assertThat( constraint.ownedIndexId(), is( 2L ) );
+        assertThat( constraint.ownedIndexId() ).isEqualTo( 2L );
     }
 
     @Test
     void shouldAcquireTxStateBeforeAllocatingNodeIdInBareCreateMethod()
     {
         // given
+        SecurityContext sctx = mock( SecurityContext.class );
         KernelTransactionImplementation ktx = mock( KernelTransactionImplementation.class );
         when( ktx.txState() ).thenReturn( mock( TransactionState.class ) );
+        when( ktx.securityContext() ).thenReturn( sctx );
         CommandCreationContext commandCreationContext = mock( CommandCreationContext.class );
+        when( sctx.mode() ).thenReturn( AccessMode.Static.FULL );
         Operations operations = new Operations( mock( AllStoreHolder.class ), mock( StorageReader.class ), mock( IndexTxStateUpdater.class ),
                 commandCreationContext, ktx, mock( KernelToken.class ), mock( DefaultPooledCursors.class ), mock( ConstraintIndexCreator.class ),
-                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ) );
+                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ), NULL, INSTANCE );
 
         // when
         operations.nodeCreate();
@@ -1054,18 +1059,21 @@ class OperationsTest
     void shouldAcquireTxStateBeforeAllocatingNodeIdInCreateWithLabelsMethod() throws ConstraintValidationException
     {
         // given
+        SecurityContext sctx = mock(SecurityContext.class);
         KernelTransactionImplementation ktx = mock( KernelTransactionImplementation.class );
         when( ktx.txState() ).thenReturn( mock( TransactionState.class ) );
         StatementLocks statementLocks = mock( StatementLocks.class );
         when( ktx.statementLocks() ).thenReturn( statementLocks );
+        when( ktx.securityContext() ).thenReturn( sctx );
         when( statementLocks.optimistic() ).thenReturn( mock( Locks.Client.class ) );
         CommandCreationContext commandCreationContext = mock( CommandCreationContext.class );
         DefaultPooledCursors cursors = mock( DefaultPooledCursors.class );
-        when( cursors.allocateFullAccessNodeCursor() ).thenReturn( mock( FullAccessNodeCursor.class ) );
-        when( cursors.allocateFullAccessPropertyCursor() ).thenReturn( mock( FullAccessPropertyCursor.class ) );
+        when( cursors.allocateFullAccessNodeCursor( NULL ) ).thenReturn( mock( FullAccessNodeCursor.class ) );
+        when( cursors.allocateFullAccessPropertyCursor( NULL, INSTANCE ) ).thenReturn( mock( FullAccessPropertyCursor.class ) );
+        when( sctx.mode()).thenReturn( AccessMode.Static.FULL );
         Operations operations = new Operations( mock( AllStoreHolder.class ), mock( StorageReader.class ), mock( IndexTxStateUpdater.class ),
                 commandCreationContext, ktx, mock( KernelToken.class ), cursors, mock( ConstraintIndexCreator.class ),
-                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ) );
+                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ), NULL, INSTANCE );
         operations.initialize();
 
         // when
@@ -1083,18 +1091,23 @@ class OperationsTest
     void shouldAcquireTxStateBeforeAllocatingRelationshipId() throws EntityNotFoundException
     {
         // given
+        SecurityContext sctx = mock( SecurityContext.class );
         KernelTransactionImplementation ktx = mock( KernelTransactionImplementation.class );
         when( ktx.txState() ).thenReturn( mock( TransactionState.class ) );
         StatementLocks statementLocks = mock( StatementLocks.class );
         when( ktx.statementLocks() ).thenReturn( statementLocks );
+        when( ktx.securityContext() ).thenReturn( sctx );
         when( statementLocks.optimistic() ).thenReturn( mock( Locks.Client.class ) );
         when( statementLocks.pessimistic() ).thenReturn( mock( Locks.Client.class ) );
         CommandCreationContext commandCreationContext = mock( CommandCreationContext.class );
         AllStoreHolder allStoreHolder = mock( AllStoreHolder.class );
         when( allStoreHolder.nodeExists( anyLong() ) ).thenReturn( true );
+        when( sctx.mode() ).thenReturn( AccessMode.Static.FULL );
         Operations operations = new Operations( allStoreHolder, mock( StorageReader.class ), mock( IndexTxStateUpdater.class ),
-                commandCreationContext, ktx, mock( KernelToken.class ), mock( DefaultPooledCursors.class ), mock( ConstraintIndexCreator.class ),
-                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ) );
+                                                commandCreationContext, ktx, mock( KernelToken.class ), mock( DefaultPooledCursors.class ),
+                                                mock( ConstraintIndexCreator.class ),
+                                                mock( ConstraintSemantics.class ), mock( IndexingProvidersService.class ), mock( Config.class ), NULL,
+                                                INSTANCE );
 
         // when
         operations.relationshipCreate( 0, 1, 2 );
@@ -1125,7 +1138,7 @@ class OperationsTest
         when( allStoreHolder.constraintsGetForSchema( any() ) ).thenReturn( Iterators.emptyResourceIterator() );
         Operations operations = new Operations( allStoreHolder, mock( StorageReader.class ), mock( IndexTxStateUpdater.class ),
                 commandCreationContext, ktx, mock( KernelToken.class ), mock( DefaultPooledCursors.class ), mock( ConstraintIndexCreator.class ),
-                mock( ConstraintSemantics.class ), indexingProvidersService, Config.defaults() );
+                mock( ConstraintSemantics.class ), indexingProvidersService, Config.defaults(), NULL, INSTANCE );
 
         // when
         operations.indexCreate( IndexPrototype.forSchema( schema ).withName( "name" ) );
@@ -1155,7 +1168,7 @@ class OperationsTest
 
         // when
         var e = assertThrows( KernelException.class, () -> operations.uniquePropertyConstraintCreate( prototype ) );
-        assertThat( e.getUserMessage( TokenNameLookup.idTokenNameLookup ), containsString( "FULLTEXT" ) );
+        assertThat( e.getUserMessage( new InMemoryTokens() ) ).contains( "FULLTEXT" );
     }
 
     @Test
@@ -1178,7 +1191,7 @@ class OperationsTest
 
         // when
         var e = assertThrows( KernelException.class, () -> operations.uniquePropertyConstraintCreate( prototype ) );
-        assertThat( e.getUserMessage( TokenNameLookup.idTokenNameLookup ), containsString( "full-text schema" ) );
+        assertThat( e.getUserMessage( tokenHolders ) ).contains( "full-text schema" );
     }
 
     @Test
@@ -1201,7 +1214,7 @@ class OperationsTest
 
         // when
         var e = assertThrows( KernelException.class, () -> operations.uniquePropertyConstraintCreate( prototype ) );
-        assertThat( e.getUserMessage( TokenNameLookup.idTokenNameLookup ), containsString( "relationship type schema" ) );
+        assertThat( e.getUserMessage( tokenHolders ) ).contains( "relationship type schema" );
     }
 
     @Test
@@ -1223,8 +1236,114 @@ class OperationsTest
 
         // when
         var e = assertThrows( KernelException.class, () -> operations.uniquePropertyConstraintCreate( prototype ) );
-        assertThat( e.getUserMessage( TokenNameLookup.idTokenNameLookup ),
-                allOf( containsStringIgnoringCase( "index prototype" ), containsStringIgnoringCase( "not unique" ) ) );
+        assertThat( e.getUserMessage( tokenHolders ) ).containsIgnoringCase( "index prototype" ).containsIgnoringCase( "not unique" );
+    }
+
+    @Test
+    void nodeAddLabelShouldFailReadOnly() throws Exception
+    {
+        String message = runForSecurityLevel(() -> operations.nodeAddLabel(1L, 2),  AccessMode.Static.READ, false);
+        assertThat( message).contains("Set label for label 'Label' is not allowed");
+    }
+
+    @Test
+    void nodeAddLabelShouldFailAccess() throws Exception
+    {
+        String message = runForSecurityLevel(() -> operations.nodeAddLabel(1L, 2),  AccessMode.Static.ACCESS, false);
+        assertThat( message).contains("Set label for label 'Label' is not allowed");
+    }
+
+    @Test
+    void nodeAddLabelShouldSucceedWriteOnly() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeAddLabel(1L, 2),  AccessMode.Static.WRITE_ONLY, true);
+    }
+
+    @Test
+    void nodeAddLabelShouldSucceedWrite() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeAddLabel(1L, 2),  AccessMode.Static.WRITE, true);
+    }
+
+    @Test
+    void nodeAddLabelShouldSucceedWriteFull() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeAddLabel(1L, 2),  AccessMode.Static.FULL, true);
+    }
+
+    @Test
+    void nodeRemoveLabelShouldFailReadOnly() throws Exception
+    {
+        String message = runForSecurityLevel(() -> operations.nodeRemoveLabel(1L, 3),  AccessMode.Static.READ, false);
+        assertThat( message).contains("Remove label for label 'Label' is not allowed");
+    }
+
+    @Test
+    void nodeRemoveLabelShouldFailAccess() throws Exception
+    {
+        String message = runForSecurityLevel(() -> operations.nodeRemoveLabel(1L, 3),  AccessMode.Static.ACCESS, false);
+        assertThat( message).contains("Remove label for label 'Label' is not allowed");
+    }
+
+    @Test
+    void nodeRemoveLabelShouldSucceedWriteOnly() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeRemoveLabel(1L, 3),  AccessMode.Static.WRITE_ONLY, true);
+    }
+
+    @Test
+    void nodeRemoveLabelShouldSucceedWrite() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeRemoveLabel(1L, 3),  AccessMode.Static.WRITE, true);
+    }
+
+    @Test
+    void nodeRemoveLabelShouldSucceedWriteFull() throws Exception
+    {
+        runForSecurityLevel(() -> operations.nodeRemoveLabel(1L, 3),  AccessMode.Static.FULL, true);
+    }
+
+    private String runForSecurityLevel( Executable executable, AccessMode mode, boolean shoudldBeAuthorized ) throws Exception
+    {
+        SecurityContext sctx = mock( SecurityContext.class );
+        when( transaction.securityContext() ).thenReturn( sctx );
+        when( sctx.mode() ).thenReturn( mode );
+
+        when( nodeCursor.next() ).thenReturn( true );
+        when( nodeCursor.hasLabel( 2 ) ).thenReturn( false );
+        when( nodeCursor.hasLabel( 3 ) ).thenReturn( true );
+        when( tokenHolders.labelTokens().getTokenById( anyInt() ) ).thenReturn( new NamedToken( "Label", 2 ) );
+        if ( shoudldBeAuthorized )
+        {
+            assertAuthorized( executable );
+            return null;
+        }
+        else
+        {
+            AuthorizationViolationException exception = assertThrows( AuthorizationViolationException.class, executable );
+            return exception.getMessage();
+        }
+    }
+
+    private void assertAuthorized( Executable executable )
+    {
+        try
+        {
+            executable.execute();
+        }
+        catch ( AuthorizationViolationException e )
+        {
+            throw new AssertionFailedError( e.getMessage(), e );
+        }
+        catch ( EntityNotFoundException e )
+        {
+            // Don't care about this
+        }
+        catch ( Throwable t )
+        {
+            BlacklistedExceptions.rethrowIfBlacklisted( t );
+            throw new AssertionFailedError( "Unexpected exception thrown: " + t.getMessage(), t );
+        }
     }
 
     private static Iterator<ConstraintDescriptor> asIterator( ConstraintDescriptor constraint )

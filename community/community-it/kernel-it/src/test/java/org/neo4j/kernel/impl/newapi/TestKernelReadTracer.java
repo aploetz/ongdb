@@ -26,8 +26,7 @@ import java.util.Objects;
 
 import org.neo4j.internal.kernel.api.KernelReadTracer;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class TestKernelReadTracer implements KernelReadTracer
 {
@@ -57,6 +56,12 @@ public class TestKernelReadTracer implements KernelReadTracer
     }
 
     @Override
+    public void onRelationshipTypeScan( int type )
+    {
+        traceEvents.add( OnRelationshipTypeScan( type ) );
+    }
+
+    @Override
     public void onIndexSeek()
     {
         traceEvents.add( OnIndexSeek() );
@@ -69,15 +74,15 @@ public class TestKernelReadTracer implements KernelReadTracer
     }
 
     @Override
-    public void onRelationshipGroup( int type )
-    {
-        traceEvents.add( OnRelationshipGroup( type ) );
-    }
-
-    @Override
     public void onProperty( int propertyKey )
     {
         traceEvents.add( OnProperty( propertyKey ) );
+    }
+
+    @Override
+    public void dbHit()
+    {
+        throw new UnsupportedOperationException();
     }
 
     void assertEvents( TraceEvent... expected )
@@ -87,7 +92,7 @@ public class TestKernelReadTracer implements KernelReadTracer
 
     void assertEvents( List<TraceEvent> expected )
     {
-        assertThat( traceEvents, equalTo( expected ) );
+        assertThat( traceEvents ).isEqualTo( expected );
         clear();
     }
 
@@ -101,9 +106,9 @@ public class TestKernelReadTracer implements KernelReadTracer
         Node,
         AllNodesScan,
         LabelScan,
+        RelationshipTypeScan,
         IndexSeek,
-        Relatioship,
-        RelatioshipGroup,
+        Relationship,
         Property
     }
 
@@ -164,6 +169,11 @@ public class TestKernelReadTracer implements KernelReadTracer
         return new TraceEvent( TraceEventKind.LabelScan, label );
     }
 
+    static TraceEvent OnRelationshipTypeScan( int type )
+    {
+        return new TraceEvent( TraceEventKind.RelationshipTypeScan, type );
+    }
+
     static TraceEvent OnIndexSeek()
     {
         return new TraceEvent( TraceEventKind.IndexSeek, 1 );
@@ -171,12 +181,7 @@ public class TestKernelReadTracer implements KernelReadTracer
 
     static TraceEvent OnRelationship( long relationshipReference )
     {
-        return new TraceEvent( TraceEventKind.Relatioship, relationshipReference );
-    }
-
-    static TraceEvent OnRelationshipGroup( int type )
-    {
-        return new TraceEvent( TraceEventKind.RelatioshipGroup, type );
+        return new TraceEvent( TraceEventKind.Relationship, relationshipReference );
     }
 
     static TraceEvent OnProperty( int propertyKey )

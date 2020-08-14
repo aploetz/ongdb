@@ -25,16 +25,14 @@ import java.io.UncheckedIOException;
 import java.util.function.Consumer;
 
 import org.neo4j.graphdb.ResourceIterator;
+import org.neo4j.index.internal.gbptree.GBPTree;
 import org.neo4j.index.internal.gbptree.TreeInconsistencyException;
 import org.neo4j.internal.helpers.collection.BoundedIterable;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.IOLimiter;
-import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
-import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexAccessor;
-import org.neo4j.kernel.api.index.IndexProvider;
 import org.neo4j.kernel.api.index.IndexReader;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
@@ -49,10 +47,10 @@ public abstract class NativeIndexAccessor<KEY extends NativeIndexKey<KEY>, VALUE
     private final NativeIndexUpdater<KEY,VALUE> singleUpdater;
     final NativeIndexHeaderWriter headerWriter;
 
-    NativeIndexAccessor( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
-            IndexProvider.Monitor monitor, IndexDescriptor descriptor, Consumer<PageCursor> additionalHeaderWriter, boolean readOnly )
+    NativeIndexAccessor( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
+            IndexDescriptor descriptor, Consumer<PageCursor> additionalHeaderWriter )
     {
-        super( pageCache, fs, indexFiles, layout, monitor, descriptor, readOnly );
+        super( databaseIndexContext, layout, indexFiles, descriptor, GBPTree.NO_MONITOR );
         singleUpdater = new NativeIndexUpdater<>( layout.newKey(), layout.newValue() );
         headerWriter = new NativeIndexHeaderWriter( BYTE_ONLINE, additionalHeaderWriter );
     }
@@ -60,17 +58,18 @@ public abstract class NativeIndexAccessor<KEY extends NativeIndexKey<KEY>, VALUE
     @Override
     public void drop()
     {
+        tree.setDeleteOnClose( true );
         closeTree();
         indexFiles.clear();
     }
 
     @Override
-    public NativeIndexUpdater<KEY, VALUE> newUpdater( IndexUpdateMode mode )
+    public NativeIndexUpdater<KEY, VALUE> newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
     {
         assertOpen();
         try
         {
-            return singleUpdater.initialize( tree.writer() );
+            return singleUpdater.initialize( tree.writer( cursorTracer ) );
         }
         catch ( IOException e )
         {
@@ -79,9 +78,9 @@ public abstract class NativeIndexAccessor<KEY extends NativeIndexKey<KEY>, VALUE
     }
 
     @Override
-    public void force( IOLimiter ioLimiter )
+    public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer )
     {
-        tree.checkpoint( ioLimiter );
+        tree.checkpoint( ioLimiter, cursorTracer );
     }
 
     @Override
@@ -97,18 +96,12 @@ public abstract class NativeIndexAccessor<KEY extends NativeIndexKey<KEY>, VALUE
     }
 
     @Override
-    public boolean isDirty()
-    {
-        return tree.wasDirtyOnStartup();
-    }
-
-    @Override
     public abstract IndexReader newReader();
 
     @Override
-    public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive )
+    public BoundedIterable<Long> newAllEntriesReader( long fromIdInclusive, long toIdExclusive, PageCursorTracer cursorTracer )
     {
-        return new NativeAllEntriesReader<>( tree, layout, fromIdInclusive, toIdExclusive );
+        return new NativeAllEntriesReader<>( tree, layout, fromIdInclusive, toIdExclusive, cursorTracer );
     }
 
     @Override
@@ -118,16 +111,16 @@ public abstract class NativeIndexAccessor<KEY extends NativeIndexKey<KEY>, VALUE
     }
 
     @Override
-    public void verifyDeferredConstraints( NodePropertyAccessor nodePropertyAccessor ) throws IndexEntryConflictException
+    public void verifyDeferredConstraints( NodePropertyAccessor nodePropertyAccessor )
     {   // Not needed since uniqueness is verified automatically w/o cost for every update.
     }
 
     @Override
-    public long estimateNumberOfEntries()
+    public long estimateNumberOfEntries( PageCursorTracer cursorTracer )
     {
         try
         {
-            return tree.estimateNumberOfEntriesInTree();
+            return tree.estimateNumberOfEntriesInTree( cursorTracer );
         }
         catch ( IOException e )
         {

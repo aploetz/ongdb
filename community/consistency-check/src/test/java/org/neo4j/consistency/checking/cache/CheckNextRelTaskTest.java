@@ -26,6 +26,7 @@ import org.neo4j.consistency.checking.full.CheckStage;
 import org.neo4j.consistency.checking.full.Stage;
 import org.neo4j.consistency.checking.full.StoreProcessor;
 import org.neo4j.consistency.statistics.Counts;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.StoreAccess;
@@ -37,6 +38,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class CheckNextRelTaskTest
 {
@@ -51,14 +53,15 @@ class CheckNextRelTaskTest
         when( neoStores.getNodeStore() ).thenReturn( nodeStore );
         long highNodeId = 10L;
         when( nodeStore.getHighId() ).thenReturn( highNodeId );
-        when( nodeStore.getRecord( anyLong(), any( NodeRecord.class ), any( RecordLoad.class ) ) ).thenReturn( nodeRecord );
+        when( nodeStore.getRecord( anyLong(), any( NodeRecord.class ), any( RecordLoad.class ), any() ) ).thenReturn( nodeRecord );
         when( nodeStore.newRecord() ).thenReturn( nodeRecord );
 
         StoreAccess storeAccess = new StoreAccess( neoStores );
         storeAccess.initialize();
 
-        DefaultCacheAccess cacheAccess = new DefaultCacheAccess( DefaultCacheAccess.defaultByteArray( highNodeId ), Counts.NONE, 1 );
-        CacheTask.CheckNextRel cacheTask = new CacheTask.CheckNextRel( Stage.SEQUENTIAL_FORWARD, cacheAccess, storeAccess, storeProcessor );
+        DefaultCacheAccess cacheAccess = new DefaultCacheAccess( DefaultCacheAccess.defaultByteArray( highNodeId, INSTANCE ), Counts.NONE, 1 );
+        CacheTask.CheckNextRel cacheTask = new CacheTask.CheckNextRel( Stage.SEQUENTIAL_FORWARD, cacheAccess, storeAccess, storeProcessor,
+                PageCacheTracer.NULL );
 
         cacheAccess.setCacheSlotSizes( CheckStage.Stage5_Check_NextRel.getCacheSlotSizes() );
         cacheTask.processCache();

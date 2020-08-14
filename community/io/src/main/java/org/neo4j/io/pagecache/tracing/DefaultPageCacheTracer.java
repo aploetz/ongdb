@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.LongAdder;
 
 import org.neo4j.internal.helpers.MathUtil;
 import org.neo4j.io.pagecache.PageSwapper;
+import org.neo4j.io.pagecache.tracing.cursor.DefaultPageCursorTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 /**
  * The default PageCacheTracer implementation, that just increments counters.
@@ -56,7 +58,6 @@ public class DefaultPageCacheTracer implements PageCacheTracer
         @Override
         public void done()
         {
-            flushes.increment();
         }
 
         @Override
@@ -68,6 +69,7 @@ public class DefaultPageCacheTracer implements PageCacheTracer
         @Override
         public void addPagesFlushed( int pageCount )
         {
+            flushes.add( pageCount );
         }
     };
 
@@ -136,6 +138,12 @@ public class DefaultPageCacheTracer implements PageCacheTracer
         {
         }
     };
+
+    @Override
+    public PageCursorTracer createPageCursorTracer( String tag )
+    {
+        return new DefaultPageCursorTracer( this, tag );
+    }
 
     @Override
     public void mappedFile( File file )

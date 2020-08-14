@@ -19,21 +19,23 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, NumericHelper}
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.NumericHelper
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
 import org.neo4j.exceptions.InvalidArgumentException
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
-abstract class PercentileFunction(val value: Expression, val percentile: Expression) extends AggregationFunction
-  with NumericExpressionOnly {
+abstract class PercentileFunction(val value: Expression, val percentile: Expression, memoryTracker: MemoryTracker) extends AggregationFunction
+                                                                                     with NumericExpressionOnly {
 
-  protected var temp = Vector[AnyValue]()
+  protected var temp: Vector[AnyValue] = Vector[AnyValue]() // TODO: Use heap tracking collection
   protected var count: Int = 0
   protected var perc: Double = 0
 
-  override def apply(data: ExecutionContext, state: QueryState) {
+  override def apply(data: ReadableRow, state: QueryState) {
     actOnNumber(value(data, state), number => {
       if (count < 1) {
         perc = NumericHelper.asDouble(percentile(data, state)).doubleValue()
@@ -43,13 +45,13 @@ abstract class PercentileFunction(val value: Expression, val percentile: Express
       }
       count += 1
       temp = temp :+ number
-      state.memoryTracker.allocated(number)
+      memoryTracker.allocateHeap(number.estimatedHeapUsage())
     })
   }
 }
 
-class PercentileContFunction(value: Expression, percentile: Expression)
-  extends PercentileFunction(value, percentile) {
+class PercentileContFunction(value: Expression, percentile: Expression, memoryTracker: MemoryTracker)
+  extends PercentileFunction(value, percentile, memoryTracker) {
 
   def name = "PERCENTILE_CONT"
 
@@ -64,15 +66,15 @@ class PercentileContFunction(value: Expression, percentile: Expression)
       val ceil = math.ceil(floatIdx).toInt
       if (ceil == floor || floor == count - 1) temp(floor)
       else Values.doubleValue(NumericHelper.asDouble(temp(floor)).doubleValue() * (ceil - floatIdx) +
-                                      NumericHelper.asDouble(temp(ceil)).doubleValue() * (floatIdx - floor))
+        NumericHelper.asDouble(temp(ceil)).doubleValue() * (floatIdx - floor))
     } else {
       Values.NO_VALUE
     }
   }
 }
 
-class PercentileDiscFunction(value: Expression, percentile: Expression)
-  extends PercentileFunction(value, percentile) {
+class PercentileDiscFunction(value: Expression, percentile: Expression, memoryTracker: MemoryTracker)
+  extends PercentileFunction(value, percentile, memoryTracker) {
 
   def name = "PERCENTILE_DISC"
 

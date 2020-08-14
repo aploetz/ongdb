@@ -43,18 +43,16 @@ import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.TokenRead;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.impl.coreapi.schema.IndexDefinitionImpl;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
+import org.neo4j.kernel.impl.coreapi.schema.IndexDefinitionImpl;
 import org.neo4j.test.rule.DbmsRule;
 import org.neo4j.test.rule.EmbeddedDbmsRule;
 import org.neo4j.test.rule.RandomRule;
 import org.neo4j.values.storable.TextValue;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 
 /**
  * Does test having multiple iterators open on the same index
@@ -782,7 +780,7 @@ public class MultipleOpenCursorsTest
 
         void assertSameContent( List<Long> actual, List<Long> expected )
         {
-            assertThat( actual, is( containsInAnyOrder( expected.toArray() ) ) );
+            assertThat( actual ).containsAll( expected );
         }
 
         abstract void assertExactResult( List<Long> result );
@@ -791,9 +789,9 @@ public class MultipleOpenCursorsTest
 
         NodeValueIndexCursor indexQuery( KernelTransaction ktx, IndexDescriptor indexDescriptor, IndexQuery... indexQueries ) throws KernelException
         {
-            NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor();
+            NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() );
             IndexReadSession index = ktx.dataRead().indexReadSession( indexDescriptor );
-            ktx.dataRead().nodeIndexSeek( index, cursor, IndexOrder.NONE, false, indexQueries );
+            ktx.dataRead().nodeIndexSeek( index, cursor, unconstrained(), indexQueries );
             return cursor;
         }
     }

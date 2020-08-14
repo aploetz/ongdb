@@ -42,6 +42,7 @@ import org.neo4j.internal.helpers.Args;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.transaction.log.files.TransactionLogInitializer;
 import org.neo4j.kernel.lifecycle.Lifespan;
@@ -57,6 +58,7 @@ import static org.neo4j.internal.batchimport.Configuration.calculateMaxMemoryFro
 import static org.neo4j.internal.batchimport.ImportLogic.NO_MONITOR;
 import static org.neo4j.internal.batchimport.staging.ExecutionMonitors.defaultVisible;
 import static org.neo4j.kernel.impl.scheduler.JobSchedulerFactory.createScheduler;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 /**
  * Uses all available shortcuts to as quickly as possible import as much data as possible. Usage of this
@@ -163,9 +165,15 @@ public class QuickImport
                 System.out.println( "Seed " + randomSeed );
                 final JobScheduler jobScheduler = life.add( createScheduler() );
                 consumer = BatchImporterFactory.withHighestPriority().instantiate(
+<<<<<<< HEAD
                         DatabaseLayout.ofFlat( dir ), fileSystem, null, importConfig, new SimpleLogService( logging, logging ), defaultVisible(), EMPTY,
                         dbConfig, RecordFormatSelector.selectForConfig( dbConfig, logging ), NO_MONITOR, jobScheduler, Collector.EMPTY,
                         TransactionLogInitializer.getLogFilesInitializer() );
+=======
+                        DatabaseLayout.ofFlat( dir ), fileSystem, null, PageCacheTracer.NULL, importConfig, new SimpleLogService( logging, logging ),
+                        defaultVisible(), EMPTY, dbConfig, RecordFormatSelector.selectForConfig( dbConfig, logging ), NO_MONITOR, jobScheduler,
+                        Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer(), INSTANCE );
+>>>>>>> neo4j/4.1
             }
             consumer.doImport( input );
         }

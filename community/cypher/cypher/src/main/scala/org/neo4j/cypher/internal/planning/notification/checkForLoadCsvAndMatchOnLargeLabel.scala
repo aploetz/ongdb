@@ -20,9 +20,14 @@
 package org.neo4j.cypher.internal.planning.notification
 
 import org.neo4j.cypher.internal.compiler.LargeLabelWithLoadCsvNotification
+import org.neo4j.cypher.internal.logical.plans.LoadCSV
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
 import org.neo4j.cypher.internal.planner.spi.PlanContext
-import org.neo4j.cypher.internal.logical.plans.{LoadCSV, LogicalPlan, NodeByLabelScan}
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, InternalNotification, LabelId}
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Foldable.FoldableAny
+import org.neo4j.cypher.internal.util.InternalNotification
+import org.neo4j.cypher.internal.util.LabelId
 
 case class checkForLoadCsvAndMatchOnLargeLabel(planContext: PlanContext,
                                                nonIndexedLabelWarningThreshold: Long
@@ -31,7 +36,6 @@ case class checkForLoadCsvAndMatchOnLargeLabel(planContext: PlanContext,
   private val threshold = Cardinality(nonIndexedLabelWarningThreshold)
 
   def apply(plan: LogicalPlan): Seq[InternalNotification] = {
-    import org.neo4j.cypher.internal.v4_0.util.Foldable._
 
     sealed trait SearchState
     case object NoneFound extends SearchState
@@ -44,7 +48,7 @@ case class checkForLoadCsvAndMatchOnLargeLabel(planContext: PlanContext,
         case LargeLabelFound => (LargeLabelWithLoadCsvFound, Some(identity))
         case e => (e, None)
       }
-      case NodeByLabelScan(_, label, _) if cardinality(label.name) > threshold =>
+      case NodeByLabelScan(_, label, _, _) if cardinality(label.name) > threshold =>
         acc => (LargeLabelFound, Some(identity))
     }
 

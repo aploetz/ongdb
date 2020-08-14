@@ -19,8 +19,12 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, LogicalQuery, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.LogicalQuery
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.graphdb.QueryStatistics
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.AnyValue
@@ -127,7 +131,7 @@ abstract class SubscriberErrorTestBase[CONTEXT <: RuntimeContext](
     override def onRecord(): Unit =
       if (explodeOnRecord) throw new Kaboom
 
-    override def onField(value: AnyValue): Unit =
+    override def onField(offset: Int, value: AnyValue): Unit =
       if (explodeOnField) throw new Kaboom
 
     override def onRecordCompleted(): Unit =

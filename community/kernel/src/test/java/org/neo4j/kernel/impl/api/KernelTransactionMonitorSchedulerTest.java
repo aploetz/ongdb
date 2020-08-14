@@ -24,13 +24,13 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.kernel.impl.api.transaction.monitor.KernelTransactionMonitor;
-import org.neo4j.kernel.impl.api.transaction.monitor.KernelTransactionMonitorScheduler;
+import org.neo4j.kernel.impl.api.transaction.monitor.TransactionMonitorScheduler;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobScheduler;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class KernelTransactionMonitorSchedulerTest
 {
@@ -40,24 +40,24 @@ class KernelTransactionMonitorSchedulerTest
     @Test
     void scheduleRecurringMonitorJobIfConfigured()
     {
-        KernelTransactionMonitorScheduler transactionMonitorScheduler = createMonitorScheduler(1);
+        TransactionMonitorScheduler transactionMonitorScheduler = createMonitorScheduler(1);
         transactionMonitorScheduler.start();
 
         verify( scheduler).scheduleRecurring( Group.TRANSACTION_TIMEOUT_MONITOR, transactionTimeoutMonitor, 1, TimeUnit
-                .MILLISECONDS  );
+                .MILLISECONDS );
     }
 
     @Test
     void doNotScheduleMonitorJobIfDisabled()
     {
-        KernelTransactionMonitorScheduler transactionMonitorScheduler = createMonitorScheduler( 0 );
+        TransactionMonitorScheduler transactionMonitorScheduler = createMonitorScheduler( 0 );
         transactionMonitorScheduler.start();
 
-        verifyZeroInteractions( scheduler);
+        verifyNoInteractions( scheduler);
     }
 
-    private KernelTransactionMonitorScheduler createMonitorScheduler( long checkInterval )
+    private TransactionMonitorScheduler createMonitorScheduler( long checkInterval )
     {
-        return new KernelTransactionMonitorScheduler( transactionTimeoutMonitor, scheduler, checkInterval );
+        return new TransactionMonitorScheduler( transactionTimeoutMonitor, scheduler, checkInterval );
     }
 }

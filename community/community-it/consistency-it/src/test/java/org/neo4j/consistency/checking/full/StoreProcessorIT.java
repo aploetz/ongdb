@@ -25,14 +25,16 @@ import org.neo4j.consistency.checking.CheckDecorator;
 import org.neo4j.consistency.checking.RecordCheck;
 import org.neo4j.consistency.checking.cache.CacheAccess;
 import org.neo4j.consistency.report.ConsistencyReport;
+import org.neo4j.internal.helpers.progress.ProgressListener;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.InvalidRecordException;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.extension.DbmsExtension;
 import org.neo4j.test.extension.Inject;
 
@@ -40,42 +42,43 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @SuppressWarnings( "unchecked" )
 @DbmsExtension
 class StoreProcessorIT
 {
     @Inject
-    private GraphDatabaseAPI databaseAPI;
+    private RecordStorageEngine storageEngine;
 
     @Test
-    void shouldProcessAllTheRecordsInAStore() throws Exception
+    void shouldProcessAllTheRecordsInAStore()
     {
         // given
         RecordStore<NodeRecord> nodeStore = getNeoStores().getNodeStore();
         ConsistencyReport.Reporter reporter = mock( ConsistencyReport.Reporter.class );
         StoreProcessor processor = new StoreProcessor( CheckDecorator.NONE,
                 reporter, Stage.SEQUENTIAL_FORWARD, CacheAccess.EMPTY );
-        nodeStore.updateRecord( node( 0, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 1, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 2, false, 0, 0 ) );
+        nodeStore.updateRecord( node( 0, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 1, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 2, false, 0, 0 ), NULL );
         nodeStore.setHighestPossibleIdInUse( 2 );
 
         // when
-        processor.applyFiltered( nodeStore );
+        processor.applyFiltered( nodeStore, ProgressListener.NONE, PageCacheTracer.NULL );
 
         // then
-        verify( reporter, times( 3 ) ).forNode( any( NodeRecord.class ), any( RecordCheck.class ) );
+        verify( reporter, times( 3 ) ).forNode( any( NodeRecord.class ), any( RecordCheck.class ), any( PageCursorTracer.class ) );
     }
 
     @Test
-    void shouldStopProcessingRecordsWhenSignalledToStop() throws Exception
+    void shouldStopProcessingRecordsWhenSignalledToStop()
     {
         // given
         ConsistencyReport.Reporter reporter = mock( ConsistencyReport.Reporter.class );
         StoreProcessor processor = new StoreProcessor( CheckDecorator.NONE,
                 reporter, Stage.SEQUENTIAL_FORWARD, CacheAccess.EMPTY );
-        RecordStore<NodeRecord> nodeStore = new RecordStore.Delegator<NodeRecord>( getNeoStores().getNodeStore() )
+        RecordStore<NodeRecord> nodeStore = new RecordStore.Delegator<>( getNeoStores().getNodeStore() )
         {
             @Override
             public void getRecordByCursor( long id, NodeRecord target, RecordLoad mode, PageCursor cursor ) throws InvalidRecordException
@@ -87,23 +90,23 @@ class StoreProcessorIT
                 super.getRecordByCursor( id, target, mode, cursor );
             }
         };
-        nodeStore.updateRecord( node( 0, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 1, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 2, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 3, false, 0, 0 ) );
-        nodeStore.updateRecord( node( 4, false, 0, 0 ) );
+        nodeStore.updateRecord( node( 0, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 1, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 2, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 3, false, 0, 0 ), NULL );
+        nodeStore.updateRecord( node( 4, false, 0, 0 ), NULL );
         nodeStore.setHighestPossibleIdInUse( 4 );
 
         // when
-        processor.applyFiltered( nodeStore );
+        processor.applyFiltered( nodeStore, ProgressListener.NONE, PageCacheTracer.NULL );
 
         // then
-        verify( reporter, times( 3 ) ).forNode( any( NodeRecord.class ), any( RecordCheck.class ) );
+        verify( reporter, times( 3 ) ).forNode( any( NodeRecord.class ), any( RecordCheck.class ), any( PageCursorTracer.class ) );
     }
 
     private NeoStores getNeoStores()
     {
-        return databaseAPI.getDependencyResolver().resolveDependency( RecordStorageEngine.class ).testAccessNeoStores();
+        return storageEngine.testAccessNeoStores();
     }
 
     private NodeRecord node( long id, boolean dense, long nextRel, long nextProp )

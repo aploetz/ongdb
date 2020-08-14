@@ -19,11 +19,15 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
+import org.neo4j.cypher.internal.ast.UsingScanHint
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.v4_0.ast.UsingScanHint
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.ShortestPathPattern
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class QueryGraphConnectedComponentsTest
   extends CypherFunSuite with LogicalPlanningTestSupport {
@@ -117,7 +121,7 @@ class QueryGraphConnectedComponentsTest
       selections = Selections.from(Seq(
         hasLabels(A, "Label"),
         hasLabels(B, "Label"))
-    ))
+      ))
 
     graph.connectedComponents should equal(Seq(
       QueryGraph(patternNodes = Set(A), selections = Selections.from(hasLabels(A, "Label"))),
@@ -195,8 +199,8 @@ class QueryGraphConnectedComponentsTest
 
   test("nodes solved by argument should be in the same component") {
     val graph = QueryGraph.empty.
-    addPatternNodes(A, B).
-    addArgumentIds(Seq(A, B))
+      addPatternNodes(A, B).
+      addArgumentIds(Seq(A, B))
 
     graph.connectedComponents should equal(Seq(graph))
   }

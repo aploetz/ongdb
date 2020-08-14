@@ -41,7 +41,7 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.kernel.database.Database;
 import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.kernel.database.TestDatabaseIdRepository;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.logging.Logger;
 import org.neo4j.logging.internal.SimpleLogService;
@@ -52,6 +52,7 @@ import static java.util.Collections.singletonMap;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class DbmsDiagnosticsManagerTest
 {
@@ -94,7 +95,7 @@ class DbmsDiagnosticsManagerTest
     @Test
     void dumpSystemDiagnostics()
     {
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
 
         diagnosticsManager.dumpSystemDiagnostics();
 
@@ -104,7 +105,7 @@ class DbmsDiagnosticsManagerTest
     @Test
     void dumpDatabaseDiagnostics()
     {
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
 
         diagnosticsManager.dumpDatabaseDiagnostics( defaultDatabase );
 
@@ -115,12 +116,11 @@ class DbmsDiagnosticsManagerTest
     void dumpDiagnosticOfStoppedDatabase()
     {
         when( defaultDatabase.isStarted() ).thenReturn( false );
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
 
         diagnosticsManager.dumpAll();
 
-        logProvider.formattedMessageMatcher().assertContains( "Database: " + DEFAULT_DATABASE_NAME.toLowerCase() );
-        logProvider.formattedMessageMatcher().assertContains( "Database is stopped." );
+        assertThat( logProvider ).containsMessages( "Database: " + DEFAULT_DATABASE_NAME.toLowerCase(), "Database is stopped." );
     }
 
     @Test
@@ -138,9 +138,10 @@ class DbmsDiagnosticsManagerTest
         when( databaseManager.registeredDatabases() ).thenReturn( new TreeMap<>( databaseMap ) );
 
         diagnosticsManager.dumpAll();
+        var logAssertions = assertThat( logProvider );
         for ( var dbId : databaseMap.keySet() )
         {
-            logProvider.formattedMessageMatcher().assertContains( "Database: " + dbId.name() );
+            logAssertions.containsMessages( "Database: " + dbId.name() );
         }
     }
 
@@ -149,7 +150,7 @@ class DbmsDiagnosticsManagerTest
     void dumpNativeAccessProviderOnLinux()
     {
         diagnosticsManager.dumpAll();
-        logProvider.rawMessageMatcher().assertContains( "Linux native access is available." );
+        assertThat( logProvider ).containsMessages( "Linux native access is available." );
     }
 
     @Test
@@ -157,13 +158,13 @@ class DbmsDiagnosticsManagerTest
     void dumpNativeAccessProviderOnNonLinux()
     {
         diagnosticsManager.dumpAll();
-        logProvider.rawMessageMatcher().assertContains( "Native access is not available for current platform." );
+        assertThat( logProvider ).containsMessages( "Native access is not available for current platform." );
     }
 
     @Test
     void dumpAllDiagnostics()
     {
-        logProvider.assertNoLoggingOccurred();
+        assertThat( logProvider ).doesNotHaveAnyLogs();
 
         diagnosticsManager.dumpAll();
 
@@ -200,17 +201,27 @@ class DbmsDiagnosticsManagerTest
 
     private void assertContainsSystemDiagnostics()
     {
-        logProvider.rawMessageMatcher().assertContains( "System diagnostics" );
-        logProvider.rawMessageMatcher().assertContains( "System memory information" );
-        logProvider.rawMessageMatcher().assertContains( "JVM memory information" );
-        logProvider.rawMessageMatcher().assertContains( "(IANA) TimeZone database version" );
-        logProvider.rawMessageMatcher().assertContains( "Operating system information" );
-        logProvider.rawMessageMatcher().assertContains( "System properties" );
-        logProvider.rawMessageMatcher().assertContains( "JVM information" );
-        logProvider.rawMessageMatcher().assertContains( "Java classpath" );
-        logProvider.rawMessageMatcher().assertContains( "Library path" );
-        logProvider.rawMessageMatcher().assertContains( "Network information" );
-        logProvider.rawMessageMatcher().assertContains( "DBMS config" );
+        assertThat( logProvider ).containsMessages( "System diagnostics",
+                                    "System memory information",
+                                    "JVM memory information",
+                                    "(IANA) TimeZone database version",
+                                    "Operating system information",
+                                    "System properties",
+                                    "JVM information",
+                                    "Java classpath",
+                                    "Library path",
+                                    "Network information",
+                                    "DBMS config" );
+    }
+
+    private void assertContainingAdditionalDiagnostics( DiagnosticsProvider diagnosticsProvider )
+    {
+        assertThat( logProvider ).containsMessages( diagnosticsProvider.getDiagnosticsName() );
+    }
+
+    private void assertNoAdditionalDiagnostics()
+    {
+        assertThat( logProvider ).doesNotContainMessage( "Additional diagnostics" );
     }
 
     private void assertContainingAdditionalDiagnostics( DiagnosticsProvider diagnosticsProvider )
@@ -225,17 +236,17 @@ class DbmsDiagnosticsManagerTest
 
     private void assertContainsDatabaseDiagnostics()
     {
-        logProvider.rawMessageMatcher().assertContains( "Database: " + DEFAULT_DATABASE_NAME.toLowerCase() );
-        logProvider.rawMessageMatcher().assertContains( "Version" );
-        logProvider.rawMessageMatcher().assertContains( "Store files" );
-        logProvider.rawMessageMatcher().assertContains( "Transaction log" );
+        assertThat( logProvider ).containsMessages( "Database: " + DEFAULT_DATABASE_NAME.toLowerCase(),
+                                                    "Version",
+                                                    "Store files",
+                                                    "Transaction log" );
     }
 
     private Database prepareDatabase()
     {
         Database database = mock( Database.class );
         Dependencies databaseDependencies = new Dependencies();
-        databaseDependencies.satisfyDependency( DatabaseInfo.COMMUNITY );
+        databaseDependencies.satisfyDependency( DbmsInfo.COMMUNITY );
         databaseDependencies.satisfyDependency( storageEngine );
         databaseDependencies.satisfyDependency( storageEngineFactory );
         databaseDependencies.satisfyDependency( new DefaultFileSystemAbstraction() );

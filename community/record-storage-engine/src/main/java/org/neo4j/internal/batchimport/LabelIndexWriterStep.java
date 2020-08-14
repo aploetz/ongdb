@@ -23,35 +23,41 @@ import org.neo4j.internal.batchimport.staging.BatchSender;
 import org.neo4j.internal.batchimport.staging.ProcessorStep;
 import org.neo4j.internal.batchimport.staging.StageControl;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.LabelScanWriter;
+import org.neo4j.internal.index.label.TokenScanWriter;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 
 import static org.neo4j.collection.PrimitiveLongCollections.EMPTY_LONG_ARRAY;
+import static org.neo4j.io.IOUtils.closeAll;
 import static org.neo4j.kernel.impl.store.NodeLabelsField.get;
-import static org.neo4j.storageengine.api.NodeLabelUpdate.labelChanges;
+import static org.neo4j.storageengine.api.EntityTokenUpdate.tokenChanges;
 
 public class LabelIndexWriterStep extends ProcessorStep<NodeRecord[]>
 {
-    private final LabelScanWriter writer;
+    private static final String INDEX_WRITE_STEP_TAG = "indexWriteStep";
+    private final TokenScanWriter writer;
     private final NodeStore nodeStore;
+    private final PageCursorTracer cursorTracer;
 
     public LabelIndexWriterStep( StageControl control, Configuration config, LabelScanStore store,
-            NodeStore nodeStore )
+            NodeStore nodeStore, PageCacheTracer pageCacheTracer )
     {
-        super( control, "LABEL INDEX", config, 1 );
-        this.writer = store.newWriter();
+        super( control, "LABEL INDEX", config, 1, pageCacheTracer );
+        this.cursorTracer = pageCacheTracer.createPageCursorTracer( INDEX_WRITE_STEP_TAG );
+        this.writer = store.newBulkAppendWriter( cursorTracer );
         this.nodeStore = nodeStore;
     }
 
     @Override
-    protected void process( NodeRecord[] batch, BatchSender sender ) throws Throwable
+    protected void process( NodeRecord[] batch, BatchSender sender, PageCursorTracer cursorTracer ) throws Throwable
     {
         for ( NodeRecord node : batch )
         {
             if ( node.inUse() )
             {
-                writer.write( labelChanges( node.getId(), EMPTY_LONG_ARRAY, get( node, nodeStore ) ) );
+                writer.write( tokenChanges( node.getId(), EMPTY_LONG_ARRAY, get( node, nodeStore, cursorTracer ) ) );
             }
         }
         sender.send( batch );
@@ -61,6 +67,6 @@ public class LabelIndexWriterStep extends ProcessorStep<NodeRecord[]>
     public void close() throws Exception
     {
         super.close();
-        writer.close();
+        closeAll( writer, cursorTracer );
     }
 }

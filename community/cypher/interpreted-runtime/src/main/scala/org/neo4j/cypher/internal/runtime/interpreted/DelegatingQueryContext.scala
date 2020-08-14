@@ -22,23 +22,48 @@ package org.neo4j.cypher.internal.runtime.interpreted
 import java.net.URL
 
 import org.eclipse.collections.api.iterator.LongIterator
+import org.neo4j.cypher.internal.expressions.SemanticDirection
 import org.neo4j.cypher.internal.logical.plans.IndexOrder
 import org.neo4j.cypher.internal.profiling.KernelStatisticProvider
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.graphdb.{Entity, Path}
-import org.neo4j.internal.kernel.api.helpers.RelationshipSelectionCursor
+import org.neo4j.cypher.internal.runtime.Expander
+import org.neo4j.cypher.internal.runtime.KernelPredicate
+import org.neo4j.cypher.internal.runtime.NodeOperations
+import org.neo4j.cypher.internal.runtime.Operations
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryTransactionalContext
+import org.neo4j.cypher.internal.runtime.RelationshipIterator
+import org.neo4j.cypher.internal.runtime.RelationshipOperations
+import org.neo4j.cypher.internal.runtime.ResourceManager
+import org.neo4j.cypher.internal.runtime.UserDefinedAggregator
+import org.neo4j.graphdb.Entity
+import org.neo4j.graphdb.Path
+import org.neo4j.internal.kernel.api.CursorFactory
+import org.neo4j.internal.kernel.api.IndexQuery
+import org.neo4j.internal.kernel.api.IndexReadSession
+import org.neo4j.internal.kernel.api.NodeCursor
+import org.neo4j.internal.kernel.api.NodeValueIndexCursor
+import org.neo4j.internal.kernel.api.PropertyCursor
+import org.neo4j.internal.kernel.api.Read
+import org.neo4j.internal.kernel.api.RelationshipScanCursor
+import org.neo4j.internal.kernel.api.RelationshipTraversalCursor
+import org.neo4j.internal.kernel.api.SchemaRead
+import org.neo4j.internal.kernel.api.TokenRead
+import org.neo4j.internal.kernel.api.Write
 import org.neo4j.internal.kernel.api.procs.ProcedureCallContext
-import org.neo4j.internal.kernel.api.{QueryContext => _, _}
 import org.neo4j.internal.schema.IndexDescriptor
 import org.neo4j.kernel.api.KernelTransaction
 import org.neo4j.kernel.api.dbms.DbmsOperations
 import org.neo4j.kernel.database.NamedDatabaseId
 import org.neo4j.kernel.impl.core.TransactionalEntityFactory
-import org.neo4j.kernel.impl.factory.DatabaseInfo
+import org.neo4j.kernel.impl.factory.DbmsInfo
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.{TextValue, Value}
-import org.neo4j.values.virtual.{ListValue, MapValue, NodeValue, RelationshipValue}
+import org.neo4j.values.storable.TextValue
+import org.neo4j.values.storable.Value
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.MapValue
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 import scala.collection.Iterator
 
@@ -50,8 +75,9 @@ abstract class DelegatingQueryContext(val inner: QueryContext) extends QueryCont
 
   protected def manyDbHits(value: LongIterator): LongIterator = value
   protected def manyDbHits(value: RelationshipIterator): RelationshipIterator = value
-  protected def manyDbHits(value: RelationshipSelectionCursor): RelationshipSelectionCursor = value
+  protected def manyDbHits(value: RelationshipTraversalCursor): RelationshipTraversalCursor = value
   protected def manyDbHits(value: NodeValueIndexCursor): NodeValueIndexCursor = value
+  protected def manyDbHits(value: NodeCursor): NodeCursor = value
   protected def manyDbHits(count: Int): Int = count
 
   override def resources: ResourceManager = inner.resources
@@ -89,6 +115,10 @@ abstract class DelegatingQueryContext(val inner: QueryContext) extends QueryCont
 
   override def getRelationshipsForIdsPrimitive(node: Long, dir: SemanticDirection, types: Array[Int]): RelationshipIterator =
   manyDbHits(inner.getRelationshipsForIdsPrimitive(node, dir, types))
+
+  override def nodeCursor(): NodeCursor = manyDbHits(inner.nodeCursor())
+
+  override def traversalCursor(): RelationshipTraversalCursor = manyDbHits(inner.traversalCursor())
 
   override def singleRelationship(id: Long, cursor: RelationshipScanCursor): Unit =  singleDbHit(inner.singleRelationship(id, cursor))
 
@@ -147,9 +177,11 @@ abstract class DelegatingQueryContext(val inner: QueryContext) extends QueryCont
                                                      value: TextValue): NodeValueIndexCursor =
     manyDbHits(inner.indexSeekByEndsWith(index, needsValues, indexOrder, value))
 
-  override def getNodesByLabel(id: Int): Iterator[NodeValue] = manyDbHits(inner.getNodesByLabel(id))
+  override def getNodesByLabel(id: Int, indexOrder: IndexOrder): Iterator[NodeValue] =
+    manyDbHits(inner.getNodesByLabel(id, indexOrder))
 
-  override def getNodesByLabelPrimitive(id: Int): LongIterator = manyDbHits(inner.getNodesByLabelPrimitive(id))
+  override def getNodesByLabelPrimitive(id: Int, indexOrder: IndexOrder): LongIterator =
+    manyDbHits(inner.getNodesByLabelPrimitive(id, indexOrder))
 
   override def nodeAsMap(id: Long, nodeCursor: NodeCursor, propertyCursor: PropertyCursor): MapValue = {
     val map = inner.nodeAsMap(id, nodeCursor, propertyCursor)
@@ -215,7 +247,7 @@ abstract class DelegatingQueryContext(val inner: QueryContext) extends QueryCont
 
   override def nodeGetTotalDegree(node: Long, relationship: Int, nodeCursor: NodeCursor): Int = singleDbHit(inner.nodeGetTotalDegree(node, relationship, nodeCursor))
 
-  override def nodeIsDense(node: Long, nodeCursor: NodeCursor): Boolean = singleDbHit(inner.nodeIsDense(node, nodeCursor))
+  override def nodeHasCheapDegrees(node: Long, nodeCursor: NodeCursor): Boolean = singleDbHit(inner.nodeHasCheapDegrees(node, nodeCursor))
 
   override def variableLengthPathExpand(realNode: Long,
                                         minHops: Option[Int],
@@ -237,13 +269,15 @@ abstract class DelegatingQueryContext(val inner: QueryContext) extends QueryCont
 
   override def singleShortestPath(left: Long, right: Long, depth: Int, expander: Expander,
                                   pathPredicate: KernelPredicate[Path],
-                                  filters: Seq[KernelPredicate[Entity]]): Option[Path] =
-    singleDbHit(inner.singleShortestPath(left, right, depth, expander, pathPredicate, filters))
+                                  filters: Seq[KernelPredicate[Entity]],
+                                  memoryTracker: MemoryTracker): Option[Path] =
+    singleDbHit(inner.singleShortestPath(left, right, depth, expander, pathPredicate, filters, memoryTracker))
 
   override def allShortestPath(left: Long, right: Long, depth: Int, expander: Expander,
                                pathPredicate: KernelPredicate[Path],
-                               filters: Seq[KernelPredicate[Entity]]): Iterator[Path] =
-    manyDbHits(inner.allShortestPath(left, right, depth, expander, pathPredicate, filters))
+                               filters: Seq[KernelPredicate[Entity]],
+                               memoryTracker: MemoryTracker): Iterator[Path] =
+    manyDbHits(inner.allShortestPath(left, right, depth, expander, pathPredicate, filters, memoryTracker))
 
   override def callReadOnlyProcedure(id: Int, args: Seq[AnyValue], allowed: Array[String], context: ProcedureCallContext): Iterator[Array[AnyValue]] =
     unknownDbHits(inner.callReadOnlyProcedure(id, args, allowed, context))
@@ -307,7 +341,7 @@ class DelegatingOperations[T, CURSOR](protected val inner: Operations[T, CURSOR]
   override def propertyKeyIds(obj: Long, cursor: CURSOR, propertyCursor: PropertyCursor): Array[Int] =
     singleDbHit(inner.propertyKeyIds(obj, cursor, propertyCursor))
 
-  override def removeProperty(obj: Long, propertyKeyId: Int): Unit = singleDbHit(inner.removeProperty(obj, propertyKeyId))
+  override def removeProperty(obj: Long, propertyKeyId: Int): Boolean = singleDbHit(inner.removeProperty(obj, propertyKeyId))
 
   override def all: Iterator[T] = manyDbHits(inner.all)
 
@@ -334,7 +368,7 @@ class DelegatingQueryTransactionalContext(val inner: QueryTransactionalContext) 
 
   override def kernelStatisticProvider: KernelStatisticProvider = inner.kernelStatisticProvider
 
-  override def databaseInfo: DatabaseInfo = inner.databaseInfo
+  override def dbmsInfo: DbmsInfo = inner.dbmsInfo
 
   override def databaseId: NamedDatabaseId = inner.databaseId
 

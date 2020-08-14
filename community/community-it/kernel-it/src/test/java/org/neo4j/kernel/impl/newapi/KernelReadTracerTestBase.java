@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.exceptions.KernelException;
+import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.RelationshipType;
@@ -37,7 +38,6 @@ import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
 import org.neo4j.internal.schema.IndexDescriptor;
@@ -48,13 +48,17 @@ import org.neo4j.kernel.impl.newapi.TestKernelReadTracer.TraceEvent;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.graphdb.Label.label;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.constrained;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.ON_ALL_NODES_SCAN;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnIndexSeek;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnLabelScan;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnNode;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnProperty;
 import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnRelationship;
-import static org.neo4j.kernel.impl.newapi.TestKernelReadTracer.OnRelationshipGroup;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+import static org.neo4j.storageengine.api.RelationshipSelection.ALL_RELATIONSHIPS;
+import static org.neo4j.storageengine.api.RelationshipSelection.selection;
 
 @TestInstance( TestInstance.Lifecycle.PER_CLASS )
 public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSupport> extends KernelAPIReadTestBase<G>
@@ -129,7 +133,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         List<TraceEvent> expectedEvents = new ArrayList<>();
         expectedEvents.add( ON_ALL_NODES_SCAN );
 
-        try ( NodeCursor nodes = cursors.allocateNodeCursor() )
+        try ( NodeCursor nodes = cursors.allocateNodeCursor( NULL ) )
         {
             // when
             nodes.setTracer( tracer );
@@ -150,7 +154,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeCursor cursor = cursors.allocateNodeCursor() )
+        try ( NodeCursor cursor = cursors.allocateNodeCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
@@ -174,7 +178,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeCursor cursor = cursors.allocateNodeCursor() )
+        try ( NodeCursor cursor = cursors.allocateNodeCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
@@ -204,11 +208,11 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         List<TraceEvent> expectedEvents = new ArrayList<>();
         expectedEvents.add( OnLabelScan( barId ) );
 
-        try ( NodeLabelIndexCursor cursor = cursors.allocateNodeLabelIndexCursor() )
+        try ( NodeLabelIndexCursor cursor = cursors.allocateNodeLabelIndexCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
-            read.nodeLabelScan( barId, cursor );
+            read.nodeLabelScan( barId, cursor, IndexOrder.NONE );
             while ( cursor.next() )
             {
                 expectedEvents.add( OnNode( cursor.nodeReference() ) );
@@ -225,7 +229,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeValueIndexCursor cursor = cursors.allocateNodeValueIndexCursor() )
+        try ( NodeValueIndexCursor cursor = cursors.allocateNodeValueIndexCursor( NULL ) )
         {
             int p1 = token.propertyKey( "p1" );
             IndexReadSession session = read.indexReadSession( index );
@@ -243,7 +247,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
     {
         // when
         cursor.setTracer( tracer );
-        read.nodeIndexSeek( session, cursor, order, false, IndexQuery.range( prop, 0, false, 10, false ) );
+        read.nodeIndexSeek( session, cursor, constrained( order, false ), IndexQuery.range( prop, 0, false, 10, false ) );
 
         tracer.assertEvents( OnIndexSeek() );
 
@@ -260,7 +264,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( RelationshipScanCursor cursor = cursors.allocateRelationshipScanCursor() )
+        try ( RelationshipScanCursor cursor = cursors.allocateRelationshipScanCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
@@ -289,15 +293,15 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor();
-              RelationshipTraversalCursor cursor = cursors.allocateRelationshipTraversalCursor() )
+        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor( NULL );
+              RelationshipTraversalCursor cursor = cursors.allocateRelationshipTraversalCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
 
             read.singleNode( foo, nodeCursor );
             assertTrue( nodeCursor.next() );
-            nodeCursor.allRelationships( cursor );
+            nodeCursor.relationships( cursor, ALL_RELATIONSHIPS );
 
             assertTrue( cursor.next() );
             tracer.assertEvents( OnRelationship( cursor.relationshipReference() ) );
@@ -325,24 +329,17 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor();
-              RelationshipGroupCursor groupCursor = cursors.allocateRelationshipGroupCursor();
-              RelationshipTraversalCursor cursor = cursors.allocateRelationshipTraversalCursor() )
+        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor( NULL );
+              RelationshipTraversalCursor cursor = cursors.allocateRelationshipTraversalCursor( NULL ) )
         {
             // when
             cursor.setTracer( tracer );
 
             read.singleNode( foo, nodeCursor );
             assertTrue( nodeCursor.next() );
-            nodeCursor.relationships( groupCursor );
 
-            assertTrue( groupCursor.next() );
-            if ( groupCursor.type() != token.relationshipType( "HAS" ) )
-            {
-                assertTrue( groupCursor.next() );
-            }
-
-            tx.dataRead().relationships( foo, groupCursor.outgoingReference(), cursor );
+            int type = token.relationshipType( "HAS" );
+            nodeCursor.relationships( cursor, selection( type, Direction.OUTGOING ) );
 
             assertTrue( cursor.next() );
             tracer.assertEvents( OnRelationship( cursor.relationshipReference() ) );
@@ -364,6 +361,7 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
     }
 
     @Test
+<<<<<<< HEAD
     void shouldTraceGroupTraversal()
     {
         // given
@@ -394,13 +392,15 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
     }
 
     @Test
+=======
+>>>>>>> neo4j/4.1
     void shouldTracePropertyAccess()
     {
         // given
         TestKernelReadTracer tracer = new TestKernelReadTracer();
 
-        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor();
-              PropertyCursor propertyCursor = cursors.allocatePropertyCursor() )
+        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor( NULL );
+              PropertyCursor propertyCursor = cursors.allocatePropertyCursor( NULL, INSTANCE ) )
         {
             // when
             propertyCursor.setTracer( tracer );

@@ -44,12 +44,14 @@ import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.consistency.ConsistencyCheckService;
 import org.neo4j.consistency.checking.full.ConsistencyCheckIncompleteException;
 import org.neo4j.consistency.checking.full.ConsistencyFlags;
 import org.neo4j.dbms.api.DatabaseManagementService;
+import org.neo4j.dbms.api.DatabaseManagementServiceBuilder;
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.Entity;
 import org.neo4j.graphdb.Label;
@@ -57,11 +59,13 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.schema.ConstraintCreator;
 import org.neo4j.graphdb.schema.IndexCreator;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.LabelScanWriter;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.index.label.TokenScanWriter;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.api.index.IndexAccessor;
@@ -93,8 +97,8 @@ import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
@@ -107,9 +111,11 @@ import org.neo4j.values.storable.Values;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.collection.PrimitiveLongCollections.EMPTY_LONG_ARRAY;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.experimental_consistency_checker;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
-import static org.neo4j.configuration.GraphDatabaseSettings.experimental_consistency_checker;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
+import static org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.Record.NO_LABELS_FIELD;
 import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
 
@@ -131,13 +137,24 @@ public class DetectRandomSabotageIT
     private NeoStores neoStores;
     private DependencyResolver resolver;
 
+<<<<<<< HEAD
     protected DatabaseManagementService getDbms( File home )
     {
         return new TestDatabaseManagementServiceBuilder( home ).build();
+=======
+    private DatabaseManagementService getDbms( File home )
+    {
+        return addConfig( createBuilder( home ) ).build();
+    }
+
+    protected TestDatabaseManagementServiceBuilder createBuilder( File home )
+    {
+        return new TestDatabaseManagementServiceBuilder( home );
+>>>>>>> neo4j/4.1
     }
 
     @BeforeEach
-    void setUp()
+    protected void setUp()
     {
         dbms = getDbms( directory.homeDir() );
         GraphDatabaseAPI db = (GraphDatabaseAPI) dbms.database( DEFAULT_DATABASE_NAME );
@@ -365,12 +382,33 @@ public class DetectRandomSabotageIT
     private ConsistencyCheckService.Result shutDownAndRunConsistencyChecker() throws ConsistencyCheckIncompleteException
     {
         dbms.shutdown();
-        Config config = Config.newBuilder()
-                .set( neo4j_home, directory.homeDir().toPath() )
-                .set( experimental_consistency_checker, true )
-                .build();
+        Config.Builder builder = Config.newBuilder().set( neo4j_home, directory.homeDir().toPath() );
+        Config config = addConfig( builder ).build();
         return new ConsistencyCheckService().runFullConsistencyCheck( DatabaseLayout.of( config ), config, ProgressMonitorFactory.NONE,
                 NullLogProvider.getInstance(), false, ConsistencyFlags.DEFAULT );
+    }
+
+    protected  <T> T addConfig( T t, SetConfigAction<T> action )
+    {
+        action.setConfig( t, enable_relationship_type_scan_store, true );
+        action.setConfig( t, experimental_consistency_checker, true );
+        return t;
+    }
+
+    private DatabaseManagementServiceBuilder addConfig( DatabaseManagementServiceBuilder builder )
+    {
+        return addConfig( builder, DatabaseManagementServiceBuilder::setConfig );
+    }
+
+    private Config.Builder addConfig( Config.Builder builder )
+    {
+        return addConfig( builder, Config.Builder::set );
+    }
+
+    @FunctionalInterface
+    protected interface SetConfigAction<TARGET>
+    {
+        <VALUE> void setConfig( TARGET target, Setting<VALUE> setting, VALUE value );
     }
 
     private enum SabotageType
@@ -399,9 +437,9 @@ public class DetectRandomSabotageIT
                     {
                         NodeStore store = stores.getNodeStore();
                         NodeRecord node = randomRecord( random, store, usedRecord() );
-                        NodeRecord before = store.getRecord( node.getId(), store.newRecord(), RecordLoad.NORMAL );
+                        NodeRecord before = store.getRecord( node.getId(), store.newRecord(), RecordLoad.NORMAL, NULL );
                         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
-                        long[] existing = nodeLabels.get( store );
+                        long[] existing = nodeLabels.get( store, NULL );
                         if ( random.nextBoolean() )
                         {
                             // Change inlined
@@ -413,7 +451,7 @@ public class DetectRandomSabotageIT
                                     node.setLabelField( labelField, node.getDynamicLabelRecords() );
                                 }
                             }
-                            while ( Arrays.equals( existing, NodeLabelsField.get( node, store ) ) );
+                            while ( Arrays.equals( existing, NodeLabelsField.get( node, store, NULL ) ) );
                         }
                         else
                         {
@@ -425,7 +463,7 @@ public class DetectRandomSabotageIT
                             }
                             while ( existingLabelField == node.getLabelField() );
                         }
-                        store.updateRecord( node );
+                        store.updateRecord( node, NULL );
                         return recordSabotage( before, node );
                     }
                 },
@@ -444,7 +482,11 @@ public class DetectRandomSabotageIT
                     {
                         RelationshipStore store = stores.getRelationshipStore();
                         RelationshipRecord relationship = randomRecord( random, store, usedRecord() );
+<<<<<<< HEAD
                         RelationshipRecord before = store.getRecord( relationship.getId(), store.newRecord(), RecordLoad.NORMAL );
+=======
+                        RelationshipRecord before = store.getRecord( relationship.getId(), store.newRecord(), RecordLoad.NORMAL, NULL );
+>>>>>>> neo4j/4.1
                         LongSupplier rng = () -> randomIdOrSometimesDefault( random, NULL_REFERENCE.longValue(), id -> true );
                         switch ( random.nextInt( 4 ) )
                         {
@@ -469,7 +511,7 @@ public class DetectRandomSabotageIT
                             guaranteedChangedId( relationship::getSecondNextRel, relationship::setSecondNextRel, rng );
                             break;
                         }
-                        store.updateRecord( relationship );
+                        store.updateRecord( relationship, NULL );
                         return recordSabotage( before, relationship );
                     }
                 },
@@ -500,7 +542,11 @@ public class DetectRandomSabotageIT
                                     }
 
                                     PropertyStore propertyStore = stores.getPropertyStore();
+<<<<<<< HEAD
                                     PropertyRecord record = propertyStore.getRecord( propertyId, propertyStore.newRecord(), RecordLoad.CHECK );
+=======
+                                    PropertyRecord record = propertyStore.getRecord( propertyId, propertyStore.newRecord(), RecordLoad.CHECK, NULL );
+>>>>>>> neo4j/4.1
                                     return !record.inUse() || !NULL_REFERENCE.is( record.getPrevProp() );
                                 } ) );
                     }
@@ -555,7 +601,8 @@ public class DetectRandomSabotageIT
                     Sabotage run( RandomRule random, NeoStores stores, DependencyResolver otherDependencies )
                     {
                         return loadChangeUpdateDynamicChain( random, stores.getPropertyStore(), stores.getPropertyStore().getStringStore(),
-                                PropertyType.STRING, record -> record.setLength( random.nextInt( record.getLength() ) ), v -> true );
+                                PropertyType.STRING, record ->
+                                        record.setData( Arrays.copyOf( record.getData(), random.nextInt( record.getLength() ) ) ), v -> true );
                     }
                 },
 //        STRING_DATA - format doesn't allow us to detect these
@@ -573,7 +620,8 @@ public class DetectRandomSabotageIT
                     Sabotage run( RandomRule random, NeoStores stores, DependencyResolver otherDependencies )
                     {
                         return loadChangeUpdateDynamicChain( random, stores.getPropertyStore(), stores.getPropertyStore().getArrayStore(),
-                                PropertyType.ARRAY, record -> record.setLength( random.nextInt( record.getLength() ) ),
+                                PropertyType.ARRAY, record ->
+                                        record.setData( Arrays.copyOf( record.getData(), random.nextInt( record.getLength() ) ) ),
                                 v -> v.asObjectCopy() instanceof String[] );
                     }
                 },
@@ -583,7 +631,8 @@ public class DetectRandomSabotageIT
                     Sabotage run( RandomRule random, NeoStores stores, DependencyResolver otherDependencies )
                     {
                         return loadChangeUpdateDynamicChain( random, stores.getPropertyStore(), stores.getPropertyStore().getArrayStore(),
-                                PropertyType.ARRAY, record -> record.setLength( random.nextInt( record.getLength() ) ), v -> true );
+                                PropertyType.ARRAY, record ->
+                                        record.setData( Arrays.copyOf( record.getData(), random.nextInt( record.getLength() ) ) ), v -> true );
                     }
                 },
 //        ARRAY_DATA?
@@ -666,7 +715,7 @@ public class DetectRandomSabotageIT
                         IndexAccessor accessor = ((OnlineIndexProxy) indexProxy).accessor();
                         long selectedEntityId = -1;
                         Value[] selectedValues = null;
-                        try ( IndexEntriesReader reader = accessor.newAllIndexEntriesReader( 1 )[0] )
+                        try ( IndexEntriesReader reader = accessor.newAllIndexEntriesReader( 1, NULL )[0] )
                         {
                             long entityId = -1;
                             Value[] values = null;
@@ -691,7 +740,7 @@ public class DetectRandomSabotageIT
                             throw new UnsupportedOperationException( "Something is wrong with the test, could not find index entry to sabotage" );
                         }
 
-                        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE_IDEMPOTENT ) )
+                        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE_IDEMPOTENT, NULL ) )
                         {
                             if ( add )
                             {
@@ -704,9 +753,11 @@ public class DetectRandomSabotageIT
                             }
                         }
 
+                        TokenNameLookup tokenNameLookup = otherDependencies.resolveDependency( TokenNameLookup.class );
+                        String userDescription = indexProxy.getDescriptor().userDescription( tokenNameLookup );
                         return new Sabotage( String.format( "%s entityId:%d values:%s index:%s", add ? "Add" : "Remove", selectedEntityId,
-                                Arrays.toString( selectedValues ), indexProxy.getDescriptor().toString() ),
-                                indexProxy.getDescriptor().toString() ); // TODO more specific
+                                Arrays.toString( selectedValues ), userDescription ),
+                                userDescription ); // TODO more specific
                     }
                 },
         LABEL_INDEX_ENTRY
@@ -721,13 +772,13 @@ public class DetectRandomSabotageIT
                         TokenHolders tokenHolders = otherDependencies.resolveDependency( TokenHolders.class );
                         Set<String> labelNames = new HashSet<>( Arrays.asList( TOKEN_NAMES ) );
                         int labelId;
-                        try ( LabelScanWriter writer = labelIndex.newWriter() )
+                        try ( TokenScanWriter writer = labelIndex.newWriter( NULL ) )
                         {
                             if ( nodeRecord.inUse() )
                             {
                                 // Our node is in use, make sure it's a label it doesn't already have
                                 NodeLabels labelsField = NodeLabelsField.parseLabelsField( nodeRecord );
-                                long[] labelsBefore = labelsField.get( store );
+                                long[] labelsBefore = labelsField.get( store, NULL );
                                 for ( long labelIdBefore : labelsBefore )
                                 {
                                     labelNames.remove( tokenHolders.labelTokens().getTokenById( (int) labelIdBefore ).name() );
@@ -741,34 +792,91 @@ public class DetectRandomSabotageIT
                                     long[] labelsAfter = Arrays.copyOf( labelsBefore, labelsBefore.length + 1 );
                                     labelsAfter[labelsBefore.length] = labelId;
                                     Arrays.sort( labelsAfter );
-                                    writer.write( NodeLabelUpdate.labelChanges( nodeRecord.getId(), labelsBefore, labelsAfter ) );
+                                    writer.write( EntityTokenUpdate.tokenChanges( nodeRecord.getId(), labelsBefore, labelsAfter ) );
                                 }
                                 else
                                 {
                                     // Remove a label from an existing node (in the label index only)
-                                    MutableLongList labels = LongLists.mutable.of( labelsBefore.clone() );
+                                    MutableLongList labels = LongLists.mutable.of( Arrays.copyOf( labelsBefore, labelsBefore.length ) );
                                     labelId = (int) labels.removeAtIndex( random.nextInt( labels.size() ) );
                                     long[] labelsAfter = labels.toSortedArray(); // With one of the labels removed
-                                    writer.write( NodeLabelUpdate.labelChanges( nodeRecord.getId(), labelsBefore, labelsAfter ) );
+                                    writer.write( EntityTokenUpdate.tokenChanges( nodeRecord.getId(), labelsBefore, labelsAfter ) );
                                 }
                             }
                             else // Getting here means the we're adding something (see above when selecting the node)
                             {
                                 // Add a label to a non-existent node (in the label index only)
                                 labelId = tokenHolders.labelTokens().getIdByName( random.among( TOKEN_NAMES ) );
-                                writer.write( NodeLabelUpdate.labelChanges( nodeRecord.getId(), EMPTY_LONG_ARRAY, new long[]{labelId} ) );
+                                writer.write( EntityTokenUpdate.tokenChanges( nodeRecord.getId(), EMPTY_LONG_ARRAY, new long[]{labelId} ) );
                             }
                         }
                         return new Sabotage( String.format( "%s labelId:%d node:%s", add ? "Add" : "Remove", labelId, nodeRecord ), nodeRecord.toString() );
+                    }
+                },
+        RELATIONSHIP_TYPE_INDEX_ENTRY
+                {
+                    @Override
+                    Sabotage run( RandomRule random, NeoStores stores, DependencyResolver otherDependencies ) throws Exception
+                    {
+                        RelationshipTypeScanStore relationshipTypeIndex = otherDependencies.resolveDependency( RelationshipTypeScanStore.class );
+                        RelationshipStore store = stores.getRelationshipStore();
+                        RelationshipRecord relationshipRecord = randomRecord( random, store, r -> true );
+                        TokenHolders tokenHolders = otherDependencies.resolveDependency( TokenHolders.class );
+                        Set<String> relationshipTypeNames = new HashSet<>( Arrays.asList( TOKEN_NAMES ) );
+                        int typeBefore = relationshipRecord.getType();
+                        long[] typesBefore = new long[]{typeBefore};
+                        int typeId;
+                        long[] typesAfter;
+                        String operation;
+                        try ( TokenScanWriter writer = relationshipTypeIndex.newWriter( NULL ) )
+                        {
+                            if ( relationshipRecord.inUse() )
+                            {
+                                int mode = random.nextInt( 3 );
+                                if ( mode < 2 )
+                                {
+                                    relationshipTypeNames.remove( tokenHolders.relationshipTypeTokens().getTokenById( typeBefore ).name() );
+                                    typeId =
+                                            tokenHolders.relationshipTypeTokens().getIdByName( random.among( new ArrayList<>( relationshipTypeNames ) ) );
+                                    if ( mode == 0 )
+                                    {
+                                        operation = "Replace relationship type in index with a new type";
+                                        typesAfter = new long[]{typeId};
+                                    }
+                                    else
+                                    {
+                                        operation = "Add additional relationship type in index";
+                                        typesAfter = new long[]{typeId, typeBefore};
+                                        Arrays.sort( typesAfter );
+                                    }
+                                }
+                                else
+                                {
+                                    operation = "Remove relationship type from index";
+                                    typeId = typeBefore;
+                                    typesAfter = EMPTY_LONG_ARRAY;
+                                }
+                                writer.write( EntityTokenUpdate.tokenChanges( relationshipRecord.getId(), typesBefore, typesAfter ) );
+                            }
+                            else
+                            {
+                                // Getting here means the we're adding something (see above when selecting the relationship)
+                                operation = "Add relationship type to a non-existing relationship (in relationship type index only)";
+                                typeId = tokenHolders.labelTokens().getIdByName( random.among( TOKEN_NAMES ) );
+                                writer.write( EntityTokenUpdate.tokenChanges( relationshipRecord.getId(), EMPTY_LONG_ARRAY, new long[]{typeId} ) );
+                            }
+                        }
+                        String description = String.format( "%s relationshipTypeId:%d relationship:%s", operation, typeId, relationshipRecord );
+                        return new Sabotage( description, relationshipRecord.toString() );
                     }
                 };
 
         protected <T extends AbstractBaseRecord> Sabotage setRandomRecordNotInUse( RandomRule random, RecordStore<T> store )
         {
             T before = randomRecord( random, store, usedRecord() );
-            T record = store.getRecord( before.getId(), store.newRecord(), RecordLoad.NORMAL );
+            T record = store.getRecord( before.getId(), store.newRecord(), RecordLoad.NORMAL, NULL );
             record.setInUse( false );
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
             return recordSabotage( before, record );
         }
 
@@ -788,9 +896,9 @@ public class DetectRandomSabotageIT
                 ToLongFunction<T> idGetter, BiConsumer<T,Long> idSetter, LongSupplier rng )
         {
             T before = randomRecord( random, store, filter );
-            T record = store.getRecord( before.getId(), store.newRecord(), RecordLoad.NORMAL );
+            T record = store.getRecord( before.getId(), store.newRecord(), RecordLoad.NORMAL, NULL );
             guaranteedChangedId( () -> idGetter.applyAsLong( record ), changedId -> idSetter.accept( record, changedId ), rng );
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
             return recordSabotage( before, record );
         }
 
@@ -814,20 +922,20 @@ public class DetectRandomSabotageIT
             PropertyRecord propertyRecord = propertyStore.newRecord();
             while ( true )
             {
-                propertyStore.getRecord( random.nextLong( propertyStore.getHighId() ), propertyRecord, RecordLoad.CHECK );
+                propertyStore.getRecord( random.nextLong( propertyStore.getHighId() ), propertyRecord, RecordLoad.CHECK, NULL );
                 if ( propertyRecord.inUse() )
                 {
                     for ( PropertyBlock block : propertyRecord )
                     {
-                        if ( block.getType() == valueType && checkability.test( block.getType().value( block, propertyStore ) ) )
+                        if ( block.getType() == valueType && checkability.test( block.getType().value( block, propertyStore, NULL ) ) )
                         {
-                            propertyStore.ensureHeavy( block );
+                            propertyStore.ensureHeavy( block, NULL );
                             if ( block.getValueRecords().size() > 1 )
                             {
                                 DynamicRecord dynamicRecord = block.getValueRecords().get( random.nextInt( block.getValueRecords().size() - 1 ) );
-                                DynamicRecord before = dynamicStore.getRecord( dynamicRecord.getId(), dynamicStore.newRecord(), RecordLoad.NORMAL );
+                                DynamicRecord before = dynamicStore.getRecord( dynamicRecord.getId(), dynamicStore.newRecord(), RecordLoad.NORMAL, NULL );
                                 vandal.accept( dynamicRecord );
-                                dynamicStore.updateRecord( dynamicRecord );
+                                dynamicStore.updateRecord( dynamicRecord, NULL );
                                 return recordSabotage( before, dynamicRecord );
                             }
                         }
@@ -842,12 +950,21 @@ public class DetectRandomSabotageIT
         }
 
         protected long randomLargeSometimesNegative( RandomRule random )
+<<<<<<< HEAD
         {
             return randomLargeSometimesNegative( random, id -> true );
         }
 
         protected long randomLargeSometimesNegative( RandomRule random, LongPredicate filter )
         {
+=======
+        {
+            return randomLargeSometimesNegative( random, id -> true );
+        }
+
+        protected long randomLargeSometimesNegative( RandomRule random, LongPredicate filter )
+        {
+>>>>>>> neo4j/4.1
             long value;
             do
             {
@@ -864,7 +981,8 @@ public class DetectRandomSabotageIT
             T record = store.newRecord();
             do
             {
-                store.getRecord( random.nextLong( highId ), record, RecordLoad.CHECK );
+                // Load with FORCE to ignore not-in-use and decoding errors at this stage.
+                store.getRecord( random.nextLong( highId ), record, RecordLoad.FORCE, NULL );
             }
             while ( !filter.test( record ) );
             return record;

@@ -192,3 +192,167 @@ Feature: SubqueryAcceptance
       | 'Charlie' | 5              |
       | 'Dora'    | 5              |
     And no side effects
+
+  Scenario: Should allow importing variables into a subquery
+    And having executed:
+    """
+    CREATE (:Person {age: 20, name: 'Alice'}),
+           (:Person {age: 27, name: 'Bob'}),
+           (:Person {age: 65, name: 'Charlie'}),
+           (:Person {age: 30, name: 'Dora'})
+    """
+    When executing query:
+      """
+      MATCH (p:Person)
+      CALL {
+        WITH p
+        RETURN p.name AS innerName
+      }
+      RETURN innerName
+      """
+    Then the result should be, in any order:
+      | innerName |
+      | 'Alice'   |
+      | 'Bob'     |
+      | 'Charlie' |
+      | 'Dora'    |
+    And no side effects
+
+  Scenario: Should not allow to use unimported variables in a subquery
+    When executing query:
+      """
+      MATCH (a), (b)
+      CALL {
+        WITH a
+        RETURN b AS c
+      }
+      RETURN c
+      """
+    Then a SyntaxError should be raised at compile time: UndefinedVariable
+
+  Scenario: Should allow to remove imported variables from subquery scope
+    When executing query:
+      """
+      MATCH (a)
+      CALL {
+        WITH a
+        WITH 1 AS b
+        RETURN a AS c
+      }
+      RETURN c
+      """
+    Then a SyntaxError should be raised at compile time: UndefinedVariable
+
+  Scenario: Aggregating top and bottom results from correlated subquery
+    And having executed:
+    """
+    CREATE (:Config {threshold: 2})
+    WITH *
+    UNWIND range(1, 10) as p
+    CREATE (:Node {prop: p})
+    """
+    When executing query:
+      """
+      MATCH (c:Config)
+      CALL {
+        WITH c MATCH (x:Node) WHERE x.prop > c.threshold RETURN x ORDER BY x.prop LIMIT 3
+        UNION
+        WITH c MATCH (x:Node) WHERE x.prop > c.threshold RETURN x ORDER BY x.prop DESC LIMIT 3
+      }
+      RETURN sum(x.prop) AS sum
+      """
+    Then the result should be, in any order:
+      | sum  |
+      | 39   |
+    And no side effects
+
+  Scenario: Aggregation on imported variables
+    When executing query:
+      """
+      UNWIND [0, 1, 2] AS x
+      CALL {
+        WITH x
+        RETURN max(x) AS xMax
+      }
+      RETURN x, xMax
+      """
+    Then the result should be, in any order:
+      | x | xMax |
+      | 0 | 0    |
+      | 1 | 1    |
+      | 2 | 2    |
+    And no side effects
+
+  Scenario: Aggregating top and bottom results within correlated subquery
+    And having executed:
+    """
+    CREATE (:Config {threshold: 2})
+    WITH *
+    UNWIND range(1, 10) as p
+    CREATE (:Node {prop: p})
+    """
+    When executing query:
+      """
+      MATCH (c:Config)
+      CALL {
+        WITH c MATCH (x:Node) WHERE x.prop > c.threshold WITH x.prop AS metric ORDER BY metric LIMIT 3 RETURN sum(metric) AS y
+        UNION
+        WITH c MATCH (x:Node) WHERE x.prop > c.threshold WITH x.prop AS metric ORDER BY metric DESC LIMIT 3 RETURN sum(metric) AS y
+      }
+      RETURN sum(y) AS sum
+      """
+    Then the result should be, in any order:
+      | sum |
+      | 39  |
+    And no side effects
+
+  Scenario: Grouping and aggregating within correlated subquery
+    And having executed:
+    """
+    CREATE (:Config {threshold: 2})
+    WITH *
+    UNWIND range(1, 10) as p
+    CREATE (:Node {prop: p, category: p % 2})
+    """
+    When executing query:
+      """
+      MATCH (c:Config)
+      CALL {
+          WITH c MATCH (x:Node)
+          WHERE x.prop > c.threshold
+          WITH x.prop AS metric, x.category AS cat
+          ORDER BY metric LIMIT 3
+          RETURN cat, sum(metric) AS y
+        UNION
+          WITH c MATCH (x:Node)
+          WHERE x.prop > c.threshold
+          WITH x.prop AS metric, x.category AS cat
+          ORDER BY metric DESC LIMIT 3
+          RETURN cat, sum(metric) AS y
+      }
+      RETURN cat, sum(y) AS sum
+      """
+    Then the result should be, in any order:
+      | cat | sum |
+      | 0   | 22  |
+      | 1   | 17  |
+    And no side effects
+
+  Scenario: Sorting in a subquery
+    When executing query:
+      """
+       WITH 1 AS x
+       CALL {
+         WITH x
+         WITH count(*) AS y
+         WITH y AS z
+         RETURN z ORDER BY z
+       }
+       RETURN z
+      """
+    Then the result should be, in any order:
+      | z   |
+      | 1   |
+    And no side effects
+
+

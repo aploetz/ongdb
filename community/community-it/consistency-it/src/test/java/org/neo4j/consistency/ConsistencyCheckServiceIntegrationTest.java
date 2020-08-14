@@ -40,6 +40,7 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.consistency.ConsistencyCheckService.Result;
 import org.neo4j.consistency.checking.GraphStoreFixture;
 import org.neo4j.consistency.checking.full.ConsistencyCheckIncompleteException;
+import org.neo4j.consistency.checking.full.ConsistencyFlags;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -48,14 +49,15 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.config.Setting;
-import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.internal.helpers.Strings;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
+import org.neo4j.internal.recordstorage.RecordStorageCommandReaderFactory;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.FileUtils;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -72,9 +74,7 @@ import org.neo4j.test.extension.pagecache.PageCacheExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.String.format;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -83,8 +83,10 @@ import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAM
 import static org.neo4j.configuration.GraphDatabaseSettings.SchemaIndex.NATIVE30;
 import static org.neo4j.configuration.GraphDatabaseSettings.SchemaIndex.NATIVE_BTREE10;
 import static org.neo4j.configuration.GraphDatabaseSettings.record_format;
-import static org.neo4j.test.Property.property;
-import static org.neo4j.test.Property.set;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+import static org.neo4j.test.mockito.mock.Property.property;
+import static org.neo4j.test.mockito.mock.Property.set;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -149,9 +151,25 @@ public class ConsistencyCheckServiceIntegrationTest
 
         File reportFile = result.reportFile();
         assertTrue( reportFile.exists(), "Consistency check report file should be generated." );
-        assertThat( "Expected to see report about not deleted relationship record present as part of a chain",
-                Files.readString( reportFile.toPath() ),
-                containsString( "The relationship record is not in use, but referenced from relationships chain.") );
+        assertThat( Files.readString( reportFile.toPath() ) ).as(
+                "Expected to see report about not deleted relationship record present as part of a chain" ).contains(
+                "The relationship record is not in use, but referenced from relationships chain." );
+    }
+
+    @Test
+    void tracePageCacheAccessOnConsistencyCheck() throws ConsistencyCheckIncompleteException
+    {
+        prepareDbWithDeletedRelationshipPartOfTheChain();
+        ConsistencyCheckService service = new ConsistencyCheckService( new Date() );
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var result = service.runFullConsistencyCheck( fixture.databaseLayout(), Config.defaults( settings() ), ProgressMonitorFactory.NONE,
+                NullLogProvider.getInstance(), testDirectory.getFileSystem(), pageCache, false, ConsistencyFlags.DEFAULT, pageCacheTracer, INSTANCE );
+
+        assertFalse( result.isSuccessful() );
+        assertThat( pageCacheTracer.pins() ).isGreaterThanOrEqualTo( 74 );
+        assertThat( pageCacheTracer.unpins() ).isGreaterThanOrEqualTo( 74 );
+        assertThat( pageCacheTracer.hits() ).isGreaterThanOrEqualTo( 35 );
+        assertThat( pageCacheTracer.faults() ).isGreaterThanOrEqualTo( 39 );
     }
 
     @Test
@@ -281,11 +299,8 @@ public class ConsistencyCheckServiceIntegrationTest
         assertTrue( result.isSuccessful() );
         File reportFile = result.reportFile();
         assertTrue( reportFile.exists(), "Consistency check report file should be generated." );
-        assertThat( "Expected to see report about schema index not being online",
-                Files.readString( reportFile.toPath() ), allOf(
-                        containsString( "schema rule" ),
-                        containsString( "not online" )
-                ) );
+        assertThat( Files.readString( reportFile.toPath() ) ).as( "Expected to see report about schema index not being online" ).contains(
+                "schema rule" ).contains( "not online" );
     }
 
     @Test
@@ -317,17 +332,15 @@ public class ConsistencyCheckServiceIntegrationTest
 
     private static void createIndex( GraphDatabaseService gds, Label label, String propKey )
     {
-        IndexDefinition indexDefinition;
-
         try ( Transaction tx = gds.beginTx() )
         {
-            indexDefinition = tx.schema().indexFor( label ).on( propKey ).create();
+            tx.schema().indexFor( label ).on( propKey ).create();
             tx.commit();
         }
 
         try ( Transaction tx = gds.beginTx() )
         {
-            tx.schema().awaitIndexOnline( indexDefinition, 1, TimeUnit.MINUTES );
+            tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
             tx.commit();
         }
     }
@@ -384,9 +397,9 @@ public class ConsistencyCheckServiceIntegrationTest
             NeoStores neoStores = recordStorageEngine.testAccessNeoStores();
             RelationshipStore relationshipStore = neoStores.getRelationshipStore();
             RelationshipRecord relationshipRecord = new RelationshipRecord( -1 );
-            RelationshipRecord record = relationshipStore.getRecord( 4, relationshipRecord, RecordLoad.FORCE );
+            RelationshipRecord record = relationshipStore.getRecord( 4, relationshipRecord, RecordLoad.FORCE, NULL );
             record.setInUse( false );
-            relationshipStore.updateRecord( relationshipRecord );
+            relationshipStore.updateRecord( relationshipRecord, NULL );
         }
         finally
         {
@@ -410,7 +423,9 @@ public class ConsistencyCheckServiceIntegrationTest
             node1.createRelationshipTo( node2, relationshipType );
             tx.commit();
         }
-        File[] txLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( databaseLayout.getTransactionLogsDirectory(), fs ).build().logFiles();
+        File[] txLogs = LogFilesBuilder.logFilesBasedOnlyBuilder( databaseLayout.getTransactionLogsDirectory(), fs )
+                .withCommandReaderFactory( RecordStorageCommandReaderFactory.INSTANCE )
+                .build().logFiles();
         for ( File file : txLogs )
         {
             fs.copyToDirectory( file, tmpLogDir );
@@ -444,7 +459,7 @@ public class ConsistencyCheckServiceIntegrationTest
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-                tx.create( new NodeRecord( next.node(), false, next.relationship(), -1 ) );
+                tx.create( new NodeRecord( next.node() ).initialize( false, -1, false, next.relationship(), 0 ) );
             }
         } );
     }

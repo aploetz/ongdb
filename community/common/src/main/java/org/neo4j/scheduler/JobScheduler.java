@@ -19,6 +19,7 @@
  */
 package org.neo4j.scheduler;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -66,7 +67,7 @@ public interface JobScheduler extends Lifecycle, AutoCloseable
      * <strong>NOTE:</strong> The returned instance might be an implementation of the {@link ExecutorService} interface. If so, then it is <em>NOT</em> allowed
      * to shut it down, because the life cycle of the executor is managed by the JobScheduler.
      **/
-    Executor executor( Group group );
+    CallableExecutor executor( Group group );
 
     /**
      * Expose a group scheduler as a {@link java.util.concurrent.ThreadFactory}.
@@ -82,17 +83,20 @@ public interface JobScheduler extends Lifecycle, AutoCloseable
      */
     ThreadFactory threadFactory( Group group );
 
+    /** Schedule a new callable in the specified group. */
+    <T> JobHandle<T> schedule( Group group, Callable<T> job );
+
     /** Schedule a new job in the specified group. */
-    JobHandle schedule( Group group, Runnable job );
+    JobHandle<?> schedule( Group group, Runnable job );
 
     /** Schedule a new job in the specified group with the given delay */
-    JobHandle schedule( Group group, Runnable runnable, long initialDelay, TimeUnit timeUnit );
+    JobHandle<?> schedule( Group group, Runnable runnable, long initialDelay, TimeUnit timeUnit );
 
     /** Schedule a recurring job */
-    JobHandle scheduleRecurring( Group group, Runnable runnable, long period, TimeUnit timeUnit );
+    JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long period, TimeUnit timeUnit );
 
     /** Schedule a recurring job where the first invocation is delayed the specified time */
-    JobHandle scheduleRecurring( Group group, Runnable runnable, long initialDelay, long period, TimeUnit timeUnit );
+    JobHandle<?> scheduleRecurring( Group group, Runnable runnable, long initialDelay, long period, TimeUnit timeUnit );
 
     /**
      * Return a stream of all active scheduling groups.

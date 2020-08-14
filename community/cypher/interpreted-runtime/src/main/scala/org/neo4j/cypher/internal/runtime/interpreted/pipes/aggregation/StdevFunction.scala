@@ -19,22 +19,23 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Expression, NumericHelper}
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
-class StdevFunction(val value: Expression, val population:Boolean)
+class StdevFunction(val value: Expression, val population:Boolean, memoryTracker: MemoryTracker)
   extends AggregationFunction
   with NumericExpressionOnly {
 
-  def name = if (population) "STDEVP" else "STDEV"
+  def name: String = if (population) "STDEVP" else "STDEV"
 
   // would be cool to not have to keep a temporary list to do multiple passes
   // this will blow up RAM over a big data set (not lazy!)
   // but I don't think it's currently possible with the way aggregation works
-  private var temp = Vector[Double]()
+  private var temp = Vector[Double]() // TODO: Use heap tracking collection
   private var count:Int = 0
   private var total:Double = 0
 
@@ -54,12 +55,12 @@ class StdevFunction(val value: Expression, val population:Boolean)
     }
   }
 
-  override def apply(data: ExecutionContext, state: QueryState) {
+  override def apply(data: ReadableRow, state: QueryState) {
     actOnNumber(value(data, state), number => {
       count += 1
       total += number.doubleValue()
       temp = temp :+ number.doubleValue()
-      state.memoryTracker.allocated(java.lang.Double.BYTES)
+      memoryTracker.allocateHeap(java.lang.Double.BYTES)
     })
   }
 }

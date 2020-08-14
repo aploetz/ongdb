@@ -20,6 +20,7 @@
 package org.neo4j.values.storable;
 
 import java.lang.reflect.Array;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -155,6 +156,23 @@ public final class Values
 
     // DIRECT FACTORY METHODS
 
+    public static TextValue utf8Value( String value )
+    {
+        return utf8Value( value.getBytes( StandardCharsets.UTF_8 ) );
+    }
+
+    public static Value ut8fOrNoValue( String value )
+    {
+        if ( value == null )
+        {
+            return NO_VALUE;
+        }
+        else
+        {
+            return utf8Value( value );
+        }
+    }
+
     public static TextValue utf8Value( byte[] bytes )
     {
         if ( bytes.length == 0 )
@@ -223,7 +241,7 @@ public final class Values
             return shortValue( number.shortValue() );
         }
 
-        throw new UnsupportedOperationException( "Unsupported type of Number " + number.toString() );
+        throw new UnsupportedOperationException( "Unsupported type of Number " + number );
     }
 
     public static LongValue longValue( long value )
@@ -459,7 +477,7 @@ public final class Values
             return NO_VALUE;
         }
 
-        throw new UnsupportedOperationException( "Unsupported type of Temporal " + value.toString() );
+        throw new UnsupportedOperationException( "Unsupported type of Temporal " + value );
     }
 
     public static DurationValue durationValue( TemporalAmount value )
@@ -559,7 +577,7 @@ public final class Values
     {
         if ( value instanceof String )
         {
-            return stringValue( (String) value );
+            return utf8Value( ((String) value).getBytes( StandardCharsets.UTF_8 ) );
         }
         if ( value instanceof Object[] )
         {
@@ -587,35 +605,35 @@ public final class Values
         }
         if ( value instanceof byte[] )
         {
-            return byteArray( ((byte[]) value).clone() );
+            return byteArray( Arrays.copyOf( (byte[]) value, ((byte[]) value).length) );
         }
         if ( value instanceof long[] )
         {
-            return longArray( ((long[]) value).clone() );
+            return longArray( Arrays.copyOf( (long[]) value, ((long[]) value).length) );
         }
         if ( value instanceof int[] )
         {
-            return intArray( ((int[]) value).clone() );
+            return intArray( Arrays.copyOf( (int[]) value, ((int[]) value).length) );
         }
         if ( value instanceof double[] )
         {
-            return doubleArray( ((double[]) value).clone() );
+            return doubleArray( Arrays.copyOf( (double[]) value, ((double[]) value).length) );
         }
         if ( value instanceof float[] )
         {
-            return floatArray( ((float[]) value).clone() );
+            return floatArray( Arrays.copyOf( (float[]) value, ((float[]) value).length) );
         }
         if ( value instanceof boolean[] )
         {
-            return booleanArray( ((boolean[]) value).clone() );
+            return booleanArray( Arrays.copyOf( (boolean[]) value, ((boolean[]) value).length) );
         }
         if ( value instanceof char[] )
         {
-            return charArray( ((char[]) value).clone() );
+            return charArray( Arrays.copyOf( (char[]) value, ((char[]) value).length) );
         }
         if ( value instanceof short[] )
         {
-            return shortArray( ((short[]) value).clone() );
+            return shortArray( Arrays.copyOf( (short[]) value, ((short[]) value).length) );
         }
         if ( value == null )
         {
@@ -649,12 +667,6 @@ public final class Values
         return Arrays.stream( objects )
                 .map( Values::of )
                 .toArray( Value[]::new );
-    }
-
-    @Deprecated
-    public static Object asObject( Value value )
-    {
-        return value == null ? null : value.asObject();
     }
 
     public static Object[] asObjects( Value[] propertyValues )

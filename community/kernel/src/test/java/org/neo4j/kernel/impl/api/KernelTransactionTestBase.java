@@ -35,13 +35,16 @@ import org.neo4j.collection.pool.Pool;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.schema.SchemaState;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.ByteUnit;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.availability.AvailabilityGuard;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.TestDatabaseIdRepository;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -55,16 +58,15 @@ import org.neo4j.kernel.impl.locking.StatementLocks;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
 import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.tracing.CommitEvent;
-import org.neo4j.kernel.impl.transaction.tracing.TransactionTracer;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactory;
 import org.neo4j.kernel.impl.util.collection.OnHeapCollectionsFactory;
-import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSetsImpl;
+import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSets;
 import org.neo4j.kernel.internal.event.DatabaseTransactionEventListeners;
-import org.neo4j.lock.LockTracer;
 import org.neo4j.lock.ResourceLocker;
+import org.neo4j.memory.MemoryGroup;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.memory.MemoryTracker;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.CommandCreationContext;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.StorageEngine;
@@ -80,6 +82,7 @@ import org.neo4j.values.storable.Value;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -97,7 +100,6 @@ class KernelTransactionTestBase
     protected final CommandCreationContext commandCreationContext = mock( CommandCreationContext.class );
     protected final TransactionMonitor transactionMonitor = mock( TransactionMonitor.class );
     protected final CapturingCommitProcess commitProcess = new CapturingCommitProcess();
-    protected final TransactionHeaderInformation headerInformation = mock( TransactionHeaderInformation.class );
     protected final AvailabilityGuard availabilityGuard = mock( AvailabilityGuard.class );
     protected final FakeClock clock = Clocks.fakeClock();
     protected final Pool<KernelTransactionImplementation> txPool = mock( Pool.class );
@@ -110,9 +112,8 @@ class KernelTransactionTestBase
     public void before() throws Exception
     {
         collectionsFactory = Mockito.spy( new TestCollectionsFactory() );
-        when( headerInformation.getAdditionalHeader() ).thenReturn( new byte[0] );
         when( storageEngine.newReader() ).thenReturn( storageReader );
-        when( storageEngine.newCommandCreationContext() ).thenReturn( commandCreationContext );
+        when( storageEngine.newCommandCreationContext( any( PageCursorTracer.class ), any() ) ).thenReturn( commandCreationContext );
         when( storageEngine.transactionIdStore() ).thenReturn( transactionIdStore );
         doAnswer( invocation -> ((Collection<StorageCommand>) invocation.getArgument(0) ).add( new TestCommand() ) )
             .when( storageEngine ).createCommands(
@@ -122,7 +123,7 @@ class KernelTransactionTestBase
                     any( CommandCreationContext.class ),
                     any( ResourceLocker.class ),
                     anyLong(),
-                    any( TxStateVisitor.Decorator.class ) );
+                    any( TxStateVisitor.Decorator.class ), any( PageCursorTracer.class ), any( MemoryTracker.class ) );
     }
 
     public KernelTransactionImplementation newTransaction( long transactionTimeoutMillis )
@@ -157,7 +158,7 @@ class KernelTransactionTestBase
         KernelTransactionImplementation tx = newNotInitializedTransaction();
         StatementLocks statementLocks = new SimpleStatementLocks( locks );
         SecurityContext securityContext = loginContext.authorize( LoginContext.IdLookup.EMPTY, DEFAULT_DATABASE_NAME );
-        tx.initialize( lastTransactionIdWhenStarted, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.explicit,
+        tx.initialize( lastTransactionIdWhenStarted, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.EXPLICIT,
                 securityContext, transactionTimeout, 1L, EMBEDDED_CONNECTION );
         return tx;
     }
@@ -171,14 +172,20 @@ class KernelTransactionTestBase
     {
         Dependencies dependencies = new Dependencies();
         dependencies.satisfyDependency( mock( GraphDatabaseFacade.class ) );
+        var memoryPool = new MemoryPools().pool( MemoryGroup.TRANSACTION, ByteUnit.mebiBytes( 4 ), null );
         return new KernelTransactionImplementation( config, mock( DatabaseTransactionEventListeners.class ),
                 null, null,
                 commitProcess, transactionMonitor, txPool, clock, new AtomicReference<>( CpuClock.NOT_AVAILABLE ),
-                new AtomicReference<>( HeapAllocation.NOT_AVAILABLE ), TransactionTracer.NULL, LockTracer.NONE, PageCursorTracerSupplier.NULL, storageEngine,
+                mock( DatabaseTracers.class, RETURNS_MOCKS ), storageEngine,
                 new CanWrite(), EmptyVersionContextSupplier.EMPTY, () -> collectionsFactory,
                 new StandardConstraintSemantics(), mock( SchemaState.class ), mockedTokenHolders(),
+<<<<<<< HEAD
                 mock( IndexingService.class ), mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies,
                 new TestDatabaseIdRepository().defaultDatabase(), leaseService );
+=======
+                mock( IndexingService.class ), mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ), mock( IndexStatisticsStore.class ),
+                dependencies, new TestDatabaseIdRepository().defaultDatabase(), leaseService, memoryPool );
+>>>>>>> neo4j/4.1
     }
 
     public static class CapturingCommitProcess implements TransactionCommitProcess
@@ -199,27 +206,21 @@ class KernelTransactionTestBase
     {
 
         @Override
-        public MutableLongSet newLongSet()
+        public MutableLongSet newLongSet( MemoryTracker memoryTracker )
         {
-            return OnHeapCollectionsFactory.INSTANCE.newLongSet();
+            return OnHeapCollectionsFactory.INSTANCE.newLongSet( memoryTracker );
         }
 
         @Override
-        public MutableLongDiffSetsImpl newLongDiffSets()
+        public MutableLongDiffSets newLongDiffSets( MemoryTracker memoryTracker )
         {
-            return OnHeapCollectionsFactory.INSTANCE.newLongDiffSets();
+            return OnHeapCollectionsFactory.INSTANCE.newLongDiffSets( memoryTracker );
         }
 
         @Override
-        public MutableLongObjectMap<Value> newValuesMap()
+        public MutableLongObjectMap<Value> newValuesMap( MemoryTracker memoryTracker )
         {
             return new LongObjectHashMap<>();
-        }
-
-        @Override
-        public MemoryTracker getMemoryTracker()
-        {
-            return OnHeapCollectionsFactory.INSTANCE.getMemoryTracker();
         }
 
         @Override

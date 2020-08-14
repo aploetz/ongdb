@@ -31,22 +31,28 @@ import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaState;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexAccessor;
-import org.neo4j.kernel.api.index.IndexDropper;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexUpdater;
+import org.neo4j.kernel.api.index.MinimalIndexAccessor;
 import org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
+import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.memory.MemoryTracker;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
-import org.neo4j.storageengine.api.NodeLabelUpdate;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
+import org.neo4j.test.InMemoryTokens;
 import org.neo4j.values.storable.Values;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class IndexPopulationTest
 {
@@ -62,19 +68,22 @@ class IndexPopulationTest
         OnlineIndexProxy onlineProxy = onlineIndexProxy( indexStatisticsStore );
         FlippableIndexProxy flipper = new FlippableIndexProxy();
         flipper.setFlipTarget( () -> onlineProxy );
+        InMemoryTokens tokens = new InMemoryTokens();
+
         MultipleIndexPopulator multipleIndexPopulator =
-                new MultipleIndexPopulator( storeView, logProvider, EntityType.NODE, mock( SchemaState.class ), indexStatisticsStore );
+                new MultipleIndexPopulator( storeView, logProvider, EntityType.NODE, mock( SchemaState.class ), indexStatisticsStore,
+                        JobSchedulerFactory.createInitialisedScheduler(), tokens, PageCacheTracer.NULL, INSTANCE );
 
         MultipleIndexPopulator.IndexPopulation indexPopulation =
                 multipleIndexPopulator.addPopulator( populator, dummyMeta(), flipper, t -> failedProxy, "userDescription" );
         multipleIndexPopulator.queueConcurrentUpdate( someUpdate() );
-        multipleIndexPopulator.indexAllEntities().run();
+        multipleIndexPopulator.createStoreScan( PageCursorTracer.NULL ).run();
 
         // when
-        indexPopulation.flip( false );
+        indexPopulation.flip( false, PageCursorTracer.NULL );
 
         // then
-        assertSame( flipper.getState(), InternalIndexState.FAILED, "flipper should have flipped to failing proxy" );
+        assertSame( InternalIndexState.FAILED, flipper.getState(), "flipper should have flipped to failing proxy" );
     }
 
     private OnlineIndexProxy onlineIndexProxy( IndexStatisticsStore indexStatisticsStore )
@@ -82,9 +91,9 @@ class IndexPopulationTest
         return new OnlineIndexProxy( dummyMeta(), IndexAccessor.EMPTY, indexStatisticsStore, false );
     }
 
-    private FailedIndexProxy failedIndexProxy( IndexDropper dropper, IndexStatisticsStore indexStatisticsStore )
+    private FailedIndexProxy failedIndexProxy( MinimalIndexAccessor minimalIndexAccessor, IndexStatisticsStore indexStatisticsStore )
     {
-        return new FailedIndexProxy( dummyMeta(), "userDescription", dropper, IndexPopulationFailure
+        return new FailedIndexProxy( dummyMeta(), "userDescription", minimalIndexAccessor, IndexPopulationFailure
                 .failure( "failure" ), indexStatisticsStore, NullLogProvider.getInstance() );
     }
 
@@ -93,7 +102,7 @@ class IndexPopulationTest
         return new IndexPopulator.Adapter()
         {
             @Override
-            public IndexUpdater newPopulatingUpdater( NodePropertyAccessor accessor )
+            public IndexUpdater newPopulatingUpdater( NodePropertyAccessor accessor, PageCursorTracer cursorTracer )
             {
                 return new IndexUpdater()
                 {
@@ -118,7 +127,8 @@ class IndexPopulationTest
         {
             @Override
             public <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( int[] labelIds, IntPredicate propertyKeyIdFilter,
-                    Visitor<EntityUpdates,FAILURE> propertyUpdateVisitor, Visitor<NodeLabelUpdate,FAILURE> labelUpdateVisitor, boolean forceStoreScan )
+                    Visitor<EntityUpdates,FAILURE> propertyUpdateVisitor, Visitor<EntityTokenUpdate,FAILURE> labelUpdateVisitor, boolean forceStoreScan,
+                    PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
             {
                 //noinspection unchecked
                 return new StoreScan()

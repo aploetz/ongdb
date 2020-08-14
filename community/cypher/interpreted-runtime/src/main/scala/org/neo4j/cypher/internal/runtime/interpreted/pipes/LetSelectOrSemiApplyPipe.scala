@@ -19,18 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.values.storable.Values
 
 case class LetSelectOrSemiApplyPipe(source: Pipe, inner: Pipe, letVarName: String, predicate: Predicate, negated: Boolean)
                                    (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  predicate.registerOwningPipe(this)
-
-  def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     input.map {
       outerContext =>
         val holds = predicate.isTrue(outerContext, state) || {
@@ -42,6 +40,4 @@ case class LetSelectOrSemiApplyPipe(source: Pipe, inner: Pipe, letVarName: Strin
         outerContext
     }
   }
-
-  private def name = if (negated) "LetSelectOrAntiSemiApply" else "LetSelectOrSemiApply"
 }

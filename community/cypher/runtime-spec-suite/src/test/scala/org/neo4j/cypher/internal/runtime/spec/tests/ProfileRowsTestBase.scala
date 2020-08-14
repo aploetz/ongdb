@@ -19,13 +19,26 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
+import org.neo4j.collection.RawIterator
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.plans.Ascending
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
+import org.neo4j.internal.kernel.api.exceptions.ProcedureException
+import org.neo4j.internal.kernel.api.procs.Neo4jTypes
+import org.neo4j.internal.kernel.api.procs.ProcedureSignature
+import org.neo4j.kernel.api.ResourceTracker
+import org.neo4j.kernel.api.procedure.CallableProcedure.BasicProcedure
+import org.neo4j.kernel.api.procedure.Context
+import org.neo4j.procedure.Mode
+import org.neo4j.values.AnyValue
 
 abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT],
                                                               runtime: CypherRuntime[CONTEXT],
-                                                              sizeHint: Int,
+                                                              val sizeHint: Int,
                                                               cartesianProductChunkSize: Int // The size of a LHS chunk for cartesian product
                                                              ) extends RuntimeTestSuite[CONTEXT](edition, runtime) {
 
@@ -138,7 +151,11 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
       circleGraph(sizeHint * 10)
     }
 
+<<<<<<< HEAD
     val limitSize = sizeHint * 2
+=======
+    val limitSize = sizeHint * 2L
+>>>>>>> neo4j/4.1
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
@@ -155,7 +172,140 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     queryProfile.operatorProfile(0).rows() shouldBe limitSize // produce results
     queryProfile.operatorProfile(1).rows() shouldBe limitSize // expand
     queryProfile.operatorProfile(2).rows() shouldBe limitSize // limit
+<<<<<<< HEAD
     queryProfile.operatorProfile(3).rows() should be >= limitSize.toLong // all node scan
+=======
+    queryProfile.operatorProfile(3).rows() should be >= limitSize // all node scan
+  }
+
+  test("should profile rows with limit + expand on RHS of Apply") {
+    val nodeCount = sizeHint * 10
+    given {
+      circleGraph(nodeCount)
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .apply()
+      .|.limit(1)
+      .|.expand("(x)--(y)")
+      .|.argument("x")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe nodeCount // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe nodeCount // apply
+    queryProfile.operatorProfile(2).rows() shouldBe nodeCount // limit
+    // Depending on morsel size, the limit might or might not cancel the second row of the expand.
+    queryProfile.operatorProfile(3).rows() should (be >= 1L* nodeCount and be <= 2L*nodeCount) // expand
+    queryProfile.operatorProfile(4).rows() shouldBe nodeCount // argument
+    queryProfile.operatorProfile(5).rows() shouldBe nodeCount  // all node scan
+  }
+
+  test("should profile rows with limit + expand on RHS of ConditionalApply non-nullable") {
+    val nodeCount = sizeHint
+    given {
+      circleGraph(nodeCount)
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .conditionalApply("x")
+      .|.limit(1)
+      .|.expand("(x)--(y)")
+      .|.argument("x")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe nodeCount // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe nodeCount // conditionalApply
+    queryProfile.operatorProfile(2).rows() shouldBe nodeCount // limit
+    // Depending on morsel size, the limit might or might not cancel the second row of the expand.
+    queryProfile.operatorProfile(3).rows() should (be >= 1L* nodeCount and be <= 2L*nodeCount) // expand
+    queryProfile.operatorProfile(4).rows() shouldBe nodeCount // argument
+    queryProfile.operatorProfile(5).rows() shouldBe nodeCount  // all node scan for x
+  }
+
+  test("should profile rows with limit + expand on RHS of ConditionalApply nullable") {
+    val values = (1 to sizeHint).map {
+      case i if i % 2 == 0 => Array[Any](i)
+      case _ => Array[Any](null)
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .conditionalApply("x")
+      .|.unwind("range(1, 10) AS i")
+      .|.argument("x")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime, inputValues(values:_*))
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe sizeHint / 2 + (10 * sizeHint / 2) // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe sizeHint / 2 + (10 * sizeHint / 2)// conditionalApply
+    queryProfile.operatorProfile(2).rows() shouldBe 10 * sizeHint / 2 // unwind
+    queryProfile.operatorProfile(3).rows() shouldBe sizeHint / 2 //argument
+    queryProfile.operatorProfile(4).rows() shouldBe sizeHint  // input
+  }
+
+  test("should profile rows of skip") {
+    given { nodeGraph(sizeHint) }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .skip(sizeHint - 10)
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe 10 // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe 10 // skip
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint // all node scan
+  }
+
+  test("should profile rows with skip + expand") {
+    given {
+      circleGraph(sizeHint * 10)
+    }
+
+    //when
+    val skipSize = sizeHint * 2L
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .expand("(x)-->(y)")
+      .skip(skipSize)
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe 8 * sizeHint // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe 8 * sizeHint // expand
+    queryProfile.operatorProfile(2).rows() shouldBe 8 * sizeHint // skip
+    queryProfile.operatorProfile(3).rows() should be >= skipSize // all node scan
+>>>>>>> neo4j/4.1
   }
 
   test("should profile rows with optional expand all") {
@@ -170,7 +320,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("a")
       .optionalExpandAll("(a)-->(b)")
-      .nodeByLabelScan("a", "A")
+      .nodeByLabelScan("a", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = profile(logicalQuery, runtime)
@@ -232,6 +382,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
   }
 
   test("should profile rows with pruning var-expand") {
+<<<<<<< HEAD
     // given
     val nodesPerLabel = 100
     given {
@@ -257,8 +408,60 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
   }
 
   test("should profile rows with label scan and expand") {
+=======
+>>>>>>> neo4j/4.1
     // given
     val nodesPerLabel = 100
+    given {
+      bipartiteGraph(nodesPerLabel, "A", "B", "R")
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("y")
+      .distinct("y AS y")
+      .pruningVarExpand("(x)-[*1..1]->(y)")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe nodesPerLabel // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe nodesPerLabel // distinct
+    queryProfile.operatorProfile(2).rows() shouldBe (nodesPerLabel * nodesPerLabel) // pruning var expand (but nothing can be pruned)
+    queryProfile.operatorProfile(3).rows() shouldBe (nodesPerLabel * 2L) // all node scan
+  }
+
+  test("should profile rows with shortest path") {
+    // given
+    val nodesPerLabel = 100
+    given {
+      for(_ <- 0 until nodesPerLabel)
+        sineGraph()
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("y")
+      .shortestPath("(x)-[r*]-(y)", Some("path"))
+      .cartesianProduct()
+      .|.nodeByLabelScan("y", "END", IndexOrderNone)
+      .nodeByLabelScan("x", "START", IndexOrderNone)
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe nodesPerLabel // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe nodesPerLabel // shortest path
+  }
+
+  test("should profile rows with label scan and expand") {
+    // given
+    val nodesPerLabel = 10
     given {
       bipartiteGraph(nodesPerLabel, "A", "B", "R")
     }
@@ -267,7 +470,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
       .produceResults("x")
       .expandInto("(x)-[r]->(y)")
       .expandAll("(x)-->(y)")
-      .nodeByLabelScan("x", "A")
+      .nodeByLabelScan("x", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = profile(logicalQuery, runtime)
@@ -398,7 +601,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
       .produceResults("x")
       .expandInto("(x)-[r]->(y)")
       .expandAll("(x)-->(y)")
-      .nodeByIdSeek("x", node.getId)
+      .nodeByIdSeek("x", Set.empty, node.getId)
       .build()
     val runtimeResult = profile(logicalQuery, runtime)
     consume(runtimeResult)
@@ -475,10 +678,10 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     }
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-      .optional() // The optionals are to fuse the two expands together without anything else
+      .nonFuseable()
       .expandAll("(y)<--(z)")
       .expandAll("(x)-->(y)")
-      .optional()
+      .nonFuseable()
       .allNodeScan("x")
       .build()
 
@@ -488,10 +691,10 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     // then
     val queryProfile = runtimeResult.runtimeResult.queryProfile()
     queryProfile.operatorProfile(0).rows() shouldBe (nodesPerLabel * nodesPerLabel * nodesPerLabel) // produce results
-    queryProfile.operatorProfile(1).rows() shouldBe (nodesPerLabel * nodesPerLabel * nodesPerLabel) // optional
+    queryProfile.operatorProfile(1).rows() shouldBe (nodesPerLabel * nodesPerLabel * nodesPerLabel) // nonFuseable
     queryProfile.operatorProfile(2).rows() shouldBe (nodesPerLabel * nodesPerLabel * nodesPerLabel) // expand all
     queryProfile.operatorProfile(3).rows() shouldBe (nodesPerLabel * nodesPerLabel) // expand all
-    queryProfile.operatorProfile(4).rows() shouldBe (nodesPerLabel * 2L) // optional
+    queryProfile.operatorProfile(4).rows() shouldBe (nodesPerLabel * 2L) // nonFuseable
     queryProfile.operatorProfile(5).rows() shouldBe (nodesPerLabel * 2L) // all node scan
   }
 
@@ -504,7 +707,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
       .apply()
-      .|.optional("x") // The optional is to prevent fusing the produce results
+      .|.nonFuseable()
       .|.expandAll("(x)-->(y)")
       .|.argument("x")
       .allNodeScan("x")
@@ -515,9 +718,9 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
 
     // then
     val queryProfile = runtimeResult.runtimeResult.queryProfile()
-    queryProfile.operatorProfile(0).rows() shouldBe (nodesPerLabel * nodesPerLabel + nodesPerLabel) // produce results
-    queryProfile.operatorProfile(1).rows() shouldBe (nodesPerLabel * nodesPerLabel + nodesPerLabel) // apply
-    queryProfile.operatorProfile(2).rows() shouldBe (nodesPerLabel * nodesPerLabel + nodesPerLabel) // optional
+    queryProfile.operatorProfile(0).rows() shouldBe (nodesPerLabel * nodesPerLabel) // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe (nodesPerLabel * nodesPerLabel) // apply
+    queryProfile.operatorProfile(2).rows() shouldBe (nodesPerLabel * nodesPerLabel) // nonFuseable
     queryProfile.operatorProfile(3).rows() shouldBe (nodesPerLabel * nodesPerLabel) // expand all
     queryProfile.operatorProfile(4).rows() shouldBe (nodesPerLabel * 2L) // argument
     queryProfile.operatorProfile(5).rows() shouldBe (nodesPerLabel * 2L) // all node scan
@@ -597,7 +800,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
       .produceResults("x")
       .expandInto("(x)-[r]->(y)")
       .expandAll("(x)-->(y)")
-      .nodeByIdSeek("x", aNodes.map(_.getId):_*)
+      .nodeByIdSeek("x", Set.empty, aNodes.map(_.getId):_*)
       .build()
     val runtimeResult = profile(logicalQuery, runtime)
     consume(runtimeResult)
@@ -623,7 +826,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
       .produceResults("x")
       .expandInto("(x)-[r]->(y)")
       .expandAll("(x)-->(y)")
-      .nodeByIdSeek("x", aNodes.indices.map(i => if (i % 2 ==0) aNodes(i).getId else -1): _* )
+      .nodeByIdSeek("x", Set.empty, aNodes.indices.map(i => if (i % 2 ==0) aNodes(i).getId else -1): _* )
       .build()
     val runtimeResult = profile(logicalQuery, runtime)
     consume(runtimeResult)
@@ -719,6 +922,35 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     queryProfile.operatorProfile(5).rows() shouldBe sizeHint // all node scan
   }
 
+  test("should profile rows with value hash join") {
+    given {
+      nodePropertyGraph(sizeHint, {
+        case i => Map("prop" -> i)
+      })
+    }
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .valueHashJoin("x.prop = y.prop")
+      .|.filter("y.prop % 2 = 0")
+      .|.allNodeScan("y")
+      .filter(s"x.prop < ${sizeHint / 4}")
+      .allNodeScan("x")
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime)
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe sizeHint / 2 / 4 // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe sizeHint / 2 / 4 // value hash join
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint / 2 // filter
+    queryProfile.operatorProfile(3).rows() shouldBe sizeHint // all node scan
+    queryProfile.operatorProfile(4).rows() shouldBe sizeHint / 4 // filter
+    queryProfile.operatorProfile(5).rows() shouldBe sizeHint // all node scan
+  }
+
   test("should profile rows with cartesian product") {
     given {
       nodePropertyGraph(sizeHint, {
@@ -785,7 +1017,7 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     // when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-      .nodeByLabelScan("x", "L1")
+      .nodeByLabelScan("x", "L1", IndexOrderNone)
       .build()
 
     val runtimeResult = profile(logicalQuery, runtime)
@@ -841,5 +1073,148 @@ abstract class ProfileRowsTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     result.runtimeResult.queryProfile().operatorProfile(1).rows() shouldBe size * size // cartesian product
     result.runtimeResult.queryProfile().operatorProfile(2).rows() shouldBe numberOfChunks * size // all node scan b
     result.runtimeResult.queryProfile().operatorProfile(3).rows() shouldBe size // all node scan a
+  }
+
+  test("should profile rows of union") {
+    val size = Math.sqrt(sizeHint).toInt
+    given { nodeGraph(size) }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a")
+      .union()
+      .|.allNodeScan("a")
+      .allNodeScan("a")
+      .build()
+
+    val result = profile(logicalQuery, runtime)
+    consume(result)
+
+    // then
+    result.runtimeResult.queryProfile().operatorProfile(1).rows() shouldBe size * 2 // union
+    result.runtimeResult.queryProfile().operatorProfile(2).rows() shouldBe size // all node scan
+    result.runtimeResult.queryProfile().operatorProfile(3).rows() shouldBe size // all node scan
+  }
+}
+
+trait NonParallelProfileRowsTestBase[CONTEXT <: RuntimeContext] {
+  self: ProfileRowsTestBase[CONTEXT] =>
+
+  test("should profile rows of procedure call") {
+    // given
+    registerProcedure(new BasicProcedure(ProcedureSignature.procedureSignature(Array[String](), "proc").mode(Mode.READ).in("j", Neo4jTypes.NTInteger).out("i", Neo4jTypes.NTInteger).build()) {
+      override def apply(ctx: Context, input: Array[AnyValue], resourceTracker: ResourceTracker): RawIterator[Array[AnyValue], ProcedureException] = {
+        RawIterator.of[Array[AnyValue], ProcedureException](input, input)
+      }
+    })
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("i")
+      .procedureCall("proc(j) YIELD i AS i")
+      .unwind(s"range(0, ${sizeHint - 1}) AS j")
+      .argument()
+      .build()
+
+    val result = profile(logicalQuery, runtime)
+    consume(result)
+
+    // then
+    result.runtimeResult.queryProfile().operatorProfile(1).rows() shouldBe sizeHint * 2// procedure call
+    result.runtimeResult.queryProfile().operatorProfile(2).rows() shouldBe sizeHint // unwind
+  }
+
+  test("should profile rows with ordered distinct") {
+    // given
+    val nodes = given {
+      nodeGraph(sizeHint)
+    }
+
+    val input = for (n <- nodes) yield Array[Any](nodes.head, n)
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("y")
+      .orderedDistinct(Seq("x"), "y AS y")
+      .input(nodes = Seq("x", "y"))
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime, inputValues(input:_*))
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe sizeHint // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe sizeHint // orderedDistinct
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint // input
+  }
+
+  test("should profile rows with ordered aggregation") {
+    // given
+    val nodes = given {
+      nodeGraph(sizeHint)
+    }
+
+    val input = for (n <- nodes) yield Array[Any](nodes.head, n)
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("c")
+      .orderedAggregation(Seq("x AS x", "y AS y"), Seq("collect(y) AS c"), Seq("x"))
+      .input(variables = Seq("x", "y"))
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime, inputValues(input:_*))
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe sizeHint // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe sizeHint // orderedAggregation
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint // input
+  }
+
+  test("should profile rows of partial sort") {
+    val input = for (i <- 0 until sizeHint) yield Array[Any](1, i)
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x")
+      .partialSort(Seq(Ascending("x")), Seq(Ascending("y")))
+      .input(variables = Seq("x", "y"))
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime, inputValues(input: _*))
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe sizeHint // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe sizeHint // partial sort
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint // input
+  }
+
+  test("should profile rows with partial top") {
+    // given
+    val nodes = given {
+      nodeGraph(sizeHint)
+    }
+
+    val input = for (n <- nodes) yield Array[Any](nodes.head, n)
+
+    val limit = 123
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("y")
+      .partialTop(Seq(Ascending("x")), Seq(Ascending("y")), limit)
+      .input(nodes = Seq("x", "y"))
+      .build()
+
+    val runtimeResult = profile(logicalQuery, runtime, inputValues(input:_*))
+    consume(runtimeResult)
+
+    // then
+    val queryProfile = runtimeResult.runtimeResult.queryProfile()
+    queryProfile.operatorProfile(0).rows() shouldBe limit // produce results
+    queryProfile.operatorProfile(1).rows() shouldBe limit // partial top
+    queryProfile.operatorProfile(2).rows() shouldBe sizeHint // input
   }
 }

@@ -19,16 +19,36 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-import PlannerDefaults._
-import org.neo4j.cypher.internal.compiler.helpers.MapSupport._
-import org.neo4j.cypher.internal.compiler.planner._
-import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.{CardinalityModel, QueryGraphCardinalityModel, QueryGraphSolverInput}
-import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.{IndependenceCombiner, SelectivityCombiner}
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.IntegerLiteral
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, Multiplier}
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.compiler.planner.ProcedureCallProjection
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.CardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphCardinalityModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.compiler.planner.logical.PlannerDefaults.DEFAULT_LIMIT_CARDINALITY
+import org.neo4j.cypher.internal.compiler.planner.logical.PlannerDefaults.DEFAULT_DISTINCT_SELECTIVITY
+import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.IndependenceCombiner
+import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.SelectivityCombiner
+import org.neo4j.cypher.internal.expressions.IntegerLiteral
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.CallSubqueryHorizon
+import org.neo4j.cypher.internal.ir.DistinctQueryProjection
+import org.neo4j.cypher.internal.ir.LoadCSVProjection
+import org.neo4j.cypher.internal.ir.PassthroughAllHorizon
+import org.neo4j.cypher.internal.ir.PlannerQueryPart
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.QueryHorizon
+import org.neo4j.cypher.internal.ir.QueryPagination
+import org.neo4j.cypher.internal.ir.RegularQueryProjection
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.UnionQuery
+import org.neo4j.cypher.internal.ir.UnwindProjection
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Multiplier
 import org.neo4j.values.storable.NumberValue
+import org.neo4j.cypher.internal.compiler.helpers.MapSupport.PowerMap
+import org.neo4j.cypher.internal.expressions.Expression
 
 class StatisticsBackedCardinalityModel(queryGraphCardinalityModel: QueryGraphCardinalityModel, simpleExpressionEvaluator: ExpressionEvaluator) extends CardinalityModel {
 
@@ -40,10 +60,9 @@ class StatisticsBackedCardinalityModel(queryGraphCardinalityModel: QueryGraphCar
       case query: SinglePlannerQuery =>
         val output = query.fold(input0) {
           case (input, RegularSinglePlannerQuery(graph, _, horizon, _, _)) =>
-            val QueryGraphSolverInput(newLabels, graphCardinality, laziness) = calculateCardinalityForQueryGraph(graph, input, semanticTable)
-
-            val horizonCardinality = calculateCardinalityForQueryHorizon(graphCardinality, horizon, semanticTable)
-            QueryGraphSolverInput(newLabels, horizonCardinality, laziness)
+            val newInput = calculateCardinalityForQueryGraph(graph, input, semanticTable)
+            val horizonCardinality = calculateCardinalityForQueryHorizon(newInput.inboundCardinality, horizon, semanticTable)
+            newInput.copy( inboundCardinality = horizonCardinality)
         }
         output.inboundCardinality
       case UnionQuery(part, query, distinct, _) =>
@@ -92,15 +111,9 @@ class StatisticsBackedCardinalityModel(queryGraphCardinalityModel: QueryGraphCar
       val cardinalityBeforeSelection = in * DEFAULT_DISTINCT_SELECTIVITY
       horizonCardinalityWithSelections(cardinalityBeforeSelection, projection.selections, semanticTable)
 
-    // Aggregates with no grouping
-    case projection: AggregatingQueryProjection if projection.groupingExpressions.isEmpty =>
-      val cardinalityBeforeSelection = Cardinality.min(in, Cardinality.SINGLE)
-      horizonCardinalityWithSelections(cardinalityBeforeSelection, projection.selections, semanticTable)
-
     // Aggregates
     case projection: AggregatingQueryProjection =>
-      // if input cardinality is < 1 the sqrt is bigger than the original value which makes no sense for aggregations
-      val cardinalityBeforeSelection = Cardinality.min(in, Cardinality.sqrt(in))
+      val cardinalityBeforeSelection = StatisticsBackedCardinalityModel.aggregateCardinalityBeforeSelection(in, projection.groupingExpressions)
       horizonCardinalityWithSelections(cardinalityBeforeSelection, projection.selections, semanticTable)
 
     // Unwind
@@ -118,7 +131,7 @@ class StatisticsBackedCardinalityModel(queryGraphCardinalityModel: QueryGraphCar
     case _: PassthroughAllHorizon =>
       in
 
-    case CallSubqueryHorizon(subquery) =>
+    case CallSubqueryHorizon(subquery, _) =>
       val subQueryCardinality = apply(subquery, QueryGraphSolverInput.empty, semanticTable)
       in * subQueryCardinality
   }
@@ -138,8 +151,15 @@ class StatisticsBackedCardinalityModel(queryGraphCardinalityModel: QueryGraphCar
 
   private def calculateCardinalityForQueryGraph(graph: QueryGraph, input: QueryGraphSolverInput,
                                                 semanticTable: SemanticTable) = {
-    val newLabels = input.labelInfo.fuse(graph.patternNodeLabels)(_ ++ _)
-    val newCardinality = queryGraphCardinalityModel(graph, input, semanticTable)
-    QueryGraphSolverInput(newLabels, newCardinality, input.strictness)
+    input.copy(labelInfo = input.labelInfo.fuse(graph.patternNodeLabels)(_ ++ _), inboundCardinality = queryGraphCardinalityModel(graph, input, semanticTable))
   }
+}
+
+object StatisticsBackedCardinalityModel {
+  def aggregateCardinalityBeforeSelection(in: Cardinality, groupingExpressions: Map[String, Expression]): Cardinality =
+    if (groupingExpressions.isEmpty)
+      Cardinality.min(in, Cardinality.SINGLE)
+    else
+      // if input cardinality is < 1 the sqrt is bigger than the original value which makes no sense for aggregations
+      Cardinality.min(in, Cardinality.sqrt(in))
 }

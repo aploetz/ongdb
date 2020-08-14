@@ -20,10 +20,12 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import org.neo4j.cypher.internal.logical.plans.ProcedureSignature
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ProcedureCallMode
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, ProcedureCallMode, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.internal.kernel.api.procs.ProcedureCallContext
 import org.neo4j.values.AnyValue
 
@@ -48,8 +50,6 @@ case class ProcedureCallPipe(source: Pipe,
 
   extends PipeWithSource(source) {
 
-  argExprs.foreach(_.registerOwningPipe(this))
-
   private val rowProcessor = rowProcessing match {
     case FlatMapAndAppendToRow => internalCreateResultsByAppending _
     case PassThroughRow => internalCreateResultsByPassingThrough _
@@ -62,9 +62,9 @@ case class ProcedureCallPipe(source: Pipe,
     new ProcedureCallContext( originalVariables, true, databaseId.name(), databaseId.isSystemDatabase )
   }
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = rowProcessor(input, state)
+  override protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = rowProcessor(input, state)
 
-  private def internalCreateResultsByAppending(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  private def internalCreateResultsByAppending(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     val qtx = state.query
     val builder = Seq.newBuilder[(String, AnyValue)]
     builder.sizeHint(resultIndices.length)
@@ -86,7 +86,7 @@ case class ProcedureCallPipe(source: Pipe,
   private def call(qtx: QueryContext, argValues: Seq[AnyValue], context: ProcedureCallContext) =
     callMode.callProcedure(qtx, signature.id, argValues, context)
 
-  private def internalCreateResultsByPassingThrough(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  private def internalCreateResultsByPassingThrough(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     val qtx = state.query
     input map { input =>
       val argValues = argExprs.map(arg => arg(input, state))

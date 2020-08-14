@@ -26,6 +26,9 @@ import java.util.Arrays;
 
 import org.neo4j.configuration.Config;
 import org.neo4j.index.internal.gbptree.Layout;
+import org.neo4j.internal.schema.IndexDescriptor;
+import org.neo4j.internal.schema.IndexPrototype;
+import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.kernel.impl.index.schema.config.IndexSpecificSpaceFillingCurveSettings;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
@@ -33,8 +36,7 @@ import org.neo4j.test.rule.RandomRule;
 import org.neo4j.values.storable.Value;
 
 import static java.lang.String.format;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.doThrow;
@@ -49,6 +51,8 @@ import static org.neo4j.values.storable.Values.stringValue;
 @ExtendWith( RandomExtension.class )
 class GenericIndexKeyValidatorTest
 {
+    private final IndexDescriptor descriptor = IndexPrototype.forSchema( SchemaDescriptor.forLabel( 1, 1 ) ).withName( "test" ).materialise( 1 );
+
     @Inject
     private RandomRule random;
 
@@ -58,10 +62,10 @@ class GenericIndexKeyValidatorTest
         // given
         Layout<GenericKey,NativeIndexValue> layout = mock( Layout.class );
         doThrow( RuntimeException.class ).when( layout ).newKey();
-        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( 120, layout );
+        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( 120, descriptor, layout );
 
         // when
-        validator.validate( new Value[]{intValue( 10 ), epochDate( 100 ), stringValue( "abc" )} );
+        validator.validate( intValue( 10 ), epochDate( 100 ), stringValue( "abc" ) );
 
         // then no exception should have been thrown
     }
@@ -72,12 +76,12 @@ class GenericIndexKeyValidatorTest
         // given
         Layout<GenericKey,NativeIndexValue> layout = mock( Layout.class );
         when( layout.newKey() ).thenReturn( new CompositeGenericKey( 3, spatialSettings() ) );
-        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( 48, layout );
+        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( 48, descriptor, layout );
 
         // when
         var e = assertThrows( IllegalArgumentException.class,
-                () -> validator.validate( new Value[]{intValue( 10 ), epochDate( 100 ), stringValue( "abcdefghijklmnopqrstuvw" )} ) );
-        assertThat( e.getMessage(), containsString( "abcdefghijklmnopqrstuvw" ) );
+                () -> validator.validate( intValue( 10 ), epochDate( 100 ), stringValue( "abcdefghijklmnopqrstuvw" ) ) );
+        assertThat( e.getMessage() ).contains( "abcdefghijklmnopqrstuvw" );
         verify( layout ).newKey();
     }
 
@@ -88,11 +92,9 @@ class GenericIndexKeyValidatorTest
         int slots = random.nextInt( 1, 6 );
         int maxLength = random.nextInt( 15, 30 ) * slots;
         GenericLayout layout = new GenericLayout( slots, spatialSettings() );
-        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( maxLength, layout );
+        GenericIndexKeyValidator validator = new GenericIndexKeyValidator( maxLength, descriptor, layout );
         GenericKey key = layout.newKey();
 
-        int countOk = 0;
-        int countNotOk = 0;
         for ( int i = 0; i < 100; i++ )
         {
             // when
@@ -102,12 +104,10 @@ class GenericIndexKeyValidatorTest
             {
                 validator.validate( tuple );
                 isOk = true;
-                countOk++;
             }
             catch ( IllegalArgumentException e )
             {
                 isOk = false;
-                countNotOk++;
             }
             int actualSize = actualSize( tuple, key );
             boolean manualIsOk = actualSize <= maxLength;

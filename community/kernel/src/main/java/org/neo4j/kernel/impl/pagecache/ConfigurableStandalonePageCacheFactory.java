@@ -26,12 +26,14 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.DefaultPageCursorTracerSupplier;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
-import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.logging.FormattedLogProvider;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.time.Clocks;
+
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_tracking;
+import static org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier.EMPTY;
 
 /*
  * This class is an helper to allow to construct properly a page cache in the few places we need it without all
@@ -46,39 +48,35 @@ public final class ConfigurableStandalonePageCacheFactory
     {
     }
 
-    public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler )
+    public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler, PageCacheTracer pageCacheTracer )
     {
-        return createPageCache( fileSystem, PageCacheTracer.NULL, DefaultPageCursorTracerSupplier.INSTANCE,
-                Config.defaults(), EmptyVersionContextSupplier.EMPTY, jobScheduler );
+        var config = Config.defaults();
+        return createPageCache( fileSystem, pageCacheTracer, config, EMPTY, jobScheduler, new MemoryPools( config.get( memory_tracking ) ) );
     }
 
-    public static PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, JobScheduler jobScheduler )
+    public static PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, JobScheduler jobScheduler, PageCacheTracer pageCacheTracer )
     {
-        return createPageCache( fileSystem, PageCacheTracer.NULL, DefaultPageCursorTracerSupplier.INSTANCE, config,
-                EmptyVersionContextSupplier.EMPTY, jobScheduler );
+        return createPageCache( fileSystem, pageCacheTracer, config, EMPTY, jobScheduler, new MemoryPools( config.get( memory_tracking ) ) );
     }
 
     /**
      * Create page cache
      * @param fileSystem file system that page cache will be based on
      * @param pageCacheTracer global page cache tracer
-     * @param pageCursorTracerSupplier supplier of thread local (transaction local) page cursor tracer that will provide
-     * thread local page cache statistics
      * @param config page cache configuration
      * @param versionContextSupplier version context supplier
      * @param jobScheduler page cache job scheduler
      * @return created page cache instance
      */
-    public static PageCache createPageCache( FileSystemAbstraction fileSystem, PageCacheTracer pageCacheTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier, Config config,
-            VersionContextSupplier versionContextSupplier, JobScheduler jobScheduler )
+    public static PageCache createPageCache( FileSystemAbstraction fileSystem, PageCacheTracer pageCacheTracer, Config config,
+            VersionContextSupplier versionContextSupplier, JobScheduler jobScheduler, MemoryPools memoryPools )
     {
         config.setIfNotSet( GraphDatabaseSettings.pagecache_memory, "8M" );
         ZoneId logTimeZone = config.get( GraphDatabaseSettings.db_timezone ).getZoneId();
         FormattedLogProvider logProvider = FormattedLogProvider.withZoneId( logTimeZone ).toOutputStream( System.err );
         ConfiguringPageCacheFactory pageCacheFactory = new ConfiguringPageCacheFactory(
-                fileSystem, config, pageCacheTracer, pageCursorTracerSupplier,
-                logProvider.getLog( PageCache.class ), versionContextSupplier, jobScheduler );
+                fileSystem, config, pageCacheTracer, logProvider.getLog( PageCache.class ), versionContextSupplier, jobScheduler,
+                Clocks.nanoClock(), memoryPools );
         return pageCacheFactory.getOrCreatePageCache();
     }
 }

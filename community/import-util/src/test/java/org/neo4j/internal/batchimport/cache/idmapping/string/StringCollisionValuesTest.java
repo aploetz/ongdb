@@ -32,6 +32,7 @@ import java.util.function.Function;
 
 import org.neo4j.internal.batchimport.cache.NumberArrayFactory;
 import org.neo4j.internal.batchimport.cache.PageCachedNumberArrayFactory;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.test.rule.PageCacheAndDependenciesRule;
 import org.neo4j.test.rule.RandomRule;
 import org.neo4j.test.rule.fs.DefaultFileSystemRule;
@@ -39,6 +40,7 @@ import org.neo4j.values.storable.RandomValues;
 
 import static org.junit.Assert.assertEquals;
 import static org.neo4j.io.pagecache.PageCache.PAGE_SIZE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @RunWith( Parameterized.class )
 public class StringCollisionValuesTest
@@ -63,7 +65,7 @@ public class StringCollisionValuesTest
                 storage -> NumberArrayFactory.OFF_HEAP,
                 storage -> NumberArrayFactory.AUTO_WITHOUT_PAGECACHE,
                 storage -> NumberArrayFactory.CHUNKED_FIXED_SIZE,
-                storage -> new PageCachedNumberArrayFactory( storage.pageCache(), storage.directory().homeDir() ) );
+                storage -> new PageCachedNumberArrayFactory( storage.pageCache(), PageCacheTracer.NULL, storage.directory().homeDir() ) );
     }
 
     @Parameter( 0 )
@@ -73,7 +75,7 @@ public class StringCollisionValuesTest
     public void shouldStoreAndLoadStrings()
     {
         // given
-        try ( StringCollisionValues values = new StringCollisionValues( factory.apply( storage ), 10_000 ) )
+        try ( StringCollisionValues values = new StringCollisionValues( factory.apply( storage ), 10_000, INSTANCE ) )
         {
             // when
             long[] offsets = new long[100];
@@ -97,7 +99,7 @@ public class StringCollisionValuesTest
     public void shouldMoveOverToNextChunkOnNearEnd()
     {
         // given
-        try ( StringCollisionValues values = new StringCollisionValues( factory.apply( storage ), 10_000 ) )
+        try ( StringCollisionValues values = new StringCollisionValues( factory.apply( storage ), 10_000, INSTANCE ) )
         {
             char[] chars = new char[PAGE_SIZE - 3];
             Arrays.fill( chars, 'a' );

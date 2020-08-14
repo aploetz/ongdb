@@ -34,7 +34,7 @@ import java.util.Collection;
 import java.util.List;
 
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.internal.batchimport.Configuration;
 import org.neo4j.internal.batchimport.ImportLogic;
 import org.neo4j.internal.batchimport.ParallelBatchImporter;
@@ -57,7 +57,7 @@ import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.kernel.impl.store.NeoStores;
@@ -67,6 +67,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.NullLogService;
+import org.neo4j.memory.EmptyMemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 import org.neo4j.test.extension.Inject;
@@ -78,9 +79,9 @@ import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.toIntExact;
-import static java.util.Arrays.asList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
+import static java.util.Collections.singletonList;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.data.Percentage.withPercentage;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.csv.reader.CharSeekers.charSeeker;
 import static org.neo4j.csv.reader.Configuration.COMMAS;
@@ -92,9 +93,11 @@ import static org.neo4j.internal.batchimport.input.csv.DataFactories.defaultForm
 import static org.neo4j.internal.batchimport.input.csv.DataFactories.defaultFormatRelationshipFileHeader;
 import static org.neo4j.internal.batchimport.staging.ExecutionMonitors.invisible;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
+import static org.neo4j.io.ByteUnit.bytesToString;
 import static org.neo4j.kernel.impl.store.NoStoreHeader.NO_STORE_HEADER;
 import static org.neo4j.kernel.impl.store.format.standard.Standard.LATEST_RECORD_FORMATS;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.CHECK;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 @ExtendWith( RandomExtension.class )
@@ -102,6 +105,39 @@ class CsvInputEstimateCalculationIT
 {
     private static final long NODE_COUNT = 600_000;
     private static final long RELATIONSHIP_COUNT = 600_000;
+    // Configured for maximum determinism in order to reduce flakiness of this test.
+    private static final Configuration PBI_CONFIG = new Configuration.Overridden( Configuration.DEFAULT )
+    {
+        @Override
+        public boolean sequentialBackgroundFlushing()
+        {
+            return false;
+        }
+
+        @Override
+        public int maxNumberOfProcessors()
+        {
+            return 1;
+        }
+
+        @Override
+        public boolean parallelRecordWrites()
+        {
+            return false;
+        }
+
+        @Override
+        public boolean parallelRecordReads()
+        {
+            return false;
+        }
+
+        @Override
+        public boolean highIO()
+        {
+            return false;
+        }
+    };
 
     @Inject
     private RandomRule random;
@@ -120,32 +156,42 @@ class CsvInputEstimateCalculationIT
         RecordFormats format = LATEST_RECORD_FORMATS;
         Input.Estimates estimates = input.calculateEstimates( new PropertyValueRecordSizeCalculator(
                 format.property().getRecordSize( NO_STORE_HEADER ),
-                GraphDatabaseSettings.string_block_size.defaultValue(), 0,
-                GraphDatabaseSettings.array_block_size.defaultValue(), 0 ) );
+                GraphDatabaseInternalSettings.string_block_size.defaultValue(), 0,
+                GraphDatabaseInternalSettings.array_block_size.defaultValue(), 0 ) );
 
         // when
         Config config = Config.defaults();
         FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
         try ( JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
+<<<<<<< HEAD
             new ParallelBatchImporter( databaseLayout, fs, null, Configuration.DEFAULT, NullLogService.getInstance(),
                                        invisible(), EMPTY, config, format, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
                                        LogFilesInitializer.NULL ).doImport( input );
+=======
+            new ParallelBatchImporter( databaseLayout, fs, null, PageCacheTracer.NULL, PBI_CONFIG, NullLogService.getInstance(),
+                    invisible(), EMPTY, config, format, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
+                    LogFilesInitializer.NULL, EmptyMemoryTracker.INSTANCE ).doImport( input );
+>>>>>>> neo4j/4.1
 
             // then compare estimates with actual disk sizes
             VersionContextSupplier contextSupplier = EmptyVersionContextSupplier.EMPTY;
-            SingleFilePageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory();
-            swapperFactory.open( fs );
-            try ( PageCache pageCache = new MuninnPageCache( swapperFactory, 1000, PageCacheTracer.NULL, PageCursorTracerSupplier.NULL,
-                          contextSupplier, jobScheduler );
+            SingleFilePageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory( fs );
+            try ( PageCache pageCache = new MuninnPageCache( swapperFactory, 1000, PageCacheTracer.NULL, contextSupplier, jobScheduler );
                   NeoStores stores = new StoreFactory( databaseLayout, config, new DefaultIdGeneratorFactory( fs, immediate() ), pageCache, fs,
-                          NullLogProvider.getInstance() ).openAllNeoStores() )
+                          NullLogProvider.getInstance(), PageCacheTracer.NULL ).openAllNeoStores() )
             {
                 assertRoughlyEqual( estimates.numberOfNodes(), stores.getNodeStore().getNumberOfIdsInUse() );
                 assertRoughlyEqual( estimates.numberOfRelationships(), stores.getRelationshipStore().getNumberOfIdsInUse() );
                 assertRoughlyEqual( estimates.numberOfNodeProperties() + estimates.numberOfRelationshipProperties(), calculateNumberOfProperties( stores ) );
             }
-            assertRoughlyEqual( propertyStorageSize(), estimates.sizeOfNodeProperties() + estimates.sizeOfRelationshipProperties() );
+
+            long measuredPropertyStorage = propertyStorageSize();
+            long estimatedPropertyStorage = estimates.sizeOfNodeProperties() + estimates.sizeOfRelationshipProperties();
+            assertThat( estimatedPropertyStorage )
+                    .as( "Estimated property storage size of %s must be within 10%% of the measured size of %s.",
+                            bytesToString( estimatedPropertyStorage ), bytesToString( measuredPropertyStorage ) )
+                    .isCloseTo( measuredPropertyStorage, withPercentage( 10.0 ) );
         }
     }
 
@@ -154,17 +200,18 @@ class CsvInputEstimateCalculationIT
     {
         // given
         Groups groups = new Groups();
-        Collection<DataFactory> nodeData = asList( generateData( defaultFormatNodeFileHeader(), new MutableLong(), 0, 0, ":ID", "nodes-1.csv", groups ) );
-        Collection<DataFactory> relationshipData = asList( generateData( defaultFormatRelationshipFileHeader(), new MutableLong(),
-                0, 0, ":START_ID,:TYPE,:END_ID", "rels-1.csv", groups ) );
+        Collection<DataFactory> nodeData = singletonList(
+                generateData( defaultFormatNodeFileHeader(), new MutableLong(), 0, 0, ":ID", "nodes-1.csv", groups ) );
+        Collection<DataFactory> relationshipData = singletonList(
+                generateData( defaultFormatRelationshipFileHeader(), new MutableLong(), 0, 0, ":START_ID,:TYPE,:END_ID", "rels-1.csv", groups ) );
         Input input = new CsvInput( nodeData, defaultFormatNodeFileHeader(), relationshipData, defaultFormatRelationshipFileHeader(),
-                IdType.INTEGER, COMMAS, CsvInput.NO_MONITOR, groups );
+                IdType.INTEGER, COMMAS, CsvInput.NO_MONITOR, groups, INSTANCE );
 
         // when
         Input.Estimates estimates = input.calculateEstimates( new PropertyValueRecordSizeCalculator(
                 LATEST_RECORD_FORMATS.property().getRecordSize( NO_STORE_HEADER ),
-                GraphDatabaseSettings.string_block_size.defaultValue(), 0,
-                GraphDatabaseSettings.array_block_size.defaultValue(), 0 ) );
+                GraphDatabaseInternalSettings.string_block_size.defaultValue(), 0,
+                GraphDatabaseInternalSettings.array_block_size.defaultValue(), 0 ) );
 
         // then
         assertEquals( 0, estimates.numberOfNodes() );
@@ -202,14 +249,14 @@ class CsvInputEstimateCalculationIT
         relationshipData.add( generateData( defaultFormatRelationshipFileHeader(), start, RELATIONSHIP_COUNT - start.longValue(),
                 NODE_COUNT, ":START_ID,:TYPE,:END_ID,prop1,prop2", "relationships-2.csv", groups ) );
         return new CsvInput( nodeData, defaultFormatNodeFileHeader(), relationshipData, defaultFormatRelationshipFileHeader(),
-                IdType.INTEGER, COMMAS, CsvInput.NO_MONITOR, groups );
+                IdType.INTEGER, COMMAS, CsvInput.NO_MONITOR, groups, INSTANCE );
     }
 
     private static long calculateNumberOfProperties( NeoStores stores )
     {
         long count = 0;
         PropertyRecord record = stores.getPropertyStore().newRecord();
-        try ( PageCursor cursor = stores.getPropertyStore().openPageCursorForReading( 0 ) )
+        try ( PageCursor cursor = stores.getPropertyStore().openPageCursorForReading( 0, PageCursorTracer.NULL ) )
         {
             long highId = stores.getPropertyStore().getHighId();
             for ( long id = 0; id < highId; id++ )
@@ -227,7 +274,7 @@ class CsvInputEstimateCalculationIT
     private static void assertRoughlyEqual( long expected, long actual )
     {
         long diff = abs( expected - actual );
-        assertThat( expected / 10, greaterThan( diff ) );
+        assertThat( expected / 10 ).isGreaterThan( diff );
     }
 
     private DataFactory generateData( Header.Factory factory, MutableLong start, long count,
@@ -239,7 +286,7 @@ class CsvInputEstimateCalculationIT
         Deserialization<String> deserialization = new StringDeserialization( COMMAS );
         try ( PrintWriter out = new PrintWriter( new BufferedWriter( new FileWriter( file ) ) );
               RandomEntityDataGenerator generator = new RandomEntityDataGenerator( nodeCount, count, toIntExact( count ), random.seed(),
-                      start.longValue(), header, distribution, distribution, 0, 0 );
+                      start.longValue(), header, distribution, distribution, 0, 0, 5 );
               InputChunk chunk = generator.newChunk();
               InputEntity entity = new InputEntity() )
         {

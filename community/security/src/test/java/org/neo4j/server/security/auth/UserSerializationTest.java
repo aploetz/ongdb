@@ -23,12 +23,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import org.neo4j.cypher.internal.security.SecureHasher;
+import org.neo4j.cypher.internal.security.SystemGraphCredential;
 import org.neo4j.kernel.impl.security.User;
 import org.neo4j.string.UTF8;
 
 import static java.util.Arrays.asList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class UserSerializationTest
 {
@@ -49,7 +50,37 @@ class UserSerializationTest
         byte[] serialized = serialization.serialize( users );
 
         // Then
-        assertThat( serialization.deserializeRecords( serialized ), equalTo( users ) );
+        assertThat( serialization.deserializeRecords( serialized ) ).isEqualTo( users );
+    }
+
+    @Test
+    void shouldSerializeAndDeserializeSystemGraphCredentialPassword() throws Exception
+    {
+        // Given
+        UserSerialization serialization = new UserSerialization();
+        SecureHasher hasher = new SecureHasher();
+
+        List<User> users = asList(
+                new User.Builder( "Mike", SystemGraphCredential.createCredentialForPassword( UTF8.encode( "1234321" ), hasher ) ).build(),
+                new User.Builder( "Steve", SystemGraphCredential.createCredentialForPassword( UTF8.encode( "1234321" ), hasher ) ).build(),
+                new User.Builder( "steve.stevesson@WINDOMAIN", SystemGraphCredential.createCredentialForPassword( UTF8.encode( "1234321" ), hasher ) ).build(),
+                new User.Builder( "Bob", SystemGraphCredential.createCredentialForPassword( UTF8.encode( "0987654" ), hasher ) ).build()
+        );
+
+        // When
+        byte[] serialized = serialization.serialize( users );
+
+        // Then
+        List<User> actual = serialization.deserializeRecords( serialized );
+        assertThat( actual.size() ).isEqualTo( users.size() );
+        for ( int i = 0; i < actual.size(); i++ )
+        {
+            // they should be in the same order so this is okay
+            User actualUser = actual.get( i );
+            User givenUser = users.get( i );
+            assertThat( actualUser.name() ).isEqualTo( givenUser.name() );
+            assertThat( actualUser.credentials().serialize() ).isEqualTo( givenUser.credentials().serialize() );
+        }
     }
 
     /**
@@ -72,13 +103,8 @@ class UserSerializationTest
                 "Bob:SHA-256,0E1FFFC23E,34A4:password_change_required\n" ) );
 
         // Then
-        assertThat( deserialized, equalTo(
-                asList( new User.Builder( "Mike", new LegacyCredential( salt1, hash1 ) ).build(),
-                        new User.Builder( "Steve", new LegacyCredential( salt1, hash1 ) )
-                            .withRequiredPasswordChange( true ).withFlag("nice_guy").build(),
-                        new User.Builder( "Bob", new LegacyCredential( salt2, hash2 ) )
-                                .withRequiredPasswordChange( true )
-                                .build()
-        ) ) );
+        assertThat( deserialized ).isEqualTo( asList( new User.Builder( "Mike", new LegacyCredential( salt1, hash1 ) ).build(),
+                new User.Builder( "Steve", new LegacyCredential( salt1, hash1 ) ).withRequiredPasswordChange( true ).withFlag( "nice_guy" ).build(),
+                new User.Builder( "Bob", new LegacyCredential( salt2, hash2 ) ).withRequiredPasswordChange( true ).build() ) );
     }
 }

@@ -26,6 +26,10 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> neo4j/4.1
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -34,10 +38,19 @@ import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
+<<<<<<< HEAD
+=======
+import org.neo4j.dbms.database.SystemGraphComponent;
+import org.neo4j.dbms.database.SystemGraphComponents;
+import org.neo4j.fabric.transaction.TransactionManager;
+>>>>>>> neo4j/4.1
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.internal.kernel.api.exceptions.ProcedureException;
+import org.neo4j.internal.kernel.api.procs.ProcedureCallContext;
 import org.neo4j.internal.kernel.api.procs.ProcedureSignature;
 import org.neo4j.internal.kernel.api.procs.UserFunctionSignature;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.api.procedure.GlobalProcedures;
 import org.neo4j.kernel.api.procedure.SystemProcedure;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.query.FunctionInformation;
@@ -50,11 +63,19 @@ import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Internal;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
-import org.neo4j.procedure.impl.GlobalProceduresRegistry;
+import org.neo4j.storageengine.api.StoreIdProvider;
 
 import static java.lang.String.format;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
+<<<<<<< HEAD
 import static org.neo4j.procedure.Mode.DBMS;
+=======
+import static org.neo4j.dbms.database.SystemGraphComponent.Status.REQUIRES_UPGRADE;
+import static org.neo4j.kernel.api.exceptions.Status.Procedure.ProcedureCallFailed;
+import static org.neo4j.procedure.Mode.DBMS;
+import static org.neo4j.procedure.Mode.READ;
+import static org.neo4j.procedure.Mode.WRITE;
+>>>>>>> neo4j/4.1
 import static org.neo4j.procedure.builtin.ProceduresTimeFormatHelper.formatTime;
 import static org.neo4j.procedure.builtin.StoreIdDecodeUtils.decodeId;
 
@@ -75,16 +96,31 @@ public class BuiltInDbmsProcedures
     @Context
     public SecurityContext securityContext;
 
+<<<<<<< HEAD
+=======
+    @Context
+    public ProcedureCallContext callContext;
+
+    @Context
+    public SystemGraphComponents systemGraphComponents;
+
+>>>>>>> neo4j/4.1
     @SystemProcedure
     @Description( "Provides information regarding the DBMS." )
     @Procedure( name = "dbms.info", mode = DBMS )
     public Stream<SystemInfo> databaseInfo() throws NoSuchAlgorithmException
     {
         var systemGraph = getSystemDatabase();
+<<<<<<< HEAD
         var storeId = systemGraph.storeId();
         var creationTime = formatTime( storeId.getCreationTime(), getConfiguredTimeZone() );
         String id = decodeId( storeId );
         return Stream.of( new SystemInfo( id, systemGraph.databaseName(), creationTime ) );
+=======
+        var storeIdProvider = getSystemDatabaseStoreIdProvider( systemGraph );
+        var creationTime = formatTime( storeIdProvider.getStoreId().getCreationTime(), getConfiguredTimeZone() );
+        return Stream.of( new SystemInfo( decodeId( storeIdProvider ), systemGraph.databaseName(), creationTime ) );
+>>>>>>> neo4j/4.1
     }
 
     @Admin
@@ -151,7 +187,14 @@ public class BuiltInDbmsProcedures
                             "keys and values to be less than %d, got %d", HARD_CHAR_LIMIT, totalCharSize ) );
         }
 
-        ((InternalTransaction) transaction).setMetaData( data );
+        InternalTransaction internalTransaction = (InternalTransaction) this.transaction;
+
+        graph.getDependencyResolver().resolveDependency( TransactionManager.class )
+             .findTransactionContaining( internalTransaction )
+             .ifPresentOrElse(
+                     parent -> parent.setMetaData( data ),
+                     () -> internalTransaction.setMetaData( data )
+             );
     }
 
     @SystemProcedure
@@ -169,7 +212,11 @@ public class BuiltInDbmsProcedures
     public Stream<ProcedureResult> listProcedures()
     {
         securityContext.assertCredentialsNotExpired();
+<<<<<<< HEAD
         return graph.getDependencyResolver().resolveDependency( GlobalProceduresRegistry.class ).getAllProcedures().stream()
+=======
+        return graph.getDependencyResolver().resolveDependency( GlobalProcedures.class ).getAllProcedures().stream()
+>>>>>>> neo4j/4.1
                 .filter( proc -> !proc.internal() )
                 .sorted( Comparator.comparing( a -> a.name().toString() ) )
                 .map( ProcedureResult::new );
@@ -185,17 +232,18 @@ public class BuiltInDbmsProcedures
         DependencyResolver resolver = graph.getDependencyResolver();
         QueryExecutionEngine queryExecutionEngine = resolver.resolveDependency( QueryExecutionEngine.class );
         List<FunctionInformation> providedLanguageFunctions = queryExecutionEngine.getProvidedLanguageFunctions();
+        var globalProcedures = resolver.resolveDependency( GlobalProcedures.class );
 
         // gets you all functions provided by the query language
         Stream<FunctionResult> languageFunctions =
                 providedLanguageFunctions.stream().map( FunctionResult::new );
 
         // gets you all non-aggregating functions that are registered in the db (incl. those from libs like apoc)
-        Stream<FunctionResult> loadedFunctions = resolver.resolveDependency( GlobalProceduresRegistry.class ).getAllNonAggregatingFunctions()
+        Stream<FunctionResult> loadedFunctions = globalProcedures.getAllNonAggregatingFunctions()
                 .map( f -> new FunctionResult( f, false ) );
 
         // gets you all aggregation functions that are registered in the db (incl. those from libs like apoc)
-        Stream<FunctionResult> loadedAggregationFunctions = resolver.resolveDependency( GlobalProceduresRegistry.class ).getAllAggregatingFunctions()
+        Stream<FunctionResult> loadedAggregationFunctions = globalProcedures.getAllAggregatingFunctions()
                 .map( f -> new FunctionResult( f, true ) );
 
         return Stream.concat( Stream.concat( languageFunctions, loadedFunctions ), loadedAggregationFunctions )
@@ -217,10 +265,69 @@ public class BuiltInDbmsProcedures
         return Stream.of( new StringResult( result ) );
     }
 
+<<<<<<< HEAD
     private GraphDatabaseAPI getSystemDatabase()
     {
         return (GraphDatabaseAPI) graph.getDependencyResolver()
                 .resolveDependency( DatabaseManagementService.class ).database( SYSTEM_DATABASE_NAME );
+=======
+    @Admin
+    @SystemProcedure
+    @Description( "Report the current status of the system database sub-graph schema." )
+    @Procedure( name = "dbms.upgradeStatus", mode = READ )
+    public Stream<SystemGraphComponentStatusResult> systemSchemaVersion() throws ProcedureException
+    {
+        if ( !callContext.isSystemDatabase() )
+        {
+            throw new ProcedureException( ProcedureCallFailed,
+                                          "This is an administration command and it should be executed against the system database: dbms.upgradeStatus" );
+        }
+        return Stream.of( new SystemGraphComponentStatusResult( systemGraphComponents.detect( transaction ) ) );
+    }
+
+    @Admin
+    @SystemProcedure
+    @Description( "Upgrade the system database schema if it is not the current schema." )
+    @Procedure( name = "dbms.upgrade", mode = WRITE )
+    public Stream<SystemGraphComponentUpgradeResult> upgradeSystemSchema() throws ProcedureException
+    {
+        if ( !callContext.isSystemDatabase() )
+        {
+            throw new ProcedureException( ProcedureCallFailed,
+                                          "This is an administration command and it should be executed against the system database: dbms.upgrade" );
+        }
+        SystemGraphComponents versions = systemGraphComponents;
+        SystemGraphComponent.Status status = versions.detect( transaction );
+        if ( status == REQUIRES_UPGRADE )
+        {
+            ArrayList<String> failed = new ArrayList<>();
+            versions.forEach( component ->
+                              {
+                                  SystemGraphComponent.Status initialStatus = component.detect( transaction );
+                                  if ( initialStatus == REQUIRES_UPGRADE )
+                                  {
+                                      Optional<Exception> error = component.upgradeToCurrent( graph );
+                                      error.ifPresent( e -> failed.add( String.format( "[%s] %s", component.component(), e.getMessage() ) ) );
+                                  }
+                              } );
+            String upgradeResult = failed.isEmpty() ? "Success" : "Failed: " + String.join( ", ", failed );
+            return Stream.of( new SystemGraphComponentUpgradeResult( versions.detect( transaction ).name(), upgradeResult ) );
+        }
+        else
+        {
+            return Stream.of( new SystemGraphComponentUpgradeResult( status.name(), status.resolution() ) );
+        }
+    }
+
+    private GraphDatabaseAPI getSystemDatabase()
+    {
+        return (GraphDatabaseAPI) graph.getDependencyResolver().resolveDependency( DatabaseManagementService.class ).database( SYSTEM_DATABASE_NAME );
+    }
+
+    private StoreIdProvider getSystemDatabaseStoreIdProvider( GraphDatabaseAPI databaseAPI )
+    {
+        return databaseAPI.getDependencyResolver().resolveDependency( StoreIdProvider.class );
+>>>>>>> neo4j/4.1
     }
 
     private ZoneId getConfiguredTimeZone()
@@ -304,6 +411,32 @@ public class BuiltInDbmsProcedures
         MetadataResult( Map<String,Object> metadata )
         {
             this.metadata = metadata;
+        }
+    }
+
+    public static class SystemGraphComponentStatusResult
+    {
+        public final String status;
+        public final String description;
+        public final String resolution;
+
+        SystemGraphComponentStatusResult( SystemGraphComponent.Status status )
+        {
+            this.status = status.name();
+            this.description = status.description();
+            this.resolution = status.resolution();
+        }
+    }
+
+    public static class SystemGraphComponentUpgradeResult
+    {
+        public final String status;
+        public final String upgradeResult;
+
+        SystemGraphComponentUpgradeResult( String status, String upgradeResult )
+        {
+            this.status = status;
+            this.upgradeResult = upgradeResult;
         }
     }
 }

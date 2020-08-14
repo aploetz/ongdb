@@ -36,10 +36,6 @@ import org.neo4j.graphdb.config.Setting;
 import org.neo4j.logging.AssertableLogProvider;
 
 import static java.lang.String.format;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,7 +47,9 @@ import static org.neo4j.configuration.GraphDatabaseSettings.keep_logical_logs;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_sampling_percentage;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_tracing_level;
 import static org.neo4j.configuration.SettingValueParsers.DURATION;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.io.ByteUnit.gibiBytes;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class GraphDatabaseSettingsTest
 {
@@ -59,22 +57,22 @@ class GraphDatabaseSettingsTest
     void mustHaveNullDefaultPageCacheMemorySizeInBytes()
     {
         String bytes = Config.defaults().get( GraphDatabaseSettings.pagecache_memory );
-        assertThat( bytes, is( nullValue() ) );
+        assertThat( bytes ).isNull();
     }
 
     @Test
     void pageCacheSettingMustAcceptArbitraryUserSpecifiedValue()
     {
         Setting<String> setting = GraphDatabaseSettings.pagecache_memory;
-        assertThat( Config.defaults( setting, "245760" ).get( setting ), is( "245760" ) );
-        assertThat( Config.defaults( setting, "2244g" ).get( setting ), is( "2244g" ) );
-        assertThat( Config.defaults( setting, "string" ).get( setting ), is( "string" ) );
+        assertThat( Config.defaults( setting, "245760" ).get( setting ) ).isEqualTo( "245760" );
+        assertThat( Config.defaults( setting, "2244g" ).get( setting ) ).isEqualTo( "2244g" );
+        assertThat( Config.defaults( setting, "string" ).get( setting ) ).isEqualTo( "string" );
     }
 
     @Test
     void noDuplicateSettingsAreAllowed() throws Exception
     {
-        final HashMap<String,String> fields = new HashMap<>();
+        final Map<String,String> fields = new HashMap<>();
         for ( Field field : GraphDatabaseSettings.class.getDeclaredFields() )
         {
             if ( field.getType() == Setting.class )
@@ -263,12 +261,8 @@ class GraphDatabaseSettingsTest
     @Test
     void configValuesContainsConnectors()
     {
-        assertThat( GraphDatabaseSettings.SERVER_DEFAULTS.keySet().stream().map( Setting::name ).collect( Collectors.toList() ), containsInAnyOrder(
-                "dbms.connector.http.enabled",
-                "dbms.connector.https.enabled",
-                "dbms.connector.bolt.enabled",
-                "dbms.security.auth_enabled"
-        ) );
+        assertThat( GraphDatabaseSettings.SERVER_DEFAULTS.keySet().stream().map( Setting::name ).collect( Collectors.toList() ) ).contains(
+                "dbms.connector.http.enabled", "dbms.connector.https.enabled", "dbms.connector.bolt.enabled", "dbms.security.auth_enabled" );
     }
 
     @Test
@@ -300,11 +294,26 @@ class GraphDatabaseSettingsTest
         assertEquals( new SocketAddress( "foo" ), config.get( default_listen_address ) );
         assertEquals( new SocketAddress( "bar" ), config.get( default_advertised_address) );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class )
-                .warn( "Use of deprecated setting %s. It is replaced by %s", oldDefaultListen, default_listen_address.name() ) );
+        var messageMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( WARN );
+        messageMatcher.containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s", oldDefaultListen, default_listen_address.name() )
+                      .containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s", oldDefaultAdvertised,
+                default_advertised_address.name() );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class )
-                .warn( "Use of deprecated setting %s. It is replaced by %s", oldDefaultAdvertised, default_advertised_address.name() ) );
+    }
 
+    @Test
+    void shouldLimitTxSizeIfCore()
+    {
+        assertThrows( IllegalArgumentException.class, () -> Config.newBuilder()
+                .set( GraphDatabaseSettings.mode, GraphDatabaseSettings.Mode.CORE )
+                .set( GraphDatabaseSettings.memory_transaction_max_size, gibiBytes( 3 ) ).build() );
+    }
+
+    @Test
+    void shouldNotLimitTxSizeIfSingle()
+    {
+        Config.newBuilder()
+                .set( GraphDatabaseSettings.mode, GraphDatabaseSettings.Mode.SINGLE )
+                .set( GraphDatabaseSettings.memory_transaction_max_size, gibiBytes( 3 ) ).build();
     }
 }

@@ -32,6 +32,8 @@ import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
@@ -46,15 +48,15 @@ import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 
 /**
- * A store for {@link #updateRecord(AbstractBaseRecord) updating} and
- * {@link #getRecord(long, AbstractBaseRecord, RecordLoad) getting} records.
+ * A store for {@link #updateRecord(AbstractBaseRecord, PageCursorTracer) updating} and
+ * {@link #getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}  getting} records.
  *
  * There are two ways of getting records, either one-by-one using
- * {@link #getRecord(long, AbstractBaseRecord, RecordLoad)}, passing in record retrieved from {@link #newRecord()}.
+ * {@link #getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}, passing in record retrieved from {@link #newRecord()}.
  * This to make a conscious decision about who will create the record instance and in that process figure out
  * ways to reduce number of record instances created.
  * <p>
- * The other way is to use {@link #openPageCursorForReading(long)} to open a cursor and use it to read records using
+ * The other way is to use {@link #openPageCursorForReading(long, PageCursorTracer)} to open a cursor and use it to read records using
  * {@link #getRecordByCursor(long, AbstractBaseRecord, RecordLoad, PageCursor)}. A {@link PageCursor} can be ket open
  * to read multiple records before closing it.
  *
@@ -73,9 +75,10 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
     long getHighId();
 
     /**
+     * @param cursorTracer underlying page cursor tracer.
      * @return highest id in use in this store.
      */
-    long getHighestPossibleIdInUse();
+    long getHighestPossibleIdInUse( PageCursorTracer cursorTracer );
 
     /**
      * Sets highest id in use for this store. This is for when records are applied to this store where
@@ -88,7 +91,7 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
     void setHighestPossibleIdInUse( long highestIdInUse );
 
     /**
-     * @return a new record instance for receiving data by {@link #getRecord(long, AbstractBaseRecord, RecordLoad)}.
+     * @return a new record instance for receiving data by {@link #getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}.
      */
     RECORD newRecord();
 
@@ -97,23 +100,26 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * be different behavior, although the {@code target} record will be marked with the specified
      * {@code id} after participating in this method call.
      * <ul>
-     * <li>{@link RecordLoad#CHECK}: As little data as possible is read to determine whether or not the record
-     *     is in use. If not in use then no more data will be loaded into the target record and
-     *     the the data of the record will be {@link AbstractBaseRecord#clear() cleared}.</li>
+     * <li>{@link RecordLoad#CHECK}: As little data as possible is read to determine whether the record
+     *     is in use or not. If not in use then no more data will be loaded into the target record and
+     *     the data of the record will be {@link AbstractBaseRecord#clear() cleared}.</li>
      * <li>{@link RecordLoad#NORMAL}: Just like {@link RecordLoad#CHECK}, but with the difference that
      *     an {@link InvalidRecordException} will be thrown if the record isn't in use.</li>
      * <li>{@link RecordLoad#FORCE}: The entire contents of the record will be loaded into the target record
      *     regardless if the record is in use or not. This leaves no guarantees about the data in the record
      *     after this method call, except that the id will be the specified {@code id}.
+     * <li>{@link RecordLoad#ALWAYS}: Similar to {@link RecordLoad#FORCE}, except the sanity checks on
+     *     the record data is always enabled.</li>
      *
      * @param id the id of the record to load.
      * @param target record where data will be loaded into. This record will have its id set to the specified
      * {@code id} as part of this method call.
      * @param mode loading behaviour, read more in method description.
+     * @param cursorTracer underlying page cursor tracer.
      * @return the record that was passed in, for convenience.
      * @throws InvalidRecordException if record not in use and the {@code mode} allows for throwing.
      */
-    RECORD getRecord( long id, RECORD target, RecordLoad mode ) throws InvalidRecordException;
+    RECORD getRecord( long id, RECORD target, RecordLoad mode, PageCursorTracer cursorTracer ) throws InvalidRecordException;
 
     /**
      * Opens a {@link PageCursor} on this store, capable of reading records using
@@ -121,20 +127,33 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * The caller is responsible for closing it when done with it.
      *
      * @param id cursor will initially be placed at the page containing this record id.
+     * @param cursorTracer underlying page cursor tracer.
      * @return PageCursor for reading records.
      */
-    PageCursor openPageCursorForReading( long id );
+    PageCursor openPageCursorForReading( long id, PageCursorTracer cursorTracer );
+
+    /**
+     * Opens a {@link PageCursor} on this store, capable of reading records using
+     * {@link #getRecordByCursor(long, AbstractBaseRecord, RecordLoad, PageCursor)}.
+     * The caller is responsible for closing it when done with it.
+     * The opened cursor will make use of pre-fetching for optimal scanning performance.
+     *
+     * @param id cursor will initially be placed at the page containing this record id.
+     * @param cursorTracer underlying page cursor tracer.
+     * @return PageCursor for reading records.
+     */
+    PageCursor openPageCursorForReadingWithPrefetching( long id, PageCursorTracer cursorTracer );
 
     /**
      * Reads a record from the store into {@code target}, see
-     * {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad)}.
+     * {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}.
      * <p>
      * The provided page cursor will be used to get the record, and in doing this it will be redirected to the
      * correct page if needed.
      *
      * @param id the record id, understood to be the absolute reference to the store.
      * @param target the record to fill.
-     * @param mode loading behaviour, read more in {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad)}.
+     * @param mode loading behaviour, read more in {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}.
      * @param cursor the PageCursor to use for record loading.
      * @throws InvalidRecordException if record not in use and the {@code mode} allows for throwing.
      */
@@ -142,14 +161,14 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
 
     /**
      * Reads a record from the store into {@code target}, see
-     * {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad)}.
+     * {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}.
      * <p>
      * This method requires that the cursor page and offset point to the first byte of the record in target on calling.
      * The provided page cursor will be used to get the record, and in doing this it will be redirected to the
      * next page if the input record was the last on it's page.
      *
      * @param target the record to fill.
-     * @param mode loading behaviour, read more in {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad)}.
+     * @param mode loading behaviour, read more in {@link RecordStore#getRecord(long, AbstractBaseRecord, RecordLoad, PageCursorTracer)}.
      * @param cursor the PageCursor to use for record loading.
      * @throws InvalidRecordException if record not in use and the {@code mode} allows for throwing.
      */
@@ -161,8 +180,9 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * This method can load those records and enrich the target record with those, marking it as heavy.
      *
      * @param record record to make heavy, if not already.
+     * @param cursorTracer underlying page cursor tracer.
      */
-    void ensureHeavy( RECORD record );
+    void ensureHeavy( RECORD record, PageCursorTracer cursorTracer );
 
     /**
      * Reads records that belong together, a chain of records that as a whole forms the entirety of a data item.
@@ -173,10 +193,26 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * When a cycle is found, a {@link RecordChainCycleDetectedException} will be thrown.
      * If {@code false}, then chain cycles will likely end up causing an {@link OutOfMemoryError}.
      * A cycle would only occur if the store is inconsistent, though.
+     * @param cursorTracer underlying page cursor tracer
      * @return {@link Collection} of records in the loaded chain.
      * @throws InvalidRecordException if some record not in use and the {@code mode} is allows for throwing.
      */
-    List<RECORD> getRecords( long firstId, RecordLoad mode, boolean guardForCycles ) throws InvalidRecordException;
+    List<RECORD> getRecords( long firstId, RecordLoad mode, boolean guardForCycles, PageCursorTracer cursorTracer ) throws InvalidRecordException;
+
+    /**
+     * Streams records that belong together, a chain of records that as a whole forms the entirety of a data item.
+     *
+     * @param firstId record id of the first record to start loading from.
+     * @param mode {@link RecordLoad} mode.
+     * @param guardForCycles Set to {@code true} if we need to take extra care in guarding for cycles in the chain.
+     * When a cycle is found, a {@link RecordChainCycleDetectedException} will be thrown.
+     * If {@code false}, then chain cycles will likely end up causing an {@link OutOfMemoryError}.
+     * A cycle would only occur if the store is inconsistent, though.
+     * @param cursorTracer underlying page cursor tracer
+     * @param subscriber The subscriber of the data, will receive records until the subscriber returns <code>false</code>
+     */
+    void streamRecords( long firstId, RecordLoad mode, boolean guardForCycles, PageCursorTracer cursorTracer,
+                        RecordSubscriber<RECORD> subscriber );
 
     /**
      * Returns another record id which the given {@code record} references, if it exists in a chain of records.
@@ -194,12 +230,13 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      *
      * @param record containing data to write to this store at the {@link AbstractBaseRecord#getId() id}
      * specified by the record.
+     * @param cursorTracer underlying page cursor tracer.
      */
-    void updateRecord( RECORD record, IdUpdateListener idUpdates );
+    void updateRecord( RECORD record, IdUpdateListener idUpdates, PageCursorTracer cursorTracer );
 
-    default void updateRecord( RECORD record )
+    default void updateRecord( RECORD record , PageCursorTracer cursorTracer )
     {
-        updateRecord( record, IdUpdateListener.DIRECT );
+        updateRecord( record, IdUpdateListener.DIRECT, cursorTracer );
     }
 
     /**
@@ -207,9 +244,10 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      *
      * @param processor {@link Processor} of records.
      * @param record to process.
+     * @param cursorTracer underlying page cache access tracer
      * @throws FAILURE if the processor fails.
      */
-    <FAILURE extends Exception> void accept( Processor<FAILURE> processor, RECORD record ) throws FAILURE;
+    <FAILURE extends Exception> void accept( Processor<FAILURE> processor, RECORD record, PageCursorTracer cursorTracer ) throws FAILURE;
 
     /**
      * @return number of bytes each record in this store occupies. All records in a store is of the same size.
@@ -238,11 +276,11 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
     void close();
 
     /**
-     * Flushes all pending {@link #updateRecord(AbstractBaseRecord) updates} to underlying storage.
+     * Flushes all pending {@link #updateRecord(AbstractBaseRecord, PageCursorTracer) updates} to underlying storage.
      * This call is blocking and will ensure all updates since last call to this method are durable
      * once the call returns.
      */
-    void flush();
+    void flush( PageCursorTracer cursorTracer );
 
     /**
      * Some stores may have meta data stored in the header of the store file. Since all records in a store
@@ -265,17 +303,19 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * Called once all changes to a record is ready to be converted into a command.
      *
      * @param record record to prepare, potentially updating it with more information before converting into a command.
+     * @param cursorTracer underlying page cursor tracer
      */
-    void prepareForCommit( RECORD record );
+    void prepareForCommit( RECORD record, PageCursorTracer cursorTracer );
 
     /**
      * Called once all changes to a record is ready to be converted into a command.
-     * WARNING this is for advanced use, please consider using {@link #prepareForCommit(AbstractBaseRecord)} instead.
+     * WARNING this is for advanced use, please consider using {@link #prepareForCommit(AbstractBaseRecord, PageCursorTracer)} instead.
      *
      * @param record record to prepare, potentially updating it with more information before converting into a command.
      * @param idSequence {@link IdSequence} to use for potentially generating additional ids required by this record.
+     * @param cursorTracer underlying page cursor tracer
      */
-    void prepareForCommit( RECORD record, IdSequence idSequence );
+    void prepareForCommit( RECORD record, IdSequence idSequence, PageCursorTracer cursorTracer );
 
     /**
      * Scan the given range of records both inclusive, and pass all the in-use ones to the given processor, one by one.
@@ -283,9 +323,10 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
      * The record passed to the NodeRecordScanner is reused instead of reallocated for every record, so it must be
      * cloned if you want to save it for later.
      * @param visitor {@link Visitor} notified about all records.
-     * @throws Exception on error reading from store.
+     * @param cursorTracer underlying page cursor tracer.
+     * @throws EXCEPTION on error reading from store.
      */
-    <EXCEPTION extends Exception> void scanAllRecords( Visitor<RECORD,EXCEPTION> visitor ) throws EXCEPTION;
+    <EXCEPTION extends Exception> void scanAllRecords( Visitor<RECORD,EXCEPTION> visitor, PageCursorTracer cursorTracer ) throws EXCEPTION;
 
     class Delegator<R extends AbstractBaseRecord> implements RecordStore<R>
     {
@@ -304,15 +345,21 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
         }
 
         @Override
-        public R getRecord( long id, R target, RecordLoad mode ) throws InvalidRecordException
+        public R getRecord( long id, R target, RecordLoad mode, PageCursorTracer cursorTracer ) throws InvalidRecordException
         {
-            return actual.getRecord( id, target, mode );
+            return actual.getRecord( id, target, mode, cursorTracer );
         }
 
         @Override
-        public PageCursor openPageCursorForReading( long id )
+        public PageCursor openPageCursorForReading( long id, PageCursorTracer cursorTracer )
         {
-            return actual.openPageCursorForReading( id );
+            return actual.openPageCursorForReading( id, cursorTracer );
+        }
+
+        @Override
+        public PageCursor openPageCursorForReadingWithPrefetching( long id, PageCursorTracer cursorTracer )
+        {
+            return actual.openPageCursorForReadingWithPrefetching( id, cursorTracer );
         }
 
         @Override
@@ -328,9 +375,15 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
         }
 
         @Override
-        public List<R> getRecords( long firstId, RecordLoad mode, boolean guardForCycles ) throws InvalidRecordException
+        public List<R> getRecords( long firstId, RecordLoad mode, boolean guardForCycles, PageCursorTracer cursorTracer ) throws InvalidRecordException
         {
-            return actual.getRecords( firstId, mode, guardForCycles );
+            return actual.getRecords( firstId, mode, guardForCycles, cursorTracer );
+        }
+
+        @Override
+        public void streamRecords( long firstId, RecordLoad mode, boolean guardForCycles, PageCursorTracer cursorTracer, RecordSubscriber<R> subscriber )
+        {
+            actual.streamRecords( firstId, mode, guardForCycles, cursorTracer, subscriber );
         }
 
         @Override
@@ -345,15 +398,15 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
         }
 
         @Override
-        public long nextId()
+        public long nextId( PageCursorTracer cursorTracer )
         {
-            return actual.nextId();
+            return actual.nextId( cursorTracer );
         }
 
         @Override
-        public IdRange nextIdBatch( int size )
+        public IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
         {
-            return actual.nextIdBatch( size );
+            return actual.nextIdBatch( size, cursorTracer );
         }
 
         @Override
@@ -369,21 +422,21 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
         }
 
         @Override
-        public long getHighestPossibleIdInUse()
+        public long getHighestPossibleIdInUse( PageCursorTracer cursorTracer )
         {
-            return actual.getHighestPossibleIdInUse();
+            return actual.getHighestPossibleIdInUse( cursorTracer );
         }
 
         @Override
-        public void updateRecord( R record, IdUpdateListener idUpdateListener )
+        public void updateRecord( R record, IdUpdateListener idUpdateListener, PageCursorTracer cursorTracer )
         {
-            actual.updateRecord( record, idUpdateListener );
+            actual.updateRecord( record, idUpdateListener, cursorTracer );
         }
 
         @Override
-        public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, R record ) throws FAILURE
+        public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, R record, PageCursorTracer cursorTracer ) throws FAILURE
         {
-            actual.accept( processor, record );
+            actual.accept( processor, record, cursorTracer );
         }
 
         @Override
@@ -423,39 +476,40 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
         }
 
         @Override
-        public void flush()
+        public void flush( PageCursorTracer cursorTracer )
         {
-            actual.flush();
+            actual.flush( cursorTracer );
         }
 
         @Override
-        public void ensureHeavy( R record )
+        public void ensureHeavy( R record, PageCursorTracer cursorTracer )
         {
-            actual.ensureHeavy( record );
+            actual.ensureHeavy( record, cursorTracer );
         }
 
         @Override
-        public void prepareForCommit( R record )
+        public void prepareForCommit( R record, PageCursorTracer cursorTracer )
         {
-            actual.prepareForCommit( record );
+            actual.prepareForCommit( record, cursorTracer );
         }
 
         @Override
-        public void prepareForCommit( R record, IdSequence idSequence )
+        public void prepareForCommit( R record, IdSequence idSequence, PageCursorTracer cursorTracer )
         {
-            actual.prepareForCommit( record, idSequence );
+            actual.prepareForCommit( record, idSequence, cursorTracer );
         }
 
         @Override
-        public <EXCEPTION extends Exception> void scanAllRecords( Visitor<R,EXCEPTION> visitor ) throws EXCEPTION
+        public <EXCEPTION extends Exception> void scanAllRecords( Visitor<R,EXCEPTION> visitor, PageCursorTracer cursorTracer ) throws EXCEPTION
         {
-            actual.scanAllRecords( visitor );
+            actual.scanAllRecords( visitor, cursorTracer );
         }
     }
 
     @SuppressWarnings( "unchecked" )
     abstract class Processor<FAILURE extends Exception>
     {
+        private static final String RECORD_PROCESSOR_APPLIER_TAG = "recordProcessorApplier";
         // Have it volatile so that it can be stopped from a different thread.
         private volatile boolean shouldStop;
 
@@ -464,61 +518,50 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
             shouldStop = true;
         }
 
-        public abstract void processSchema( RecordStore<SchemaRecord> store, SchemaRecord schema ) throws FAILURE;
+        public abstract void processSchema( RecordStore<SchemaRecord> store, SchemaRecord schema, PageCursorTracer cursorTracer ) throws FAILURE;
 
-        public abstract void processNode( RecordStore<NodeRecord> store, NodeRecord node ) throws FAILURE;
+        public abstract void processNode( RecordStore<NodeRecord> store, NodeRecord node, PageCursorTracer cursorTracer ) throws FAILURE;
 
-        public abstract void processRelationship( RecordStore<RelationshipRecord> store, RelationshipRecord rel )
+        public abstract void processRelationship( RecordStore<RelationshipRecord> store, RelationshipRecord rel, PageCursorTracer cursorTracer )
                 throws FAILURE;
 
-        public abstract void processProperty( RecordStore<PropertyRecord> store, PropertyRecord property ) throws
+        public abstract void processProperty( RecordStore<PropertyRecord> store, PropertyRecord property, PageCursorTracer cursorTracer ) throws
                 FAILURE;
 
-        public abstract void processString( RecordStore<DynamicRecord> store, DynamicRecord string, IdType idType )
+        public abstract void processString( RecordStore<DynamicRecord> store, DynamicRecord string, IdType idType, PageCursorTracer cursorTracer )
                 throws FAILURE;
 
-        public abstract void processArray( RecordStore<DynamicRecord> store, DynamicRecord array ) throws FAILURE;
+        public abstract void processArray( RecordStore<DynamicRecord> store, DynamicRecord array, PageCursorTracer cursorTracer ) throws FAILURE;
 
-        public abstract void processLabelArrayWithOwner( RecordStore<DynamicRecord> store, DynamicRecord labelArray )
+        public abstract void processLabelArrayWithOwner( RecordStore<DynamicRecord> store, DynamicRecord labelArray, PageCursorTracer cursorTracer )
                 throws FAILURE;
 
         public abstract void processRelationshipTypeToken( RecordStore<RelationshipTypeTokenRecord> store,
-                RelationshipTypeTokenRecord record ) throws FAILURE;
+                RelationshipTypeTokenRecord record, PageCursorTracer cursorTracer ) throws FAILURE;
 
-        public abstract void processPropertyKeyToken( RecordStore<PropertyKeyTokenRecord> store, PropertyKeyTokenRecord
-                record ) throws FAILURE;
+        public abstract void processPropertyKeyToken( RecordStore<PropertyKeyTokenRecord> store, PropertyKeyTokenRecord record,
+                PageCursorTracer cursorTracer ) throws FAILURE;
 
-        public abstract void processLabelToken( RecordStore<LabelTokenRecord> store, LabelTokenRecord record ) throws
+        public abstract void processLabelToken( RecordStore<LabelTokenRecord> store, LabelTokenRecord record, PageCursorTracer cursorTracer ) throws
                 FAILURE;
 
         public abstract void processRelationshipGroup( RecordStore<RelationshipGroupRecord> store,
-                RelationshipGroupRecord record ) throws FAILURE;
-
-        protected <R extends AbstractBaseRecord> R getRecord( RecordStore<R> store, long id, R into )
-        {
-            store.getRecord( id, into, RecordLoad.FORCE );
-            return into;
-        }
+                RelationshipGroupRecord record, PageCursorTracer cursorTracer ) throws FAILURE;
 
         public <R extends AbstractBaseRecord> void applyFiltered( RecordStore<R> store,
+                ProgressListener progressListener, PageCacheTracer pageCacheTracer,
                 Predicate<? super R>... filters ) throws FAILURE
         {
-            apply( store, ProgressListener.NONE, filters );
+            apply( store, progressListener, pageCacheTracer, filters );
         }
 
-        public <R extends AbstractBaseRecord> void applyFiltered( RecordStore<R> store,
-                ProgressListener progressListener,
+        private <R extends AbstractBaseRecord> void apply( RecordStore<R> store, ProgressListener progressListener, PageCacheTracer pageCacheTracer,
                 Predicate<? super R>... filters ) throws FAILURE
         {
-            apply( store, progressListener, filters );
-        }
-
-        private <R extends AbstractBaseRecord> void apply( RecordStore<R> store, ProgressListener progressListener,
-                Predicate<? super R>... filters ) throws FAILURE
-        {
-            ResourceIterable<R> iterable = Scanner.scan( store, true, filters );
+            ResourceIterable<R> iterable = Scanner.scan( store, true, pageCacheTracer, filters );
             long lastReported = -1;
-            try ( ResourceIterator<R> scan = iterable.iterator() )
+            try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( RECORD_PROCESSOR_APPLIER_TAG );
+                  ResourceIterator<R> scan = iterable.iterator() )
             {
                 while ( scan.hasNext() )
                 {
@@ -528,7 +571,7 @@ public interface RecordStore<RECORD extends AbstractBaseRecord> extends IdSequen
                         break;
                     }
 
-                    store.accept( this, record );
+                    store.accept( this, record, cursorTracer );
                     long diff = record.getId() - lastReported;
                     progressListener.add( diff );
                     lastReported = record.getId();

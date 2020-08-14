@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.api.impl.schema;
 
+import org.assertj.core.api.Condition;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -47,11 +48,11 @@ import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotApplicableKernelException;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
 import org.neo4j.kernel.api.index.IndexAccessor;
@@ -67,7 +68,7 @@ import org.neo4j.kernel.extension.ExtensionFailureStrategies;
 import org.neo4j.kernel.extension.context.DatabaseExtensionContext;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.index.schema.GenericNativeIndexProviderFactory;
 import org.neo4j.kernel.impl.index.schema.NodeValueIterator;
 import org.neo4j.kernel.impl.index.schema.fusion.NativeLuceneFusionIndexProviderFactory30;
@@ -86,16 +87,20 @@ import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.Matchers.oneOf;
+import static org.assertj.core.api.Assertions.anyOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.neo4j.collection.PrimitiveLongCollections.toSet;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.kernel.api.IndexQuery.exact;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
+import static org.neo4j.io.IOUtils.closeAll;
 import static org.neo4j.io.memory.ByteBufferFactory.heapBufferFactory;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.rule.concurrent.ThreadingRule.waitingWhileIn;
 
 @RunWith( Parameterized.class )
@@ -114,7 +119,7 @@ public class DatabaseCompositeIndexAccessorTest
     private static final CleanupRule cleanup = new CleanupRule();
     private static final AssertableLogProvider logProvider = new AssertableLogProvider();
     @ClassRule
-    public static final RuleChain rules = RuleChain.outerRule( fileSystemRule ).around( dir ).around( cleanup ).around( logProvider );
+    public static final RuleChain rules = RuleChain.outerRule( fileSystemRule ).around( dir ).around( cleanup );
 
     @Parameterized.Parameter( 0 )
     public String testName;
@@ -139,12 +144,12 @@ public class DatabaseCompositeIndexAccessorTest
 
         Dependencies deps = new Dependencies();
         JobScheduler jobScheduler = cleanup.add( JobSchedulerFactory.createInitialisedScheduler() );
-        PageCache pageCache = cleanup.add( ConfigurableStandalonePageCacheFactory.createPageCache( fileSystemRule, jobScheduler ) );
+        PageCache pageCache = cleanup.add( ConfigurableStandalonePageCacheFactory.createPageCache( fileSystemRule, jobScheduler, PageCacheTracer.NULL ) );
         deps.satisfyDependencies( pageCache, jobScheduler, fileSystemRule, new SimpleLogService( logProvider ), new Monitors(), CONFIG,
                 RecoveryCleanupWorkCollector.ignore() );
         dir.prepareDirectory( DatabaseCompositeIndexAccessorTest.class, "null" );
         Config config = Config.defaults( neo4j_home, dir.homeDir().toPath() );
-        DatabaseExtensionContext context = new DatabaseExtensionContext( DatabaseLayout.of( config ), DatabaseInfo.UNKNOWN, deps );
+        DatabaseExtensionContext context = new DatabaseExtensionContext( DatabaseLayout.of( config ), DbmsInfo.UNKNOWN, deps );
         DatabaseExtensions extensions = new DatabaseExtensions( context, indexProviderFactories, deps, ExtensionFailureStrategies.fail() );
 
         extensions.init();
@@ -166,9 +171,9 @@ public class DatabaseCompositeIndexAccessorTest
     {
         IOFunction function = dirFactory1 ->
         {
-            IndexPopulator populator = provider.getPopulator( descriptor, SAMPLING_CONFIG, heapBufferFactory( 1024 ) );
+            IndexPopulator populator = provider.getPopulator( descriptor, SAMPLING_CONFIG, heapBufferFactory( 1024 ), INSTANCE );
             populator.create();
-            populator.close( true );
+            populator.close( true, NULL );
 
             return provider.getOnlineAccessor( descriptor, SAMPLING_CONFIG );
         };
@@ -183,10 +188,9 @@ public class DatabaseCompositeIndexAccessorTest
     }
 
     @After
-    public void after()
+    public void after() throws IOException
     {
-        accessor.close();
-        dirFactory.close();
+        closeAll( accessor, dirFactory );
     }
 
     @Test
@@ -217,7 +221,9 @@ public class DatabaseCompositeIndexAccessorTest
 
         // THEN
         assertEquals( asSet( nodeId ), resultSet( firstReader, exact( PROP_ID1, values[0] ), exact( PROP_ID2, values[1] ) ) );
-        assertThat( resultSet( firstReader, exact( PROP_ID1, values2[0] ), exact( PROP_ID2, values2[1] ) ), oneOf( asSet(), asSet( nodeId2 )) );
+        assertThat( resultSet( firstReader, exact( PROP_ID1, values2[0] ), exact( PROP_ID2, values2[1] ) ) ).
+                is( anyOf( new Condition<>( s -> s.equals( asSet() ), "empty set" ),
+                          new Condition<>( s -> s.equals( asSet( nodeId2 ) ), "one element" ) ) );
         assertEquals( asSet( nodeId ), resultSet( secondReader, exact( PROP_ID1, values[0] ), exact( PROP_ID2, values[1] ) ) );
         assertEquals( asSet( nodeId2 ), resultSet( secondReader, exact( PROP_ID1, values2[0] ), exact( PROP_ID2, values2[1] ) ) );
         firstReader.close();
@@ -302,7 +308,7 @@ public class DatabaseCompositeIndexAccessorTest
             {
                 Thread.onSpinWait();
             }
-            sampler.sampleIndex();
+            sampler.sampleIndex( NULL );
             fail( "expected exception" );
         }
         catch ( IndexNotFoundKernelException e )
@@ -319,7 +325,7 @@ public class DatabaseCompositeIndexAccessorTest
     {
         try ( NodeValueIterator results = new NodeValueIterator() )
         {
-            reader.query( NULL_CONTEXT, results, IndexOrder.NONE, false, queries );
+            reader.query( NULL_CONTEXT, results, unconstrained(), queries );
             return toSet( results );
         }
     }
@@ -342,7 +348,7 @@ public class DatabaseCompositeIndexAccessorTest
     private void updateAndCommit( List<IndexEntryUpdate<?>> nodePropertyUpdates )
             throws IndexEntryConflictException
     {
-        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+        try ( IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
         {
             for ( IndexEntryUpdate<?> update : nodePropertyUpdates )
             {

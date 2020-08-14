@@ -21,12 +21,20 @@ package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.expressions.SemanticDirection
 import org.neo4j.cypher.internal.ir.LazyMode
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeHashJoin
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.Selection
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.Cost
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.Cost
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -36,7 +44,7 @@ class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSu
       setC(Selection(ands(hasLabels("a", "Awesome")),
         setC(Expand(
           setC(Selection(ands(hasLabels("a", "Awesome")),
-                         setC(Expand(
+            setC(Expand(
               setC(Argument(Set("a")), cardinalities, 10.0),
               "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r1"), cardinalities, 100.0)
           ), cardinalities, 10.0), "a", SemanticDirection.OUTGOING, Seq.empty, "b", "r1"), cardinalities, 100.0)
@@ -48,9 +56,9 @@ class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSu
   test("should introduce increase cost when estimating an eager operator and laziness is preferred") {
     val cardinalities = new Cardinalities
     val plan = setC(NodeHashJoin(Set("a"),
-      setC(NodeByLabelScan("a", labelName("A"), Set.empty), cardinalities, 10.0),
+      setC(NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone), cardinalities, 10.0),
       setC(Expand(
-        setC(NodeByLabelScan("b", labelName("B"), Set.empty), cardinalities, 5.0),
+        setC(NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone), cardinalities, 5.0),
         "b", SemanticDirection.OUTGOING, Seq.empty, "a", "r", ExpandAll), cardinalities, 15.0)
     ), cardinalities, 10.0)
 
@@ -68,7 +76,7 @@ class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSu
         Seq(hasLabels("a2", "A")),
         setC(Expand(
           setC(Expand(
-            setC(NodeByLabelScan("a1", labelName("A"), Set.empty), lazyCardinalities, 10.0),
+            setC(NodeByLabelScan("a1", labelName("A"), Set.empty, IndexOrderNone), lazyCardinalities, 10.0),
             "a1", SemanticDirection.OUTGOING, Seq.empty, "b", "r1", ExpandAll
           ), lazyCardinalities, 50.0),
           "b", SemanticDirection.INCOMING, Seq.empty, "a2", "r2", ExpandAll
@@ -80,11 +88,11 @@ class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSu
     val eagerPlan = setC(Projection(
       setC(NodeHashJoin(Set("b"),
         setC(Expand(
-          setC(NodeByLabelScan("a1", labelName("A"), Set.empty), eagerCardinalities, 10.0),
+          setC(NodeByLabelScan("a1", labelName("A"), Set.empty, IndexOrderNone), eagerCardinalities, 10.0),
           "a1", SemanticDirection.OUTGOING, Seq.empty, "b", "r1", ExpandAll
         ), eagerCardinalities, 50.0),
         setC(Expand(
-          setC(NodeByLabelScan("a2", labelName("A"), Set.empty), eagerCardinalities, 10.0),
+          setC(NodeByLabelScan("a2", labelName("A"), Set.empty, IndexOrderNone), eagerCardinalities, 10.0),
           "a2", SemanticDirection.OUTGOING, Seq.empty, "b", "r2", ExpandAll
         ), eagerCardinalities, 50.0)
       ), eagerCardinalities, 250.0), Map("b" -> varFor("b"))
@@ -113,7 +121,7 @@ class CardinalityCostModelTest extends CypherFunSuite with LogicalPlanningTestSu
   private def costFor(plan: LogicalPlan,
                       input: QueryGraphSolverInput = QueryGraphSolverInput.empty,
                       cardinalities: Cardinalities) = {
-    CardinalityCostModel(cypherCompilerConfig).apply(plan, input, cardinalities)
+    CardinalityCostModel(plan, input, cardinalities)
   }
 
 }

@@ -44,11 +44,15 @@ import org.neo4j.test.extension.SuppressOutputExtension;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
+<<<<<<< HEAD
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+>>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 @ExtendWith( SuppressOutputExtension.class )
@@ -65,7 +69,7 @@ class DiagnosticsReportCommandIT
     void shouldBeAbleToAttachToPidAndRunThreadDump() throws IOException
     {
         long pid = getPID();
-        assertThat( pid, is( not( 0 ) ) );
+        assertThat( pid ).isNotEqualTo( 0 );
 
         // Write config file
         Files.createFile( testDirectory.file( "neo4j.conf" ).toPath() );
@@ -96,23 +100,23 @@ class DiagnosticsReportCommandIT
         // Verify that we took a thread dump
         File reports = testDirectory.directory( "reports" );
         File[] files = reports.listFiles();
-        assertThat( files, notNullValue() );
-        assertThat( files.length, is( 1 ) );
+        assertThat( files ).isNotNull();
+        assertThat( files.length ).isEqualTo( 1 );
 
         Path report = files[0].toPath();
         final URI uri = URI.create( "jar:file:" + report.toUri().getRawPath() );
 
         try ( FileSystem fs = FileSystems.newFileSystem( uri, Collections.emptyMap() ) )
         {
-            String threadDump = new String( Files.readAllBytes( fs.getPath( "threaddump.txt" ) ) );
-            assertThat( threadDump, containsString( DiagnosticsReportCommandIT.class.getCanonicalName() ) );
+            String threadDump = Files.readString( fs.getPath( "threaddump.txt" ) );
+            assertThat( threadDump ).contains( DiagnosticsReportCommandIT.class.getCanonicalName() );
         }
     }
 
     private static long getPID()
     {
         String processName = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
-        if ( processName != null && processName.length() > 0 )
+        if ( processName != null && !processName.isEmpty() )
         {
             try
             {

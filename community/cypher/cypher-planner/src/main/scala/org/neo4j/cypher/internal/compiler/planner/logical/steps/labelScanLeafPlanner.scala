@@ -19,24 +19,31 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.neo4j.cypher.internal.compiler.planner.logical.{LeafPlanFromExpression, LeafPlanner, LeafPlansForVariable, LogicalPlanningContext}
-import org.neo4j.cypher.internal.ir.{QueryGraph, InterestingOrder}
+import org.neo4j.cypher.internal.ast.UsingScanHint
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlanFromExpression
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlanner
+import org.neo4j.cypher.internal.compiler.planner.logical.LeafPlansForVariable
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.compiler.planner.logical.ordering.ResultOrdering
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.HasLabels
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.ast.UsingScanHint
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, HasLabels, Variable}
 
 object labelScanLeafPlanner extends LeafPlanner with LeafPlanFromExpression {
 
   override def producePlanFor(e: Expression, qg: QueryGraph, interestingOrder: InterestingOrder, context: LogicalPlanningContext): Option[LeafPlansForVariable] = {
     e match {
-      case labelPredicate@HasLabels(Variable(varName), labels) =>
-        val id = varName
-        if (qg.patternNodes(id) && !qg.argumentIds(id)) {
+      case labelPredicate@HasLabels(variable@Variable(varName), labels) =>
+        if (qg.patternNodes(varName) && !qg.argumentIds(varName)) {
           val labelName = labels.head
           val hint = qg.hints.collectFirst {
-            case hint@UsingScanHint(Variable(`varName`), `labelName`) => hint
+            case hint@UsingScanHint(`variable`, `labelName`) => hint
           }
-          val plan = context.logicalPlanProducer.planNodeByLabelScan(id, labelName, Seq(labelPredicate), hint, qg.argumentIds, context)
+          val providedOrder = ResultOrdering.providedOrderForLabelScan(interestingOrder, variable)
+          val plan = context.logicalPlanProducer.planNodeByLabelScan(variable, labelName, Seq(labelPredicate), hint, qg.argumentIds, providedOrder, context)
           Some(LeafPlansForVariable(varName, Set(plan)))
         } else
           None

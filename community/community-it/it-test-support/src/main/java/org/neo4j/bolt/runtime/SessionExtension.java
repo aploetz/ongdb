@@ -27,11 +27,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
 import org.neo4j.bolt.BoltChannel;
+import org.neo4j.bolt.BoltProtocolVersion;
 import org.neo4j.bolt.dbapi.BoltGraphDatabaseManagementServiceSPI;
 import org.neo4j.bolt.dbapi.impl.BoltKernelDatabaseManagementServiceProvider;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachine;
@@ -76,7 +78,7 @@ public class SessionExtension implements BeforeEachCallback, AfterEachCallback
         this.builderFactory = builderFactory;
     }
 
-    public BoltStateMachine newMachine( long version, BoltChannel boltChannel )
+    public BoltStateMachine newMachine( BoltProtocolVersion version, BoltChannel boltChannel )
     {
         assertTestStarted();
         BoltStateMachine machine = boltFactory.newStateMachine( version, boltChannel );
@@ -135,6 +137,7 @@ public class SessionExtension implements BeforeEachCallback, AfterEachCallback
             if ( runningMachines != null )
             {
                 IOUtils.closeAll( runningMachines );
+                runningMachines.clear();
             }
         }
         catch ( Throwable e )
@@ -167,7 +170,7 @@ public class SessionExtension implements BeforeEachCallback, AfterEachCallback
     {
         var tmpFile = File.createTempFile( prefix, suffix, null );
         tmpFile.deleteOnExit();
-        try ( PrintWriter out = new PrintWriter( tmpFile ) )
+        try ( PrintWriter out = new PrintWriter( tmpFile, StandardCharsets.UTF_8 ) )
         {
             out.println( contents);
         }

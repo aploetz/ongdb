@@ -19,7 +19,11 @@
  */
 package org.neo4j.internal.kernel.api;
 
+<<<<<<< HEAD
 import org.neo4j.internal.schema.IndexOrder;
+=======
+import org.neo4j.storageengine.api.ReadTracer;
+>>>>>>> neo4j/4.1
 
 /**
  * Tracer of kernel API reads. The Kernel will callback the tracer methods on various key events
@@ -31,18 +35,20 @@ import org.neo4j.internal.schema.IndexOrder;
  *       add additional callback, extend some callbacks with more details, or
  *       differentiate callbacks (e.g. onNode) depending on the underlying read.
  */
-public interface KernelReadTracer
+public interface KernelReadTracer extends ReadTracer
 {
     /**
      * Called just before {@link NodeCursor#next()} returns true.
      *
      * @param nodeReference the node reference that will be available.
      */
+    @Override
     void onNode( long nodeReference );
 
     /**
      * Called on {@link Read#allNodesScan(NodeCursor)}.
      */
+    @Override
     void onAllNodesScan();
 
     /**
@@ -51,7 +57,12 @@ public interface KernelReadTracer
     void onLabelScan( int label );
 
     /**
-     * Called on {@link Read#nodeIndexSeek(IndexReadSession, NodeValueIndexCursor, IndexOrder, boolean, IndexQuery...)}.
+     * Called on {@link Read#relationshipTypeScan(int, RelationshipScanCursor)}
+     */
+    void onRelationshipTypeScan( int type );
+
+    /**
+     * Called on {@link Read#nodeIndexSeek(IndexReadSession, NodeValueIndexCursor, IndexQueryConstraints, IndexQuery...)}.
      */
     void onIndexSeek();
 
@@ -60,19 +71,14 @@ public interface KernelReadTracer
      *
      * @param relationshipReference the relationship reference that will be available.
      */
+    @Override
     void onRelationship( long relationshipReference );
-
-    /**
-     * Called just before {@link RelationshipGroupCursor#next()} returns true.
-     *
-     * @param type the relationship type that will be available.
-     */
-    void onRelationshipGroup( int type );
 
     /**
      * Called just before {@link PropertyCursor#next()} returns true.
      *
      * @param propertyKey the property key of the next property.
      */
+    @Override
     void onProperty( int propertyKey );
 }

@@ -42,13 +42,20 @@ public class DefaultPageCursorTracer implements PageCursorTracer
     private long evictionExceptions;
     private long flushes;
 
-    private PageCacheTracer pageCacheTracer = PageCacheTracer.NULL;
-    private DefaultPinEvent pinTracingEvent = new DefaultPinEvent();
+    private final DefaultPinEvent pinTracingEvent = new DefaultPinEvent();
+    private final PageCacheTracer pageCacheTracer;
+    private final String tag;
 
-    @Override
-    public void init( PageCacheTracer pageCacheTracer )
+    public DefaultPageCursorTracer( PageCacheTracer pageCacheTracer, String tag )
     {
         this.pageCacheTracer = pageCacheTracer;
+        this.tag = tag;
+    }
+
+    @Override
+    public String getTag()
+    {
+        return tag;
     }
 
     @Override
@@ -262,7 +269,6 @@ public class DefaultPageCursorTracer implements PageCursorTracer
         @Override
         public void done()
         {
-            flushes++;
         }
 
         @Override
@@ -274,6 +280,7 @@ public class DefaultPageCursorTracer implements PageCursorTracer
         @Override
         public void addPagesFlushed( int pageCount )
         {
+            flushes += pageCount;
         }
     };
 

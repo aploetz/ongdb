@@ -23,6 +23,7 @@ import java.io.IOException;
 
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.StoreHeader;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
@@ -61,25 +62,25 @@ public class ForcedSecondaryUnitRecordFormat<RECORD extends AbstractBaseRecord> 
     }
 
     @Override
-    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize ) throws IOException
+    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage ) throws IOException
     {
-        actual.read( record, cursor, mode, recordSize );
+        actual.read( record, cursor, mode, recordSize, recordsPerPage );
     }
 
     @Override
-    public void prepare( RECORD record, int recordSize, IdSequence idSequence )
+    public void prepare( RECORD record, int recordSize, IdSequence idSequence, PageCursorTracer cursorTracer )
     {
-        actual.prepare( record, recordSize, idSequence );
+        actual.prepare( record, recordSize, idSequence, cursorTracer );
         if ( !record.hasSecondaryUnitId() )
         {
-            record.setSecondaryUnitIdOnCreate( idSequence.nextId() );
+            record.setSecondaryUnitIdOnCreate( idSequence.nextId( cursorTracer ) );
         }
     }
 
     @Override
-    public void write( RECORD record, PageCursor cursor, int recordSize ) throws IOException
+    public void write( RECORD record, PageCursor cursor, int recordSize, int recordsPerPage ) throws IOException
     {
-        actual.write( record, cursor, recordSize );
+        actual.write( record, cursor, recordSize, recordsPerPage );
     }
 
     @Override
@@ -104,5 +105,11 @@ public class ForcedSecondaryUnitRecordFormat<RECORD extends AbstractBaseRecord> 
     public long getMaxId()
     {
         return actual.getMaxId();
+    }
+
+    @Override
+    public int getPageSize( int pageCachePageSize, int recordSize )
+    {
+        return actual.getPageSize( pageCachePageSize, recordSize );
     }
 }

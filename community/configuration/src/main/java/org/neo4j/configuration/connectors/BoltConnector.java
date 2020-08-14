@@ -25,7 +25,6 @@ import org.neo4j.annotations.api.PublicApi;
 import org.neo4j.annotations.service.ServiceProvider;
 import org.neo4j.configuration.Description;
 import org.neo4j.configuration.DocumentedDefaultValue;
-import org.neo4j.configuration.Internal;
 import org.neo4j.configuration.SettingsDeclaration;
 import org.neo4j.configuration.helpers.SocketAddress;
 import org.neo4j.graphdb.config.Setting;
@@ -47,11 +46,15 @@ import static org.neo4j.configuration.connectors.BoltConnector.EncryptionLevel.D
 public final class BoltConnector implements SettingsDeclaration
 {
     public static final int DEFAULT_PORT = 7687;
+
     public static final String NAME = "bolt";
+    public static final String INTERNAL_NAME = "bolt-internal";
 
     @Description( "Enable the bolt connector" )
     @DocumentedDefaultValue( "true" ) // Should document server defaults.
-    public static final Setting<Boolean> enabled = newBuilder( "dbms.connector.bolt.enabled", BOOL, false ).build();
+    public static final Setting<Boolean> enabled =
+            newBuilder( "dbms.connector.bolt.enabled", BOOL, false )
+                    .build();
 
     @Description( "Encryption level to require this connector to use" )
     public static final Setting<EncryptionLevel> encryption_level =
@@ -82,11 +85,6 @@ public final class BoltConnector implements SettingsDeclaration
     @Description( "The maximum time to wait for the thread pool to finish processing its pending jobs and shutdown" )
     public static final Setting<Duration> thread_pool_shutdown_wait_time =
             newBuilder( "dbms.connector.bolt.unsupported_thread_pool_shutdown_wait_time", DURATION, ofSeconds( 5 ) ).build();
-
-    @Description( "The queue size of the thread pool bound to this connector (-1 for unbounded, 0 for direct handoff, > 0 for bounded)" )
-    @Internal
-    public static final Setting<Integer> unsupported_thread_pool_queue_size =
-            newBuilder( "dbms.connector.bolt.unsupported_thread_pool_queue_size", INT, 0 ).build();
 
     public enum EncryptionLevel
     {

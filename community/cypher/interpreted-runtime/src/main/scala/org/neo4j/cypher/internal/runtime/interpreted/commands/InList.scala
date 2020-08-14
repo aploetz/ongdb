@@ -19,10 +19,11 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{Closure, Expression}
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, ListSupport}
+import org.neo4j.cypher.internal.runtime.ListSupport
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 import org.neo4j.values.virtual.ListValue
@@ -30,21 +31,20 @@ import org.neo4j.values.virtual.ListValue
 import scala.collection.Seq
 
 /**
-  * These classes solve List Predicates.
-  */
+ * These classes solve List Predicates.
+ */
 abstract class InList(collection: Expression,
                       innerVariableName: String,
                       innerVariableOffset: Int,
                       predicate: Predicate)
   extends Predicate
-  with ListSupport
-  with Closure {
+  with ListSupport {
 
   type CollectionPredicate = (AnyValue => Option[Boolean]) => Option[Boolean]
 
   def seqMethod(f: ListValue): CollectionPredicate
 
-  def isMatch(row: ExecutionContext, state: QueryState): Option[Boolean] = {
+  def isMatch(row: ReadableRow, state: QueryState): Option[Boolean] = {
     val list = collection(row, state)
 
     if (list eq Values.NO_VALUE) None

@@ -19,9 +19,14 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
-import org.neo4j.graphdb.{Label, RelationshipType}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
+import org.neo4j.graphdb.Label
+import org.neo4j.graphdb.RelationshipType
 
 abstract class RelationshipCountFromCountStoreTestBase[CONTEXT <: RuntimeContext](
                                                                                    edition: Edition[CONTEXT],
@@ -103,7 +108,7 @@ abstract class RelationshipCountFromCountStoreTestBase[CONTEXT <: RuntimeContext
       .filter("x > 0")
       .apply()
       .|.relationshipCountFromCountStore("x", Some("LabelA"), List(), None)
-      .nodeByLabelScan("n", "LabelA")
+      .nodeByLabelScan("n", "LabelA", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)

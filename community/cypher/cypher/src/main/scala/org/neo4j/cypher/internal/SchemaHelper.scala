@@ -26,6 +26,8 @@ import org.neo4j.kernel.api.query.SchemaIndexUsage
 import org.neo4j.kernel.impl.api.SchemaStateKey
 import org.neo4j.kernel.impl.query.TransactionalContext
 
+import scala.collection.JavaConverters.asScalaBufferConverter
+
 case class SchemaToken(x: Long) extends AnyVal
 
 class SchemaHelper(val queryCache: QueryCache[_,_,_]) {
@@ -48,7 +50,7 @@ class SchemaHelper(val queryCache: QueryCache[_,_,_]) {
                  executionPlan: ExecutableQuery,
                  version: CypherVersion,
                  tc: TransactionalContext): Boolean = {
-    val labelIds: Seq[Long] = extractPlanLabels(executionPlan, version, tc)
+    val labelIds: Array[Long] = executionPlan.labelIdsOfUsedIndexes
     if (labelIds.nonEmpty) {
       lockPlanLabels(tc, labelIds)
       val schemaTokenAfter = readSchemaToken(tc)
@@ -62,16 +64,10 @@ class SchemaHelper(val queryCache: QueryCache[_,_,_]) {
     true
   }
 
-  private def extractPlanLabels(plan: ExecutableQuery, version: CypherVersion, tc: TransactionalContext): Seq[Long] = {
-    import scala.collection.JavaConverters._
+  private def releasePlanLabels(tc: TransactionalContext, labelIds: Array[Long]): Unit =
+    tc.kernelTransaction.locks().releaseSharedLabelLock(labelIds:_*)
 
-    plan.compilerInfo.indexes().asScala.collect { case item: SchemaIndexUsage => item.getLabelId.toLong }
-  }
-
-  private def releasePlanLabels(tc: TransactionalContext, labelIds: Seq[Long]): Unit =
-    tc.kernelTransaction.locks().releaseSharedLabelLock(labelIds.toArray[Long]:_*)
-
-  private def lockPlanLabels(tc: TransactionalContext, labelIds: Seq[Long]): Unit =
-    tc.kernelTransaction.locks().acquireSharedLabelLock(labelIds.toArray[Long]:_*)
+  private def lockPlanLabels(tc: TransactionalContext, labelIds: Array[Long]): Unit =
+    tc.kernelTransaction.locks().acquireSharedLabelLock(labelIds:_*)
 
 }

@@ -20,13 +20,13 @@
 package org.neo4j.cypher.internal.logical.plans
 
 import org.neo4j.cypher.internal.ir.StrictnessMode
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
-import org.neo4j.cypher.internal.v4_0.expressions.LabelName
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.LabelName
 
 /**
-  * For each source row, the labels in 'labelNamed' are removed from the node 'idName'.
-  * The source row is produced.
-  */
+ * For each source row, the labels in 'labelNamed' are removed from the node 'idName'.
+ * The source row is produced.
+ */
 case class RemoveLabels(source: LogicalPlan, idName: String, labelNames: Seq[LabelName])(implicit idGen: IdGen) extends LogicalPlan(idGen) with UpdatingPlan {
 
   override def lhs: Option[LogicalPlan] = Some(source)

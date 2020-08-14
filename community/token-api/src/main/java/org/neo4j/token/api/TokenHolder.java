@@ -37,7 +37,7 @@ public interface TokenHolder
      * @param tokens The set of initial tokens to populate this token holder with.
      * @throws NonUniqueTokenException If there are duplicate names or ids amongst the given tokens.
      */
-    void setInitialTokens( List<NamedToken> tokens ) throws NonUniqueTokenException;
+    void setInitialTokens( List<NamedToken> tokens );
 
     /**
      * Add the given token to the internal token registry. The token maybe be either a public or an internal one.
@@ -45,7 +45,7 @@ public interface TokenHolder
      * @param token The token to add.
      * @throws NonUniqueTokenException if the token conflicts with an existing token on id, or on name.
      */
-    void addToken( NamedToken token ) throws NonUniqueTokenException;
+    void addToken( NamedToken token );
 
     /**
      * Get the id of the public token by the given name, or create a new id for the token if it does not have one already,
@@ -84,7 +84,7 @@ public interface TokenHolder
     /**
      * Resolve the ids of the given token {@code names} into the array for {@code ids}.
      * <p>
-     * Any tokens that don't already have an id will not be resolved, and the corrosponding entry in the {@code ids}
+     * Any tokens that don't already have an id will not be resolved, and the corresponding entry in the {@code ids}
      * array will be left untouched. If you wish for those unresolved id entries to end up with the {@link TokenConstants#NO_TOKEN}
      * value, you must first fill the array with that value before calling this method.
      * <p>

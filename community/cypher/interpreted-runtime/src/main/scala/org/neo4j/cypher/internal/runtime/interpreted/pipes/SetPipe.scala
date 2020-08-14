@@ -19,15 +19,14 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.attribution.Id
 
 case class SetPipe(src: Pipe, setOperation: SetOperation)
                   (val id: Id = Id.INVALID_ID) extends PipeWithSource(src) {
-  setOperation.registerOwningPipe(this)
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: Iterator[CypherRow],
+                                               state: QueryState): Iterator[CypherRow] = {
     input.map { row =>
       setOperation.set(row, state)
       row

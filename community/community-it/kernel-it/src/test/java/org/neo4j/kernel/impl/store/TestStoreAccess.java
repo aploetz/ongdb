@@ -30,6 +30,7 @@ import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.EphemeralNeo4jLayoutExtension;
 import org.neo4j.test.extension.Inject;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.Config.defaults;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.kernel.recovery.Recovery.isRecoveryRequired;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @EphemeralNeo4jLayoutExtension
 class TestStoreAccess
@@ -58,7 +60,7 @@ class TestStoreAccess
             assertTrue( isUnclean( snapshot ), "Store should be unclean" );
 
             PageCache pageCache = pageCacheExtension.getPageCache( snapshot );
-            new StoreAccess( snapshot, pageCache, databaseLayout, Config.defaults() ).initialize().close();
+            new StoreAccess( snapshot, pageCache, databaseLayout, Config.defaults(), PageCacheTracer.NULL ).initialize().close();
             assertTrue( isUnclean( snapshot ), "Store should be unclean" );
         }
     }
@@ -82,6 +84,6 @@ class TestStoreAccess
 
     private boolean isUnclean( FileSystemAbstraction fileSystem ) throws Exception
     {
-        return isRecoveryRequired( fileSystem, databaseLayout, defaults() );
+        return isRecoveryRequired( fileSystem, databaseLayout, defaults(), INSTANCE );
     }
 }

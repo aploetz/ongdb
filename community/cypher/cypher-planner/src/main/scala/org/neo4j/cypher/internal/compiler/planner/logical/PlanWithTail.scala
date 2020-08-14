@@ -21,7 +21,7 @@ package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.ir.SinglePlannerQuery
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.util.attribution.{Attributes, IdGen}
+import org.neo4j.cypher.internal.util.attribution.Attributes
 
 /*
 This class ties together disparate query graphs through their event horizons. It does so by using Apply,
@@ -43,7 +43,7 @@ case class PlanWithTail(planEventHorizon: EventHorizonPlanner = PlanEventHorizon
         val applyPlan = newContext.logicalPlanProducer.planTailApply(lhs, planWithUpdates, context)
 
         val applyContext = newContext.withUpdatedCardinalityInformation(applyPlan)
-        val projectedPlan = planEventHorizon(plannerQuery, applyPlan, applyContext)
+        val projectedPlan = planEventHorizon(plannerQuery, applyPlan, Some(in.interestingOrder), applyContext)
         val projectedContext = applyContext.withUpdatedCardinalityInformation(projectedPlan)
 
         this.apply(projectedPlan, plannerQuery, projectedContext)

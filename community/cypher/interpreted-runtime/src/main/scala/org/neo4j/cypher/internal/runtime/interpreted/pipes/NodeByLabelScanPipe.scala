@@ -19,20 +19,23 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.logical.plans.IndexOrder
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.LazyLabel.UNKNOWN
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 
-case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
-                              (val id: Id = Id.INVALID_ID) extends Pipe  {
+case class NodeByLabelScanPipe(ident: String, label: LazyLabel, indexOrder: IndexOrder)
+                              (val id: Id = Id.INVALID_ID) extends Pipe {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
 
     val id = label.getId(state.query)
     if (id != UNKNOWN) {
-        val nodes = state.query.getNodesByLabel(id)
-        val baseContext = state.newExecutionContext(executionContextFactory)
-        nodes.map(n => executionContextFactory.copyWith(baseContext, ident, n))
-    } else Iterator.empty
+      val nodes = state.query.getNodesByLabel(id, indexOrder)
+      val baseContext = state.newExecutionContextWithInitialContext(executionContextFactory)
+      nodes.map(n => executionContextFactory.copyWith(baseContext, ident, n))
+    } else {
+      Iterator.empty
+    }
   }
 }

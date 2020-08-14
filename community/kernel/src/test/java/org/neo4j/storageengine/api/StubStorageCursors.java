@@ -27,12 +27,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import org.neo4j.common.EntityType;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.constraints.IndexBackedConstraintDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.token.DelegatingTokenHolder;
 import org.neo4j.token.api.TokenHolder;
 import org.neo4j.values.storable.Value;
@@ -58,12 +61,6 @@ public class StubStorageCursors implements StorageReader
             ( name, internal ) -> toIntExact( nextTokenId.getAndIncrement() ), TYPE_PROPERTY_KEY );
 
     private final Map<Long,NodeData> nodeData = new HashMap<>();
-    private final Map<String,Long> labelByName = new HashMap<>();
-    private final Map<Long,String> labelById = new HashMap<>();
-    private final Map<String,Long> propertyKeyByName = new HashMap<>();
-    private final Map<Long,String> propertyKeyById = new HashMap<>();
-    private final Map<String,Long> relationshipTypeByName = new HashMap<>();
-    private final Map<Long,String> relationshipTypeById = new HashMap<>();
     private final Map<Long,PropertyData> propertyData = new HashMap<>();
     private final Map<Long,RelationshipData> relationshipData = new HashMap<>();
 
@@ -233,19 +230,19 @@ public class StubStorageCursors implements StorageReader
     }
 
     @Override
-    public long countsForNode( int labelId )
+    public long countsForNode( int labelId, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
 
     @Override
-    public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
+    public long countsForRelationship( int startLabelId, int typeId, int endLabelId, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
 
     @Override
-    public long nodesGetCount()
+    public long nodesGetCount( PageCursorTracer cursorTracer )
     {
         return nodeData.size();
     }
@@ -253,7 +250,7 @@ public class StubStorageCursors implements StorageReader
     @Override
     public long relationshipsGetCount()
     {
-        throw new UnsupportedOperationException( "Not implemented yet" );
+        return relationshipData.size();
     }
 
     @Override
@@ -275,13 +272,13 @@ public class StubStorageCursors implements StorageReader
     }
 
     @Override
-    public boolean nodeExists( long id )
+    public boolean nodeExists( long id, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
 
     @Override
-    public boolean relationshipExists( long id )
+    public boolean relationshipExists( long id, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
@@ -305,37 +302,37 @@ public class StubStorageCursors implements StorageReader
     }
 
     @Override
-    public StorageNodeCursor allocateNodeCursor()
+    public StorageNodeCursor allocateNodeCursor( PageCursorTracer cursorTracer )
     {
         return new StubStorageNodeCursor();
     }
 
     @Override
-    public StoragePropertyCursor allocatePropertyCursor()
+    public StoragePropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         return new StubStoragePropertyCursor();
     }
 
     @Override
-    public StorageRelationshipGroupCursor allocateRelationshipGroupCursor()
+    public StorageRelationshipTraversalCursor allocateRelationshipTraversalCursor( PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
 
     @Override
-    public StorageRelationshipTraversalCursor allocateRelationshipTraversalCursor()
-    {
-        throw new UnsupportedOperationException( "Not implemented yet" );
-    }
-
-    @Override
-    public StorageRelationshipScanCursor allocateRelationshipScanCursor()
+    public StorageRelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         return new StubStorageRelationshipScanCursor();
     }
 
     @Override
     public StorageSchemaReader schemaSnapshot()
+    {
+        throw new UnsupportedOperationException( "Not implemented yet" );
+    }
+
+    @Override
+    public TokenNameLookup tokenNameLookup()
     {
         throw new UnsupportedOperationException( "Not implemented yet" );
     }
@@ -445,7 +442,7 @@ public class StubStorageCursors implements StorageReader
         @Override
         public boolean scanBatch( AllNodeScan scan, int sizeHint )
         {
-            throw new UnsupportedOperationException(  );
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -473,13 +470,25 @@ public class StubStorageCursors implements StorageReader
         }
 
         @Override
-        public long relationshipGroupReference()
+        public void relationships( StorageRelationshipTraversalCursor traversalCursor, RelationshipSelection selection )
         {
-            return current.firstRelationship;
+            throw new UnsupportedOperationException( "Not implemented yet" );
         }
 
         @Override
-        public long allRelationshipsReference()
+        public int[] relationshipTypes()
+        {
+            throw new UnsupportedOperationException( "Not implemented yet" );
+        }
+
+        @Override
+        public void degrees( RelationshipSelection selection, Degrees.Mutator mutator, boolean allowFastDegreeLookup )
+        {
+            throw new UnsupportedOperationException( "Not implemented yet" );
+        }
+
+        @Override
+        public long relationshipsReference()
         {
             return current.firstRelationship;
         }
@@ -533,9 +542,14 @@ public class StubStorageCursors implements StorageReader
         }
 
         @Override
-        public boolean isDense()
+        public boolean supportsFastDegreeLookup()
         {
             return false;
+        }
+
+        @Override
+        public void setForceLoad()
+        {
         }
 
         @Override
@@ -574,7 +588,7 @@ public class StubStorageCursors implements StorageReader
         @Override
         public boolean scanBatch( AllRelationshipsScan scan, int sizeHint )
         {
-            throw new UnsupportedOperationException(  );
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -648,6 +662,11 @@ public class StubStorageCursors implements StorageReader
         }
 
         @Override
+        public void setForceLoad()
+        {
+        }
+
+        @Override
         public void close()
         {
             reset();
@@ -702,6 +721,11 @@ public class StubStorageCursors implements StorageReader
 
         @Override
         public void reset()
+        {
+        }
+
+        @Override
+        public void setForceLoad()
         {
         }
 

@@ -21,11 +21,14 @@ package org.neo4j.kernel;
 
 import org.junit.jupiter.api.Test;
 
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
+
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class DiagnosticsLoggingTest
 {
@@ -37,25 +40,22 @@ class DiagnosticsLoggingTest
         DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder()
                 .setInternalLogProvider( logProvider )
                 .impermanent()
-                .setConfig( GraphDatabaseSettings.dump_configuration, true )
+                .setConfig( GraphDatabaseInternalSettings.dump_configuration, true )
                 .setConfig( GraphDatabaseSettings.pagecache_memory, "4M" )
                 .build();
         try
         {
             // THEN we should have logged
-            logProvider.rawMessageMatcher().assertContains( "Network information" );
-            logProvider.rawMessageMatcher().assertContains( "Disk space on partition" );
-            logProvider.rawMessageMatcher().assertContains( "Local timezone" );
-            // page cache info
-            logProvider.rawMessageMatcher().assertContains( "Page cache: 4M" );
+            assertThat( logProvider ).containsMessages( "Network information", "Disk space on partition",
+                                                        "Local timezone",
+                                                        "Page cache: 4M" );
             // neostore records
             for ( MetaDataStore.Position position : MetaDataStore.Position.values() )
             {
-                logProvider.rawMessageMatcher().assertContains( position.name() );
+                assertThat( logProvider ).containsMessages( position.name() );
             }
             // transaction log info
-            logProvider.rawMessageMatcher().assertContains( "Transaction log" );
-            logProvider.rawMessageMatcher().assertContains( "TimeZone version: " );
+            assertThat( logProvider ).containsMessages( "Transaction log", "TimeZone version: " );
         }
         finally
         {

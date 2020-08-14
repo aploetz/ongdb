@@ -19,26 +19,28 @@
  */
 package org.neo4j.kernel.impl.newapi;
 
-
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
 import org.neo4j.internal.helpers.collection.Iterables;
-import org.neo4j.internal.kernel.api.LabelSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.internal.kernel.api.security.AuthSubject;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.kernel.api.security.TestAccessMode;
+<<<<<<< HEAD
+=======
+import org.neo4j.internal.schema.IndexOrder;
+>>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.values.storable.ValueGroup;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,7 +59,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             nodeId = tx.dataWrite().nodeCreate();
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -86,14 +88,14 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
             labelId = tx.token().labelGetOrCreateForName( labelName );
             tx.dataWrite().nodeAddLabel( nodeId, labelId );
 
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
 
-                LabelSet labels = node.labels();
-                assertEquals( 1, labels.numberOfLabels() );
-                assertEquals( labelId, labels.label( 0 ) );
+                TokenSet labels = node.labels();
+                assertEquals( 1, labels.numberOfTokens() );
+                assertEquals( labelId, labels.token( 0 ) );
                 assertTrue( node.hasLabel( labelId ) );
                 assertFalse( node.hasLabel( labelId + 1 ) );
                 assertFalse( node.next(), "should only find one node" );
@@ -103,9 +105,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getLabels(),
-                    equalTo( Iterables.iterable( label( labelName ) ) ) );
+            assertThat( tx.getNodeById( nodeId ).getLabels() ).isEqualTo( Iterables.iterable( label( labelName ) ) );
         }
     }
 
@@ -131,9 +131,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getLabels(),
-                    containsInAnyOrder( label( toRetainName ), label( toDeleteName ) ) );
+            assertThat( tx.getNodeById( nodeId ).getLabels() ).contains( label( toRetainName ), label( toDeleteName ) );
         }
 
         try ( KernelTransaction tx = beginTransaction() )
@@ -146,7 +144,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
             tx.dataWrite().nodeAddLabel( nodeId, toRegret );
             tx.dataWrite().nodeRemoveLabel( nodeId, toRegret );
 
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -163,9 +161,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getLabels(),
-                    containsInAnyOrder( label( toRetainName ), label( toAddName ) ) );
+            assertThat( tx.getNodeById( nodeId ).getLabels() ).contains( label( toRetainName ), label( toAddName ) );
         }
     }
 
@@ -182,7 +178,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             assertTrue( tx.dataWrite().nodeDelete( nodeId ) );
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertFalse( node.next() );
@@ -221,11 +217,11 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
             nodeId = tx.dataWrite().nodeCreate();
             int prop1 = tx.token().propertyKeyGetOrCreateForName( propKey1 );
             int prop2 = tx.token().propertyKeyGetOrCreateForName( propKey2 );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, prop1, stringValue( "hello" ) ), NO_VALUE );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, prop2, stringValue( "world" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, prop1, stringValue( "hello" ) ) );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, prop2, stringValue( "world" ) ) );
 
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -263,10 +259,10 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             int propToken = tx.token().propertyKeyGetOrCreateForName( propKey );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ) );
 
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -285,8 +281,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getProperty( propKey ), equalTo( "hello" ) );
+            assertThat( tx.getNodeById( nodeId ).getProperty( propKey ) ).isEqualTo( "hello" );
         }
     }
 
@@ -303,7 +298,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         {
             nodeId = tx.dataWrite().nodeCreate();
             propToken1 = tx.token().propertyKeyGetOrCreateForName( propKey1 );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken1, stringValue( "hello" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken1, stringValue( "hello" ) ) );
             tx.commit();
         }
 
@@ -311,10 +306,10 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             propToken2 = tx.token().propertyKeyGetOrCreateForName( propKey2 );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken2, stringValue( "world" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken2, stringValue( "world" ) ) );
 
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -339,10 +334,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getProperty( propKey1 ), equalTo( "hello" ) );
-            assertThat(
-                    tx.getNodeById( nodeId ).getProperty( propKey2 ), equalTo( "world" ) );
+            assertThat( tx.getNodeById( nodeId ).getProperty( propKey1 ) ).isEqualTo( "hello" );
+            assertThat( tx.getNodeById( nodeId ).getProperty( propKey2 ) ).isEqualTo( "world" );
         }
     }
 
@@ -357,7 +350,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         {
             nodeId = tx.dataWrite().nodeCreate();
             propToken = tx.token().propertyKeyGetOrCreateForName( propKey );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ) );
             tx.commit();
         }
 
@@ -366,8 +359,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         {
             assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "world" ) ),
                     stringValue( "hello" ) );
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -387,8 +380,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getProperty( propKey ), equalTo( "world" ) );
+            assertThat( tx.getNodeById( nodeId ).getProperty( propKey ) ).isEqualTo( "world" );
         }
     }
 
@@ -403,7 +395,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         {
             nodeId = tx.dataWrite().nodeCreate();
             propToken = tx.token().propertyKeyGetOrCreateForName( propKey );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ) );
             tx.commit();
         }
 
@@ -411,8 +403,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             assertEquals( tx.dataWrite().nodeRemoveProperty( nodeId, propToken ), stringValue( "hello" ) );
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -443,7 +435,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         {
             nodeId = tx.dataWrite().nodeCreate();
             propToken = tx.token().propertyKeyGetOrCreateForName( propKey );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ), NO_VALUE );
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "hello" ) ) );
             tx.commit();
         }
 
@@ -451,9 +443,9 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             assertEquals( tx.dataWrite().nodeRemoveProperty( nodeId, propToken ), stringValue( "hello" ) );
-            assertEquals( tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "world" ) ), NO_VALUE );
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor();
-                  PropertyCursor property = tx.cursors().allocatePropertyCursor() )
+            assertEquals( NO_VALUE, tx.dataWrite().nodeSetProperty( nodeId, propToken, stringValue( "world" ) ) );
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor property = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( nodeId, node );
                 assertTrue( node.next(), "should access node" );
@@ -472,8 +464,7 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
 
         try ( org.neo4j.graphdb.Transaction tx = graphDb.beginTx() )
         {
-            assertThat(
-                    tx.getNodeById( nodeId ).getProperty( propKey ), equalTo( "world" ) );
+            assertThat( tx.getNodeById( nodeId ).getProperty( propKey ) ).isEqualTo( "world" );
         }
     }
 
@@ -544,11 +535,11 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         Node node = createNode( "label" );
 
         try ( KernelTransaction tx = beginTransaction();
-              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
         {
             // when
             tx.dataWrite().nodeDelete( node.node );
-            tx.dataRead().nodeLabelScan( node.labels[0], cursor );
+            tx.dataRead().nodeLabelScan( node.labels[0], cursor, IndexOrder.NONE );
 
             // then
             assertFalse( cursor.next() );
@@ -562,11 +553,11 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         Node node = createNode( "label" );
 
         try ( KernelTransaction tx = beginTransaction();
-              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
         {
             // when
             tx.dataWrite().nodeRemoveLabel( node.node, node.labels[0] );
-            tx.dataRead().nodeLabelScan( node.labels[0], cursor );
+            tx.dataRead().nodeLabelScan( node.labels[0], cursor, IndexOrder.NONE );
 
             // then
             assertFalse( cursor.next() );
@@ -577,15 +568,15 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
     void shouldFindUpdatedNodeInInLabelScan() throws Exception
     {
         // Given
-        Node node = createNode(  );
+        Node node = createNode();
 
         try ( KernelTransaction tx = beginTransaction();
-              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
         {
             // when
             int label = tx.tokenWrite().labelGetOrCreateForName( "label" );
             tx.dataWrite().nodeAddLabel( node.node, label );
-            tx.dataRead().nodeLabelScan( label, cursor );
+            tx.dataRead().nodeLabelScan( label, cursor, IndexOrder.NONE );
 
             // then
             assertTrue( cursor.next() );
@@ -601,12 +592,12 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         Node node2 = createNode();
 
         try ( KernelTransaction tx = beginTransaction();
-              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+              NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
         {
             // when
             tx.dataWrite().nodeRemoveLabel( node1.node, node1.labels[0] );
             tx.dataWrite().nodeAddLabel( node2.node, node1.labels[0] );
-            tx.dataRead().nodeLabelScan( node1.labels[0], cursor );
+            tx.dataRead().nodeLabelScan( node1.labels[0], cursor, IndexOrder.NONE );
 
             // then
             assertTrue( cursor.next() );
@@ -792,8 +783,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         // Then
         try ( KernelTransaction tx = beginTransaction() )
         {
-            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor();
-                  PropertyCursor props = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor props = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( node, cursor );
                 assertTrue( cursor.next() );
@@ -817,8 +808,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         try ( KernelTransaction tx = beginTransaction() )
         {
             long node = tx.dataWrite().nodeCreate();
-            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor();
-                  PropertyCursor props = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor props = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( node, cursor );
                 assertTrue( cursor.next() );
@@ -851,8 +842,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         // Then
         try ( KernelTransaction tx = beginTransaction() )
         {
-            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor();
-                  PropertyCursor props = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor cursor = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor props = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( node, cursor );
                 assertTrue( cursor.next() );
@@ -882,8 +873,8 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
         // Then
         try ( KernelTransaction tx = beginTransaction() )
         {
-            try ( NodeCursor nodes = tx.cursors().allocateNodeCursor();
-                  PropertyCursor properties = tx.cursors().allocatePropertyCursor() )
+            try ( NodeCursor nodes = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() );
+                  PropertyCursor properties = tx.cursors().allocatePropertyCursor( tx.pageCursorTracer(), tx.memoryTracker() ) )
             {
                 tx.dataRead().singleNode( node, nodes );
                 assertTrue( nodes.next() );
@@ -893,22 +884,22 @@ public abstract class NodeTransactionStateTestBase<G extends KernelAPIWriteTestS
                 nodes.properties( properties );
 
                 assertTrue( properties.next() );
-                assertThat( properties.propertyType(), equalTo( ValueGroup.TEXT ) );
+                assertThat( properties.propertyType() ).isEqualTo( ValueGroup.TEXT );
             }
         }
     }
 
-    private void assertLabels( LabelSet labels, int... expected )
+    private void assertLabels( TokenSet labels, int... expected )
     {
-        assertEquals( expected.length, labels.numberOfLabels() );
+        assertEquals( expected.length, labels.numberOfTokens() );
         Arrays.sort( expected );
-        int[] labelArray = new int[labels.numberOfLabels()];
-        for ( int i = 0; i < labels.numberOfLabels(); i++ )
+        int[] labelArray = new int[labels.numberOfTokens()];
+        for ( int i = 0; i < labels.numberOfTokens(); i++ )
         {
-            labelArray[i] = labels.label( i );
+            labelArray[i] = labels.token( i );
         }
         Arrays.sort( labelArray );
-        assertTrue( Arrays.equals( expected, labelArray ), "labels match expected" );
+        assertArrayEquals( expected, labelArray, "labels match expected" );
     }
 
     public Node createNode( String... labels ) throws Exception

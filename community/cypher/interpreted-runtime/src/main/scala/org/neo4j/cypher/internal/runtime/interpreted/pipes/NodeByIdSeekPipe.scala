@@ -19,52 +19,46 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsList
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsList}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.values.virtual.{ListValue, VirtualValues}
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.VirtualValues
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 sealed trait SeekArgs {
-  def expressions(ctx: ExecutionContext, state: QueryState): ListValue
-  def registerOwningPipe(pipe: Pipe): Unit
+  def expressions(ctx: ReadableRow, state: QueryState): ListValue
 }
 
 object SeekArgs {
   object empty extends SeekArgs {
-    def expressions(ctx: ExecutionContext, state: QueryState):  ListValue = VirtualValues.EMPTY_LIST
-
-    override def registerOwningPipe(pipe: Pipe){}
+    def expressions(ctx: ReadableRow, state: QueryState):  ListValue = VirtualValues.EMPTY_LIST
   }
 }
 
 case class SingleSeekArg(expr: Expression) extends SeekArgs {
-  def expressions(ctx: ExecutionContext, state: QueryState): ListValue =
+  def expressions(ctx: ReadableRow, state: QueryState): ListValue =
     expr(ctx, state) match {
       case value => VirtualValues.list(value)
     }
-
-  override def registerOwningPipe(pipe: Pipe): Unit = expr.registerOwningPipe(pipe)
 }
 
 case class ManySeekArgs(coll: Expression) extends SeekArgs {
-  def expressions(ctx: ExecutionContext, state: QueryState): ListValue = {
+  def expressions(ctx: ReadableRow, state: QueryState): ListValue = {
     coll(ctx, state) match {
       case IsList(values) => values
     }
   }
-
-  override def registerOwningPipe(pipe: Pipe): Unit = coll.registerOwningPipe(pipe)
 }
 
 case class NodeByIdSeekPipe(ident: String, nodeIdsExpr: SeekArgs)
                            (val id: Id = Id.INVALID_ID) extends Pipe {
 
-  nodeIdsExpr.registerOwningPipe(this)
-
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
-    val ctx = state.newExecutionContext(executionContextFactory)
+  protected def internalCreateResults(state: QueryState): Iterator[CypherRow] = {
+    val ctx = state.newExecutionContextWithInitialContext(executionContextFactory)
     val nodeIds = nodeIdsExpr.expressions(ctx, state)
     new NodeIdSeekIterator(
       ident,

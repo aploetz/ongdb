@@ -23,14 +23,19 @@ import org.neo4j.storageengine.api.StoragePropertyCursor;
 
 class FullAccessPropertyCursor extends DefaultPropertyCursor
 {
+<<<<<<< HEAD
     FullAccessPropertyCursor( CursorPool<DefaultPropertyCursor> pool, StoragePropertyCursor storeCursor, FullAccessNodeCursor nodeCursor,
                               FullAccessRelationshipScanCursor relCursor )
+=======
+    FullAccessPropertyCursor( CursorPool<DefaultPropertyCursor> pool, StoragePropertyCursor storeCursor,
+                              FullAccessNodeCursor nodeCursor, FullAccessRelationshipScanCursor relCursor )
+>>>>>>> neo4j/4.1
     {
         super( pool, storeCursor, nodeCursor, relCursor );
     }
 
     @Override
-    boolean allowed()
+    final boolean allowed()
     {
         return true;
     }

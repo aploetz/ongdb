@@ -19,34 +19,49 @@
  */
 package org.neo4j.cypher.internal
 
+import java.lang
 import java.time.Clock
+<<<<<<< HEAD
 import java.{lang, util}
+=======
+>>>>>>> neo4j/4.1
 
 import org.neo4j.cypher.CypherExecutionMode
-import org.neo4j.cypher.internal.ExecutionEngine.{JitCompilation, NEVER_COMPILE, QueryCompilation}
 import org.neo4j.cypher.internal.QueryCache.ParameterTypeMap
+import org.neo4j.cypher.internal.expressions.functions.FunctionInfo
 import org.neo4j.cypher.internal.planning.CypherCacheMonitor
-import org.neo4j.cypher.internal.runtime.{InputDataStream, NoInput}
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.NoInput
 import org.neo4j.cypher.internal.tracing.CompilationTracer
 import org.neo4j.cypher.internal.tracing.CompilationTracer.QueryCompilationEvent
-import org.neo4j.cypher.internal.v4_0.expressions.functions.FunctionInfo
 import org.neo4j.exceptions.ParameterNotFoundException
 import org.neo4j.internal.helpers.collection.Pair
 import org.neo4j.internal.kernel.api.security.AccessMode
 import org.neo4j.kernel.GraphDatabaseQueryService
+<<<<<<< HEAD
 import org.neo4j.kernel.impl.query.{FunctionInformation, QueryExecution, QueryExecutionMonitor, QuerySubscriber, TransactionalContext}
+=======
+import org.neo4j.kernel.impl.query.FunctionInformation
+import org.neo4j.kernel.impl.query.QueryExecution
+import org.neo4j.kernel.impl.query.QueryExecutionMonitor
+import org.neo4j.kernel.impl.query.QuerySubscriber
+import org.neo4j.kernel.impl.query.TransactionalContext
+>>>>>>> neo4j/4.1
 import org.neo4j.logging.LogProvider
 import org.neo4j.monitoring.Monitors
 import org.neo4j.values.virtual.MapValue
 
-import scala.collection.JavaConverters._
-
-trait StringCacheMonitor extends CypherCacheMonitor[Pair[String, ParameterTypeMap]]
+import scala.collection.JavaConverters.seqAsJavaListConverter
 
 /**
-  * This class constructs and initializes both the cypher compilers and runtimes, which are very expensive
-  * operation. Please make sure this will be constructed only once and properly reused.
-  */
+ * See comment in MonitoringCacheTracer for justification of the existence of this type.
+ */
+trait ExecutionEngineQueryCacheMonitor extends CypherCacheMonitor[Pair[String, ParameterTypeMap]]
+
+/**
+ * This class constructs and initializes both the cypher compilers and runtimes, which are very expensive
+ * operation. Please make sure this will be constructed only once and properly reused.
+ */
 class ExecutionEngine(val queryService: GraphDatabaseQueryService,
                       val kernelMonitors: Monitors,
                       val tracer: CompilationTracer,
@@ -59,7 +74,11 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
   require(queryService != null, "Can't work with a null graph database")
 
   // HELPER OBJECTS
+<<<<<<< HEAD
   private val queryExecutionMonitor = kernelMonitors.newMonitor(classOf[QueryExecutionMonitor])
+=======
+  private val defaultQueryExecutionMonitor = kernelMonitors.newMonitor(classOf[QueryExecutionMonitor])
+>>>>>>> neo4j/4.1
 
   private val preParser = new PreParser(config.version,
     config.planner,
@@ -75,71 +94,57 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
 
   // Log on stale query discard from query cache
   private val log = logProvider.getLog( getClass )
-  kernelMonitors.addMonitorListener( new StringCacheMonitor {
-    override def cacheDiscard(ignored: Pair[String, ParameterTypeMap], query: String, secondsSinceReplan: Int) {
-      log.info(s"Discarded stale query from the query cache after $secondsSinceReplan seconds: $query")
+  kernelMonitors.addMonitorListener( new ExecutionEngineQueryCacheMonitor {
+    override def cacheDiscard(ignored: Pair[String, ParameterTypeMap], query: String, secondsSinceReplan: Int, maybeReason: Option[String]) {
+      log.info(s"Discarded stale query from the query cache after $secondsSinceReplan seconds${maybeReason.fold("")(r => s". Reason: $r")}. Query: $query")
     }
   })
 
   private val planStalenessCaller =
-    new PlanStalenessCaller[ExecutableQuery](clock,
-                                             config.statsDivergenceCalculator,
-                                             lastCommittedTxIdProvider,
-                                             planReusabilitiy)
+    new DefaultPlanStalenessCaller[ExecutableQuery](clock,
+      config.statsDivergenceCalculator,
+      lastCommittedTxIdProvider,
+      planReusabilitiy,
+      log)
 
-  private val toStringCacheTracer: CacheTracer[Pair[AnyRef, ParameterTypeMap]] = new CacheTracer[Pair[AnyRef, ParameterTypeMap]] {
-    private def str(p: Pair[AnyRef, ParameterTypeMap]): Pair[String, ParameterTypeMap] =
-      Pair.of(p.first().toString, p.other())
+  private val queryCache: QueryCache[String, Pair[String, ParameterTypeMap], ExecutableQuery] =
+    new QueryCache[String, Pair[String, ParameterTypeMap], ExecutableQuery](config.queryCacheSize, planStalenessCaller, cacheTracer)
 
-    override def queryCacheHit(queryKey: Pair[AnyRef, ParameterTypeMap], metaData: String): Unit =
-      cacheTracer.queryCacheHit(str(queryKey), metaData)
-
-    override def queryCacheMiss(queryKey: Pair[AnyRef, ParameterTypeMap], metaData: String): Unit =
-      cacheTracer.queryCacheMiss(str(queryKey), metaData)
-
-    override def queryCacheRecompile(queryKey: Pair[AnyRef, ParameterTypeMap], metaData: String): Unit =
-      cacheTracer.queryCacheRecompile(str(queryKey), metaData)
-
-    override def queryCacheStale(queryKey: Pair[AnyRef, ParameterTypeMap], secondsSincePlan: Int, metaData: String): Unit =
-      cacheTracer.queryCacheStale(str(queryKey), secondsSincePlan, metaData)
-
-    override def queryCacheFlush(sizeOfCacheBeforeFlush: Long): Unit =
-      cacheTracer.queryCacheFlush(sizeOfCacheBeforeFlush)
-  }
-
-  private val queryCache: QueryCache[AnyRef, Pair[AnyRef, ParameterTypeMap], ExecutableQuery] =
-    new QueryCache[AnyRef, Pair[AnyRef, ParameterTypeMap], ExecutableQuery](config.queryCacheSize, planStalenessCaller, toStringCacheTracer)
-
-  private val masterCompiler: MasterCompiler = new MasterCompiler(config, compilerLibrary)
+  private val masterCompiler: MasterCompiler = new MasterCompiler(compilerLibrary)
 
   private val schemaHelper = new SchemaHelper(queryCache)
 
   // ACTUAL FUNCTIONALITY
 
   /**
-    * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
-    * This method assumes this is the only query running within the transaction, and therefor will register transaction closing
-    * with the TaskCloser
-    *
-    * @param query the query to execute
-    * @param params the parameters of the query
-    * @param context the transactional context in which to run the query
-    * @param profile if `true` run with profiling enabled
-    * @param prePopulate if `true` pre populate all results
-    * @param subscriber the subscriber where results will be streamed
-    * @return a `QueryExecution` that controls the demand to the subscriber
-    */
+   * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
+   * This method assumes this is the only query running within the transaction, and therefor will register transaction closing
+   * with the TaskCloser
+   *
+   * @param query the query to execute
+   * @param params the parameters of the query
+   * @param context the transactional context in which to run the query
+   * @param profile if `true` run with profiling enabled
+   * @param prePopulate if `true` pre populate all results
+   * @param subscriber the subscriber where results will be streamed
+   * @return a `QueryExecution` that controls the demand to the subscriber
+   */
   def execute(query: String,
               params: MapValue,
               context: TransactionalContext,
               profile: Boolean,
               prePopulate: Boolean,
               subscriber: QuerySubscriber): QueryExecution = {
+<<<<<<< HEAD
     queryExecutionMonitor.start( context.executingQuery() )
+=======
+    defaultQueryExecutionMonitor.startProcessing(context.executingQuery())
+>>>>>>> neo4j/4.1
     executeSubQuery(query, params, context, isOutermostQuery = true, profile, prePopulate, subscriber)
   }
 
   /**
+<<<<<<< HEAD
     * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`
     * Note. This method will monitor the query start after it has been parsed. The caller is responsible for monitoring any query failing before this point.
     *
@@ -150,20 +155,41 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
     * @param subscriber  the subscriber where results will be streamed
     * @return a `QueryExecution` that controls the demand to the subscriber
     */
+=======
+   * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`
+   * Note. This method will monitor the query start after it has been parsed. The caller is responsible for monitoring any query failing before this point.
+   *
+   * @param query       the query to execute
+   * @param params      the parameters of the query
+   * @param context     the context in which to run the query
+   * @param prePopulate if `true` pre populate all results
+   * @param subscriber  the subscriber where results will be streamed
+   * @return a `QueryExecution` that controls the demand to the subscriber
+   */
+>>>>>>> neo4j/4.1
   def execute(query: FullyParsedQuery,
               params: MapValue,
               context: TransactionalContext,
               prePopulate: Boolean,
               input: InputDataStream,
+              queryMonitor: QueryExecutionMonitor,
               subscriber: QuerySubscriber): QueryExecution = {
+<<<<<<< HEAD
     queryExecutionMonitor.start( context.executingQuery() )
     val queryTracer = tracer.compileQuery(query.description)
     closing(context, queryTracer) {
       doExecute(query, params, context, isOutermostQuery = true, prePopulate, input, queryTracer, subscriber)
+=======
+    queryMonitor.startProcessing(context.executingQuery())
+    val queryTracer = tracer.compileQuery(query.description)
+    closing(context, queryTracer) {
+      doExecute(query, params, context, isOutermostQuery = true, prePopulate, input, queryMonitor, queryTracer, subscriber)
+>>>>>>> neo4j/4.1
     }
   }
 
   /**
+<<<<<<< HEAD
     * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
     * This method assumes the query is running as one of many queries within a single transaction and therefor needs
     * to be told using the shouldCloseTransaction field if the TaskCloser needs to have a transaction close registered.
@@ -177,6 +203,21 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
     * @param subscriber the subscriber where results will be streamed
     * @return a `QueryExecution` that controls the demand to the subscriber
     */
+=======
+   * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
+   * This method assumes the query is running as one of many queries within a single transaction and therefor needs
+   * to be told using the shouldCloseTransaction field if the TaskCloser needs to have a transaction close registered.
+   *
+   * @param query the query to execute
+   * @param params the parameters of the query
+   * @param context the transactional context in which to run the query
+   * @param isOutermostQuery provide `true` if this is the outer-most query and should close the transaction when finished or error
+   * @param profile if `true` run with profiling enabled
+   * @param prePopulate if `true` pre populate all results
+   * @param subscriber the subscriber where results will be streamed
+   * @return a `QueryExecution` that controls the demand to the subscriber
+   */
+>>>>>>> neo4j/4.1
   def executeSubQuery(query: String,
                       params: MapValue,
                       context: TransactionalContext,
@@ -186,8 +227,14 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
                       subscriber: QuerySubscriber): QueryExecution = {
     val queryTracer = tracer.compileQuery(query)
     closing(context, queryTracer) {
+<<<<<<< HEAD
       val preParsedQuery = preParser.preParseQuery(query, profile)
       doExecute(preParsedQuery, params, context, isOutermostQuery, prePopulate, NoInput, queryTracer, subscriber)
+=======
+      val couldContainSensitiveFields = isOutermostQuery && compilerLibrary.supportsAdministrativeCommands()
+      val preParsedQuery = preParser.preParseQuery(query, profile, couldContainSensitiveFields)
+      doExecute(preParsedQuery, params, context, isOutermostQuery, prePopulate, NoInput, defaultQueryExecutionMonitor, queryTracer, subscriber)
+>>>>>>> neo4j/4.1
     }
   }
 
@@ -204,9 +251,11 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
                         isOutermostQuery: Boolean,
                         prePopulate: Boolean,
                         input: InputDataStream,
+                        queryMonitor: QueryExecutionMonitor,
                         tracer: QueryCompilationEvent,
                         subscriber: QuerySubscriber): QueryExecution = {
 
+<<<<<<< HEAD
     def parseAndCompile: (ExecutableQuery, MapValue) = {
       try {
         val executableQuery = getOrCompile(context, query, tracer, params)
@@ -228,38 +277,68 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
     }
     val (executableQuery, combinedParams) = parseAndCompile
     executableQuery.execute(context, isOutermostQuery, query.options, combinedParams, prePopulate, input, subscriber)
+=======
+    val executableQuery = try {
+      getOrCompile(context, query, tracer, params)
+    } catch {
+      case up: Throwable =>
+        if (isOutermostQuery)
+          queryMonitor.endFailure(context.executingQuery(), up.getMessage)
+        throw up
+    }
+    if (query.options.executionMode.name != "explain") {
+      checkParameters(executableQuery.paramNames, params, executableQuery.extractedParams)
+    }
+    val combinedParams = params.updatedWith(executableQuery.extractedParams)
+
+    if (isOutermostQuery) {
+      context.executingQuery().onObfuscatorReady(executableQuery.queryObfuscator)
+      context.executingQuery().onCompilationCompleted(executableQuery.compilerInfo, executableQuery.queryType, () => executableQuery.planDescription())
+    }
+
+    executableQuery.execute(context, isOutermostQuery, query.options, combinedParams, prePopulate, input, queryMonitor, subscriber)
+>>>>>>> neo4j/4.1
   }
 
   /*
-   * Return the primary and secondary compile to be used
-   *
-   * The primary compiler is the main compiler and the secondary compiler is used for compiling expressions for hot queries.
+   * Return the CompilerWithExpressionCodeGenOption to be used.
    */
-  private def compilers(inputQuery: InputQuery,
-                        tracer: QueryCompilationEvent,
-                        transactionalContext: TransactionalContext,
-                        params: MapValue): (QueryCompilation, JitCompilation) = {
-
+  private def compilerWithExpressionCodeGenOption(inputQuery: InputQuery,
+                                                  tracer: QueryCompilationEvent,
+                                                  transactionalContext: TransactionalContext,
+                                                  params: MapValue): CompilerWithExpressionCodeGenOption[ExecutableQuery] = {
     val compiledExpressionCompiler = () => masterCompiler.compile(inputQuery.withRecompilationLimitReached,
-                                                                  tracer, transactionalContext, params)
+      tracer, transactionalContext, params)
     val interpretedExpressionCompiler = () => masterCompiler.compile(inputQuery, tracer, transactionalContext, params)
-    //check if we need to jit compiling of queries
-    if (inputQuery.options.compileWhenHot && config.recompilationLimit > 0) {
-      //compile if hot enough
-      (interpretedExpressionCompiler, count => if (count >= config.recompilationLimit) Some(compiledExpressionCompiler()) else None)
-    } else if (inputQuery.options.compileWhenHot) {
-      //We have recompilationLimit == 0, go to compiled directly
-      (compiledExpressionCompiler, NEVER_COMPILE)
-    } else {
-      //In the other cases we have no recompilation step
-     (interpretedExpressionCompiler, NEVER_COMPILE)
+
+    new CompilerWithExpressionCodeGenOption[ExecutableQuery] {
+      override def compile(): ExecutableQuery = {
+        if (inputQuery.options.compileWhenHot && config.recompilationLimit == 0) {
+          //We have recompilationLimit == 0, go to compiled directly
+          compiledExpressionCompiler()
+        } else {
+          interpretedExpressionCompiler()
+        }
+      }
+
+      override def compileWithExpressionCodeGen(): ExecutableQuery = compiledExpressionCompiler()
+
+      override def maybeCompileWithExpressionCodeGen(hitCount: Int): Option[ExecutableQuery] = {
+        //check if we need to do jit compiling of queries and if hot enough
+        if (inputQuery.options.compileWhenHot && config.recompilationLimit > 0 && hitCount >= config.recompilationLimit) {
+          Some(compiledExpressionCompiler())
+        } else {
+          //In the other case we have no recompilation step
+          None
+        }
+      }
     }
   }
 
   private def getOrCompile(context: TransactionalContext,
                            inputQuery: InputQuery,
                            tracer: QueryCompilationEvent,
-                           params: MapValue
+                           params: MapValue,
                           ): ExecutableQuery = {
     val cacheKey = Pair.of(inputQuery.cacheKey, QueryCache.extractParameterTypeMap(params))
 
@@ -272,13 +351,12 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
       while (n < ExecutionEngine.PLAN_BUILDING_TRIES) {
 
         val schemaToken = schemaHelper.readSchemaToken(tc)
-        val (primaryCompiler, secondaryCompiler) = compilers(inputQuery, tracer, tc, params)
-        val cacheLookup = queryCache.computeIfAbsentOrStale(cacheKey,
-                                                            tc,
-                                                            primaryCompiler,
-                                                            secondaryCompiler,
-                                                            inputQuery.description)
-        val executableQuery = cacheLookup.executableQuery
+        val compiler = compilerWithExpressionCodeGenOption(inputQuery, tracer, tc, params)
+        val executableQuery = queryCache.computeIfAbsentOrStale(cacheKey,
+          tc,
+          compiler,
+          inputQuery.options.replan,
+          inputQuery.description)
 
         if (schemaHelper.lockLabels(schemaToken, executableQuery, inputQuery.options.version, tc)) {
           return executableQuery
@@ -305,8 +383,8 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
     preParsedQuery.options.executionMode != CypherExecutionMode.explain && preParsedQuery.options.isPeriodicCommit
   }
 
-  def getCypherFunctions: util.List[FunctionInformation] = {
-    val informations: Seq[FunctionInformation] = org.neo4j.cypher.internal.v4_0.expressions.functions.Function.functionInfo.map(FunctionWithInformation)
+  def getCypherFunctions: java.util.List[FunctionInformation] = {
+    val informations: Seq[FunctionInformation] = org.neo4j.cypher.internal.expressions.functions.Function.functionInfo.map(FunctionWithInformation)
     informations.asJava
   }
 
@@ -339,8 +417,4 @@ case class FunctionWithInformation(f: FunctionInfo) extends FunctionInformation 
 
 object ExecutionEngine {
   val PLAN_BUILDING_TRIES: Int = 20
-  type QueryCompilation = () => ExecutableQuery
-  type JitCompilation = Int => Option[ExecutableQuery]
-
-  private val NEVER_COMPILE: JitCompilation = _ => None
 }

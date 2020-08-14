@@ -29,6 +29,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.resources.Profiler;
@@ -62,7 +63,7 @@ import org.neo4j.test.rule.TestDirectory;
  *
  * @see Profiler The Profiler interface, for more information on how to use the injected profiler instance.
  */
-public class ProfilerExtension extends StatefullFieldExtension<Profiler> implements BeforeEachCallback, AfterEachCallback
+public class ProfilerExtension extends StatefulFieldExtension<Profiler> implements BeforeEachCallback, AfterEachCallback
 {
     static final String PROFILER_KEY = "profiler";
     static final Namespace PROFILER_NAMESPACE = Namespace.create( PROFILER_KEY );
@@ -108,7 +109,7 @@ public class ProfilerExtension extends StatefullFieldExtension<Profiler> impleme
             {
                 String displayName = "Profile: " + context.getTestClass().map( Class::getSimpleName ).orElse( "class" ) + "." + context.getDisplayName();
                 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                profiler.printProfile( new PrintStream( buffer ), displayName );
+                profiler.printProfile( new PrintStream( buffer, false, StandardCharsets.UTF_8 ), displayName );
                 buffer.writeTo( System.err );
 
                 ExtensionContext.Store testDirStore = getStore( context, TestDirectorySupportExtension.TEST_DIRECTORY_NAMESPACE );

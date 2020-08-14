@@ -52,9 +52,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_transaction_max_size;
+import static org.neo4j.configuration.GraphDatabaseSettings.tx_state_max_off_heap_memory;
+import static org.neo4j.configuration.GraphDatabaseSettings.tx_state_off_heap_block_cache_size;
+import static org.neo4j.configuration.GraphDatabaseSettings.tx_state_off_heap_max_cacheable_block_size;
+import static org.neo4j.configuration.SettingValueParsers.BYTES;
 import static org.neo4j.configuration.SettingValueParsers.FALSE;
 import static org.neo4j.configuration.SettingValueParsers.TRUE;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @TestDirectoryExtension
 class SettingMigratorsTest
@@ -110,7 +117,9 @@ class SettingMigratorsTest
 
         for ( String setting : legacySettings.keySet() )
         {
-            logProvider.assertAtLeastOnce( inLog( Config.class ).warn("Use of deprecated setting %s. Legacy ssl policy is no longer supported.", setting ) );
+            assertThat( logProvider ).forClass( Config.class )
+                    .forLevel( WARN )
+                    .containsMessageWithArguments( "Use of deprecated setting %s. Legacy ssl policy is no longer supported.", setting );
         }
 
     }
@@ -164,11 +173,12 @@ class SettingMigratorsTest
         assertTrue( config.get( HttpConnector.enabled ) );
         assertTrue( config.get( HttpsConnector.enabled ) );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( "Use of deprecated setting %s. Type is no longer required", "dbms.connector.bolt.type" ) );
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( "Use of deprecated setting %s. No longer supports multiple connectors. Setting discarded.",
-                "dbms.connector.bolt2.type" ) );
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( "Use of deprecated setting %s. No longer supports multiple connectors. Setting discarded.",
-                "dbms.connector.bolt2.listen_address" ) );
+        var warnConfigMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( WARN );
+        warnConfigMatcher.containsMessageWithArguments( "Use of deprecated setting %s. Type is no longer required", "dbms.connector.bolt.type" )
+                         .containsMessageWithArguments( "Use of deprecated setting %s. No longer supports multiple connectors. Setting discarded.",
+                "dbms.connector.bolt2.type" )
+                         .containsMessageWithArguments( "Use of deprecated setting %s. No longer supports multiple connectors. Setting discarded.",
+                "dbms.connector.bolt2.listen_address" );
     }
 
     @Test
@@ -181,8 +191,24 @@ class SettingMigratorsTest
         var logProvider = new AssertableLogProvider();
         config.setLogger( logProvider.getLog( Config.class ) );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class )
-                .warn( "Setting %s is removed. It's no longer possible to disable verbose kill query logging.", "dbms.procedures.kill_query_verbose" ) );
+        assertThat( logProvider ).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments( "Setting %s is removed. It's no longer possible to disable verbose kill query logging.",
+                        "dbms.procedures.kill_query_verbose" );
+    }
+
+    @Test
+    void testMultiThreadedSchemaIndexPopulationEnabled() throws IOException
+    {
+        File confFile = testDirectory.createFile( "test.conf" );
+        Files.write( confFile.toPath(), List.of( "unsupported.dbms.multi_threaded_schema_index_population_enabled=false" ) );
+
+        Config config = Config.newBuilder().fromFile( confFile ).build();
+        var logProvider = new AssertableLogProvider();
+        config.setLogger( logProvider.getLog( Config.class ) );
+
+        assertThat( logProvider ).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments( "Setting %s is removed. It's no longer possible to disable multi-threaded index population.",
+                        "unsupported.dbms.multi_threaded_schema_index_population_enabled" );
     }
 
     @Test
@@ -207,8 +233,70 @@ class SettingMigratorsTest
             {
                 expectedWarning += " Value migrated from " + oldSchemaProvider + " to " + migrationMap.get( oldSchemaProvider ) + ".";
             }
-            logProvider.assertAtLeastOnce( inLog( Config.class ).warn( expectedWarning ) );
+            assertThat( logProvider ).forClass( Config.class ).forLevel( WARN ).containsMessages( expectedWarning );
         }
+    }
+
+    @Test
+    void testMemorySettingsRename() throws IOException
+    {
+        File confFile = testDirectory.createFile( "test.conf" );
+        Files.write( confFile.toPath(), List.of(
+                "dbms.tx_state.max_off_heap_memory=6g",
+                "dbms.tx_state.off_heap.max_cacheable_block_size=4096",
+                "dbms.tx_state.off_heap.block_cache_size=256") );
+
+        Config config = Config.newBuilder().fromFile( confFile ).build();
+        var logProvider = new AssertableLogProvider();
+        config.setLogger( logProvider.getLog( Config.class ) );
+
+        assertThat( logProvider ).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s",
+                        "dbms.tx_state.max_off_heap_memory", tx_state_max_off_heap_memory.name() )
+                .containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s",
+                        "dbms.tx_state.off_heap.max_cacheable_block_size", tx_state_off_heap_max_cacheable_block_size.name() )
+                .containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s",
+                        "dbms.tx_state.off_heap.block_cache_size", tx_state_off_heap_block_cache_size.name() );
+
+        assertEquals( BYTES.parse( "6g" ), config.get( tx_state_max_off_heap_memory ) );
+        assertEquals( 4096, config.get( tx_state_off_heap_max_cacheable_block_size ) );
+        assertEquals( 256, config.get( tx_state_off_heap_block_cache_size ) );
+    }
+
+    @Test
+    void transactionCypherMaxAllocations() throws IOException
+    {
+        File confFile = testDirectory.createFile( "test.conf" );
+        Files.write( confFile.toPath(), List.of( "cypher.query_max_allocations=6g" ) );
+
+        Config config = Config.newBuilder().fromFile( confFile ).build();
+        var logProvider = new AssertableLogProvider();
+        config.setLogger( logProvider.getLog( Config.class ) );
+
+        assertThat( logProvider ).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments( "The setting cypher.query_max_allocations is removed and replaced by %s.",
+                        memory_transaction_max_size.name() );
+        assertEquals( BYTES.parse( "6g" ), config.get( memory_transaction_max_size ) );
+    }
+
+    @Test
+    void transactionCypherMaxAllocationsConflict() throws IOException
+    {
+        File confFile = testDirectory.createFile( "test.conf" );
+        Files.write( confFile.toPath(), List.of(
+                "cypher.query_max_allocations=6g",
+                memory_transaction_max_size.name() + "=7g" ) );
+
+        Config config = Config.newBuilder().fromFile( confFile ).build();
+        var logProvider = new AssertableLogProvider();
+        config.setLogger( logProvider.getLog( Config.class ) );
+
+        assertThat( logProvider ).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments(
+                        "The setting cypher.query_max_allocations is removed and replaced by %s. Since both are set, %s will take " +
+                                "precedence and the value of cypher.query_max_allocations, %s, will be ignored.",
+                        memory_transaction_max_size.name(), memory_transaction_max_size.name(), "6g" );
+        assertEquals( BYTES.parse( "7g" ), config.get( memory_transaction_max_size ) );
     }
 
     @TestFactory
@@ -244,7 +332,8 @@ class SettingMigratorsTest
         assertEquals( newValue, config.get( setting ) );
 
         String msg = "Use of deprecated setting value %s=%s. It is replaced by %s=%s";
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( msg, setting.name(), oldValue.toString(), setting.name(), newValue.name() ) );
+        assertThat(logProvider).forClass( Config.class ).forLevel( WARN )
+                .containsMessageWithArguments( msg, setting.name(), oldValue.toString(), setting.name(), newValue.name() );
     }
 
     private static void testAddrMigration( Setting<SocketAddress> listenAddr, Setting<SocketAddress> advertisedAddr )
@@ -274,6 +363,7 @@ class SettingMigratorsTest
         String msg = "Note that since you did not explicitly set the port in %s Neo4j automatically set it to %s to match %s." +
                 " This behavior may change in the future and we recommend you to explicitly set it.";
 
+<<<<<<< HEAD
         logProvider.assertAtLeastOnce( inLog( Config.class ).info( msg, advertisedAddr.name(), 111, listenAddr.name() ) );
         logProvider.assertAtLeastOnce( inLog( Config.class ).info( msg, advertisedAddr.name(), 222, listenAddr.name() ) );
         logProvider.assertAtLeastOnce( inLog( Config.class ).warn( msg, advertisedAddr.name(), 333, listenAddr.name() ) );
@@ -281,6 +371,17 @@ class SettingMigratorsTest
         logProvider.assertNone( inLog( Config.class ).warn( msg, advertisedAddr.name(), 444, listenAddr.name() ) );
         logProvider.assertNone( inLog( Config.class ).info( msg, advertisedAddr.name(), 555, listenAddr.name() ) );
         logProvider.assertNone( inLog( Config.class ).warn( msg, advertisedAddr.name(), 666, listenAddr.name() ) );
+=======
+        var warnMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( WARN );
+        var infoMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( INFO );
+        infoMatcher.containsMessageWithArguments( msg, advertisedAddr.name(), 111, listenAddr.name() );
+        infoMatcher.containsMessageWithArguments( msg, advertisedAddr.name(), 222, listenAddr.name() );
+        warnMatcher.containsMessageWithArguments( msg, advertisedAddr.name(), 333, listenAddr.name() );
+
+        warnMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 444, listenAddr.name() );
+        infoMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 555, listenAddr.name() );
+        warnMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 666, listenAddr.name() );
+>>>>>>> neo4j/4.1
     }
 
     private static void testMigrateSslPolicy( String oldGroupnameSetting, SslPolicyConfig policyConfig )
@@ -293,9 +394,9 @@ class SettingMigratorsTest
 
         assertTrue( config.get( policyConfig.trust_all ) );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( "Use of deprecated setting %s.", oldGroupnameSetting ) );
-        logProvider.assertAtLeastOnce( inLog( Config.class )
-                .warn( "Use of deprecated setting %s. It is replaced by %s", oldFormatSetting, policyConfig.trust_all.name() ) );
+        assertThat( logProvider ).forLevel( WARN ).forClass( Config.class )
+                .containsMessageWithArguments( "Use of deprecated setting %s.", oldGroupnameSetting )
+                .containsMessageWithArguments( "Use of deprecated setting %s. It is replaced by %s", oldFormatSetting, policyConfig.trust_all.name() );
     }
 
     private void shouldRemoveAllowKeyGeneration( String toRemove, String value )
@@ -307,7 +408,8 @@ class SettingMigratorsTest
 
         assertThrows( IllegalArgumentException.class, () -> config.getSetting( toRemove ) );
 
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( "Setting %s is removed. A valid key and certificate are required " +
-                "to be present in the key and certificate path configured in this ssl policy.", toRemove ) );
+        assertThat( logProvider ).forLevel( WARN ).forClass( Config.class )
+                .containsMessageWithArguments( "Setting %s is removed. A valid key and certificate are required " +
+                        "to be present in the key and certificate path configured in this ssl policy.", toRemove );
     }
 }

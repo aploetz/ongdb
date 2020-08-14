@@ -22,7 +22,7 @@ package org.neo4j.kernel.impl.util.collection;
 import java.nio.ByteBuffer;
 
 import org.neo4j.kernel.impl.util.collection.OffHeapBlockAllocator.MemoryBlock;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
@@ -35,22 +35,20 @@ import static org.neo4j.util.Preconditions.checkState;
 
 public class OffHeapMemoryAllocator implements MemoryAllocator
 {
-    private final MemoryAllocationTracker tracker;
     private final OffHeapBlockAllocator blockAllocator;
 
-    public OffHeapMemoryAllocator( MemoryAllocationTracker tracker, OffHeapBlockAllocator blockAllocator )
+    public OffHeapMemoryAllocator( OffHeapBlockAllocator blockAllocator )
     {
-        this.tracker = requireNonNull( tracker );
         this.blockAllocator = requireNonNull( blockAllocator );
     }
 
     @Override
-    public Memory allocate( long size, boolean zeroed )
+    public Memory allocate( long size, boolean zeroed, MemoryTracker memoryTracker )
     {
-        final MemoryBlock block = blockAllocator.allocate( size, tracker );
+        final MemoryBlock block = blockAllocator.allocate( size, memoryTracker );
         if ( zeroed )
         {
-            setMemory( block.unalignedAddr, block.unalignedSize, (byte) 0 );
+            setMemory( block.addr, block.size, (byte) 0 );
         }
         return new OffHeapMemory( block );
     }
@@ -79,7 +77,7 @@ public class OffHeapMemoryAllocator implements MemoryAllocator
         @Override
         public void clear()
         {
-            setMemory( block.unalignedAddr, block.unalignedSize, (byte) 0 );
+            setMemory( block.addr, block.size, (byte) 0 );
         }
 
         @Override
@@ -89,15 +87,15 @@ public class OffHeapMemoryAllocator implements MemoryAllocator
         }
 
         @Override
-        public void free()
+        public void free( MemoryTracker memoryTracker )
         {
-            blockAllocator.free( block, tracker );
+            blockAllocator.free( block, memoryTracker );
         }
 
         @Override
-        public Memory copy()
+        public Memory copy( MemoryTracker memoryTracker )
         {
-            final MemoryBlock copy = blockAllocator.allocate( block.size, tracker );
+            final MemoryBlock copy = blockAllocator.allocate( block.size, memoryTracker );
             copyMemory( block.addr, copy.addr, block.size );
             return new OffHeapMemory( copy );
         }

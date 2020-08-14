@@ -27,6 +27,11 @@ public class NeoStoreRecord extends PrimitiveRecord
         setInUse( true );
     }
 
+    public NeoStoreRecord( NeoStoreRecord other )
+    {
+        super( other );
+    }
+
     @Override
     public NeoStoreRecord initialize( boolean inUse, long nextProp )
     {
@@ -55,8 +60,12 @@ public class NeoStoreRecord extends PrimitiveRecord
     }
 
     @Override
+<<<<<<< HEAD
     public NeoStoreRecord clone()
+=======
+    public NeoStoreRecord copy()
+>>>>>>> neo4j/4.1
     {
-        return (NeoStoreRecord) super.clone();
+        return new NeoStoreRecord( this );
     }
 }

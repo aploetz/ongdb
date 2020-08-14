@@ -21,9 +21,12 @@ package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.helpers.AggregationHelper
 import org.neo4j.cypher.internal.compiler.planner.logical.steps.countStorePlanner
-import org.neo4j.cypher.internal.ir.{AggregatingQueryProjection, QueryProjection, SinglePlannerQuery}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.QueryProjection
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
 
 import scala.collection.mutable
 
@@ -47,15 +50,15 @@ case class PlanSingleQuery(planPart: PartPlanner = planPart,
         case None =>
           val partPlan = planPart(in, updatedContext)
           val (planWithUpdates, contextAfterUpdates) = planUpdates(in, partPlan, firstPlannerQuery = true, updatedContext)
-          
+
           val planWithInput = in.queryInput match {
             case Some(variables) =>
               val inputPlan = contextAfterUpdates.logicalPlanProducer.planInput(variables, contextAfterUpdates)
               contextAfterUpdates.logicalPlanProducer.planInputApply(inputPlan, planWithUpdates, variables, contextAfterUpdates)
-            case None => planWithUpdates  
+            case None => planWithUpdates
           }
-          
-          val projectedPlan = planEventHorizon(in, planWithInput, contextAfterUpdates)
+
+          val projectedPlan = planEventHorizon(in, planWithInput, None, contextAfterUpdates)
           val projectedContext = contextAfterUpdates.withUpdatedCardinalityInformation(projectedPlan)
           (projectedPlan, projectedContext)
       }
@@ -104,7 +107,7 @@ trait PartPlanner {
 }
 
 trait EventHorizonPlanner {
-  def apply(query: SinglePlannerQuery, plan: LogicalPlan, context: LogicalPlanningContext): LogicalPlan
+  def apply(query: SinglePlannerQuery, plan: LogicalPlan, previousInterestingOrder: Option[InterestingOrder], context: LogicalPlanningContext): LogicalPlan
 }
 
 trait TailPlanner {

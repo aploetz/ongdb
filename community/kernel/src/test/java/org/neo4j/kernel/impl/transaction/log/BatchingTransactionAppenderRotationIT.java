@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.util.List;
 
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.impl.api.TestCommand;
@@ -48,11 +49,10 @@ import org.neo4j.kernel.impl.transaction.tracing.LogRotateEvent;
 import org.neo4j.kernel.impl.transaction.tracing.SerializeTransactionEvent;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.NullLog;
-import org.neo4j.monitoring.DatabaseEventListeners;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Health;
 import org.neo4j.monitoring.Monitors;
+import org.neo4j.monitoring.PanicEventGenerator;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.test.extension.Inject;
@@ -61,7 +61,8 @@ import org.neo4j.test.extension.Neo4jLayoutExtension;
 
 import static java.util.Collections.singletonList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 @ExtendWith( LifeExtension.class )
@@ -99,7 +100,7 @@ class BatchingTransactionAppenderRotationIT
 
         assertEquals( 1, logFiles.getHighestLogVersion() );
         File highestLogFile = logFiles.getHighestLogFile();
-        LogHeader logHeader = LogHeaderReader.readLogHeader( fileSystem, highestLogFile );
+        LogHeader logHeader = LogHeaderReader.readLogHeader( fileSystem, highestLogFile, INSTANCE );
         assertEquals( 2, logHeader.getLastCommittedTxId() );
     }
 
@@ -108,7 +109,7 @@ class BatchingTransactionAppenderRotationIT
         List<StorageCommand> commands = createCommands();
         PhysicalTransactionRepresentation transactionRepresentation = new PhysicalTransactionRepresentation( commands );
         transactionRepresentation.setHeader( new byte[0], 0, 0, 0, 0 );
-        return new TransactionToApply( transactionRepresentation );
+        return new TransactionToApply( transactionRepresentation, NULL );
     }
 
     private static List<StorageCommand> createCommands()
@@ -120,6 +121,7 @@ class BatchingTransactionAppenderRotationIT
             SimpleTransactionIdStore transactionIdStore ) throws IOException
     {
         return LogFilesBuilder.builder( layout, fileSystem )
+                .withRotationThreshold( ByteUnit.mebiBytes( 1 ) )
                 .withLogVersionRepository( logVersionRepository )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogEntryReader( new VersionAwareLogEntryReader( new TestCommandReaderFactory() ) )
@@ -129,9 +131,7 @@ class BatchingTransactionAppenderRotationIT
 
     private static Health getDatabaseHealth()
     {
-        DatabasePanicEventGenerator databasePanicEventGenerator =
-                new DatabasePanicEventGenerator( new DatabaseEventListeners( NullLog.getInstance() ), DEFAULT_DATABASE_NAME );
-        return new DatabaseHealth( databasePanicEventGenerator, NullLog.getInstance() );
+        return new DatabaseHealth( PanicEventGenerator.NO_OP, NullLog.getInstance() );
     }
 
     private static class RotationLogAppendEvent implements LogAppendEvent

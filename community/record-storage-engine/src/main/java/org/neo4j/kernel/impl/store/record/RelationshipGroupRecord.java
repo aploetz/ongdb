@@ -22,9 +22,11 @@ package org.neo4j.kernel.impl.store.record;
 import java.util.Objects;
 
 import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 
 public class RelationshipGroupRecord extends AbstractBaseRecord
 {
+    public static final long SHALLOW_SIZE = shallowSizeOfInstance( RelationshipGroupRecord.class );
     private int type;
     private long next;
     private long firstOut;
@@ -35,41 +37,24 @@ public class RelationshipGroupRecord extends AbstractBaseRecord
     // Not stored, just kept in memory temporarily when loading the group chain
     private long prev;
 
-    @Deprecated
-    public RelationshipGroupRecord( long id, int type )
-    {
-        super( id );
-        this.type = type;
-    }
-
-    @Deprecated
-    public RelationshipGroupRecord( long id, int type, long firstOut, long firstIn, long firstLoop, long owningNode,
-            boolean inUse )
-    {
-        this( id, type, firstOut, firstIn, firstLoop, owningNode, NULL_REFERENCE.intValue(), inUse );
-    }
-
-    @Deprecated
-    public RelationshipGroupRecord( long id, int type, long firstOut, long firstIn, long firstLoop, long owningNode,
-            long next, boolean inUse )
-    {
-        super( id );
-        setInUse( inUse );
-        this.type = type;
-        this.firstOut = firstOut;
-        this.firstIn = firstIn;
-        this.firstLoop = firstLoop;
-        this.owningNode = owningNode;
-        this.next = next;
-    }
-
     public RelationshipGroupRecord( long id )
     {
         super( id );
     }
 
-    public RelationshipGroupRecord initialize( boolean inUse, int type,
-            long firstOut, long firstIn, long firstLoop, long owningNode, long next )
+    public RelationshipGroupRecord( RelationshipGroupRecord other )
+    {
+        super( other );
+        this.type = other.type;
+        this.next = other.next;
+        this.firstOut = other.firstOut;
+        this.firstIn = other.firstIn;
+        this.firstLoop = other.firstLoop;
+        this.owningNode = other.owningNode;
+        this.prev = other.prev;
+    }
+
+    public RelationshipGroupRecord initialize( boolean inUse, int type, long firstOut, long firstIn, long firstLoop, long owningNode, long next )
     {
         super.initialize( inUse );
         this.type = type;
@@ -188,9 +173,13 @@ public class RelationshipGroupRecord extends AbstractBaseRecord
     }
 
     @Override
+<<<<<<< HEAD
     public RelationshipGroupRecord clone()
+=======
+    public RelationshipGroupRecord copy()
+>>>>>>> neo4j/4.1
     {
-        return (RelationshipGroupRecord) super.clone();
+        return new RelationshipGroupRecord( this );
     }
 
     @Override

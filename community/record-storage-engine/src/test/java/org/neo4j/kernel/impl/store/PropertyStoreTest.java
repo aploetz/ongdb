@@ -41,6 +41,7 @@ import org.neo4j.test.extension.EphemeralNeo4jLayoutExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.pagecache.PageCacheSupportExtension;
 
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 import static org.neo4j.test.rule.PageCacheConfig.config;
 
@@ -83,13 +85,13 @@ class PropertyStoreTest
         final PropertyStore store =
                 new PropertyStore( storeFile, idFile, config, new DefaultIdGeneratorFactory( fs, immediate() ), pageCache,
                         NullLogProvider.getInstance(), stringPropertyStore, mock( PropertyKeyTokenStore.class ), mock( DynamicArrayStore.class ),
-                        RecordFormatSelector.defaultFormat() );
-        store.initialise( true );
+                        RecordFormatSelector.defaultFormat(), immutable.empty() );
+        store.initialise( true, NULL );
 
         try
         {
-            store.start();
-            final long propertyRecordId = store.nextId();
+            store.start( NULL );
+            final long propertyRecordId = store.nextId( NULL );
 
             PropertyRecord record = new PropertyRecord( propertyRecordId );
             record.setInUse( true );
@@ -100,16 +102,16 @@ class PropertyStoreTest
 
             doAnswer( invocation ->
             {
-                PropertyRecord recordBeforeWrite = store.getRecord( propertyRecordId, store.newRecord(), FORCE );
+                PropertyRecord recordBeforeWrite = store.getRecord( propertyRecordId, store.newRecord(), FORCE, NULL );
                 assertFalse( recordBeforeWrite.inUse() );
                 return null;
-            } ).when( stringPropertyStore ).updateRecord( dynamicRecord );
+            } ).when( stringPropertyStore ).updateRecord( eq( dynamicRecord ), any() );
 
             // when
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
 
             // then verify that our mocked method above, with the assert, was actually called
-            verify( stringPropertyStore ).updateRecord( eq( dynamicRecord ), any() );
+            verify( stringPropertyStore ).updateRecord( eq( dynamicRecord ), any(), any() );
         }
         finally
         {

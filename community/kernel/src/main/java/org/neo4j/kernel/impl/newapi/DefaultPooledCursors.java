@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageReader;
 
 /**
@@ -39,12 +41,12 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
     private DefaultRelationshipTraversalCursor relationshipTraversalCursor;
     private DefaultPropertyCursor propertyCursor;
     private FullAccessPropertyCursor fullAccessPropertyCursor;
-    private DefaultRelationshipGroupCursor relationshipGroupCursor;
     private DefaultNodeValueIndexCursor nodeValueIndexCursor;
     private FullAccessNodeValueIndexCursor fullAccessNodeValueIndexCursor;
     private DefaultNodeLabelIndexCursor nodeLabelIndexCursor;
     private DefaultNodeLabelIndexCursor fullAccessNodeLabelIndexCursor;
     private DefaultRelationshipIndexCursor relationshipIndexCursor;
+    private DefaultRelationshipTypeIndexCursor relationshipTypeIndexCursor;
 
     public DefaultPooledCursors( StorageReader storageReader )
     {
@@ -53,11 +55,12 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
     }
 
     @Override
-    public DefaultNodeCursor allocateNodeCursor()
+    public DefaultNodeCursor allocateNodeCursor( PageCursorTracer cursorTracer )
     {
         if ( nodeCursor == null )
         {
-            return trace( new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) );
+            return trace( new DefaultNodeCursor( this::accept,
+                    storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) );
         }
 
         try
@@ -76,15 +79,17 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             nodeCursor.release();
         }
+        cursor.removeTracer();
         nodeCursor = cursor;
     }
 
     @Override
-    public FullAccessNodeCursor allocateFullAccessNodeCursor()
+    public FullAccessNodeCursor allocateFullAccessNodeCursor( PageCursorTracer cursorTracer )
     {
         if ( fullAccessNodeCursor == null )
         {
-            return trace( new FullAccessNodeCursor( this::acceptFullAccess, storageReader.allocateNodeCursor() ) );
+            return trace( new FullAccessNodeCursor( this::acceptFullAccess,
+                    storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) );
         }
 
         try
@@ -103,16 +108,23 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             fullAccessNodeCursor.release();
         }
+        cursor.removeTracer();
         fullAccessNodeCursor = (FullAccessNodeCursor) cursor;
     }
 
     @Override
-    public DefaultRelationshipScanCursor allocateRelationshipScanCursor()
+    public DefaultRelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         if ( relationshipScanCursor == null )
         {
+<<<<<<< HEAD
             return trace( new DefaultRelationshipScanCursor( this::accept, storageReader.allocateRelationshipScanCursor(),
                                                              new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new DefaultRelationshipScanCursor( this::accept, storageReader.allocateRelationshipScanCursor( cursorTracer ),
+                    new DefaultNodeCursor( this::accept,
+                                           storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -131,16 +143,23 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             relationshipScanCursor.release();
         }
+        cursor.removeTracer();
         relationshipScanCursor = cursor;
     }
 
     @Override
-    public RelationshipScanCursor allocateFullAccessRelationshipScanCursor()
+    public RelationshipScanCursor allocateFullAccessRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         if ( fullAccessRelationshipScanCursor == null )
         {
+<<<<<<< HEAD
             return trace( new FullAccessRelationshipScanCursor( this::acceptFullAccess, storageReader.allocateRelationshipScanCursor(),
                                                                 new FullAccessNodeCursor( this::acceptFullAccess, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new FullAccessRelationshipScanCursor( this::acceptFullAccess, storageReader.allocateRelationshipScanCursor( cursorTracer ),
+                    new FullAccessNodeCursor( this::acceptFullAccess,
+                                              storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -159,16 +178,26 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             fullAccessRelationshipScanCursor.release();
         }
+<<<<<<< HEAD
+=======
+        cursor.removeTracer();
+>>>>>>> neo4j/4.1
         fullAccessRelationshipScanCursor = (FullAccessRelationshipScanCursor) cursor;
     }
 
     @Override
-    public DefaultRelationshipTraversalCursor allocateRelationshipTraversalCursor()
+    public DefaultRelationshipTraversalCursor allocateRelationshipTraversalCursor( PageCursorTracer cursorTracer )
     {
         if ( relationshipTraversalCursor == null )
         {
+<<<<<<< HEAD
             return trace( new DefaultRelationshipTraversalCursor( this::accept, storageReader.allocateRelationshipTraversalCursor(),
                                                                   new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new DefaultRelationshipTraversalCursor( this::accept, storageReader.allocateRelationshipTraversalCursor( cursorTracer ),
+                    new DefaultNodeCursor( this::accept,
+                                           storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -187,17 +216,27 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             relationshipTraversalCursor.release();
         }
+        cursor.removeTracer();
         relationshipTraversalCursor = cursor;
     }
 
     @Override
-    public DefaultPropertyCursor allocatePropertyCursor()
+    public DefaultPropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         if ( propertyCursor == null )
         {
+<<<<<<< HEAD
             FullAccessNodeCursor nodeCursor = new FullAccessNodeCursor( this::acceptFullAccess, storageReader.allocateNodeCursor() );
             return trace( new DefaultPropertyCursor( this::accept, storageReader.allocatePropertyCursor(), nodeCursor,
                     new FullAccessRelationshipScanCursor( this::acceptFullAccess, storageReader.allocateRelationshipScanCursor(), nodeCursor ) ) );
+=======
+            FullAccessNodeCursor nodeCursor = new FullAccessNodeCursor( this::acceptFullAccess,
+                    storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) );
+            FullAccessRelationshipScanCursor relCursor = new FullAccessRelationshipScanCursor(
+                    this::acceptFullAccess, storageReader.allocateRelationshipScanCursor( cursorTracer ), nodeCursor );
+            return trace( new DefaultPropertyCursor( this::accept, storageReader.allocatePropertyCursor( cursorTracer, memoryTracker ), nodeCursor,
+                    relCursor ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -216,17 +255,27 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             propertyCursor.release();
         }
+        cursor.removeTracer();
         propertyCursor = cursor;
     }
 
     @Override
-    public FullAccessPropertyCursor allocateFullAccessPropertyCursor()
+    public FullAccessPropertyCursor allocateFullAccessPropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
         if ( fullAccessPropertyCursor == null )
         {
+<<<<<<< HEAD
             FullAccessNodeCursor nodeCursor = new FullAccessNodeCursor( this::acceptFullAccess, storageReader.allocateNodeCursor() );
             return trace( new FullAccessPropertyCursor( this::acceptFullAccess, storageReader.allocatePropertyCursor(), nodeCursor,
                     new FullAccessRelationshipScanCursor( this::acceptFullAccess, storageReader.allocateRelationshipScanCursor(), nodeCursor ) ) );
+=======
+            FullAccessNodeCursor nodeCursor = new FullAccessNodeCursor( this::acceptFullAccess,
+                    storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) );
+            FullAccessRelationshipScanCursor relCursor = new FullAccessRelationshipScanCursor(
+                    this::acceptFullAccess, storageReader.allocateRelationshipScanCursor( cursorTracer ), nodeCursor );
+            return trace( new FullAccessPropertyCursor( this::acceptFullAccess, storageReader.allocatePropertyCursor( cursorTracer, memoryTracker ),
+                    nodeCursor, relCursor ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -245,45 +294,25 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             fullAccessPropertyCursor.release();
         }
+        cursor.removeTracer();
         fullAccessPropertyCursor = (FullAccessPropertyCursor) cursor;
     }
 
     @Override
-    public DefaultRelationshipGroupCursor allocateRelationshipGroupCursor()
+    public DefaultNodeValueIndexCursor allocateNodeValueIndexCursor( PageCursorTracer cursorTracer )
     {
-        if ( relationshipGroupCursor == null )
+        if ( nodeValueIndexCursor == null )
         {
+<<<<<<< HEAD
             DefaultRelationshipTraversalCursor traversalCursor = new DefaultRelationshipTraversalCursor(
                     this::accept, storageReader.allocateRelationshipTraversalCursor(),
                     new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) );
             return trace( new DefaultRelationshipGroupCursor( this::accept, storageReader.allocateRelationshipGroupCursor(), traversalCursor ) );
-        }
-
-        try
-        {
-            return relationshipGroupCursor;
-        }
-        finally
-        {
-            relationshipGroupCursor = null;
-        }
-    }
-
-    private void accept( DefaultRelationshipGroupCursor cursor )
-    {
-        if ( relationshipGroupCursor != null )
-        {
-            relationshipGroupCursor.release();
-        }
-        relationshipGroupCursor = cursor;
-    }
-
-    @Override
-    public DefaultNodeValueIndexCursor allocateNodeValueIndexCursor()
-    {
-        if ( nodeValueIndexCursor == null )
-        {
-            return trace( new DefaultNodeValueIndexCursor( this::accept, new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new DefaultNodeValueIndexCursor( this::accept,
+                    new DefaultNodeCursor( this::accept,
+                            storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -296,13 +325,54 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         }
     }
 
+<<<<<<< HEAD
+    private void accept( DefaultRelationshipGroupCursor cursor )
+=======
     private void accept( DefaultNodeValueIndexCursor cursor )
+>>>>>>> neo4j/4.1
     {
         if ( nodeValueIndexCursor != null )
         {
             nodeValueIndexCursor.release();
         }
+        cursor.removeTracer();
         nodeValueIndexCursor = cursor;
+    }
+
+    FullAccessNodeValueIndexCursor allocateFullAccessNodeValueIndexCursor( PageCursorTracer cursorTracer )
+    {
+        if ( fullAccessNodeValueIndexCursor == null )
+        {
+<<<<<<< HEAD
+            return trace( new DefaultNodeValueIndexCursor( this::accept, new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new FullAccessNodeValueIndexCursor( this::acceptFullAccess, new FullAccessNodeCursor(
+                    this::acceptFullAccess, storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
+        }
+
+        try
+        {
+            return fullAccessNodeValueIndexCursor;
+        }
+        finally
+        {
+            fullAccessNodeValueIndexCursor = null;
+        }
+    }
+
+<<<<<<< HEAD
+    private void accept( DefaultNodeValueIndexCursor cursor )
+=======
+    private void acceptFullAccess( DefaultNodeValueIndexCursor cursor )
+>>>>>>> neo4j/4.1
+    {
+        if ( fullAccessNodeValueIndexCursor != null )
+        {
+            fullAccessNodeValueIndexCursor.release();
+        }
+        cursor.removeTracer();
+        fullAccessNodeValueIndexCursor = (FullAccessNodeValueIndexCursor) cursor;
     }
 
     FullAccessNodeValueIndexCursor allocateFullAccessNodeValueIndexCursor()
@@ -334,11 +404,16 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
     }
 
     @Override
-    public DefaultNodeLabelIndexCursor allocateNodeLabelIndexCursor()
+    public DefaultNodeLabelIndexCursor allocateNodeLabelIndexCursor( PageCursorTracer cursorTracer )
     {
         if ( nodeLabelIndexCursor == null )
         {
+<<<<<<< HEAD
             return trace( new DefaultNodeLabelIndexCursor( this::accept, new DefaultNodeCursor( this::accept, storageReader.allocateNodeCursor() ) ) );
+=======
+            return trace( new DefaultNodeLabelIndexCursor( this::accept, new DefaultNodeCursor(
+                    this::accept, storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -357,15 +432,25 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             nodeLabelIndexCursor.release();
         }
+        cursor.removeTracer();
         nodeLabelIndexCursor = cursor;
     }
 
+<<<<<<< HEAD
     DefaultNodeLabelIndexCursor allocateFullAccessNodeLabelIndexCursor()
     {
         if ( fullAccessNodeLabelIndexCursor == null )
         {
             return trace( new FullAccessNodeLabelIndexCursor( this::acceptFullAccess,
                                                               new FullAccessNodeCursor( this::acceptFullAccess, storageReader.allocateNodeCursor() ) ) );
+=======
+    DefaultNodeLabelIndexCursor allocateFullAccessNodeLabelIndexCursor( PageCursorTracer cursorTracer )
+    {
+        if ( fullAccessNodeLabelIndexCursor == null )
+        {
+            return trace( new FullAccessNodeLabelIndexCursor( this::acceptFullAccess, new FullAccessNodeCursor(
+                    this::acceptFullAccess, storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) ) );
+>>>>>>> neo4j/4.1
         }
 
         try
@@ -388,13 +473,20 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
     }
 
     @Override
-    public RelationshipIndexCursor allocateRelationshipIndexCursor()
+    public RelationshipIndexCursor allocateRelationshipIndexCursor( PageCursorTracer cursorTracer )
     {
         if ( relationshipIndexCursor == null )
         {
+<<<<<<< HEAD
             DefaultRelationshipScanCursor relationshipScanCursor =
                     new DefaultRelationshipScanCursor( this::accept, storageReader.allocateRelationshipScanCursor(), new DefaultNodeCursor(
                             this::accept, storageReader.allocateNodeCursor() ) );
+=======
+            DefaultNodeCursor nodeCursor = new DefaultNodeCursor( this::accept,
+                    storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) );
+            DefaultRelationshipScanCursor relationshipScanCursor = new DefaultRelationshipScanCursor(
+                    this::accept, storageReader.allocateRelationshipScanCursor( cursorTracer ), nodeCursor );
+>>>>>>> neo4j/4.1
             return trace( new DefaultRelationshipIndexCursor( this::accept, relationshipScanCursor ) );
         }
 
@@ -414,7 +506,36 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             relationshipIndexCursor.release();
         }
+        cursor.removeTracer();
         relationshipIndexCursor = cursor;
+    }
+
+    @Override
+    public DefaultRelationshipTypeIndexCursor allocateRelationshipTypeIndexCursor()
+    {
+        if ( relationshipTypeIndexCursor == null )
+        {
+            return trace( new DefaultRelationshipTypeIndexCursor( this::accept ) );
+        }
+
+        try
+        {
+            return relationshipTypeIndexCursor;
+        }
+        finally
+        {
+            relationshipTypeIndexCursor = null;
+        }
+    }
+
+    private void accept( DefaultRelationshipTypeIndexCursor cursor )
+    {
+        if ( relationshipTypeIndexCursor != null )
+        {
+            relationshipTypeIndexCursor.release();
+        }
+        cursor.removeTracer();
+        relationshipTypeIndexCursor = cursor;
     }
 
     public void release()
@@ -453,11 +574,6 @@ public class DefaultPooledCursors extends DefaultCursors implements CursorFactor
         {
             fullAccessPropertyCursor.release();
             fullAccessPropertyCursor = null;
-        }
-        if ( relationshipGroupCursor != null )
-        {
-            relationshipGroupCursor.release();
-            relationshipGroupCursor = null;
         }
         if ( nodeValueIndexCursor != null )
         {

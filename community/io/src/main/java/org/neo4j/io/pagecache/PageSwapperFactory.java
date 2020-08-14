@@ -23,9 +23,6 @@ import java.io.File;
 import java.io.IOException;
 
 import org.neo4j.annotations.service.Service;
-import org.neo4j.internal.unsafe.UnsafeUtil;
-import org.neo4j.io.fs.FileSystemAbstraction;
-import org.neo4j.service.NamedService;
 
 /**
  * Creates PageSwappers for the given files.
@@ -39,23 +36,8 @@ import org.neo4j.service.NamedService;
  * It should never be used directly by user code.
  */
 @Service
-public interface PageSwapperFactory extends NamedService
+public interface PageSwapperFactory
 {
-    /**
-     * Open page swapper factory with provided filesystem and config
-     * @param fs file system to use in page swappers
-     */
-    void open( FileSystemAbstraction fs );
-
-    /**
-     * Get the unit of alignment that the swappers require of the memory buffers. For instance, if page alignment is
-     * required for doing direct IO, then {@link UnsafeUtil#pageSize()} can be
-     * returned.
-     *
-     * @return The required buffer alignment byte multiple.
-     */
-    long getRequiredBufferAlignment();
-
     /**
      * Create a PageSwapper for the given file.
      *
@@ -67,8 +49,6 @@ public interface PageSwapperFactory extends NamedService
      * the responsibility of informing the PagedFile via this callback.
      * @param createIfNotExist When true, creates the given file if it does not exist, instead of throwing an
      * exception.
-     * @param noChannelStriping When true, overrides channel striping behaviour,
-     * setting it to a single channel per mapped file.
      * @param useDirectIO When true, direct io open open will gonna be used for underlying channel.
      * Option supported only on Linux with certain limitations.
      * @return A working PageSwapper instance for the given file.
@@ -81,7 +61,6 @@ public interface PageSwapperFactory extends NamedService
             int filePageSize,
             PageEvictionCallback onEviction,
             boolean createIfNotExist,
-            boolean noChannelStriping,
             boolean useDirectIO ) throws IOException;
 
     /**

@@ -20,12 +20,10 @@
 package org.neo4j.internal.batchimport.input;
 
 import java.io.IOException;
-import java.util.function.ToIntFunction;
 
 import org.neo4j.internal.batchimport.BatchImporter;
 import org.neo4j.internal.batchimport.InputIterable;
 import org.neo4j.internal.batchimport.InputIterator;
-import org.neo4j.values.storable.Value;
 
 /**
  * Unifies all data input given to a {@link BatchImporter} to allow for more coherent implementations.
@@ -110,7 +108,7 @@ public interface Input
      * @return {@link Estimates} for this input w/o reading through it entirely.
      * @throws IOException on I/O error.
      */
-    Estimates calculateEstimates( ToIntFunction<Value[]> valueSizeCalculator ) throws IOException;
+    Estimates calculateEstimates( PropertySizeCalculator valueSizeCalculator ) throws IOException;
 
     static Input input( InputIterable nodes, InputIterable relationships, IdType idType, Estimates estimates, ReadableGroups groups )
     {
@@ -141,7 +139,7 @@ public interface Input
             }
 
             @Override
-            public Estimates calculateEstimates( ToIntFunction<Value[]> valueSizeCalculator )
+            public Estimates calculateEstimates( PropertySizeCalculator valueSizeCalculator )
             {
                 return estimates;
             }

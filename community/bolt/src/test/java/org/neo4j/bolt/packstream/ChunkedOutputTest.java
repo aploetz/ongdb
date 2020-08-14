@@ -38,8 +38,7 @@ import java.util.List;
 import org.neo4j.io.memory.ByteBuffers;
 
 import static java.util.stream.Collectors.toList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -47,6 +46,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.neo4j.bolt.packstream.ChunkedOutput.CHUNK_HEADER_SIZE;
 import static org.neo4j.bolt.transport.TransportThrottleGroup.NO_THROTTLE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 public class ChunkedOutputTest
 {
@@ -309,7 +309,7 @@ public class ChunkedOutputTest
         output.close();
 
         var e = assertThrows( PackOutputClosedException.class, () -> output.writeInt( 42 ) );
-        assertThat( e.getMessage(), containsString( remoteAddressString ) );
+        assertThat( e.getMessage() ).contains( remoteAddressString );
     }
 
     @Test
@@ -592,7 +592,7 @@ public class ChunkedOutputTest
             }
         }
 
-        ByteBuffer buffer = ByteBuffers.allocate( chunkSize + CHUNK_HEADER_SIZE );
+        ByteBuffer buffer = ByteBuffers.allocate( chunkSize + CHUNK_HEADER_SIZE, INSTANCE );
         buffer.putShort( chunkSize );
 
         for ( Number value : values )
@@ -629,7 +629,7 @@ public class ChunkedOutputTest
 
     private static String messageBoundary()
     {
-        ByteBuffer buffer = ByteBuffers.allocate( Short.BYTES );
+        ByteBuffer buffer = ByteBuffers.allocate( Short.BYTES, INSTANCE );
         buffer.putShort( (short) 0 );
         buffer.flip();
         return ByteBufUtil.hexDump( buffer.array() );

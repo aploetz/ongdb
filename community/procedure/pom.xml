@@ -15,7 +15,11 @@
   </properties>
 
   <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
   <artifactId>ongdb-procedure</artifactId>
+=======
+  <artifactId>neo4j-procedure</artifactId>
+>>>>>>> neo4j/4.1
 
   <packaging>jar</packaging>
   <name>ONgDB - Community Procedures</name>
@@ -60,8 +64,13 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+<<<<<<< HEAD
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-cypher-expression-evaluator</artifactId>
+=======
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-cypher-expression-evaluator</artifactId>
+>>>>>>> neo4j/4.1
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -74,12 +83,20 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter</artifactId>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-kernel</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
     <dependency>
-      <groupId>org.hamcrest</groupId>
-      <artifactId>hamcrest</artifactId>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-fabric</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
@@ -101,6 +118,7 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+<<<<<<< HEAD
     <dependency>
       <groupId>org.graphfoundation.ongdb</groupId>
       <artifactId>ongdb-kernel</artifactId>
@@ -108,5 +126,7 @@
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
+=======
+>>>>>>> neo4j/4.1
   </dependencies>
 </project>

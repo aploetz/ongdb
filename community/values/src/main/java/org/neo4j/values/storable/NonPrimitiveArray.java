@@ -87,7 +87,7 @@ public abstract class NonPrimitiveArray<T extends Comparable<? super T>> extends
         return NumberType.NO_NUMBER;
     }
 
-    protected final int compareToNonPrimitiveArray( NonPrimitiveArray<T> other )
+    final int compareToNonPrimitiveArray( NonPrimitiveArray<T> other )
     {
         int i = 0;
         int x = 0;
@@ -131,7 +131,8 @@ public abstract class NonPrimitiveArray<T extends Comparable<? super T>> extends
     @Override
     public final T[] asObjectCopy()
     {
-        return value().clone();
+        T[] value = value();
+        return Arrays.copyOf( value, value.length );
     }
 
     @Override

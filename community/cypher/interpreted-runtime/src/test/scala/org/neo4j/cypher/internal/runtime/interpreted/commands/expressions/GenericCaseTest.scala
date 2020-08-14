@@ -19,11 +19,14 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{CoercedPredicate, Equals, Predicate}
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.values.storable.Values.{NO_VALUE, stringValue}
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.CoercedPredicate
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Equals
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.stringValue
 
 class GenericCaseTest extends CypherFunSuite {
 
@@ -34,7 +37,7 @@ class GenericCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("one"))
@@ -48,7 +51,7 @@ class GenericCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("two"))
@@ -62,7 +65,7 @@ class GenericCaseTest extends CypherFunSuite {
     )
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(NO_VALUE)
@@ -76,7 +79,7 @@ class GenericCaseTest extends CypherFunSuite {
     ) defaultsTo "other"
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     result should equal(stringValue("other"))
@@ -87,7 +90,7 @@ class GenericCaseTest extends CypherFunSuite {
     val caseExpr = GenericCase(IndexedSeq(CoercedPredicate(Null())->Literal(42)), Some(Literal("defaults")))
 
     //WHEN
-    val result = caseExpr(ExecutionContext.empty, QueryStateHelper.empty)
+    val result = caseExpr(CypherRow.empty, QueryStateHelper.empty)
 
     //THEN
     assert(result === stringValue("defaults"))

@@ -39,25 +39,25 @@ public class RowDroppingQuerySubscriber implements QuerySubscriber
     }
 
     @Override
-    public void onRecord() throws Exception
+    public void onRecord()
     {
         // drop it
     }
 
     @Override
-    public void onField( AnyValue value ) throws Exception
+    public void onField( int offset, AnyValue value )
     {
         // drop it
     }
 
     @Override
-    public void onRecordCompleted() throws Exception
+    public void onRecordCompleted()
     {
         // drop it
     }
 
     @Override
-    public void onError( Throwable throwable )
+    public void onError( Throwable throwable ) throws Exception
     {
         inner.onError( throwable );
     }

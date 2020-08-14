@@ -20,13 +20,12 @@
 package org.neo4j.cypher.internal.runtime.interpreted.commands.values
 
 import org.neo4j.cypher.internal.planner.spi.TokenContext
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, QueryContext}
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.values.AnyValue
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
 
 /*
 KeyTokens are things with name and id. KeyTokens makes it possible to look up the id
@@ -46,7 +45,7 @@ sealed abstract class KeyToken(typ: TokenType) extends Expression {
 
   override def rewrite(f: Expression => Expression): KeyToken = f(this).asInstanceOf[KeyToken]
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = throw new NotImplementedError()
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = throw new NotImplementedError()
 }
 
 object KeyToken {

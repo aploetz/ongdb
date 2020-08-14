@@ -24,11 +24,12 @@ import java.io.UncheckedIOException;
 
 import org.neo4j.index.internal.gbptree.GBPTree;
 import org.neo4j.index.internal.gbptree.Seeker;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.NonUniqueIndexSampler;
 
 /**
- * {@link NonUniqueIndexSampler} which performs a full scans of a {@link GBPTree} in {@link #result()}.
+ * {@link NonUniqueIndexSampler} which performs a full scans of a {@link GBPTree} in {@link #sample(PageCursorTracer)}.
  *
  * @param <KEY> type of keys in tree.
  * @param <VALUE> type of values in tree.
@@ -46,7 +47,7 @@ class FullScanNonUniqueIndexSampler<KEY extends NativeIndexKey<KEY>, VALUE exten
     }
 
     @Override
-    public IndexSample result()
+    public IndexSample sample( PageCursorTracer cursorTracer )
     {
         KEY lowest = layout.newKey();
         lowest.initialize( Long.MIN_VALUE );
@@ -55,7 +56,7 @@ class FullScanNonUniqueIndexSampler<KEY extends NativeIndexKey<KEY>, VALUE exten
         highest.initialize( Long.MAX_VALUE );
         highest.initValuesAsHighest();
         KEY prev = layout.newKey();
-        try ( Seeker<KEY,VALUE> seek = gbpTree.seek( lowest, highest ) )
+        try ( Seeker<KEY,VALUE> seek = gbpTree.seek( lowest, highest, cursorTracer ) )
         {
             long sampledValues = 0;
             long uniqueValues = 0;
@@ -88,7 +89,7 @@ class FullScanNonUniqueIndexSampler<KEY extends NativeIndexKey<KEY>, VALUE exten
     }
 
     @Override
-    public IndexSample result( int numDocs )
+    public IndexSample sample( int numDocs, PageCursorTracer cursorTracer )
     {
         throw new UnsupportedOperationException();
     }

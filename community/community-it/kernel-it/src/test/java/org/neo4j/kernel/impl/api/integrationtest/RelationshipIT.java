@@ -19,12 +19,10 @@
  */
 package org.neo4j.kernel.impl.api.integrationtest;
 
-import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -38,14 +36,13 @@ import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.security.AnonymousContext;
 import org.neo4j.test.rule.OtherThreadRule;
 
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.AllOf.allOf;
+import static org.apache.commons.lang3.ArrayUtils.toObject;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.graphdb.Direction.BOTH;
 import static org.neo4j.graphdb.Direction.INCOMING;
 import static org.neo4j.graphdb.Direction.OUTGOING;
-import static org.neo4j.kernel.api.KernelTransaction.Type.implicit;
+import static org.neo4j.kernel.api.KernelTransaction.Type.IMPLICIT;
 
 class RelationshipIT extends KernelIntegrationTest
 {
@@ -73,12 +70,12 @@ class RelationshipIT extends KernelIntegrationTest
 
         long refNode = transaction.dataWrite().nodeCreate();
         long otherNode = transaction.dataWrite().nodeCreate();
-        long fromRefToOther1 = transaction.dataWrite().relationshipCreate(  refNode, relType1, otherNode );
-        long fromRefToOther2 = transaction.dataWrite().relationshipCreate(  refNode, relType2, otherNode );
-        long fromOtherToRef = transaction.dataWrite().relationshipCreate(  otherNode, relType1, refNode );
-        long fromRefToRef = transaction.dataWrite().relationshipCreate(  refNode, relType2, refNode );
+        long fromRefToOther1 = transaction.dataWrite().relationshipCreate( refNode, relType1, otherNode );
+        long fromRefToOther2 = transaction.dataWrite().relationshipCreate( refNode, relType2, otherNode );
+        long fromOtherToRef = transaction.dataWrite().relationshipCreate( otherNode, relType1, refNode );
+        long fromRefToRef = transaction.dataWrite().relationshipCreate( refNode, relType2, refNode );
         long endNode = transaction.dataWrite().nodeCreate();
-        long fromRefToThird = transaction.dataWrite().relationshipCreate(  refNode, relType2, endNode );
+        long fromRefToThird = transaction.dataWrite().relationshipCreate( refNode, relType2, endNode );
 
         // when & then
         assertRels( nodeGetRelationships( transaction, refNode, BOTH ), fromRefToOther1, fromRefToOther2,
@@ -93,8 +90,7 @@ class RelationshipIT extends KernelIntegrationTest
 
         assertRels( nodeGetRelationships( transaction, refNode, INCOMING ), fromOtherToRef );
 
-        assertRels( nodeGetRelationships( transaction, refNode, INCOMING, new int[]{relType1}
-                /* none */ ) );
+        assertRels( nodeGetRelationships( transaction, refNode, INCOMING, new int[]{relType1} ), fromOtherToRef );
 
         assertRels( nodeGetRelationships( transaction, refNode, OUTGOING, new int[]{relType1, relType2} ),
                 fromRefToOther1, fromRefToOther2, fromRefToThird, fromRefToRef );
@@ -115,8 +111,7 @@ class RelationshipIT extends KernelIntegrationTest
 
         assertRels( nodeGetRelationships( transaction, refNode, INCOMING ), fromOtherToRef );
 
-        assertRels( nodeGetRelationships( transaction, refNode, INCOMING, new int[]{relType1} )
-                /* none */ );
+        assertRels( nodeGetRelationships( transaction, refNode, INCOMING, new int[]{relType1} ), fromOtherToRef );
 
         assertRels( nodeGetRelationships( transaction, refNode, OUTGOING, new int[]{relType1, relType2} ),
                 fromRefToOther1, fromRefToOther2, fromRefToThird, fromRefToRef );
@@ -150,7 +145,7 @@ class RelationshipIT extends KernelIntegrationTest
             // When
             transaction.dataWrite().relationshipDelete( fromRefToOther1 );
             long endNode = transaction.dataWrite().nodeCreate();
-            long localTxRel = transaction.dataWrite().relationshipCreate(  refNode, relType1, endNode );
+            long localTxRel = transaction.dataWrite().relationshipCreate( refNode, relType1, endNode );
 
             // Then
             assertRels( nodeGetRelationships( transaction, refNode, BOTH ), fromRefToOther2, localTxRel);
@@ -169,7 +164,7 @@ class RelationshipIT extends KernelIntegrationTest
 
         long refNode = transaction.dataWrite().nodeCreate();
         long otherNode = transaction.dataWrite().nodeCreate();
-        long theRel = transaction.dataWrite().relationshipCreate(  refNode, relType1, otherNode );
+        long theRel = transaction.dataWrite().relationshipCreate( refNode, relType1, otherNode );
 
         assertRels( nodeGetRelationships( transaction, refNode, OUTGOING, new int[]{relType2,relType1} ), theRel );
         commit();
@@ -214,7 +209,7 @@ class RelationshipIT extends KernelIntegrationTest
     {
         assertTrue( otherThread.execute( state ->
         {
-            try ( KernelTransaction ktx = kernel.beginTransaction( implicit, LoginContext.AUTH_DISABLED ) )
+            try ( KernelTransaction ktx = kernel.beginTransaction( IMPLICIT, LoginContext.AUTH_DISABLED ) )
             {
                 assertRels( nodeGetRelationships( ktx, refNode, both ), longs );
             }
@@ -224,13 +219,7 @@ class RelationshipIT extends KernelIntegrationTest
 
     private static void assertRels( Iterator<Long> it, long... rels )
     {
-        List<Matcher<? super Iterable<Long>>> all = new ArrayList<>( rels.length );
-        for ( long element : rels )
-        {
-            all.add(hasItem(element));
-        }
-
         List<Long> list = Iterators.asList( it );
-        assertThat( list, allOf(all));
+        assertThat( list ).contains( toObject( rels ) );
     }
 }

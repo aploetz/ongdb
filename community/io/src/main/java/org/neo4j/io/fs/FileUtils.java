@@ -21,13 +21,10 @@ package org.neo4j.io.fs;
 
 import org.apache.commons.lang3.SystemUtils;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -36,7 +33,6 @@ import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.io.Writer;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
@@ -69,10 +65,7 @@ import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Collections.singleton;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.reflect.FieldUtils.getDeclaredField;
 import static org.neo4j.function.Predicates.alwaysTrue;
-import static org.neo4j.io.fs.FileSystemAbstraction.INVALID_FILE_DESCRIPTOR;
-import static org.neo4j.util.FeatureToggles.flag;
 
 /**
  * Set of utility methods to work with {@link File} and {@link Path} using the {@link DefaultFileSystemAbstraction default file system}.
@@ -81,61 +74,13 @@ import static org.neo4j.util.FeatureToggles.flag;
  *
  * @see FileSystemUtils
  */
-public class FileUtils
+public final class FileUtils
 {
-    private static final boolean PRINT_REFLECTION_EXCEPTIONS = flag( FileUtils.class, "printReflectionExceptions", false );
     private static final int NUMBER_OF_RETRIES = 5;
-
-    private static final Field CHANNEL_FILE_DESCRIPTOR;
-    private static final Field FILE_DESCRIPTOR_FIELD;
-
-    static
-    {
-        Field channelFileDescriptor = null;
-        Field fileDescriptorField = null;
-        try
-        {
-            Class<?> fileChannelClass = Class.forName( "sun.nio.ch.FileChannelImpl" );
-            channelFileDescriptor = requireNonNull( getDeclaredField( fileChannelClass, "fd", true ) );
-            fileDescriptorField = getDeclaredField( FileDescriptor.class, "fd", true );
-        }
-        catch ( Exception e )
-        {
-            if ( PRINT_REFLECTION_EXCEPTIONS )
-            {
-                e.printStackTrace();
-            }
-
-        }
-        CHANNEL_FILE_DESCRIPTOR = channelFileDescriptor;
-        FILE_DESCRIPTOR_FIELD = fileDescriptorField;
-    }
 
     private FileUtils()
     {
         throw new AssertionError();
-    }
-
-    static int getFileDescriptor( FileChannel fileChannel )
-    {
-        requireNonNull( fileChannel );
-        try
-        {
-            if ( (FILE_DESCRIPTOR_FIELD == null) || (CHANNEL_FILE_DESCRIPTOR == null) )
-            {
-                return INVALID_FILE_DESCRIPTOR;
-            }
-            FileDescriptor fileDescriptor = (FileDescriptor) CHANNEL_FILE_DESCRIPTOR.get( fileChannel );
-            return FILE_DESCRIPTOR_FIELD.getInt( fileDescriptor );
-        }
-        catch ( IllegalAccessException | IllegalArgumentException e )
-        {
-            if ( PRINT_REFLECTION_EXCEPTIONS )
-            {
-                e.printStackTrace();
-            }
-            return INVALID_FILE_DESCRIPTOR;
-        }
     }
 
     public static void deleteRecursively( File directory ) throws IOException
@@ -155,77 +100,90 @@ public class FileUtils
 
     public static long blockSize( File file ) throws IOException
     {
-        return Files.getFileStore( file.toPath() ).getBlockSize();
+        requireNonNull( file );
+        var path = file.toPath();
+        while ( path != null && !Files.exists( path ) )
+        {
+            path = path.getParent();
+        }
+        if ( path == null )
+        {
+            throw new IOException( "Fail to determine block size for file: " + file );
+        }
+        return Files.getFileStore( path ).getBlockSize();
     }
 
     public static void deletePathRecursively( Path path, Predicate<Path> removeFilePredicate ) throws IOException
     {
 
-        Files.walkFileTree( path, new SimpleFileVisitor<>()
+        windowsSafeIOOperation( () ->
         {
-            private int skippedFiles;
-
-            @Override
-            public FileVisitResult visitFile( Path file, BasicFileAttributes attrs ) throws IOException
+            Files.walkFileTree( path, new SimpleFileVisitor<>()
             {
-                if ( removeFilePredicate.test( file ) )
-                {
-                    deleteFile( file );
-                }
-                else
-                {
-                    skippedFiles++;
-                }
-                return FileVisitResult.CONTINUE;
-            }
+                private int skippedFiles;
 
-            @Override
-            public FileVisitResult postVisitDirectory( Path dir, IOException e ) throws IOException
-            {
-                if ( e != null )
+                @Override
+                public FileVisitResult visitFile( Path file, BasicFileAttributes attrs ) throws IOException
                 {
-                    throw e;
-                }
-                try
-                {
-                    if ( skippedFiles == 0 )
+                    if ( removeFilePredicate.test( file ) )
                     {
-                        Files.delete( dir );
-                        return FileVisitResult.CONTINUE;
+                        Files.delete( file );
                     }
-                    if ( isDirectoryEmpty( dir ) )
+                    else
                     {
-                        Files.delete( dir );
+                        skippedFiles++;
                     }
                     return FileVisitResult.CONTINUE;
                 }
-                catch ( DirectoryNotEmptyException notEmpty )
-                {
-                    String reason = notEmptyReason( dir, notEmpty );
-                    throw new IOException( notEmpty.getMessage() + ": " + reason, notEmpty );
-                }
-            }
 
-            private boolean isDirectoryEmpty( Path dir ) throws IOException
-            {
-                try ( Stream<Path> list = Files.list( dir ) )
+                @Override
+                public FileVisitResult postVisitDirectory( Path dir, IOException e ) throws IOException
                 {
-                    return list.noneMatch( alwaysTrue() );
+                    if ( e != null )
+                    {
+                        throw e;
+                    }
+                    try
+                    {
+                        if ( skippedFiles == 0 )
+                        {
+                            Files.delete( dir );
+                            return FileVisitResult.CONTINUE;
+                        }
+                        if ( isDirectoryEmpty( dir ) )
+                        {
+                            Files.delete( dir );
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+                    catch ( DirectoryNotEmptyException notEmpty )
+                    {
+                        String reason = notEmptyReason( dir, notEmpty );
+                        throw new IOException( notEmpty.getMessage() + ": " + reason, notEmpty );
+                    }
                 }
-            }
 
-            private String notEmptyReason( Path dir, DirectoryNotEmptyException notEmpty )
-            {
-                try ( Stream<Path> list = Files.list( dir ) )
+                private boolean isDirectoryEmpty( Path dir ) throws IOException
                 {
-                    return list.map( p -> String.valueOf( p.getFileName() ) ).collect( Collectors.joining( "', '", "'", "'." ) );
+                    try ( Stream<Path> list = Files.list( dir ) )
+                    {
+                        return list.noneMatch( alwaysTrue() );
+                    }
                 }
-                catch ( Exception e )
+
+                private String notEmptyReason( Path dir, DirectoryNotEmptyException notEmpty )
                 {
-                    notEmpty.addSuppressed( e );
-                    return "(could not list directory: " + e.getMessage() + ")";
+                    try ( Stream<Path> list = Files.list( dir ) )
+                    {
+                        return list.map( p -> String.valueOf( p.getFileName() ) ).collect( Collectors.joining( "', '", "'", "'." ) );
+                    }
+                    catch ( Exception e )
+                    {
+                        notEmpty.addSuppressed( e );
+                        return "(could not list directory: " + e.getMessage() + ")";
+                    }
                 }
-            }
+            } );
         } );
     }
 
@@ -271,7 +229,7 @@ public class FileUtils
      *
      * @param toMove The File object to move.
      * @param target Target file to move to.
-     * @throws IOException
+     * @throws IOException if an IO error occurs.
      */
     public static void moveFile( File toMove, File target ) throws IOException
     {
@@ -313,7 +271,7 @@ public class FileUtils
      * @param toMove The File object to move.
      * @param targetDirectory the destination directory
      * @return the new file, null iff the move was unsuccessful
-     * @throws IOException
+     * @throws IOException if an IO error occurs.
      */
     public static File moveFileToDirectory( File toMove, File targetDirectory ) throws IOException
     {
@@ -334,7 +292,7 @@ public class FileUtils
      *
      * @param file file that needs to be copied.
      * @param targetDirectory the destination directory
-     * @throws IOException
+     * @throws IOException if an IO error occurs.
      */
     public static void copyFileToDirectory( File file, File targetDirectory ) throws IOException
     {
@@ -379,9 +337,8 @@ public class FileUtils
         {
             Thread.sleep( 500 );
         }
-        catch ( InterruptedException ee )
+        catch ( InterruptedException ignored )
         {
-            Thread.interrupted();
         } // ok
         System.gc();
     }
@@ -647,28 +604,6 @@ public class FileUtils
             }
         }
         throw requireNonNull( storedIoe );
-    }
-
-    public interface LineListener
-    {
-        void line( String line );
-    }
-
-    public static void readTextFile( File file, LineListener listener ) throws IOException
-    {
-        try ( BufferedReader reader = new BufferedReader( new FileReader( file ) ) )
-        {
-            String line;
-            while ( (line = reader.readLine()) != null )
-            {
-                listener.line( line );
-            }
-        }
-    }
-
-    private static void deleteFile( Path path ) throws IOException
-    {
-        windowsSafeIOOperation( () -> Files.delete( path ) );
     }
 
     /**

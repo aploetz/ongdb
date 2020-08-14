@@ -59,12 +59,15 @@ import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemUtils;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.os.OsBeanUtil;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.transaction.log.files.TransactionLogInitializer;
 import org.neo4j.kernel.internal.Version;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.SimpleLogService;
+import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 
 import static java.util.Objects.requireNonNull;
@@ -107,6 +110,8 @@ class CsvImporter implements Importer
     private final FileSystemAbstraction fileSystem;
     private final PrintStream stdOut;
     private final PrintStream stdErr;
+    private final PageCacheTracer pageCacheTracer;
+    private final MemoryTracker memoryTracker;
 
     private CsvImporter( Builder b )
     {
@@ -127,6 +132,8 @@ class CsvImporter implements Importer
         this.nodeFiles = requireNonNull( b.nodeFiles );
         this.relationshipFiles = requireNonNull( b.relationshipFiles );
         this.fileSystem = requireNonNull( b.fileSystem );
+        this.pageCacheTracer = requireNonNull( b.pageCacheTracer );
+        this.memoryTracker = requireNonNull( b.memoryTracker );
         this.stdOut = requireNonNull( b.stdOut );
         this.stdErr = requireNonNull( b.stdErr );
     }
@@ -134,8 +141,8 @@ class CsvImporter implements Importer
     @Override
     public void doImport() throws IOException
     {
-        OutputStream badOutput = new BufferedOutputStream( fileSystem.openAsOutputStream( reportFile, false ) );
-        try ( Collector badCollector = getBadCollector( skipBadEntriesLogging, badOutput ) )
+        try ( OutputStream badOutput = new BufferedOutputStream( fileSystem.openAsOutputStream( reportFile, false ) );
+                Collector badCollector = getBadCollector( skipBadEntriesLogging, badOutput ) )
         {
             // Extract the default time zone from the database configuration
             ZoneId dbTimeZone = databaseConfig.get( GraphDatabaseSettings.db_temporal_timezone );
@@ -146,8 +153,7 @@ class CsvImporter implements Importer
 
             CsvInput input = new CsvInput( nodeData, defaultFormatNodeFileHeader( defaultTimeZone, normalizeTypes ),
                 relationshipsData, defaultFormatRelationshipFileHeader( defaultTimeZone, normalizeTypes ), idType,
-                csvConfig,
-                    new CsvInput.PrintingMonitor( stdOut ) );
+                csvConfig, new CsvInput.PrintingMonitor( stdOut ), memoryTracker );
 
             doImport( input, badCollector );
         }
@@ -170,6 +176,7 @@ class CsvImporter implements Importer
                     databaseLayout,
                     fileSystem,
                     null, // no external page cache
+                    pageCacheTracer,
                     importConfig,
                     new SimpleLogService( NullLogProvider.getInstance(), logProvider ),
                     executionMonitor,
@@ -179,7 +186,12 @@ class CsvImporter implements Importer
                     new PrintingImportLogicMonitor( stdOut, stdErr ),
                     jobScheduler,
                     badCollector,
+<<<<<<< HEAD
                     TransactionLogInitializer.getLogFilesInitializer() );
+=======
+                    TransactionLogInitializer.getLogFilesInitializer(),
+                    memoryTracker );
+>>>>>>> neo4j/4.1
 
             printOverview( databaseLayout.databaseDirectory(), nodeFiles, relationshipFiles, importConfig, stdOut );
 
@@ -399,9 +411,11 @@ class CsvImporter implements Importer
         private long badTolerance;
         private boolean normalizeTypes;
         private boolean verbose;
-        private Map<Set<String>, List<File[]>> nodeFiles = new HashMap<>();
-        private Map<String, List<File[]>> relationshipFiles = new HashMap<>();
+        private final Map<Set<String>, List<File[]>> nodeFiles = new HashMap<>();
+        private final Map<String, List<File[]>> relationshipFiles = new HashMap<>();
         private FileSystemAbstraction fileSystem = new DefaultFileSystemAbstraction();
+        private PageCacheTracer pageCacheTracer = PageCacheTracer.NULL;
+        private MemoryTracker memoryTracker = EmptyMemoryTracker.INSTANCE;
         private PrintStream stdOut = System.out;
         private PrintStream stdErr = System.err;
 
@@ -506,6 +520,18 @@ class CsvImporter implements Importer
         Builder withFileSystem( FileSystemAbstraction fileSystem )
         {
             this.fileSystem = fileSystem;
+            return this;
+        }
+
+        Builder withPageCacheTracer( PageCacheTracer pageCacheTracer )
+        {
+            this.pageCacheTracer = pageCacheTracer;
+            return this;
+        }
+
+        Builder withMemoryTracker( MemoryTracker memoryTracker )
+        {
+            this.memoryTracker = memoryTracker;
             return this;
         }
 

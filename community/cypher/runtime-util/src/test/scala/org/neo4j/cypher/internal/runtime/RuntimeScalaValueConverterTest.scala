@@ -21,9 +21,11 @@ package org.neo4j.cypher.internal.runtime
 
 import java.util
 import java.util.Arrays.asList
-import java.util.Collections.{emptyList, emptyMap, singletonMap, singleton => singletonSet}
+import java.util.Collections.emptyList
+import java.util.Collections.emptyMap
+import java.util.Collections.singletonMap
 
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class RuntimeScalaValueConverterTest extends CypherFunSuite {
 
@@ -74,7 +76,7 @@ class RuntimeScalaValueConverterTest extends CypherFunSuite {
   }
 
   test("should convert singleton set") {
-    val it = singletonSet(3)
+    val it = util.Collections.singleton(3)
 
     converter.asDeepScalaValue(it) should equal(List(3))
   }
@@ -86,7 +88,7 @@ class RuntimeScalaValueConverterTest extends CypherFunSuite {
   }
 
   test("should convert nested data structures") {
-    val it = singletonSet(asList(3, 4))
+    val it = util.Collections.singleton(asList(3, 4))
 
     converter.asDeepScalaValue(it) should equal(List(List(3, 4)))
   }

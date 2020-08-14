@@ -29,8 +29,10 @@ import org.neo4j.internal.batchimport.store.BatchingNeoStores;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 
@@ -49,6 +51,7 @@ public class ParallelBatchImporter implements BatchImporter
     private final PageCache externalPageCache;
     private final DatabaseLayout databaseLayout;
     private final FileSystemAbstraction fileSystem;
+    private final PageCacheTracer pageCacheTracer;
     private final Configuration config;
     private final LogService logService;
     private final Config dbConfig;
@@ -59,15 +62,17 @@ public class ParallelBatchImporter implements BatchImporter
     private final JobScheduler jobScheduler;
     private final Collector badCollector;
     private final LogFilesInitializer logFilesInitializer;
+    private final MemoryTracker memoryTracker;
 
     public ParallelBatchImporter( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem, PageCache externalPageCache,
-            Configuration config, LogService logService, ExecutionMonitor executionMonitor,
+            PageCacheTracer pageCacheTracer, Configuration config, LogService logService, ExecutionMonitor executionMonitor,
             AdditionalInitialIds additionalInitialIds, Config dbConfig, RecordFormats recordFormats, ImportLogic.Monitor monitor,
-            JobScheduler jobScheduler, Collector badCollector, LogFilesInitializer logFilesInitializer )
+            JobScheduler jobScheduler, Collector badCollector, LogFilesInitializer logFilesInitializer, MemoryTracker memoryTracker )
     {
         this.externalPageCache = externalPageCache;
         this.databaseLayout = databaseLayout;
         this.fileSystem = fileSystem;
+        this.pageCacheTracer = pageCacheTracer;
         this.config = config;
         this.logService = logService;
         this.dbConfig = dbConfig;
@@ -78,15 +83,16 @@ public class ParallelBatchImporter implements BatchImporter
         this.jobScheduler = jobScheduler;
         this.badCollector = badCollector;
         this.logFilesInitializer = logFilesInitializer;
+        this.memoryTracker = memoryTracker;
     }
 
     @Override
     public void doImport( Input input ) throws IOException
     {
-        try ( BatchingNeoStores store = ImportLogic.instantiateNeoStores( fileSystem, databaseLayout, externalPageCache, recordFormats,
-                      config, logService, additionalInitialIds, dbConfig, jobScheduler );
+        try ( BatchingNeoStores store = ImportLogic.instantiateNeoStores( fileSystem, databaseLayout, externalPageCache, pageCacheTracer, recordFormats,
+                      config, logService, additionalInitialIds, dbConfig, jobScheduler, memoryTracker );
               ImportLogic logic = new ImportLogic( databaseLayout, store, config, dbConfig, logService,
-                      executionMonitor, recordFormats, badCollector, monitor ) )
+                      executionMonitor, recordFormats, badCollector, monitor, pageCacheTracer, memoryTracker ) )
         {
             store.createNew();
             logic.initialize( input );

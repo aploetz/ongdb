@@ -31,6 +31,7 @@ import org.neo4j.index.internal.gbptree.Header;
 import org.neo4j.index.internal.gbptree.MetadataMismatchException;
 import org.neo4j.internal.schema.IndexConfig;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.index.schema.SpatialIndexConfig;
 import org.neo4j.logging.Log;
 import org.neo4j.values.storable.CoordinateReferenceSystem;
@@ -52,14 +53,15 @@ final class SpatialConfigExtractor
     {
     }
 
-    static IndexConfig indexConfigFromSpatialFile( PageCache pageCache, List<SpatialFile> spatialFiles, Log log ) throws IOException
+    static IndexConfig indexConfigFromSpatialFile( PageCache pageCache, List<SpatialFile> spatialFiles,
+            PageCursorTracer cursorTracer, Log log ) throws IOException
     {
         Map<String,Value> map = new HashMap<>();
         for ( SpatialFile spatialFile : spatialFiles )
         {
             try
             {
-                GBPTree.readHeader( pageCache, spatialFile.getIndexFile(), headerReader( map, spatialFile, log ) );
+                GBPTree.readHeader( pageCache, spatialFile.getIndexFile(), headerReader( map, spatialFile, log ), cursorTracer );
             }
             catch ( MetadataMismatchException e )
             {
@@ -98,7 +100,7 @@ final class SpatialConfigExtractor
                     }
                     catch ( BufferUnderflowException e )
                     {
-                        logExtractionFailure( "Got an exception, " + e.toString() + ".", log, spatialFile.getIndexFile() );
+                        logExtractionFailure( "Got an exception, " + e + ".", log, spatialFile.getIndexFile() );
                     }
                 }
                 else

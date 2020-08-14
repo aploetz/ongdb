@@ -32,6 +32,8 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.PhysicalFlushableChecksumChannel;
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.memory.HeapScopedBuffer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.index.IndexMap;
 import org.neo4j.kernel.impl.api.index.IndexProxy;
 import org.neo4j.kernel.impl.api.index.IndexingService;
@@ -49,6 +51,7 @@ import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.recovery.RecoveryMonitor;
 import org.neo4j.monitoring.Monitors;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
@@ -59,12 +62,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.TestLabels.LABEL_ONE;
 
 /**
  * Issue came up when observing that recovering an INDEX DROP command didn't actually call {@link IndexProxy#drop()},
  * and actually did nothing to that {@link IndexProxy} except removing it from its {@link IndexMap}.
- * This would have {@link IndexingService} forget about that index and at shutdown not call {@link IndexProxy#close()},
+ * This would have {@link IndexingService} forget about that index and at shutdown not call {@link IndexProxy#close(PageCursorTracer)},
  * resulting in open page cache files, for any page cache mapped native index files.
  *
  * This would be a problem if the INDEX DROP command was present in the transaction log, but the db had been killed
@@ -91,8 +95,9 @@ class RecoverIndexDropIT
         DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( databaseLayout ).build();
         GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
         createIndex( db );
+        StorageEngineFactory storageEngineFactory = ((GraphDatabaseAPI) db).getDependencyResolver().resolveDependency( StorageEngineFactory.class );
         managementService.shutdown();
-        appendDropTransactionToTransactionLog( databaseLayout.getTransactionLogsDirectory(), dropTransaction );
+        appendDropTransactionToTransactionLog( databaseLayout.getTransactionLogsDirectory(), dropTransaction, storageEngineFactory );
 
         // when recovering this (the drop transaction with the index file intact)
         Monitors monitors = new Monitors();
@@ -129,22 +134,29 @@ class RecoverIndexDropIT
         }
     }
 
-    private void appendDropTransactionToTransactionLog( File transactionLogsDirectory, CommittedTransactionRepresentation dropTransaction ) throws IOException
+    private void appendDropTransactionToTransactionLog( File transactionLogsDirectory, CommittedTransactionRepresentation dropTransaction,
+            StorageEngineFactory storageEngineFactory ) throws IOException
     {
-        LogFiles logFiles = LogFilesBuilder.logFilesBasedOnlyBuilder( transactionLogsDirectory, fs ).build();
+        LogFiles logFiles = LogFilesBuilder.logFilesBasedOnlyBuilder( transactionLogsDirectory, fs )
+                .withCommandReaderFactory( storageEngineFactory.commandReaderFactory() )
+                .build();
         LogFile logFile = logFiles.getLogFile();
 
         try ( ReadableLogChannel reader = logFile.getReader( logFiles.extractHeader( 0 ).getStartPosition() ) )
         {
-            LogEntryReader logEntryReader = new VersionAwareLogEntryReader();
+            LogEntryReader logEntryReader = new VersionAwareLogEntryReader( storageEngineFactory.commandReaderFactory() );
             while ( logEntryReader.readLogEntry( reader ) != null )
             {
             }
             LogPosition position = logEntryReader.lastPosition();
             StoreChannel storeChannel = fs.write( logFiles.getLogFileForVersion( logFiles.getHighestLogVersion() ) );
             storeChannel.position( position.getByteOffset() );
+<<<<<<< HEAD
             ByteBuffer buf = ByteBuffer.allocate( 1000 );
             try ( PhysicalFlushableChecksumChannel writeChannel = new PhysicalFlushableChecksumChannel( storeChannel, buf ) )
+=======
+            try ( PhysicalFlushableChecksumChannel writeChannel = new PhysicalFlushableChecksumChannel( storeChannel, new HeapScopedBuffer( 100, INSTANCE ) ) )
+>>>>>>> neo4j/4.1
             {
                 new LogEntryWriter( writeChannel ).serialize( dropTransaction );
             }

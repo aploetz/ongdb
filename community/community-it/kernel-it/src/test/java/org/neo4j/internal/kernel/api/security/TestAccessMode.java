@@ -23,7 +23,11 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import org.neo4j.graphdb.security.AuthorizationViolationException;
+<<<<<<< HEAD
 import org.neo4j.internal.kernel.api.LabelSet;
+=======
+import org.neo4j.internal.kernel.api.TokenSet;
+>>>>>>> neo4j/4.1
 
 public class TestAccessMode implements AccessMode
 {
@@ -113,7 +117,11 @@ public class TestAccessMode implements AccessMode
     }
 
     @Override
+<<<<<<< HEAD
     public boolean allowsReadNodeProperty( Supplier<LabelSet> labels, int propertyKey )
+=======
+    public boolean allowsReadNodeProperty( Supplier<TokenSet> labels, int propertyKey )
+>>>>>>> neo4j/4.1
     {
         return allowRead;
     }
@@ -143,6 +151,57 @@ public class TestAccessMode implements AccessMode
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean allowsSetLabel( long labelId )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsRemoveLabel( long labelId )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsCreateNode( int[] labelIds )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsDeleteNode( Supplier<TokenSet> labelSupplier )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsCreateRelationship( int relType )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsDeleteRelationship( int relType )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsSetProperty( Supplier<TokenSet> labels, int propertyKey )
+    {
+        return allowWrite;
+    }
+
+    @Override
+    public boolean allowsSetProperty( IntSupplier relType, int propertyKey )
+    {
+        return allowWrite;
+    }
+
+    @Override
+>>>>>>> neo4j/4.1
     public AuthorizationViolationException onViolation( String msg )
     {
         return new AuthorizationViolationException( "Forbidden in testAccessMode" );

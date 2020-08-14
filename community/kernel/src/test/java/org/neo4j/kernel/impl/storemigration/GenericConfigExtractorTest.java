@@ -20,7 +20,6 @@
 package org.neo4j.kernel.impl.storemigration;
 
 import org.eclipse.collections.api.tuple.Pair;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -48,6 +47,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.test.Unzip.unzip;
 import static org.neo4j.values.storable.Values.COMPARATOR;
 
@@ -97,17 +100,16 @@ class GenericConfigExtractorTest
     {
         // given
         AssertableLogProvider logProvider = new AssertableLogProvider();
-        Log myLog = logProvider.getLog( "myLog" );
+        Log myLog = logProvider.getLog( getClass() );
         File genericFile = directory.file( "genericFile" );
         assertFalse( fs.fileExists( genericFile ) );
 
         // when
-        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, myLog );
+        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, NULL, myLog );
 
         // then
         String reason = "Index file does not exists.";
-        AssertableLogProvider.LogMatcher logEntry = getExpectedLogEntry( genericFile, reason );
-        logProvider.assertExactly( logEntry );
+        assertContainsLogEntry( logProvider, genericFile, reason );
     }
 
     @Test
@@ -117,18 +119,17 @@ class GenericConfigExtractorTest
         unzip( getClass(), ZIP_FAILED_GENERIC_35_FILE, directory.homeDir() );
         File genericFile = directory.file( FAILED_GENERIC_35_FILE );
         AssertableLogProvider logProvider = new AssertableLogProvider();
-        Log myLog = logProvider.getLog( "myLog" );
+        Log myLog = logProvider.getLog( getClass() );
 
         // and
         assertTrue( fs.fileExists( genericFile ) );
 
         // when
-        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, myLog );
+        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, NULL, myLog );
 
         // then
         String reason = "Index is in FAILED state.";
-        AssertableLogProvider.LogMatcher logEntry = getExpectedLogEntry( genericFile, reason );
-        logProvider.assertExactly( logEntry );
+        assertContainsLogEntry( logProvider, genericFile, reason );
     }
 
     @Test
@@ -136,17 +137,16 @@ class GenericConfigExtractorTest
     {
         // given
         AssertableLogProvider logProvider = new AssertableLogProvider();
-        Log myLog = logProvider.getLog( "myLog" );
+        Log myLog = logProvider.getLog( getClass() );
         File genericFile = directory.file( "genericFile" );
         corruptFile( fs, genericFile );
 
         // when
-        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, myLog );
+        GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, NULL, myLog );
 
         // then
         String reason = "Index meta data is corrupt and can not be parsed.";
-        AssertableLogProvider.LogMatcher logEntry = getExpectedLogEntry( genericFile, reason );
-        logProvider.assertExactly( logEntry );
+        assertContainsLogEntry( logProvider, genericFile, reason );
     }
 
     @Test
@@ -160,21 +160,17 @@ class GenericConfigExtractorTest
         assertTrue( fs.fileExists( genericFile ) );
 
         // when
-        IndexConfig indexConfig = GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, NullLog.getInstance() );
+        IndexConfig indexConfig = GenericConfigExtractor.indexConfigFromGenericFile( fs, pageCache, genericFile, NULL, NullLog.getInstance() );
 
         // then
         assertExpectedIndexConfig( indexConfig );
     }
 
-    private static AssertableLogProvider.LogMatcher getExpectedLogEntry( File genericFile, String reason )
+    private void assertContainsLogEntry( AssertableLogProvider logProvider, File genericFile, String reason )
     {
-        return AssertableLogProvider.inLog( "myLog" )
-                .warn( Matchers.allOf(
-                        Matchers.containsString( "Could not extract index configuration from migrating index file." ),
-                        Matchers.containsString( reason ),
-                        Matchers.containsString(
-                                "Index will be recreated with currently configured settings instead, indexFile=" + genericFile.getAbsolutePath() )
-                ) );
+        assertThat( logProvider ).forClass( getClass() ).forLevel( WARN )
+                .containsMessages( "Could not extract index configuration from migrating index file. " + reason +
+                        " Index will be recreated with currently configured settings instead, indexFile=" + genericFile.getAbsolutePath() );
     }
 
     private static void corruptFile( FileSystemAbstraction fs, File genericFile ) throws IOException
@@ -184,7 +180,7 @@ class GenericConfigExtractorTest
             int size = 100;
             byte[] bytes = new byte[size];
             Arrays.fill( bytes, (byte) 9 );
-            ByteBuffer byteBuffer = ByteBuffers.allocate( size );
+            ByteBuffer byteBuffer = ByteBuffers.allocate( size, INSTANCE );
             byteBuffer.put( bytes );
             write.writeAll( byteBuffer );
         }

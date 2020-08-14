@@ -19,14 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ShortestPathExpression
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.InternalException
 import org.neo4j.values.storable.Values
-import org.neo4j.values.virtual.{ListValue, PathValue, VirtualValues}
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.PathValue
+import org.neo4j.values.virtual.VirtualValues
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 /**
  * Shortest pipe inserts a single shortest path between two already found nodes
@@ -36,17 +38,17 @@ case class ShortestPathPipe(source: Pipe,
                            (val id: Id = Id.INVALID_ID)
   extends PipeWithSource(source) {
 
-  shortestPathExpression.registerOwningPipe(this)
-
   private val shortestPathCommand = shortestPathExpression.shortestPathPattern
   private def pathName = shortestPathCommand.pathName
 
-  protected def internalCreateResults(input:Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input:Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
+
     input.flatMap(ctx => {
-      val result = shortestPathExpression(ctx, state) match {
+      val result = shortestPathExpression(ctx, state, memoryTracker) match {
         case in: ListValue => in
         case v if v eq Values.NO_VALUE => VirtualValues.EMPTY_LIST
-        case path: PathValue    => VirtualValues.list(path)
+        case path: PathValue => VirtualValues.list(path)
       }
 
       shortestPathCommand.relIterator match {
@@ -69,4 +71,5 @@ case class ShortestPathPipe(source: Pipe,
           }
       }
     })
+  }
 }

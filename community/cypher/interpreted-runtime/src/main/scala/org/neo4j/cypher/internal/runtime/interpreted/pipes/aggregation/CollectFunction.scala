@@ -19,23 +19,25 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.VirtualValues
 
 import scala.collection.mutable.ArrayBuffer
 
-class CollectFunction(value:Expression) extends AggregationFunction {
-  val collection = new ArrayBuffer[AnyValue]()
+class CollectFunction(value:Expression, memoryTracker: MemoryTracker) extends AggregationFunction {
+  private var collection = new ArrayBuffer[AnyValue]()
 
-  override def apply(data: ExecutionContext, state:QueryState): Unit = {
+  override def apply(data: ReadableRow, state:QueryState): Unit = {
     value(data, state) match {
       case IsNoValue() =>
       case v    =>
         collection += v
-        state.memoryTracker.allocated(v)
+        memoryTracker.allocateHeap(v.estimatedHeapUsage())
     }
   }
 

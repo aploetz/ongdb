@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -49,11 +50,9 @@ import org.neo4j.server.security.systemgraph.BasicSystemGraphRealm;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 
 import static java.util.Collections.emptyList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.core.IsEqual.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
@@ -123,8 +122,8 @@ public class AuthProceduresIT
         // Given
         assertSuccess( admin, "ALTER CURRENT USER SET PASSWORD FROM 'neo4j' TO 'abc'" );
 
-        assertThat( login( "neo4j", "neo4j" ).subject().getAuthenticationResult(), equalTo( FAILURE ) );
-        assertThat( login( "neo4j", "abc" ).subject().getAuthenticationResult(), equalTo( SUCCESS ) );
+        assertThat( login( "neo4j", "neo4j" ).subject().getAuthenticationResult() ).isEqualTo( FAILURE );
+        assertThat( login( "neo4j", "abc" ).subject().getAuthenticationResult() ).isEqualTo( SUCCESS );
     }
 
     @Test
@@ -153,10 +152,9 @@ public class AuthProceduresIT
 
         // Then
         assertThat( execute( user, "CALL dbms.procedures", r ->
-                {
-                    assert !r.hasNext();
-                } ),
-                containsString( "The credentials you provided were valid, but must be changed before you can use this instance." ) );
+        {
+            assertFalse( r.hasNext() );
+        } ) ).contains( "The credentials you provided were valid, but must be changed before you can use this instance." );
     }
 
     //---------- create user -----------
@@ -167,11 +165,18 @@ public class AuthProceduresIT
         assertSuccess( admin, "CALL dbms.security.createUser('andres', '123', true)" );
 
         assertSuccess( admin, "SHOW USERS", r -> {
+            Map<String,Object> expectedNeo4j = new HashMap<>();
+            expectedNeo4j.put( "user", "neo4j" );
+            expectedNeo4j.put( "roles", null );
+            expectedNeo4j.put( "passwordChangeRequired", false );
+            expectedNeo4j.put( "suspended", null );
+            Map<String,Object> expectedAndres = new HashMap<>();
+            expectedAndres.put( "user", "andres" );
+            expectedAndres.put( "roles", null );
+            expectedAndres.put( "passwordChangeRequired", true );
+            expectedAndres.put( "suspended", null );
             Set<Map<String,Object>> users = r.stream().collect( Collectors.toSet() );
-            assertTrue( users.containsAll( Set.of(
-                    Map.of( "user", "neo4j", "passwordChangeRequired", false ),
-                    Map.of( "user", "andres", "passwordChangeRequired", true )
-            ) ) );
+            assertTrue( users.containsAll( Set.of( expectedNeo4j, expectedAndres ) ) );
         } );
     }
 
@@ -180,11 +185,18 @@ public class AuthProceduresIT
     {
         assertSuccess( admin, "CALL dbms.security.createUser('andres', '123', false)" );
         assertSuccess( admin, "SHOW USERS", r -> {
+            Map<String,Object> expectedNeo4j = new HashMap<>();
+            expectedNeo4j.put( "user", "neo4j" );
+            expectedNeo4j.put( "roles", null );
+            expectedNeo4j.put( "passwordChangeRequired", false );
+            expectedNeo4j.put( "suspended", null );
+            Map<String,Object> expectedAndres = new HashMap<>();
+            expectedAndres.put( "user", "andres" );
+            expectedAndres.put( "roles", null );
+            expectedAndres.put( "passwordChangeRequired", false );
+            expectedAndres.put( "suspended", null );
             Set<Map<String,Object>> users = r.stream().collect( Collectors.toSet() );
-            assertTrue( users.containsAll( Set.of(
-                    Map.of( "user", "neo4j", "passwordChangeRequired", false ),
-                    Map.of( "user", "andres", "passwordChangeRequired", false )
-            ) ) );
+            assertTrue( users.containsAll( Set.of( expectedNeo4j, expectedAndres ) ) );
         } );
     }
 
@@ -193,11 +205,18 @@ public class AuthProceduresIT
     {
         assertSuccess( admin, "CALL dbms.security.createUser('andres', '123')" );
         assertSuccess( admin, "SHOW USERS", r -> {
+            Map<String,Object> expectedNeo4j = new HashMap<>();
+            expectedNeo4j.put( "user", "neo4j" );
+            expectedNeo4j.put( "roles", null );
+            expectedNeo4j.put( "passwordChangeRequired", false );
+            expectedNeo4j.put( "suspended", null );
+            Map<String,Object> expectedAndres = new HashMap<>();
+            expectedAndres.put( "user", "andres" );
+            expectedAndres.put( "roles", null );
+            expectedAndres.put( "passwordChangeRequired", true );
+            expectedAndres.put( "suspended", null );
             Set<Map<String,Object>> users = r.stream().collect( Collectors.toSet() );
-            assertTrue( users.containsAll( Set.of(
-                    Map.of( "user", "neo4j", "passwordChangeRequired", false ),
-                    Map.of( "user", "andres", "passwordChangeRequired", true )
-            ) ) );
+            assertTrue( users.containsAll( Set.of( expectedNeo4j, expectedAndres ) ) );
         } );
     }
 
@@ -212,10 +231,8 @@ public class AuthProceduresIT
     void shouldNotCreateUserIfInvalidUsername()
     {
         assertFail( admin, "CALL dbms.security.createUser('', '1234', true)", "The provided username is empty." );
-        assertFail( admin, "CALL dbms.security.createUser(',!', '1234', true)",
-                "Username ',!' contains illegal characters." );
-        assertFail( admin, "CALL dbms.security.createUser(':ss!', '', true)", "Username ':ss!' contains illegal " +
-                "characters." );
+        assertFail( admin, "CALL dbms.security.createUser(',!', '1234', true)", "Username ',!' contains illegal characters." );
+        assertFail( admin, "CALL dbms.security.createUser(':ss!', '1234', true)", "Username ':ss!' contains illegal " + "characters." );
     }
 
     @Test
@@ -245,8 +262,13 @@ public class AuthProceduresIT
 
         // THEN
         assertSuccess( admin, "SHOW USERS", r -> {
+            Map<String,Object> expectedNeo4j = new HashMap<>();
+            expectedNeo4j.put( "user", "neo4j" );
+            expectedNeo4j.put( "roles", null );
+            expectedNeo4j.put( "passwordChangeRequired", false );
+            expectedNeo4j.put( "suspended", null );
             Set<Map<String,Object>> users = r.stream().collect( Collectors.toSet() );
-            assertTrue( users.contains( Map.of( "user", "neo4j", "passwordChangeRequired", false ) ) );
+            assertTrue( users.contains( expectedNeo4j ) );
         } );
     }
 
@@ -275,7 +297,7 @@ public class AuthProceduresIT
             String[] items = new String[]{"neo4j", "andres"};
             List<Object> results = r.stream().map( s -> s.get( "username" ) ).collect( Collectors.toList() );
             assertEquals( Arrays.asList( items ).size(), results.size() );
-            assertThat( results, containsInAnyOrder( items ) );
+            assertThat( results ).contains( items );
         } );
     }
 
@@ -294,8 +316,8 @@ public class AuthProceduresIT
     @Test
     void shouldShowCurrentUser()
     {
-        assertThat( execute( admin, "CALL dbms.showCurrentUser()",
-                r -> assertKeyIsMap( r, "username", "flags", map( "neo4j", emptyList() ) ) ), equalTo( "" ) );
+        assertThat( execute( admin, "CALL dbms.showCurrentUser()", r -> assertKeyIsMap( r, "username", "flags", map( "neo4j", emptyList() ) ) ) ).isEqualTo(
+                "" );
     }
 
     @Test
@@ -322,7 +344,7 @@ public class AuthProceduresIT
 
     private void assertNotification( LoginContext subject, String query, Notification wantedNotification )
     {
-        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.implicit, subject ) )
+        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.IMPLICIT, subject ) )
         {
             Result result = tx.execute( query );
 
@@ -342,7 +364,7 @@ public class AuthProceduresIT
 
     private void assertSuccess( LoginContext subject, String query, Consumer<ResourceIterator<Map<String,Object>>> resultConsumer )
     {
-        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.implicit, subject ) )
+        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.IMPLICIT, subject ) )
         {
             Result result = tx.execute( query );
             resultConsumer.accept( result );
@@ -356,7 +378,7 @@ public class AuthProceduresIT
         {
             assert !row.hasNext();
         };
-        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.implicit, subject ) )
+        try ( Transaction tx = systemDb.beginTransaction( KernelTransaction.Type.IMPLICIT, subject ) )
         {
             Result result = tx.execute( query );
             resultConsumer.accept( result );
@@ -365,14 +387,14 @@ public class AuthProceduresIT
         }
         catch ( Exception e )
         {
-            assertThat( e.getMessage(), containsString( partOfErrorMsg ) );
+            assertThat( e.getMessage() ).contains( partOfErrorMsg );
         }
     }
 
     private String execute( LoginContext subject, String query,
             Consumer<ResourceIterator<Map<String, Object>>> resultConsumer )
     {
-        try ( Transaction tx = db.beginTransaction( KernelTransaction.Type.implicit, subject ) )
+        try ( Transaction tx = db.beginTransaction( KernelTransaction.Type.IMPLICIT, subject ) )
         {
             resultConsumer.accept( tx.execute( query ) );
             tx.commit();
@@ -410,7 +432,7 @@ public class AuthProceduresIT
                 assertEquals( value.size(), expectedValues.size(),
                         "Results for '" + key + "' should have size " + expectedValues.size() + " but was " +
                                 value.size() );
-                assertThat( value, containsInAnyOrder( expectedValues.toArray() ) );
+                assertThat( value ).containsAll( expectedValues );
             }
             else
             {

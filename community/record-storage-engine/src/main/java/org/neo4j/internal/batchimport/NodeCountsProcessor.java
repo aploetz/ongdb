@@ -22,6 +22,7 @@ package org.neo4j.internal.batchimport;
 import org.neo4j.common.ProgressReporter;
 import org.neo4j.counts.CountsAccessor;
 import org.neo4j.internal.batchimport.cache.NodeLabelsCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -36,7 +37,7 @@ public class NodeCountsProcessor implements RecordProcessor<NodeRecord>
 {
     private final NodeStore nodeStore;
     private final long[] labelCounts;
-    private ProgressReporter progressReporter;
+    private final ProgressReporter progressReporter;
     private final NodeLabelsCache cache;
     private final CountsAccessor.Updater counts;
     private final int anyLabel;
@@ -54,9 +55,9 @@ public class NodeCountsProcessor implements RecordProcessor<NodeRecord>
     }
 
     @Override
-    public boolean process( NodeRecord node )
+    public boolean process( NodeRecord node, PageCursorTracer cursorTracer )
     {
-        long[] labels = NodeLabelsField.get( node, nodeStore );
+        long[] labels = NodeLabelsField.get( node, nodeStore, cursorTracer );
         if ( labels.length > 0 )
         {
             for ( long labelId : labels )

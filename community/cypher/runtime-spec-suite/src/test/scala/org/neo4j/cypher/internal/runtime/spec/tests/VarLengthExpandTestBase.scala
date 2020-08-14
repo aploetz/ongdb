@@ -19,12 +19,18 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
 import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.Predicate
 import org.neo4j.cypher.internal.logical.plans.ExpandInto
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
-import org.neo4j.graphdb.{Node, RelationshipType}
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
+import org.neo4j.graphdb.Node
+import org.neo4j.graphdb.RelationshipType
 
 import scala.util.Random
 
@@ -43,7 +49,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y")
       .expand("(x)-[*]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -66,7 +72,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "r", "y")
       .expand("(x)-[r*]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -92,7 +98,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "r", "y")
       .expand("(x)-[r*]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -117,7 +123,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "r", "y")
       .expand("(x)-[r*..1]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -140,7 +146,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "r", "y")
       .expand("(x)-[r*2..4]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -506,7 +512,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r*1..2]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -533,7 +539,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)<-[r*1..2]-(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -553,7 +559,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r*1..2]-(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -587,7 +593,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r:A*1..2]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -611,7 +617,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r:B*1..2]->(y)")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -633,7 +639,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r:*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.middle.getId))
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -656,7 +662,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r:*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.start.getId))
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -674,7 +680,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .expand("(X)-[r:*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.start.getId))
       .projection("x AS X")
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -691,7 +697,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .expand("(x)-[r:*1..2]->(y)", relationshipPredicate = Predicate("r", "id(r) <> "+g.startMiddle.getId))
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -715,7 +721,7 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .expand("(x)-[r:*2..2]-(y)",
         nodePredicate = Predicate("n", "id(n) <> "+g.sa1.getId),
         relationshipPredicate = Predicate("r", "id(r) <> "+g.startMiddle.getId))
-      .nodeByLabelScan("x", "START")
+      .nodeByLabelScan("x", "START", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -788,10 +794,10 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
 
     // then
     val expected =
-    for {
-      path <- paths
-      length <- 0 to 5
-    } yield Array(path.startNode, path.take(length).endNode())
+      for {
+        path <- paths
+        length <- 0 to 5
+      } yield Array(path.startNode, path.take(length).endNode())
     runtimeResult should beColumns("x", "y").withRows(expected)
   }
 
@@ -863,6 +869,46 @@ abstract class VarLengthExpandTestBase[CONTEXT <: RuntimeContext](
         length <- 0 to 5
       } yield Array(path.startNode, path.take(length).endNode())
     runtimeResult should beColumns("x", "y").withRows(expected)
+  }
+
+  test("should handle var expand + predicate on cached property") {
+    // given
+    val n = sizeHint / 6
+    val paths = given {
+      val ps = chainGraphs(n, "TO", "TO", "TO", "TOO", "TO")
+      // set incrementing node property values along chain
+      for {
+        p <- ps
+        i <- 0 until p.length()
+        n = p.nodeAt(i)
+      } n.setProperty("prop", i)
+      // set property of last node to lowest value, so VarLength predicate fails
+      for {
+        p <- ps
+        n = p.nodeAt(p.length())
+      } n.setProperty("prop", -1)
+      ps
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("b", "c")
+      .expand("(b)-[*]->(c)", nodePredicate = Predicate("n", "n.prop > cache[a.prop]"))
+      .expandAll("(a)-[:TO]->(b)")
+      .nodeByLabelScan("a", "START", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expected =
+      for {
+        path <- paths
+        length <- 0 to 3
+        p = path.slice(1, 1 + length)
+      } yield Array(p.startNode, p.endNode())
+
+    runtimeResult should beColumns("b", "c").withRows(expected)
   }
 
   // HELPERS

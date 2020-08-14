@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.Flushable;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -35,11 +36,13 @@ import java.util.function.BooleanSupplier;
 
 import org.neo4j.function.ThrowingConsumer;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.TransactionAppender;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointerImpl.ForceOperation;
 import org.neo4j.kernel.impl.transaction.log.pruning.LogPruning;
-import org.neo4j.kernel.impl.transaction.tracing.CheckPointTracer;
+import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.kernel.impl.transaction.tracing.LogCheckPointEvent;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.monitoring.DatabaseHealth;
@@ -47,9 +50,8 @@ import org.neo4j.monitoring.Health;
 import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.util.concurrent.BinaryLatch;
 
-import static java.time.Duration.ofSeconds;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static java.time.Duration.ofMinutes;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,14 +66,16 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.test.ThreadTestUtils.forkFuture;
 
 class CheckPointerImplTest
 {
     private static final SimpleTriggerInfo INFO = new SimpleTriggerInfo( "Test" );
+    public static final Duration TIMEOUT = ofMinutes( 5 );
 
     private final TransactionIdStore txIdStore = mock( TransactionIdStore.class );
     private final CheckPointThreshold threshold = mock( CheckPointThreshold.class );
@@ -79,7 +83,7 @@ class CheckPointerImplTest
     private final LogPruning logPruning = mock( LogPruning.class );
     private final TransactionAppender appender = mock( TransactionAppender.class );
     private final Health health = mock( DatabaseHealth.class );
-    private final CheckPointTracer tracer = mock( CheckPointTracer.class, RETURNS_MOCKS );
+    private final DatabaseTracer tracer = mock( DatabaseTracer.class, RETURNS_MOCKS );
     private IOLimiter limiter = mock( IOLimiter.class );
 
     private final long initialTransactionId = 2L;
@@ -100,9 +104,9 @@ class CheckPointerImplTest
 
         // Then
         assertEquals( -1, txId );
-        verifyZeroInteractions( forceOperation );
-        verifyZeroInteractions( tracer );
-        verifyZeroInteractions( appender );
+        verifyNoInteractions( forceOperation );
+        verifyNoInteractions( tracer );
+        verifyNoInteractions( appender );
     }
 
     @Test
@@ -120,7 +124,7 @@ class CheckPointerImplTest
 
         // Then
         assertEquals( transactionId, txId );
-        verify( forceOperation ).flushAndForce( limiter );
+        verify( forceOperation ).flushAndForce( limiter, NULL );
         verify( health, times( 2 ) ).assertHealthy( IOException.class );
         verify( appender ).checkPoint( eq( logPosition ), any( LogCheckPointEvent.class ) );
         verify( threshold ).initialize( initialTransactionId );
@@ -146,7 +150,7 @@ class CheckPointerImplTest
 
         // Then
         assertEquals( transactionId, txId );
-        verify( forceOperation ).flushAndForce( limiter );
+        verify( forceOperation ).flushAndForce( limiter, NULL );
         verify( health, times( 2 ) ).assertHealthy( IOException.class );
         verify( appender ).checkPoint( eq( logPosition ), any( LogCheckPointEvent.class ) );
         verify( threshold ).initialize( initialTransactionId );
@@ -171,7 +175,7 @@ class CheckPointerImplTest
 
         // Then
         assertEquals( transactionId, txId );
-        verify( forceOperation ).flushAndForce( limiter );
+        verify( forceOperation ).flushAndForce( limiter, NULL );
         verify( health, times( 2 ) ).assertHealthy( IOException.class );
         verify( appender ).checkPoint( eq( logPosition ), any( LogCheckPointEvent.class ) );
         verify( threshold ).initialize( initialTransactionId );
@@ -196,7 +200,7 @@ class CheckPointerImplTest
 
         // Then
         assertEquals( transactionId, txId );
-        verify( forceOperation ).flushAndForce( limiter );
+        verify( forceOperation ).flushAndForce( limiter, NULL );
         verify( health, times( 2 ) ).assertHealthy( IOException.class );
         verify( appender ).checkPoint( eq( logPosition ), any( LogCheckPointEvent.class ) );
         verify( threshold ).initialize( initialTransactionId );
@@ -336,7 +340,7 @@ class CheckPointerImplTest
         checkPointing.start();
         checkPointing.checkPointIfNeeded( INFO );
 
-        verify( forceOperation ).flushAndForce( limiter );
+        verify( forceOperation ).flushAndForce( limiter, NULL );
     }
 
     @Test
@@ -413,7 +417,7 @@ class CheckPointerImplTest
             arriveFlushAndForce.release();
             finishFlushAndForce.await();
             return null;
-        } ).when( forceOperation ).flushAndForce( limiter );
+        } ).when( forceOperation ).flushAndForce( limiter, NULL );
 
         Thread forceCheckPointThread = new Thread( () ->
         {
@@ -433,12 +437,12 @@ class CheckPointerImplTest
 
         BooleanSupplier predicate = mock( BooleanSupplier.class );
         when( predicate.getAsBoolean() ).thenReturn( false, false, true );
-        assertThat( checkPointer.tryCheckPoint( INFO, predicate ), is( -1L ) ); // We decided to not wait for the on-going check point to finish.
+        assertThat( checkPointer.tryCheckPoint( INFO, predicate ) ).isEqualTo( -1L ); // We decided to not wait for the on-going check point to finish.
 
         finishFlushAndForce.release(); // Let the flushAndForce complete.
         forceCheckPointThread.join();
 
-        assertThat( checkPointer.tryCheckPoint( INFO, predicate ), is( this.transactionId ) );
+        assertThat( checkPointer.tryCheckPoint( INFO, predicate ) ).isEqualTo( this.transactionId );
     }
 
     private void verifyAsyncActionCausesConcurrentFlushingRush(
@@ -487,7 +491,7 @@ class CheckPointerImplTest
             long newValue = limitDisableCounter.get();
             observedRushCount.set( newValue );
             return null;
-        } ).when( forceOperation ).flushAndForce( limiter );
+        } ).when( forceOperation ).flushAndForce( limiter, NULL );
 
         Future<Object> forceCheckPointer = forkFuture( () ->
         {
@@ -499,13 +503,17 @@ class CheckPointerImplTest
         when( threshold.isCheckPointingNeeded( anyLong(), eq( INFO ) ) ).thenReturn( true );
         checkPointer.checkPointIfNeeded( INFO );
         forceCheckPointer.get();
-        assertThat( observedRushCount.get(), is( 1L ) );
+        assertThat( observedRushCount.get() ).isEqualTo( 1L );
     }
 
     @Test
     void mustRequestFastestPossibleFlushWhenForceCheckPointIsCalledDuringBackgroundCheckPoint()
     {
+<<<<<<< HEAD
         assertTimeoutPreemptively( ofSeconds( 10 ), () ->
+=======
+        assertTimeoutPreemptively( TIMEOUT, () ->
+>>>>>>> neo4j/4.1
                 verifyAsyncActionCausesConcurrentFlushingRush( checkPointer -> checkPointer.forceCheckPoint( new SimpleTriggerInfo( "async" ) ) ) );
 
     }
@@ -513,14 +521,21 @@ class CheckPointerImplTest
     @Test
     void mustRequestFastestPossibleFlushWhenTryCheckPointIsCalledDuringBackgroundCheckPoint()
     {
+<<<<<<< HEAD
         assertTimeoutPreemptively( ofSeconds( 10 ), () ->
+=======
+        assertTimeoutPreemptively( TIMEOUT, () ->
+>>>>>>> neo4j/4.1
                 verifyAsyncActionCausesConcurrentFlushingRush( checkPointer -> checkPointer.tryCheckPoint( new SimpleTriggerInfo( "async" ) ) ) );
     }
 
     private CheckPointerImpl checkPointer( StoreCopyCheckPointMutex mutex )
     {
+        var databaseTracers = mock( DatabaseTracers.class );
+        when( databaseTracers.getDatabaseTracer() ).thenReturn( tracer );
+        when( databaseTracers.getPageCacheTracer() ).thenReturn( PageCacheTracer.NULL );
         return new CheckPointerImpl( txIdStore, threshold, forceOperation, logPruning, appender, health,
-                NullLogProvider.getInstance(), tracer, limiter, mutex );
+                NullLogProvider.getInstance(), databaseTracers, limiter, mutex );
     }
 
     private CheckPointerImpl checkPointer()

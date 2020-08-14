@@ -20,6 +20,7 @@
 package org.neo4j.index.internal.gbptree;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.eclipse.collections.impl.factory.Sets;
 
 import java.io.File;
 
@@ -27,7 +28,7 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.scheduler.JobScheduler;
 
@@ -42,12 +43,14 @@ public class GBPTreeBootstrapper
     private final PageCache pageCache;
     private final LayoutBootstrapper layoutBootstrapper;
     private final boolean readOnly;
+    private final PageCacheTracer pageCacheTracer;
 
-    public GBPTreeBootstrapper( PageCache pageCache, LayoutBootstrapper layoutBootstrapper, boolean readOnly )
+    public GBPTreeBootstrapper( PageCache pageCache, LayoutBootstrapper layoutBootstrapper, boolean readOnly, PageCacheTracer pageCacheTracer )
     {
         this.pageCache = pageCache;
         this.layoutBootstrapper = layoutBootstrapper;
         this.readOnly = readOnly;
+        this.pageCacheTracer = pageCacheTracer;
     }
 
     public Bootstrap bootstrapTree( File file )
@@ -56,15 +59,18 @@ public class GBPTreeBootstrapper
         {
             // Get meta information about the tree
             MetaVisitor<?,?> metaVisitor = new MetaVisitor();
-            GBPTreeStructure.visitHeader( pageCache, file, metaVisitor );
+            try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( "TreeBootstrap" ) )
+            {
+                GBPTreeStructure.visitHeader( pageCache, file, metaVisitor, cursorTracer );
+            }
             Meta meta = metaVisitor.meta;
             Pair<TreeState,TreeState> statePair = metaVisitor.statePair;
             TreeState state = TreeStatePair.selectNewestValidState( statePair );
 
             // Create layout and treeNode from meta
             Layout<?,?> layout = layoutBootstrapper.create( file, pageCache, meta );
-            GBPTree<?,?> tree =
-                    new GBPTree<>( pageCache, file, layout, meta.getPageSize(), NO_MONITOR, NO_HEADER_READER, NO_HEADER_WRITER, ignore(), readOnly );
+            GBPTree<?,?> tree = new GBPTree<>( pageCache, file, layout, meta.getPageSize(), NO_MONITOR, NO_HEADER_READER, NO_HEADER_WRITER, ignore(), readOnly,
+                    pageCacheTracer, Sets.immutable.empty() );
             return new SuccessfulBootstrap( tree, layout, state, meta );
         }
         catch ( Exception e )
@@ -75,11 +81,9 @@ public class GBPTreeBootstrapper
 
     public static PageCache pageCache( JobScheduler jobScheduler )
     {
-        SingleFilePageSwapperFactory swapper = new SingleFilePageSwapperFactory();
         DefaultFileSystemAbstraction fs = new DefaultFileSystemAbstraction();
-        swapper.open( fs );
-        PageCursorTracerSupplier cursorTracerSupplier = PageCursorTracerSupplier.NULL;
-        return new MuninnPageCache( swapper, 100, NULL, cursorTracerSupplier, EmptyVersionContextSupplier.EMPTY, jobScheduler );
+        SingleFilePageSwapperFactory swapper = new SingleFilePageSwapperFactory( fs );
+        return new MuninnPageCache( swapper, 100, NULL, EmptyVersionContextSupplier.EMPTY, jobScheduler );
     }
 
     public interface Bootstrap

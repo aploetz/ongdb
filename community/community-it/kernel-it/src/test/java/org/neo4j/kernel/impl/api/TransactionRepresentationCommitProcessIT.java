@@ -41,8 +41,7 @@ import org.neo4j.test.extension.ImpermanentDbmsExtension;
 import org.neo4j.test.extension.Inject;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @ImpermanentDbmsExtension( configurationCallback = "configure" )
@@ -52,6 +51,12 @@ class TransactionRepresentationCommitProcessIT
 
     @Inject
     private GraphDatabaseAPI db;
+    @Inject
+    private GBPTreeCountsStore countsStore;
+    @Inject
+    private CheckPointer checkPointer;
+    @Inject
+    private TransactionIdStore transactionIdStore;
 
     @ExtensionCallback
     static void configure( TestDatabaseManagementServiceBuilder builder )
@@ -109,18 +114,11 @@ class TransactionRepresentationCommitProcessIT
         }
         workers.awaitAndThrowOnError();
 
-        GBPTreeCountsStore counts = getDependency( GBPTreeCountsStore.class );
-        assertThat( "Count store should be rotated once at least", counts.txId(), greaterThan( 0L ) );
+        assertThat( countsStore.txId() ).as( "Count store should be rotated once at least" ).isGreaterThan( 0L );
 
-        long lastRotationTx = getDependency( CheckPointer.class ).forceCheckPoint( new SimpleTriggerInfo( "test" ) );
-        TransactionIdStore txIdStore = getDependency( TransactionIdStore.class );
-        assertEquals( txIdStore.getLastClosedTransactionId(), lastRotationTx,
+        long lastRotationTx = checkPointer.forceCheckPoint( new SimpleTriggerInfo( "test" ) );
+        assertEquals( transactionIdStore.getLastClosedTransactionId(), lastRotationTx,
                 "NeoStore last closed transaction id should be equal last count store rotation transaction id." );
-        assertEquals( txIdStore.getLastClosedTransactionId(), counts.txId(), "Last closed transaction should be last rotated tx in count store" );
-    }
-
-    private <T> T getDependency( Class<T> clazz )
-    {
-        return db.getDependencyResolver().resolveDependency( clazz );
+        assertEquals( transactionIdStore.getLastClosedTransactionId(), countsStore.txId(), "Last closed transaction should be last rotated tx in count store" );
     }
 }

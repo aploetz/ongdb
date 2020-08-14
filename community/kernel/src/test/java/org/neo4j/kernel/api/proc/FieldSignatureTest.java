@@ -62,8 +62,7 @@ class FieldSignatureTest
         // when
         IllegalArgumentException exception =
                 assertThrows( IllegalArgumentException.class, () -> inputField( "name", Neo4jTypes.NTInteger, ntString( "bad" ) ) );
-        assertEquals( exception.getMessage(),
-                    "Default value does not have a valid type, field type was INTEGER?, but value type was STRING?." );
+        assertEquals( "Default value does not have a valid type, field type was INTEGER?, but value type was STRING?.", exception.getMessage() );
     }
 
     @Test
@@ -94,6 +93,20 @@ class FieldSignatureTest
         assertNotEquals(
                 inputField( "name", Neo4jTypes.NTString, ntString( "bar" ) ),
                 inputField( "name", Neo4jTypes.NTString, ntString( "baz" ) ) );
+    }
+
+    @Test
+    void equalsShouldConsiderSensitivity()
+    {
+        assertEquals(
+                inputField( "name", Neo4jTypes.NTString, true ),
+                inputField( "name", Neo4jTypes.NTString, true ) );
+        assertEquals(
+                inputField( "name", Neo4jTypes.NTString, false ),
+                inputField( "name", Neo4jTypes.NTString, false ) );
+        assertNotEquals(
+                inputField( "name", Neo4jTypes.NTString, true ),
+                inputField( "name", Neo4jTypes.NTString, false ) );
     }
 
     @Test

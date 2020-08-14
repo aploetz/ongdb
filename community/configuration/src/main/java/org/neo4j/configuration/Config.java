@@ -22,17 +22,18 @@ package org.neo4j.configuration;
 import org.apache.commons.lang3.reflect.FieldUtils;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,21 +59,20 @@ public class Config implements Configuration
 {
     public static final String DEFAULT_CONFIG_FILE_NAME = "neo4j.conf";
 
-    public static class Builder
+    public static final class Builder
     {
         private final Collection<Class<? extends SettingsDeclaration>> settingsClasses = new HashSet<>();
         private final Collection<Class<? extends GroupSetting>> groupSettingClasses = new HashSet<>();
         private final Collection<SettingMigrator> settingMigrators = new HashSet<>();
-        private final List<Class<? extends GroupSettingValidator>> validators = new ArrayList<>();
         private final Map<String,String> settingValueStrings = new HashMap<>();
         private final Map<String,Object> settingValueObjects = new HashMap<>();
         private final Map<String,Object> overriddenDefaults = new HashMap<>();
         private Config fromConfig;
-        private Log log = new BufferingLog();
+        private final Log log = new BufferingLog();
 
         private static boolean allowedToLogOverriddenValues( String setting )
         {
-            return !Objects.equals( setting, ExternalSettings.additionalJvm.name() );
+            return !Objects.equals( setting, ExternalSettings.additional_jvm.name() );
         }
 
         private void overrideSettingValue( String setting, Object value )
@@ -167,18 +167,6 @@ public class Config implements Configuration
             return this;
         }
 
-        public Builder addValidators( List<Class<? extends GroupSettingValidator>> validators )
-        {
-            this.validators.addAll( validators );
-            return this;
-        }
-
-        public Builder addValidator( Class<? extends GroupSettingValidator> validator )
-        {
-            this.validators.add( validator );
-            return this;
-        }
-
         public Builder addMigrator( SettingMigrator migrator )
         {
             this.settingMigrators.add( migrator );
@@ -228,7 +216,7 @@ public class Config implements Configuration
 
             try
             {
-                try ( FileInputStream stream = new FileInputStream( file ) )
+                try ( InputStream stream = Files.newInputStream( file.toPath() ) )
                 {
                     new Properties()
                     {
@@ -259,7 +247,7 @@ public class Config implements Configuration
 
         public Config build()
         {
-            return new Config( settingsClasses, groupSettingClasses, validators, settingMigrators, settingValueStrings, settingValueObjects, overriddenDefaults,
+            return new Config( settingsClasses, groupSettingClasses, settingMigrators, settingValueStrings, settingValueObjects, overriddenDefaults,
                     fromConfig, log );
         }
     }
@@ -297,6 +285,7 @@ public class Config implements Configuration
     protected final Map<String,Entry<?>> settings = new HashMap<>();
     private final Map<Class<? extends GroupSetting>, Map<String,GroupSetting>> allGroupInstances = new HashMap<>();
     private Log log;
+    private Configuration validationConfig = new ValidationConfig();
 
     protected Config()
     {
@@ -304,7 +293,6 @@ public class Config implements Configuration
 
     private Config( Collection<Class<? extends SettingsDeclaration>> settingsClasses,
             Collection<Class<? extends GroupSetting>> groupSettingClasses,
-            List<Class<? extends GroupSettingValidator>> validatorClasses,
             Collection<SettingMigrator> settingMigrators,
             Map<String,String> settingValueStrings,
             Map<String,Object> settingValueObjects,
@@ -326,7 +314,7 @@ public class Config implements Configuration
 
         Map<String,SettingImpl<?>> definedSettings = getDefinedSettings( settingsClasses );
         Map<String,Class<? extends GroupSetting>> definedGroups = getDefinedGroups( groupSettingClasses );
-        HashSet<String> keys = new HashSet<>( definedSettings.keySet() );
+        Set<String> keys = new HashSet<>( definedSettings.keySet() );
         keys.addAll( settingValueStrings.keySet() );
         keys.addAll( settingValueObjects.keySet() );
 
@@ -357,33 +345,47 @@ public class Config implements Configuration
         newSettings.addAll( getActiveSettings( keys, definedGroups, definedSettings, strict ) );
 
         evaluateSettingValues( newSettings, settingValueStrings, settingValueObjects, overriddenDefaultStrings, overriddenDefaultObjects, fromConfig );
-
-        validateGroupsettings( validatorClasses );
     }
 
     @SuppressWarnings( "unchecked" )
     private void evaluateSettingValues( Collection<SettingImpl<?>> settingsToEvaluate, Map<String,String> settingValueStrings,
             Map<String,Object> settingValueObjects,Map<String,String> overriddenDefaultStrings, Map<String,Object> overriddenDefaultObjects, Config fromConfig )
     {
-        Deque<SettingImpl<?>> newSettings = new LinkedList<>( settingsToEvaluate );
+        Deque<SettingImpl<?>> newSettings = new ArrayDeque<>( settingsToEvaluate );
         while ( !newSettings.isEmpty() )
         {
             boolean modified = false;
             SettingImpl<?> last = newSettings.peekLast();
             SettingImpl<Object> setting;
+            Map<Setting<?>,Setting<?>> dependencies = new HashMap<>();
             do
             {
                 setting = (SettingImpl<Object>) requireNonNull( newSettings.pollFirst() );
 
+                boolean retry = false;
                 if ( setting.dependency() != null && !settings.containsKey( setting.dependency().name() ) )
                 {
-                    //dependency not yet evaluated, put last
-                    newSettings.addLast( setting );
+                    //dependency not yet evaluated
+                    dependencies.put( setting, setting.dependency() );
+                    retry = true;
                 }
                 else
                 {
-                    modified = true;
-                    evaluateSetting( setting, settingValueStrings, settingValueObjects, fromConfig, overriddenDefaultStrings, overriddenDefaultObjects );
+                    try
+                    {
+                        evaluateSetting( setting, settingValueStrings, settingValueObjects, fromConfig, overriddenDefaultStrings, overriddenDefaultObjects );
+                        modified = true;
+                    }
+                    catch ( AccessDuringEvaluationException e )
+                    {
+                        //Constraint with internal dependencies yet not evaluated
+                        dependencies.put( setting, e.getAttemptedAccess() );
+                        retry = true;
+                    }
+                }
+                if ( retry )
+                {
+                    newSettings.addLast( setting );
                 }
             }
             while ( setting != last );
@@ -392,7 +394,7 @@ public class Config implements Configuration
             {
                 //Settings left depend on settings not present in this config.
                 String unsolvable = newSettings.stream()
-                        .map( s -> format("'%s'->'%s'", s.name(), s.dependency().name() ) )
+                        .map( s -> format("'%s'->'%s'", s.name(), dependencies.get( s ).name() ) )
                         .collect( Collectors.joining(",\n","[","]"));
                 throw new IllegalArgumentException(
                         format( "Can not resolve setting dependencies. %s depend on settings not present in config, or are in a circular dependency ",
@@ -484,19 +486,6 @@ public class Config implements Configuration
         return newSettings;
     }
 
-    private void validateGroupsettings( List<Class<? extends GroupSettingValidator>> validatorClasses )
-    {
-        for ( GroupSettingValidator validator : getGroupSettingValidators( validatorClasses ) )
-        {
-            String prefix = validator.getPrefix() + '.';
-            Map<Setting<?>, Object> values = settings.entrySet().stream()
-                    .filter( e -> e.getKey().startsWith( prefix ) )
-                    .collect( HashMap::new, ( map, entry ) -> map.put( entry.getValue().setting, entry.getValue().getValue() ), HashMap::putAll );
-
-            validator.validate( values, this );
-        }
-    }
-
     @SuppressWarnings( "unchecked" )
     private void evaluateSetting( Setting<?> untypedSetting, Map<String,String> settingValueStrings, Map<String,Object> settingValueObjects, Config fromConfig,
             Map<String,String> overriddenDefaultStrings, Map<String,Object> overriddenDefaultObjects )
@@ -548,6 +537,10 @@ public class Config implements Configuration
 
             settings.put( key, createEntry( setting, value, defaultValue ) );
         }
+        catch ( AccessDuringEvaluationException exception )
+        {
+            throw exception; //Bubble up
+        }
         catch ( RuntimeException exception )
         {
             String msg = format( "Error evaluating value for setting '%s'. %s", setting.name(), exception.getMessage() );
@@ -580,13 +573,6 @@ public class Config implements Configuration
                 .filter( parentClass::isAssignableFrom )
                 .map( childClass -> (Class<U>) childClass )
                 .collect( Collectors.toMap( childClass -> childClass, this::getGroups ) );
-    }
-
-    private static List<GroupSettingValidator> getGroupSettingValidators( List<Class<? extends GroupSettingValidator>> validatorClasses )
-    {
-        List<GroupSettingValidator> validators = new ArrayList<>();
-        validatorClasses.forEach( validatorClass -> validators.add( createInstance( validatorClass ) ) );
-        return validators;
     }
 
     private static <T> T createInstance( Class<T> classObj )
@@ -712,7 +698,7 @@ public class Config implements Configuration
     @SuppressWarnings( "unchecked" )
     public Map<Setting<Object>,Object> getValues()
     {
-        HashMap<Setting<Object>,Object> values = new HashMap<>();
+        Map<Setting<Object>,Object> values = new HashMap<>();
         settings.forEach( ( s, entry ) -> values.put( (Setting<Object>) entry.setting, entry.value ) );
         return values;
     }
@@ -820,7 +806,11 @@ public class Config implements Configuration
         {
             super( setting, value, defaultValue, false );
             this.solved = solved;
+<<<<<<< HEAD
             setting.validate( solved );
+=======
+            setting.validate( solved, validationConfig );
+>>>>>>> neo4j/4.1
         }
 
         @Override
@@ -834,13 +824,17 @@ public class Config implements Configuration
         {
             T oldValue = solved;
             solved = setting.solveDependency( value != null ? value : defaultValue, getObserver( setting.dependency() ).getValue() );
+<<<<<<< HEAD
             setting.validate( solved );
+=======
+            setting.validate( solved, validationConfig );
+>>>>>>> neo4j/4.1
             internalSetValue( value );
             notifyListeners( oldValue, solved );
         }
     }
 
-    private static class Entry<T> implements SettingObserver<T>
+    private class Entry<T> implements SettingObserver<T>
     {
         protected final SettingImpl<T> setting;
         protected final T defaultValue;
@@ -881,7 +875,11 @@ public class Config implements Configuration
             this.value = isDefault ? defaultValue : value;
             if ( validate )
             {
+<<<<<<< HEAD
                 setting.validate( this.value );
+=======
+                setting.validate( this.value, validationConfig );
+>>>>>>> neo4j/4.1
             }
         }
 
@@ -911,4 +909,36 @@ public class Config implements Configuration
         }
     }
 
+    private static class AccessDuringEvaluationException extends RuntimeException
+    {
+        private final Setting<?> attemptedAccess;
+
+        AccessDuringEvaluationException( Setting<?> attemptedAccess )
+        {
+            super( String.format( "AccessDuringEvaluationException{ Tried to access %s in config during construction }", attemptedAccess.name() ) );
+            this.attemptedAccess = attemptedAccess;
+        }
+
+        Setting<?> getAttemptedAccess()
+        {
+            return attemptedAccess;
+        }
+    }
+
+    private class ValidationConfig implements Configuration
+    {
+        @Override
+        public <T> T get( Setting<T> setting )
+        {
+            if ( setting.dynamic() )
+            {
+                throw new IllegalArgumentException( "Can not depend on dynamic setting:" + setting.name() );
+            }
+            if ( !settings.containsKey( setting.name() ) )
+            {
+                throw new AccessDuringEvaluationException( setting );
+            }
+            return Config.this.get( setting );
+        }
+    }
 }

@@ -38,9 +38,13 @@ import org.neo4j.time.FakeClock;
 import org.neo4j.util.concurrent.BinaryLatch;
 
 import static java.time.Duration.ofMinutes;
+<<<<<<< HEAD
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+>>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -99,14 +103,14 @@ class TimeBasedTaskSchedulerTest
     {
         JobHandle handle = scheduler.submit( Group.STORAGE_MAINTENANCE, counter::incrementAndGet, 100, 0 );
         scheduler.tick();
-        assertThat( counter.get(), is( 0 ) );
+        assertThat( counter.get() ).isEqualTo( 0 );
         clock.forward( 99, TimeUnit.NANOSECONDS );
         scheduler.tick();
-        assertThat( counter.get(), is( 0 ) );
+        assertThat( counter.get() ).isEqualTo( 0 );
         clock.forward( 1, TimeUnit.NANOSECONDS );
         scheduler.tick();
         handle.waitTermination();
-        assertThat( counter.get(), is( 1 ) );
+        assertThat( counter.get() ).isEqualTo( 1 );
     }
 
     @Test
@@ -115,15 +119,15 @@ class TimeBasedTaskSchedulerTest
         JobHandle handle1 = scheduler.submit( Group.STORAGE_MAINTENANCE, () -> counter.addAndGet( 10 ), 100, 0 );
         JobHandle handle2 = scheduler.submit( Group.STORAGE_MAINTENANCE, () -> counter.addAndGet( 100 ), 200, 0 );
         scheduler.tick();
-        assertThat( counter.get(), is( 0 ) );
+        assertThat( counter.get() ).isEqualTo( 0 );
         clock.forward( 199, TimeUnit.NANOSECONDS );
         scheduler.tick();
         handle1.waitTermination();
-        assertThat( counter.get(), is( 10 ) );
+        assertThat( counter.get() ).isEqualTo( 10 );
         clock.forward( 1, TimeUnit.NANOSECONDS );
         scheduler.tick();
         handle2.waitTermination();
-        assertThat( counter.get(), is( 110 ) );
+        assertThat( counter.get() ).isEqualTo( 110 );
     }
 
     @Test
@@ -133,12 +137,12 @@ class TimeBasedTaskSchedulerTest
         clock.forward( 100, TimeUnit.NANOSECONDS );
         scheduler.tick();
         handle.waitTermination();
-        assertThat( counter.get(), is( 1 ) );
+        assertThat( counter.get() ).isEqualTo( 1 );
         clock.forward( 100, TimeUnit.NANOSECONDS );
         scheduler.tick();
         handle.waitTermination();
         pools.getThreadPool( Group.STORAGE_MAINTENANCE ).shutDown();
-        assertThat( counter.get(), is( 1 ) );
+        assertThat( counter.get() ).isEqualTo( 1 );
     }
 
     @Test
@@ -197,7 +201,11 @@ class TimeBasedTaskSchedulerTest
         clock.forward( 20, TimeUnit.NANOSECONDS ); // should run at MOST 2 times
         scheduler.tick();
         assertSemaphoreAcquire();
+<<<<<<< HEAD
         assertThat( timesScheduled.get(), lessThanOrEqualTo( 2 ) );
+=======
+        assertThat( timesScheduled.get() ).isLessThanOrEqualTo( 2 );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -222,7 +230,7 @@ class TimeBasedTaskSchedulerTest
             }
             semaphore.release( Integer.MAX_VALUE );
             pools.getThreadPool( Group.STORAGE_MAINTENANCE ).shutDown();
-            assertThat( counter.get(), is( 1 ) );
+            assertThat( counter.get() ).isEqualTo( 1 );
         } );
     }
 
@@ -255,7 +263,7 @@ class TimeBasedTaskSchedulerTest
         clock.forward( 10, TimeUnit.NANOSECONDS );
         scheduler.tick();
         pools.getThreadPool( Group.STORAGE_MAINTENANCE ).shutDown();
-        assertThat( counter.get(), is( 0 ) );
+        assertThat( counter.get() ).isEqualTo( 0 );
         assertTrue( cancelListener.isCanceled() );
         assertThrows( CancellationException.class, handle::waitTermination );
     }
@@ -283,7 +291,7 @@ class TimeBasedTaskSchedulerTest
         clock.forward( 100, TimeUnit.NANOSECONDS );
         scheduler.tick();
         pools.getThreadPool( Group.STORAGE_MAINTENANCE ).shutDown();
-        assertThat( counter.get(), is( 2 ) );
+        assertThat( counter.get() ).isEqualTo( 2 );
         assertTrue( cancelListener.isCanceled() );
     }
 
@@ -300,7 +308,7 @@ class TimeBasedTaskSchedulerTest
         {
             Thread.yield();
         }
-        assertThat( counter.get(), is( 1 ) );
+        assertThat( counter.get() ).isEqualTo( 1 );
 
         handle.cancel();
         // cancelling doesn't remove from queued tasks
@@ -313,7 +321,7 @@ class TimeBasedTaskSchedulerTest
         assertEquals( 0, scheduler.tasksLeft() );
 
         pools.getThreadPool( Group.STORAGE_MAINTENANCE ).shutDown();
-        assertThat( counter.get(), is( 1 ) );
+        assertThat( counter.get() ).isEqualTo( 1 );
     }
 
     @Test
@@ -343,7 +351,7 @@ class TimeBasedTaskSchedulerTest
             scheduler.tick();
             Thread.yield();
         }
-        assertThat( counter.get(), is( 2 ) );
+        assertThat( counter.get() ).isEqualTo( 2 );
         semaphore.release( Integer.MAX_VALUE );
         handle.cancel();
     }

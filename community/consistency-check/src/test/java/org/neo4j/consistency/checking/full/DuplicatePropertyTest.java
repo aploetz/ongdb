@@ -32,8 +32,9 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.neo4j.consistency.checking.RecordCheckTestBase.inUse;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 class DuplicatePropertyTest
 {
@@ -45,7 +46,7 @@ class DuplicatePropertyTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        NodeRecord master = records.add( inUse( new NodeRecord( 1, false, -1, 1 ) ) );
+        NodeRecord master = records.add( inUse( new NodeRecord( 1 ).initialize( false, 1, false, -1, 0 ) ) );
 
         PropertyRecord propertyRecord = inUse( new PropertyRecord( 1 ) );
         PropertyBlock firstBlock = new PropertyBlock();
@@ -70,7 +71,7 @@ class DuplicatePropertyTest
         ConsistencyReport.NodeConsistencyReport report = mock( ConsistencyReport.NodeConsistencyReport.class );
         CheckerEngine<NodeRecord, ConsistencyReport.NodeConsistencyReport> checkEngine = records.engine(
                 master, report );
-        check.checkReference( master, propertyRecord, checkEngine, records );
+        check.checkReference( master, propertyRecord, checkEngine, records, NULL );
 
         // then
         verify( report ).propertyKeyNotUniqueInChain();
@@ -84,7 +85,8 @@ class DuplicatePropertyTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        RelationshipRecord master = records.add( inUse( new RelationshipRecord( 1, 2, 3, 4 ) ) );
+        RelationshipRecord master = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        master.setLinks( 2, 3, 4 );
         master.setNextProp( 1 );
 
         PropertyRecord firstRecord = inUse( new PropertyRecord( 1 ) );
@@ -121,7 +123,7 @@ class DuplicatePropertyTest
         ConsistencyReport.RelationshipConsistencyReport report = mock( ConsistencyReport.RelationshipConsistencyReport.class );
         CheckerEngine<RelationshipRecord, ConsistencyReport.RelationshipConsistencyReport> checkEngine = records.engine(
                 master, report );
-        check.checkReference( master, firstRecord, checkEngine, records );
+        check.checkReference( master, firstRecord, checkEngine, records, NULL );
         records.checkDeferred();
 
         // then
@@ -136,7 +138,8 @@ class DuplicatePropertyTest
 
         RecordAccessStub records = new RecordAccessStub();
 
-        RelationshipRecord master = records.add( inUse( new RelationshipRecord( 1, 2, 3, 4 ) ) );
+        RelationshipRecord master = records.add( inUse( new RelationshipRecord( 1 ) ) );
+        master.setLinks( 2, 3, 4 );
         master.setNextProp( 1 );
 
         PropertyRecord firstRecord = inUse( new PropertyRecord( 1 ) );
@@ -173,10 +176,10 @@ class DuplicatePropertyTest
         ConsistencyReport.RelationshipConsistencyReport report = mock( ConsistencyReport.RelationshipConsistencyReport.class );
         CheckerEngine<RelationshipRecord, ConsistencyReport.RelationshipConsistencyReport> checkEngine = records.engine(
                 master, report );
-        check.checkReference( master, firstRecord, checkEngine, records );
+        check.checkReference( master, firstRecord, checkEngine, records, NULL );
         records.checkDeferred();
 
         // then
-        verifyZeroInteractions( report );
+        verifyNoInteractions( report );
     }
 }

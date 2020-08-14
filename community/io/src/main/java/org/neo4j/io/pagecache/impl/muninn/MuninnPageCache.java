@@ -19,6 +19,8 @@
  */
 package org.neo4j.io.pagecache.impl.muninn;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -39,6 +41,7 @@ import org.neo4j.io.mem.MemoryAllocator;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCacheOpenOptions;
+import org.neo4j.io.pagecache.PageSwapper;
 import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.tracing.EvictionRunEvent;
@@ -46,12 +49,14 @@ import org.neo4j.io.pagecache.tracing.FlushEventOpportunity;
 import org.neo4j.io.pagecache.tracing.MajorFlushEvent;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.PageFaultEvent;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.VersionContextSupplier;
 import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
 import org.neo4j.scheduler.JobScheduler;
+import org.neo4j.time.Clocks;
+import org.neo4j.time.SystemNanoClock;
 
 import static java.lang.String.format;
 import static org.neo4j.internal.helpers.Numbers.isPowerOfTwo;
@@ -146,6 +151,7 @@ public class MuninnPageCache implements PageCache
 
     // Scheduler that runs all the background jobs for page cache.
     private final JobScheduler scheduler;
+    private final SystemNanoClock clock;
 
     private static final List<OpenOption> ignoredOpenOptions = Arrays.asList( StandardOpenOption.APPEND,
             StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.SPARSE );
@@ -158,7 +164,6 @@ public class MuninnPageCache implements PageCache
     private final int cachePageSize;
     private final int keepFree;
     private final PageCacheTracer pageCacheTracer;
-    private final PageCursorTracerSupplier pageCursorTracerSupplier;
     private final VersionContextSupplier versionContextSupplier;
     final PageList pages;
     // All PageCursors are initialised with their pointers pointing to the victim page. This way, we don't have to throw
@@ -213,27 +218,19 @@ public class MuninnPageCache implements PageCache
      * @param swapperFactory page cache swapper factory
      * @param maxPages maximum number of pages
      * @param pageCacheTracer global page cache tracer
-     * @param pageCursorTracerSupplier supplier of thread local (transaction local) page cursor tracer that will provide
-     * thread local page cache statistics
-     * @param versionContextSupplier supplier of thread local (transaction local) version context that will provide
-     * access to thread local version context
+     * @param versionContextSupplier supplier of thread local (transaction local) version context that will provide access to thread local version context
      */
-    public MuninnPageCache(
-            PageSwapperFactory swapperFactory,
-            int maxPages,
-            PageCacheTracer pageCacheTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier,
-            VersionContextSupplier versionContextSupplier,
+    public MuninnPageCache( PageSwapperFactory swapperFactory, int maxPages, PageCacheTracer pageCacheTracer, VersionContextSupplier versionContextSupplier,
             JobScheduler jobScheduler )
     {
         this( swapperFactory,
                 // Cast to long prevents overflow:
-                MemoryAllocator.createAllocator( "" + memoryRequiredForPages( maxPages ), EmptyMemoryTracker.INSTANCE ),
+                MemoryAllocator.createAllocator( memoryRequiredForPages( maxPages ), EmptyMemoryTracker.INSTANCE ),
                 PAGE_SIZE,
-                pageCacheTracer,
-                pageCursorTracerSupplier,
-                versionContextSupplier,
-                jobScheduler );
+                pageCacheTracer, versionContextSupplier,
+                jobScheduler,
+                Clocks.nanoClock(),
+                EmptyMemoryTracker.INSTANCE );
     }
 
     /**
@@ -241,20 +238,13 @@ public class MuninnPageCache implements PageCache
      * @param swapperFactory page cache swapper factory
      * @param memoryAllocator the source of native memory the page cache should use
      * @param pageCacheTracer global page cache tracer
-     * @param pageCursorTracerSupplier supplier of thread local (transaction local) page cursor tracer that will provide
-     * thread local page cache statistics
-     * @param versionContextSupplier supplier of thread local (transaction local) version context that will provide
-     *        access to thread local version context
+     * @param versionContextSupplier supplier of thread local (transaction local) version context that will provide access to thread local version context
+     * @param memoryTracker underlying buffers allocation memory tracker
      */
-    public MuninnPageCache(
-            PageSwapperFactory swapperFactory,
-            MemoryAllocator memoryAllocator,
-            PageCacheTracer pageCacheTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier,
-            VersionContextSupplier versionContextSupplier,
-            JobScheduler jobScheduler )
+    public MuninnPageCache( PageSwapperFactory swapperFactory, MemoryAllocator memoryAllocator, PageCacheTracer pageCacheTracer,
+            VersionContextSupplier versionContextSupplier, JobScheduler jobScheduler, SystemNanoClock clock, MemoryTracker memoryTracker )
     {
-        this( swapperFactory, memoryAllocator, PAGE_SIZE, pageCacheTracer, pageCursorTracerSupplier, versionContextSupplier, jobScheduler );
+        this( swapperFactory, memoryAllocator, PAGE_SIZE, pageCacheTracer, versionContextSupplier, jobScheduler, clock, memoryTracker );
     }
 
     /**
@@ -263,14 +253,8 @@ public class MuninnPageCache implements PageCache
      */
     @SuppressWarnings( "DeprecatedIsStillUsed" )
     @Deprecated
-    public MuninnPageCache(
-            PageSwapperFactory swapperFactory,
-            MemoryAllocator memoryAllocator,
-            int cachePageSize,
-            PageCacheTracer pageCacheTracer,
-            PageCursorTracerSupplier pageCursorTracerSupplier,
-            VersionContextSupplier versionContextSupplier,
-            JobScheduler jobScheduler )
+    public MuninnPageCache( PageSwapperFactory swapperFactory, MemoryAllocator memoryAllocator, int cachePageSize, PageCacheTracer pageCacheTracer,
+            VersionContextSupplier versionContextSupplier, JobScheduler jobScheduler, SystemNanoClock clock, MemoryTracker memoryTracker )
     {
         verifyHacks();
         verifyCachePageSizeIsPowerOfTwo( cachePageSize );
@@ -284,13 +268,12 @@ public class MuninnPageCache implements PageCache
         this.cachePageSize = cachePageSize;
         this.keepFree = Math.min( pagesToKeepFree, maxPages / 2 );
         this.pageCacheTracer = pageCacheTracer;
-        this.pageCursorTracerSupplier = pageCursorTracerSupplier;
         this.versionContextSupplier = versionContextSupplier;
         this.printExceptionsOnClose = true;
-        long alignment = swapperFactory.getRequiredBufferAlignment();
-        this.victimPage = VictimPageReference.getVictimPage( cachePageSize );
-        this.pages = new PageList( maxPages, cachePageSize, memoryAllocator, new SwapperSet(), victimPage, alignment );
+        this.victimPage = VictimPageReference.getVictimPage( cachePageSize, memoryTracker );
+        this.pages = new PageList( maxPages, cachePageSize, memoryAllocator, new SwapperSet(), victimPage, UnsafeUtil.pageSize() );
         this.scheduler = jobScheduler;
+        this.clock = clock;
 
         setFreelistHead( new AtomicInteger() );
     }
@@ -326,7 +309,7 @@ public class MuninnPageCache implements PageCache
     }
 
     @Override
-    public synchronized PagedFile map( File file, VersionContextSupplier versionContextSupplier, int filePageSize, OpenOption... openOptions )
+    public synchronized PagedFile map( File file, VersionContextSupplier versionContextSupplier, int filePageSize, ImmutableSet<OpenOption> openOptions )
             throws IOException
     {
         assertHealthy();
@@ -342,7 +325,7 @@ public class MuninnPageCache implements PageCache
         boolean truncateExisting = false;
         boolean deleteOnClose = false;
         boolean anyPageSize = false;
-        boolean noChannelStriping = false;
+        boolean useDirectIO = false;
         for ( OpenOption option : openOptions )
         {
             if ( option.equals( StandardOpenOption.CREATE ) )
@@ -361,9 +344,9 @@ public class MuninnPageCache implements PageCache
             {
                 anyPageSize = true;
             }
-            else if ( option.equals( PageCacheOpenOptions.NO_CHANNEL_STRIPING ) )
+            else if ( option.equals( PageCacheOpenOptions.DIRECT ) )
             {
-                noChannelStriping = true;
+                useDirectIO = true;
             }
             else if ( !ignoredOpenOptions.contains( option ) )
             {
@@ -412,12 +395,9 @@ public class MuninnPageCache implements PageCache
                 this,
                 filePageSize,
                 swapperFactory,
-                pageCacheTracer,
-                pageCursorTracerSupplier,
-                versionContextSupplier,
+                pageCacheTracer, versionContextSupplier,
                 createIfNotExists,
-                truncateExisting,
-                noChannelStriping );
+                truncateExisting, useDirectIO );
         pagedFile.incrementRefCount();
         pagedFile.setDeleteOnClose( deleteOnClose );
         current = new FileMapping( file, pagedFile );
@@ -494,7 +474,7 @@ public class MuninnPageCache implements PageCache
 
         try
         {
-            scheduler.schedule( Group.PAGE_CACHE, new EvictionTask( this ) );
+            scheduler.schedule( Group.PAGE_CACHE_EVICTION, new EvictionTask( this ) );
         }
         catch ( Exception e )
         {
@@ -616,12 +596,12 @@ public class MuninnPageCache implements PageCache
 
     private void flushAllPagesParallel( List<PagedFile> files, IOLimiter limiter ) throws IOException
     {
-        List<JobHandle> flushes = new ArrayList<>( files.size() );
+        List<JobHandle<?>> flushes = new ArrayList<>( files.size() );
 
         // Submit all flushes to the background thread
         for ( PagedFile file : files )
         {
-            flushes.add( scheduler.schedule( Group.PAGE_CACHE, () ->
+            flushes.add( scheduler.schedule( Group.FILE_IO_HELPER, () ->
             {
                 try
                 {
@@ -635,7 +615,7 @@ public class MuninnPageCache implements PageCache
         }
 
         // Wait for all to complete
-        for ( JobHandle flush : flushes )
+        for ( JobHandle<?> flush : flushes )
         {
             try
             {
@@ -699,13 +679,6 @@ public class MuninnPageCache implements PageCache
         }
     }
 
-    @Override
-    protected void finalize() throws Throwable
-    {
-        close();
-        super.finalize();
-    }
-
     private void assertHealthy() throws IOException
     {
         assertNotClosed();
@@ -734,12 +707,6 @@ public class MuninnPageCache implements PageCache
     public long maxCachedPages()
     {
         return pages.getPageCount();
-    }
-
-    @Override
-    public void reportEvents()
-    {
-        pageCursorTracerSupplier.get().reportEvents();
     }
 
     @Override
@@ -1087,5 +1054,16 @@ public class MuninnPageCache implements PageCache
                 throw new UncheckedIOException( e );
             }
         } );
+    }
+
+    void startPreFetching( MuninnPageCursor cursor, CursorFactory cursorFactory )
+    {
+        PreFetcher preFetcher = new PreFetcher( cursor, cursorFactory, pageCacheTracer, clock );
+        cursor.preFetcher = scheduler.schedule( Group.PAGE_CACHE_PRE_FETCHER, preFetcher );
+    }
+
+    void allocateFileAsync( PageSwapper swapper, long newFileSize )
+    {
+        scheduler.schedule( Group.FILE_IO_HELPER, new AllocateFileTask( swapper, newFileSize ) );
     }
 }

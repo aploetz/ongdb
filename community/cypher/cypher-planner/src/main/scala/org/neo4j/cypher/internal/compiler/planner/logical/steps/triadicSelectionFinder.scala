@@ -19,13 +19,29 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-import org.neo4j.cypher.internal.compiler.planner.logical.{CandidateGenerator, LogicalPlanningContext}
-import org.neo4j.cypher.internal.ir.{InterestingOrder, QueryGraph}
-import org.neo4j.cypher.internal.logical.plans.{Expand, ExpandAll, LogicalPlan, Selection}
+import org.neo4j.cypher.internal.compiler.planner.logical.CandidateGenerator
+import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
+import org.neo4j.cypher.internal.expressions.Ands
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.HasLabels
+import org.neo4j.cypher.internal.expressions.NodePattern
+import org.neo4j.cypher.internal.expressions.Not
+import org.neo4j.cypher.internal.expressions.PatternExpression
+import org.neo4j.cypher.internal.expressions.RelTypeName
+import org.neo4j.cypher.internal.expressions.RelationshipChain
+import org.neo4j.cypher.internal.expressions.RelationshipPattern
+import org.neo4j.cypher.internal.expressions.RelationshipsPattern
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.expressions.functions.Exists
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.Selection
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Solveds
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.attribution.SameId
-import org.neo4j.cypher.internal.v4_0.expressions.functions.Exists
+import org.neo4j.cypher.internal.util.attribution.SameId
 
 object triadicSelectionFinder extends CandidateGenerator[LogicalPlan] {
 
@@ -70,10 +86,10 @@ object triadicSelectionFinder extends CandidateGenerator[LogicalPlan] {
                                       qg: QueryGraph,
                                       interestingOrder: InterestingOrder,
                                       context: LogicalPlanningContext): Seq[LogicalPlan] = expand match {
-    case exp2@Expand(exp1: Expand, _, _, _, _, _, ExpandAll) =>
+    case exp2@Expand(exp1: Expand, _, _, _, _, _, ExpandAll, _) =>
       findMatchingInnerExpand(positivePredicate, triadicPredicate, patternExpression, incomingPredicates, Seq.empty, exp1, exp2, qg, interestingOrder, context)
 
-    case exp2@Expand(Selection(Ands(innerPredicates), exp1: Expand), _, _, _, _, _, ExpandAll) =>
+    case exp2@Expand(Selection(Ands(innerPredicates), exp1: Expand), _, _, _, _, _, ExpandAll, _) =>
       findMatchingInnerExpand(positivePredicate, triadicPredicate, patternExpression, incomingPredicates, innerPredicates.toSeq, exp1, exp2, qg, interestingOrder, context)
 
     case _ => Seq.empty
@@ -95,14 +111,14 @@ object triadicSelectionFinder extends CandidateGenerator[LogicalPlan] {
       matchingRelationshipPattern(patternExpression, exp1.from, exp2.to, exp1.types, exp1.dir)) {
 
       val left = if (leftPredicates.nonEmpty)
-        context.logicalPlanProducer.planSelection(exp1, leftPredicates, interestingOrder, context)
+        context.logicalPlanProducer.planSelection(exp1, leftPredicates, context)
       else
         exp1
 
       val argument = context.logicalPlanProducer.planArgumentFrom(left, context)
       val newExpand2 = Expand(argument, exp2.from, exp2.dir, exp2.types, exp2.to, exp2.relName, ExpandAll)(SameId(exp2.id))
       val right = if (incomingPredicates.nonEmpty)
-        context.logicalPlanProducer.planSelection(newExpand2, incomingPredicates, interestingOrder, context)
+        context.logicalPlanProducer.planSelection(newExpand2, incomingPredicates, context)
       else
         newExpand2
 
@@ -129,11 +145,11 @@ object triadicSelectionFinder extends CandidateGenerator[LogicalPlan] {
                                           types: Seq[RelTypeName], dir: SemanticDirection): Boolean = pattern match {
     // (a)-[:X]->(c)
     case PatternExpression(
-      RelationshipsPattern(
-        RelationshipChain(
-          NodePattern(Some(Variable(predicateFrom)), List(), None, _),
-          RelationshipPattern(None, predicateTypes, None, None, predicateDir, _, _),
-          NodePattern(Some(Variable(predicateTo)), List(), None, _))))
+    RelationshipsPattern(
+    RelationshipChain(
+    NodePattern(Some(Variable(predicateFrom)), List(), None, _),
+    RelationshipPattern(None, predicateTypes, None, None, predicateDir, _, _),
+    NodePattern(Some(Variable(predicateTo)), List(), None, _))))
       if predicateFrom == from && predicateTo == to && predicateTypes == types && predicateDir == dir => true
     case _ => false
   }

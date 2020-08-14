@@ -25,8 +25,6 @@ import org.eclipse.collections.impl.list.mutable.primitive.LongArrayList;
 import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,6 +59,7 @@ import org.neo4j.io.fs.FlushableChannel;
 import org.neo4j.io.fs.ReadPastEndException;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.DynamicArrayStore;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
@@ -78,7 +77,6 @@ import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.transaction.log.InMemoryVersionableReadableClosablePositionAwareChannel;
 import org.neo4j.kernel.impl.transaction.log.ReadableLogChannel;
-import org.neo4j.lock.Lock;
 import org.neo4j.lock.LockService;
 import org.neo4j.lock.ResourceLocker;
 import org.neo4j.logging.NullLogProvider;
@@ -94,8 +92,8 @@ import org.neo4j.util.concurrent.WorkSync;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.eclipse.collections.api.factory.Sets.immutable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -103,6 +101,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -120,8 +119,10 @@ import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
 import static org.neo4j.internal.schema.SchemaDescriptor.forRelType;
 import static org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory.uniqueForLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.change;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.remove;
@@ -176,7 +177,7 @@ class TransactionRecordStateTest
     {
         idGeneratorFactory = new DefaultIdGeneratorFactory( fs, immediate() );
         var storeFactory = new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache, fs,
-                formats, NullLogProvider.getInstance() );
+                formats, NullLogProvider.getInstance(), PageCacheTracer.NULL, immutable.empty() );
         return storeFactory.openAllNeoStores( true );
     }
 
@@ -188,7 +189,7 @@ class TransactionRecordStateTest
     private static void assertDenseRelationshipCounts( RecordChangeSet recordChangeSet, long nodeId, int type, int outCount, int inCount )
     {
         RecordProxy<RelationshipGroupRecord,Integer> proxy =
-                getRelationshipGroup( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), type );
+                getRelationshipGroup( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), type );
         assertNotNull( proxy );
         RelationshipGroupRecord group = proxy.forReadingData();
         assertNotNull( group );
@@ -197,7 +198,7 @@ class TransactionRecordStateTest
         long relId = group.getFirstOut();
         if ( relId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
-            rel = recordChangeSet.getRelRecords().getOrLoad( relId, null ).forReadingData();
+            rel = recordChangeSet.getRelRecords().getOrLoad( relId, null, NULL ).forReadingData();
             // count is stored in the back pointer of the first relationship in the chain
             assertEquals( outCount, rel.getFirstPrevRel(), "Stored relationship count for OUTGOING differs" );
             assertEquals( outCount, manuallyCountRelationships( recordChangeSet, nodeId, relId ),
@@ -207,7 +208,7 @@ class TransactionRecordStateTest
         relId = group.getFirstIn();
         if ( relId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
-            rel = recordChangeSet.getRelRecords().getOrLoad( relId, null ).forReadingData();
+            rel = recordChangeSet.getRelRecords().getOrLoad( relId, null, NULL ).forReadingData();
             assertEquals( inCount, rel.getSecondPrevRel(), "Stored relationship count for INCOMING differs" );
             assertEquals( inCount, manuallyCountRelationships( recordChangeSet, nodeId, relId ),
                 "Manually counted relationships for INCOMING differs" );
@@ -220,7 +221,7 @@ class TransactionRecordStateTest
         long previousGroupId = Record.NO_NEXT_RELATIONSHIP.intValue();
         while ( groupId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
-            RecordProxy<RelationshipGroupRecord,Integer> change = recordChangeSet.getRelGroupRecords().getOrLoad( groupId, type );
+            RecordProxy<RelationshipGroupRecord,Integer> change = recordChangeSet.getRelGroupRecords().getOrLoad( groupId, type, NULL );
             RelationshipGroupRecord record = change.forReadingData();
             record.setPrev( previousGroupId ); // not persistent so not a "change"
             if ( record.getType() == type )
@@ -240,7 +241,7 @@ class TransactionRecordStateTest
         while ( relId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
             count++;
-            RelationshipRecord record = recordChangeSet.getRelRecords().getOrLoad( relId, null ).forReadingData();
+            RelationshipRecord record = recordChangeSet.getRelRecords().getOrLoad( relId, null, NULL ).forReadingData();
             relId = record.getFirstNode() == nodeId ? record.getFirstNextRel() : record.getSecondNextRel();
         }
         return count;
@@ -554,7 +555,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         // GIVEN a store that has got a node with a dynamic label record
-        BatchTransactionApplier applier = buildApplier( LockService.NO_LOCK_SERVICE );
+        TransactionApplierFactory applier = buildApplier( LockService.NO_LOCK_SERVICE );
         AtomicLong nodeId = new AtomicLong();
         AtomicLong dynamicLabelRecordId = new AtomicLong();
         apply( applier, transaction( nodeWithDynamicLabelRecord( neoStores, nodeId, dynamicLabelRecordId ) ) );
@@ -572,7 +573,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         // GIVEN a store that has got a node with a dynamic label record
-        BatchTransactionApplier applier = buildApplier( LockService.NO_LOCK_SERVICE );
+        TransactionApplierFactory applier = buildApplier( LockService.NO_LOCK_SERVICE );
         AtomicLong nodeId = new AtomicLong();
         AtomicLong dynamicLabelRecordId = new AtomicLong();
         apply( applier, transaction( nodeWithDynamicLabelRecord( neoStores, nodeId, dynamicLabelRecordId ) ) );
@@ -604,7 +605,7 @@ class TransactionRecordStateTest
 
         // WHEN
         Collection<StorageCommand> commands = new ArrayList<>();
-        recordState.extractCommands( commands );
+        recordState.extractCommands( commands, INSTANCE );
 
         // THEN
         Iterator<StorageCommand> commandIterator = commands.iterator();
@@ -639,7 +640,7 @@ class TransactionRecordStateTest
 
         // WHEN
         Collection<StorageCommand> commands = new ArrayList<>();
-        recordState.extractCommands( commands );
+        recordState.extractCommands( commands, INSTANCE );
 
         // THEN
         Iterator<StorageCommand> commandIterator = commands.iterator();
@@ -692,7 +693,7 @@ class TransactionRecordStateTest
 
         // Then
         Collection<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
         RelationshipGroupCommand group = singleRelationshipGroupCommand( commands );
         assertEquals( relationshipA, group.getAfter().getType() );
     }
@@ -722,7 +723,7 @@ class TransactionRecordStateTest
 
         // WHEN
         Collection<StorageCommand> commands = new ArrayList<>();
-        recordState.extractCommands( commands );
+        recordState.extractCommands( commands, INSTANCE );
 
         // THEN
         Iterator<StorageCommand> commandIterator = commands.iterator();
@@ -747,13 +748,13 @@ class TransactionRecordStateTest
         // GIVEN
         TransactionRecordState recordState = newTransactionRecordState();
 
-        final long indexId = neoStores.getSchemaStore().nextId();
-        final long constraintId = neoStores.getSchemaStore().nextId();
+        final long indexId = neoStores.getSchemaStore().nextId( NULL );
+        final long constraintId = neoStores.getSchemaStore().nextId( NULL );
 
         recordState.schemaRuleCreate( constraintId, true, uniqueForLabel( 1, 1 ).withId( constraintId ).withOwnedIndexId( indexId ) );
 
         // WHEN
-        recordState.extractCommands( new ArrayList<>() );
+        recordState.extractCommands( new ArrayList<>(), INSTANCE );
 
         // THEN
         verify( integrityValidator ).validateSchemaRule( any() );
@@ -772,7 +773,7 @@ class TransactionRecordStateTest
         // WHEN
         recordState.nodeAddProperty( nodeId, propertyId1, value1 );
         Collection<StorageCommand> commands = new ArrayList<>();
-        recordState.extractCommands( commands );
+        recordState.extractCommands( commands, INSTANCE );
         PropertyCommand propertyCommand = singlePropertyCommand( commands );
 
         // THEN
@@ -816,24 +817,11 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         // given
-        LockService locks = mock( LockService.class, new Answer<>()
-        {
-            @Override
-            public synchronized Object answer( final InvocationOnMock invocation )
-            {
-                // This is necessary because finalize() will also be called
-                String name = invocation.getMethod().getName();
-                if ( name.equals( "acquireNodeLock" ) || name.equals( "acquireRelationshipLock" ) )
-                {
-                    return mock( Lock.class, invocationOnMock -> null );
-                }
-                return null;
-            }
-        } );
+        LockService locks = mock( LockService.class, RETURNS_MOCKS );
         NodeStore nodeStore = neoStores.getNodeStore();
         long[] nodes = { // allocate ids
-                nodeStore.nextId(), nodeStore.nextId(), nodeStore.nextId(), nodeStore.nextId(), nodeStore.nextId(), nodeStore.nextId(), nodeStore.nextId(),};
-
+                nodeStore.nextId( NULL ), nodeStore.nextId( NULL ), nodeStore.nextId( NULL ), nodeStore.nextId( NULL ),
+                nodeStore.nextId( NULL ), nodeStore.nextId( NULL ), nodeStore.nextId( NULL ) };
         {
             // create the node records that we will modify in our main tx.
             TransactionRecordState tx = newTransactionRecordState();
@@ -843,7 +831,7 @@ class TransactionRecordStateTest
             }
             tx.nodeAddProperty( nodes[3], 0, Values.of( "old" ) );
             tx.nodeAddProperty( nodes[4], 0, Values.of( "old" ) );
-            BatchTransactionApplier applier = buildApplier( locks );
+            TransactionApplierFactory applier = buildApplier( locks );
             apply( applier, transaction( tx ) );
         }
         reset( locks );
@@ -862,7 +850,7 @@ class TransactionRecordStateTest
         tx.nodeAddProperty( nodes[6], 0, Values.of( "value" ) );
 
         //commit( tx );
-        BatchTransactionApplier applier = buildApplier( locks );
+        TransactionApplierFactory applier = buildApplier( locks );
         apply( applier, transaction( tx ) );
 
         // then
@@ -887,15 +875,15 @@ class TransactionRecordStateTest
     {
         neoStores = createStores( Config.defaults( dense_node_threshold, 10 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
 
         tx.nodeCreate( nodeId );
 
-        int typeA = (int) neoStores.getRelationshipTypeTokenStore().nextId();
+        int typeA = (int) neoStores.getRelationshipTypeTokenStore().nextId( NULL );
         tx.createRelationshipTypeToken( "A", typeA, false );
         createRelationships( neoStores, tx, nodeId, typeA, INCOMING, 20 );
 
-        BatchTransactionApplier applier = buildApplier( LockService.NO_LOCK_SERVICE );
+        TransactionApplierFactory applier = buildApplier( LockService.NO_LOCK_SERVICE );
         apply( applier, transaction( tx ) );
 
         tx = newTransactionRecordState();
@@ -946,7 +934,7 @@ class TransactionRecordStateTest
         // GIVEN a node with a total of denseNodeThreshold-1 relationships
         neoStores = createStores( Config.defaults( dense_node_threshold, 50 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
         int typeA = 0;
         int typeB = 1;
         int typeC = 2;
@@ -963,13 +951,13 @@ class TransactionRecordStateTest
         createRelationships( neoStores, tx, nodeId, typeC, OUTGOING, 10 );
         createRelationships( neoStores, tx, nodeId, typeC, INCOMING, 10 );
         // here we're at the edge
-        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
 
         // WHEN creating the relationship that pushes us over the threshold
         createRelationships( neoStores, tx, nodeId, typeC, INCOMING, 1 );
 
         // THEN the node should have been converted into a dense node
-        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeA, 6, 7 );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeB, 8, 9 );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeC, 10, 11 );
@@ -981,7 +969,7 @@ class TransactionRecordStateTest
         // GIVEN a node with a total of denseNodeThreshold-1 relationships
         neoStores = createStores( Config.defaults( dense_node_threshold, 49 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
         int typeA = 0;
         tx.nodeCreate( nodeId );
         tx.createRelationshipTypeToken( "A", typeA, false );
@@ -989,13 +977,13 @@ class TransactionRecordStateTest
         createRelationships( neoStores, tx, nodeId, typeA, INCOMING, 25 );
 
         // here we're at the edge
-        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
 
         // WHEN creating the relationship that pushes us over the threshold
         createRelationships( neoStores, tx, nodeId, typeA, INCOMING, 1 );
 
         // THEN the node should have been converted into a dense node
-        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeA, 24, 26 );
     }
 
@@ -1005,20 +993,20 @@ class TransactionRecordStateTest
         // GIVEN a node with a total of denseNodeThreshold-1 relationships
         neoStores = createStores( Config.defaults( dense_node_threshold, 8 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
         int typeA = 0;
         tx.nodeCreate( nodeId );
         tx.createRelationshipTypeToken( "A", typeA, false );
         createRelationships( neoStores, tx, nodeId, typeA, OUTGOING, 8 );
 
         // here we're at the edge
-        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertFalse( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
 
         // WHEN creating the relationship that pushes us over the threshold
         createRelationships( neoStores, tx, nodeId, typeA, OUTGOING, 1 );
 
         // THEN the node should have been converted into a dense node
-        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData().isDense() );
+        assertTrue( recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData().isDense() );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeA, 9, 0 );
     }
 
@@ -1028,7 +1016,7 @@ class TransactionRecordStateTest
         // GIVEN a node with a total of denseNodeThreshold-1 relationships
         neoStores = createStores( Config.defaults( dense_node_threshold, 13 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        int nodeId = (int) neoStores.getNodeStore().nextId();
+        int nodeId = (int) neoStores.getNodeStore().nextId( NULL );
         int typeA = 0;
         tx.nodeCreate( nodeId );
         tx.createRelationshipTypeToken( "A", typeA, false );
@@ -1047,7 +1035,7 @@ class TransactionRecordStateTest
         // GIVEN a node with a total of denseNodeThreshold-1 relationships
         neoStores = createStores( Config.defaults( dense_node_threshold, 1 ) );
         TransactionRecordState tx = newTransactionRecordState();
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
         int typeA = 0;
         int typeB = 12;
         int typeC = 600;
@@ -1076,7 +1064,7 @@ class TransactionRecordStateTest
         tx.relDelete( relationshipsCreatedAOutgoing[0] );
 
         // THEN
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeA );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeA );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeB, 1, 1 );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeC, 1, 1 );
 
@@ -1084,7 +1072,7 @@ class TransactionRecordStateTest
         tx.relDelete( relationshipsCreatedBIncoming[0] );
 
         // THEN
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeA );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeA );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeB, 1, 0 );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeC, 1, 1 );
 
@@ -1092,25 +1080,25 @@ class TransactionRecordStateTest
         tx.relDelete( relationshipsCreatedBOutgoing[0] );
 
         // THEN
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeA );
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeB );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeA );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeB );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeC, 1, 1 );
 
         // WHEN
         tx.relDelete( relationshipsCreatedCIncoming[0] );
 
         // THEN
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeA );
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeB );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeA );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeB );
         assertDenseRelationshipCounts( recordChangeSet, nodeId, typeC, 1, 0 );
 
         // WHEN
         tx.relDelete( relationshipsCreatedCOutgoing[0] );
 
         // THEN
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeA );
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeB );
-        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null ).forReadingData(), typeC );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeA );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeB );
+        assertRelationshipGroupDoesNotExist( recordChangeSet, recordChangeSet.getNodeRecords().getOrLoad( nodeId, null, NULL ).forReadingData(), typeC );
     }
 
     @Test
@@ -1130,17 +1118,17 @@ class TransactionRecordStateTest
             apply( transaction( recordState ) );
         }
 
-        long nodeId = neoStores.getNodeStore().nextId();
+        long nodeId = neoStores.getNodeStore().nextId( NULL );
         {
-            long otherNode1Id = neoStores.getNodeStore().nextId();
-            long otherNode2Id = neoStores.getNodeStore().nextId();
+            long otherNode1Id = neoStores.getNodeStore().nextId( NULL );
+            long otherNode2Id = neoStores.getNodeStore().nextId( NULL );
             TransactionRecordState recordState = newTransactionRecordState();
             recordState.nodeCreate( nodeId );
             recordState.nodeCreate( otherNode1Id );
             recordState.nodeCreate( otherNode2Id );
-            recordState.relCreate( neoStores.getRelationshipStore().nextId(), type10, nodeId, otherNode1Id );
+            recordState.relCreate( neoStores.getRelationshipStore().nextId( NULL ), type10, nodeId, otherNode1Id );
             // This relationship will cause the switch to dense
-            recordState.relCreate( neoStores.getRelationshipStore().nextId(), type10, nodeId, otherNode2Id );
+            recordState.relCreate( neoStores.getRelationshipStore().nextId( NULL ), type10, nodeId, otherNode2Id );
 
             apply( transaction( recordState ) );
 
@@ -1151,9 +1139,9 @@ class TransactionRecordStateTest
         // WHEN inserting a relationship of type 5
         {
             TransactionRecordState recordState = newTransactionRecordState();
-            long otherNodeId = neoStores.getNodeStore().nextId();
+            long otherNodeId = neoStores.getNodeStore().nextId( NULL );
             recordState.nodeCreate( otherNodeId );
-            recordState.relCreate( neoStores.getRelationshipStore().nextId(), type5, nodeId, otherNodeId );
+            recordState.relCreate( neoStores.getRelationshipStore().nextId( NULL ), type5, nodeId, otherNodeId );
             apply( transaction( recordState ) );
 
             // THEN that group should end up first in the chain
@@ -1163,9 +1151,9 @@ class TransactionRecordStateTest
         // WHEN inserting a relationship of type 15
         {
             TransactionRecordState recordState = newTransactionRecordState();
-            long otherNodeId = neoStores.getNodeStore().nextId();
+            long otherNodeId = neoStores.getNodeStore().nextId( NULL );
             recordState.nodeCreate( otherNodeId );
-            recordState.relCreate( neoStores.getRelationshipStore().nextId(), type15, nodeId, otherNodeId );
+            recordState.relCreate( neoStores.getRelationshipStore().nextId( NULL ), type15, nodeId, otherNodeId );
             apply( transaction( recordState ) );
 
             // THEN that group should end up last in the chain
@@ -1185,7 +1173,7 @@ class TransactionRecordStateTest
         state.relCreate( 1, 0, 0, 0 );
         state.relCreate( 2, 0, 0, 0 );
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
         // THEN
         int nodes = 0;
@@ -1219,23 +1207,23 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         IndexDescriptor rule = IndexPrototype.forSchema( forLabel( 0, 1 ) ).withName( "index_" + ruleId ).materialise( ruleId );
         state.schemaRuleCreate( ruleId, false, rule );
 
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 1 ) );
+        assertThat( commands.size() ).isEqualTo( 1 );
         SchemaRuleCommand command = (SchemaRuleCommand) commands.get( 0 );
-        assertThat( command.getMode(), is( Command.Mode.CREATE ) );
-        assertThat( command.getSchemaRule(), is( rule ) );
-        assertThat( command.getKey(), is( ruleId ) );
-        assertThat( command.getBefore().inUse(), is( false ) );
-        assertThat( command.getAfter().inUse(), is( true ) );
-        assertThat( command.getAfter().isConstraint(), is( false ) );
-        assertThat( command.getAfter().isCreated(), is( true ) );
-        assertThat( command.getAfter().getNextProp(), is( Record.NO_NEXT_PROPERTY.longValue() ) );
+        assertThat( command.getMode() ).isEqualTo( Command.Mode.CREATE );
+        assertThat( command.getSchemaRule() ).isEqualTo( rule );
+        assertThat( command.getKey() ).isEqualTo( ruleId );
+        assertThat( command.getBefore().inUse() ).isEqualTo( false );
+        assertThat( command.getAfter().inUse() ).isEqualTo( true );
+        assertThat( command.getAfter().isConstraint() ).isEqualTo( false );
+        assertThat( command.getAfter().isCreated() ).isEqualTo( true );
+        assertThat( command.getAfter().getNextProp() ).isEqualTo( Record.NO_NEXT_PROPERTY.longValue() );
     }
 
     @Test
@@ -1243,23 +1231,23 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         ConstraintDescriptor rule = ConstraintDescriptorFactory.existsForLabel( 0, 1 ).withId( ruleId );
         state.schemaRuleCreate( ruleId, true, rule );
 
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 1 ) );
+        assertThat( commands.size() ).isEqualTo( 1 );
         SchemaRuleCommand command = (SchemaRuleCommand) commands.get( 0 );
-        assertThat( command.getMode(), is( Command.Mode.CREATE ) );
-        assertThat( command.getSchemaRule(), is( rule ) );
-        assertThat( command.getKey(), is( ruleId ) );
-        assertThat( command.getBefore().inUse(), is( false ) );
-        assertThat( command.getAfter().inUse(), is( true ) );
-        assertThat( command.getAfter().isConstraint(), is( true ) );
-        assertThat( command.getAfter().isCreated(), is( true ) );
-        assertThat( command.getAfter().getNextProp(), is( Record.NO_NEXT_PROPERTY.longValue() ) );
+        assertThat( command.getMode() ).isEqualTo( Command.Mode.CREATE );
+        assertThat( command.getSchemaRule() ).isEqualTo( rule );
+        assertThat( command.getKey() ).isEqualTo( ruleId );
+        assertThat( command.getBefore().inUse() ).isEqualTo( false );
+        assertThat( command.getAfter().inUse() ).isEqualTo( true );
+        assertThat( command.getAfter().isConstraint() ).isEqualTo( true );
+        assertThat( command.getAfter().isCreated() ).isEqualTo( true );
+        assertThat( command.getAfter().getNextProp() ).isEqualTo( Record.NO_NEXT_PROPERTY.longValue() );
     }
 
     @Test
@@ -1267,7 +1255,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         IndexDescriptor rule = IndexPrototype.forSchema( forLabel( 0, 1 ) ).withName( "index_" + ruleId ).materialise( ruleId );
         state.schemaRuleCreate( ruleId, false, rule );
 
@@ -1276,39 +1264,39 @@ class TransactionRecordStateTest
         state = newTransactionRecordState();
         state.schemaRuleSetProperty( ruleId, 42, Values.booleanValue( true ), rule );
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 2 ) );
+        assertThat( commands.size() ).isEqualTo( 2 );
 
         PropertyCommand propCmd = (PropertyCommand) commands.get( 0 ); // Order matters. Props added before schema.
-        assertThat( propCmd.getSchemaRuleId(), is( ruleId ) );
-        assertThat( propCmd.getBefore().inUse(), is( false ) );
-        assertThat( propCmd.getAfter().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().isCreated(), is( true ) );
-        assertThat( propCmd.getAfter().getSchemaRuleId(), is( ruleId ) );
+        assertThat( propCmd.getSchemaRuleId() ).isEqualTo( ruleId );
+        assertThat( propCmd.getBefore().inUse() ).isEqualTo( false );
+        assertThat( propCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().isCreated() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().getSchemaRuleId() ).isEqualTo( ruleId );
 
         SchemaRuleCommand schemaCmd = (SchemaRuleCommand) commands.get( 1 );
-        assertThat( schemaCmd.getSchemaRule(), is( rule ) );
-        assertThat( schemaCmd.getBefore().inUse(), is( true ) );
-        assertThat( schemaCmd.getBefore().getNextProp(), is( Record.NO_NEXT_PROPERTY.longValue() ) );
-        assertThat( schemaCmd.getAfter().inUse(), is( true ) );
-        assertThat( schemaCmd.getAfter().isCreated(), is( false ) );
-        assertThat( schemaCmd.getAfter().getNextProp(), is( propCmd.getKey() ) );
+        assertThat( schemaCmd.getSchemaRule() ).isEqualTo( rule );
+        assertThat( schemaCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getBefore().getNextProp() ).isEqualTo( Record.NO_NEXT_PROPERTY.longValue() );
+        assertThat( schemaCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getAfter().isCreated() ).isEqualTo( false );
+        assertThat( schemaCmd.getAfter().getNextProp() ).isEqualTo( propCmd.getKey() );
 
         apply( transaction( commands ) );
 
         state = newTransactionRecordState();
         state.schemaRuleSetProperty( ruleId, 42, Values.booleanValue( false ), rule );
         commands.clear();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 1 ) );
+        assertThat( commands.size() ).isEqualTo( 1 );
 
         propCmd = (PropertyCommand) commands.get( 0 );
-        assertThat( propCmd.getSchemaRuleId(), is( ruleId ) );
-        assertThat( propCmd.getBefore().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().isCreated(), is( false ) );
+        assertThat( propCmd.getSchemaRuleId() ).isEqualTo( ruleId );
+        assertThat( propCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().isCreated() ).isEqualTo( false );
     }
 
     @Test
@@ -1316,7 +1304,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         IndexDescriptor rule = IndexPrototype.forSchema( forLabel( 0, 1 ) ).withName( "index_" + ruleId ).materialise( ruleId );
         state.schemaRuleCreate( ruleId, false, rule );
         state.schemaRuleSetProperty( ruleId, 42, Values.booleanValue( true ), rule );
@@ -1327,18 +1315,18 @@ class TransactionRecordStateTest
         state.schemaRuleDelete( ruleId, rule );
 
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 2 ) );
+        assertThat( commands.size() ).isEqualTo( 2 );
         SchemaRuleCommand schemaCmd = (SchemaRuleCommand) commands.get( 0 ); // Order matters. Rule deletes before property deletes.
-        assertThat( schemaCmd.getKey(), is( ruleId ) );
-        assertThat( schemaCmd.getBefore().inUse(), is( true ) );
-        assertThat( schemaCmd.getAfter().inUse(), is( false ) );
+        assertThat( schemaCmd.getKey() ).isEqualTo( ruleId );
+        assertThat( schemaCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getAfter().inUse() ).isEqualTo( false );
 
         PropertyCommand propCmd = (PropertyCommand) commands.get( 1 );
-        assertThat( propCmd.getKey(), is( schemaCmd.getBefore().getNextProp() ) );
-        assertThat( propCmd.getBefore().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().inUse(), is( false ) );
+        assertThat( propCmd.getKey() ).isEqualTo( schemaCmd.getBefore().getNextProp() );
+        assertThat( propCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().inUse() ).isEqualTo( false );
     }
 
     @Test
@@ -1346,7 +1334,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         IndexDescriptor rule = IndexPrototype.uniqueForSchema( forLabel( 0, 1 ) ).withName( "index_" + ruleId ).materialise( ruleId );
         state.schemaRuleCreate( ruleId, false, rule );
 
@@ -1355,24 +1343,24 @@ class TransactionRecordStateTest
         state = newTransactionRecordState();
         state.schemaRuleSetIndexOwner( rule, 13, 42, Values.longValue( 13 ) );
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 2 ) );
+        assertThat( commands.size() ).isEqualTo( 2 );
 
         PropertyCommand propCmd = (PropertyCommand) commands.get( 0 ); // Order matters. Props added before schema.
-        assertThat( propCmd.getSchemaRuleId(), is( ruleId ) );
-        assertThat( propCmd.getBefore().inUse(), is( false ) );
-        assertThat( propCmd.getAfter().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().isCreated(), is( true ) );
-        assertThat( propCmd.getAfter().getSchemaRuleId(), is( ruleId ) );
+        assertThat( propCmd.getSchemaRuleId() ).isEqualTo( ruleId );
+        assertThat( propCmd.getBefore().inUse() ).isEqualTo( false );
+        assertThat( propCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().isCreated() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().getSchemaRuleId() ).isEqualTo( ruleId );
 
         SchemaRuleCommand schemaCmd = (SchemaRuleCommand) commands.get( 1 );
-        assertThat( schemaCmd.getSchemaRule(), is( rule ) );
-        assertThat( schemaCmd.getBefore().inUse(), is( true ) );
-        assertThat( schemaCmd.getBefore().getNextProp(), is( Record.NO_NEXT_PROPERTY.longValue() ) );
-        assertThat( schemaCmd.getAfter().inUse(), is( true ) );
-        assertThat( schemaCmd.getAfter().isCreated(), is( false ) );
-        assertThat( schemaCmd.getAfter().getNextProp(), is( propCmd.getKey() ) );
+        assertThat( schemaCmd.getSchemaRule() ).isEqualTo( rule );
+        assertThat( schemaCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getBefore().getNextProp() ).isEqualTo( Record.NO_NEXT_PROPERTY.longValue() );
+        assertThat( schemaCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getAfter().isCreated() ).isEqualTo( false );
+        assertThat( schemaCmd.getAfter().getNextProp() ).isEqualTo( propCmd.getKey() );
     }
 
     /**
@@ -1385,7 +1373,7 @@ class TransactionRecordStateTest
     {
         neoStores = createStores();
         TransactionRecordState state = newTransactionRecordState();
-        long ruleId = neoStores.getSchemaStore().nextId();
+        long ruleId = neoStores.getSchemaStore().nextId( NULL );
         IndexDescriptor rule = IndexPrototype.uniqueForSchema( forLabel( 0, 1 ) ).withName( "constraint_" + ruleId ).materialise( ruleId );
         state.schemaRuleCreate( ruleId, false, rule );
         state.schemaRuleSetProperty( ruleId, 42, Values.booleanValue( true ), rule );
@@ -1395,24 +1383,24 @@ class TransactionRecordStateTest
         state = newTransactionRecordState();
         state.schemaRuleSetIndexOwner( rule, 13, 56, Values.longValue( 13 ) );
         List<StorageCommand> commands = new ArrayList<>();
-        state.extractCommands( commands );
+        state.extractCommands( commands, INSTANCE );
 
-        assertThat( commands.size(), is( 2 ) );
+        assertThat( commands.size() ).isEqualTo( 2 );
 
         PropertyCommand propCmd = (PropertyCommand) commands.get( 0 ); // Order matters. Props added before schema.
-        assertThat( propCmd.getSchemaRuleId(), is( ruleId ) );
-        assertThat( propCmd.getBefore().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().inUse(), is( true ) );
-        assertThat( propCmd.getAfter().isCreated(), is( false ) );
-        assertThat( propCmd.getAfter().getSchemaRuleId(), is( ruleId ) );
+        assertThat( propCmd.getSchemaRuleId() ).isEqualTo( ruleId );
+        assertThat( propCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( propCmd.getAfter().isCreated() ).isEqualTo( false );
+        assertThat( propCmd.getAfter().getSchemaRuleId() ).isEqualTo( ruleId );
 
         SchemaRuleCommand schemaCmd = (SchemaRuleCommand) commands.get( 1 );
-        assertThat( schemaCmd.getSchemaRule(), is( rule ) );
-        assertThat( schemaCmd.getBefore().inUse(), is( true ) );
-        assertThat( schemaCmd.getBefore().getNextProp(), is( propCmd.getKey() ) );
-        assertThat( schemaCmd.getAfter().inUse(), is( true ) );
-        assertThat( schemaCmd.getAfter().isCreated(), is( false ) );
-        assertThat( schemaCmd.getAfter().getNextProp(), is( propCmd.getKey() ) );
+        assertThat( schemaCmd.getSchemaRule() ).isEqualTo( rule );
+        assertThat( schemaCmd.getBefore().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getBefore().getNextProp() ).isEqualTo( propCmd.getKey() );
+        assertThat( schemaCmd.getAfter().inUse() ).isEqualTo( true );
+        assertThat( schemaCmd.getAfter().isCreated() ).isEqualTo( false );
+        assertThat( schemaCmd.getAfter().getNextProp() ).isEqualTo( propCmd.getKey() );
     }
 
     private static void addLabelsToNode( TransactionRecordState recordState, long nodeId, long[] labelIds )
@@ -1437,11 +1425,11 @@ class TransactionRecordStateTest
         long[] result = new long[count];
         for ( int i = 0; i < count; i++ )
         {
-            long otherNodeId = neoStores.getNodeStore().nextId();
+            long otherNodeId = neoStores.getNodeStore().nextId( NULL );
             tx.nodeCreate( otherNodeId );
             long first = direction == OUTGOING ? nodeId : otherNodeId;
             long other = direction == INCOMING ? nodeId : otherNodeId;
-            long relId = neoStores.getRelationshipStore().nextId();
+            long relId = neoStores.getRelationshipStore().nextId( NULL );
             result[i] = relId;
             tx.relCreate( relId, type, first, other );
         }
@@ -1451,7 +1439,7 @@ class TransactionRecordStateTest
     private static void assertRelationshipGroupsInOrder( NeoStores neoStores, long nodeId, int... types )
     {
         NodeStore nodeStore = neoStores.getNodeStore();
-        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL );
+        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL, NULL );
         assertTrue( node.isDense(), "Node should be dense, is " + node );
         long groupId = node.getNextRel();
         int cursor = 0;
@@ -1459,7 +1447,7 @@ class TransactionRecordStateTest
         while ( groupId != Record.NO_NEXT_RELATIONSHIP.intValue() )
         {
             RecordStore<RelationshipGroupRecord> relationshipGroupStore = neoStores.getRelationshipGroupStore();
-            RelationshipGroupRecord group = relationshipGroupStore.getRecord( groupId, relationshipGroupStore.newRecord(), NORMAL );
+            RelationshipGroupRecord group = relationshipGroupStore.getRecord( groupId, relationshipGroupStore.newRecord(), NORMAL, NULL );
             seen.add( group );
             assertEquals( types[cursor++], group.getType(), "Invalid type, seen groups so far " + seen );
             groupId = group.getNext();
@@ -1482,7 +1470,8 @@ class TransactionRecordStateTest
         StorageReader reader = new RecordStorageReader( neoStores );
         List<Iterable<IndexEntryUpdate<IndexDescriptor>>> updates = new ArrayList<>();
         OnlineIndexUpdates onlineIndexUpdates =
-                new OnlineIndexUpdates( neoStores.getNodeStore(), schemaCache, new PropertyPhysicalToLogicalConverter( neoStores.getPropertyStore() ), reader );
+                new OnlineIndexUpdates( neoStores.getNodeStore(), schemaCache,
+                        new PropertyPhysicalToLogicalConverter( neoStores.getPropertyStore(), NULL ), reader, NULL, INSTANCE );
         onlineIndexUpdates.feed( extractor.getNodeCommands(), extractor.getRelationshipCommands() );
         updates.add( onlineIndexUpdates );
         reader.close();
@@ -1531,11 +1520,11 @@ class TransactionRecordStateTest
     {
         TransactionRecordState recordState = newTransactionRecordState();
 
-        nodeId.set( store.getNodeStore().nextId() );
+        nodeId.set( store.getNodeStore().nextId( NULL ) );
         int[] labelIds = new int[20];
         for ( int i = 0; i < labelIds.length; i++ )
         {
-            int labelId = (int) store.getLabelTokenStore().nextId();
+            int labelId = (int) store.getLabelTokenStore().nextId( NULL );
             recordState.createLabelToken( "Label" + i, labelId, false );
             labelIds[i] = labelId;
         }
@@ -1559,57 +1548,58 @@ class TransactionRecordStateTest
         return recordState;
     }
 
-    private void apply( BatchTransactionApplier applier, CommandsToApply transaction ) throws Exception
+    private void apply( TransactionApplierFactory applier, CommandsToApply transaction ) throws Exception
     {
         CommandHandlerContract.apply( applier, transaction );
     }
 
     private void apply( CommandsToApply transaction ) throws Exception
     {
-        BatchTransactionApplier applier = buildApplier( LockService.NO_LOCK_SERVICE );
+        TransactionApplierFactory applier = buildApplier( LockService.NO_LOCK_SERVICE );
         apply( applier, transaction );
     }
 
     private void apply( TransactionRecordState state ) throws Exception
     {
-        BatchTransactionApplier applier = buildApplier( LockService.NO_LOCK_SERVICE );
+        TransactionApplierFactory applier = buildApplier( LockService.NO_LOCK_SERVICE );
         apply( applier, transaction( state ) );
     }
 
-    private BatchTransactionApplier buildApplier( LockService noLockService )
+    private TransactionApplierFactory buildApplier( LockService noLockService )
     {
         Map<IdType,WorkSync<IdGenerator,IdGeneratorUpdateWork>> idGeneratorWorkSyncs = new EnumMap<>( IdType.class );
         for ( IdType idType : IdType.values() )
         {
             idGeneratorWorkSyncs.put( idType, new WorkSync<>( idGeneratorFactory.get( idType ) ) );
         }
-        return new NeoStoreBatchTransactionApplier( INTERNAL, neoStores, mock( CacheAccessBackDoor.class ), noLockService, idGeneratorWorkSyncs );
+        return new NeoStoreTransactionApplierFactory( INTERNAL, neoStores, mock( CacheAccessBackDoor.class ), noLockService );
     }
 
     private TransactionRecordState newTransactionRecordState()
     {
         Loaders loaders = new Loaders( neoStores );
-        recordChangeSet = new RecordChangeSet( loaders );
-        PropertyTraverser propertyTraverser = new PropertyTraverser();
-        RelationshipGroupGetter relationshipGroupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore() );
-        PropertyDeleter propertyDeleter = new PropertyDeleter( propertyTraverser );
+        recordChangeSet = new RecordChangeSet( loaders, INSTANCE );
+        PropertyTraverser propertyTraverser = new PropertyTraverser( NULL );
+        RelationshipGroupGetter relationshipGroupGetter = new RelationshipGroupGetter( neoStores.getRelationshipGroupStore(), NULL );
+        PropertyDeleter propertyDeleter = new PropertyDeleter( propertyTraverser, NULL );
         return new TransactionRecordState( neoStores, integrityValidator, recordChangeSet, 0, ResourceLocker.IGNORE,
-                new RelationshipCreator( relationshipGroupGetter, neoStores.getRelationshipGroupStore().getStoreHeaderInt() ),
-                new RelationshipDeleter( relationshipGroupGetter, propertyDeleter ), new PropertyCreator( neoStores.getPropertyStore(), propertyTraverser ),
-                propertyDeleter );
+                new RelationshipCreator( relationshipGroupGetter, neoStores.getRelationshipGroupStore().getStoreHeaderInt(), NULL ),
+                new RelationshipDeleter( relationshipGroupGetter, propertyDeleter, NULL ),
+                new PropertyCreator( neoStores.getPropertyStore(), propertyTraverser, NULL, INSTANCE ),
+                propertyDeleter, NULL, INSTANCE );
     }
 
     private static CommandsToApply transaction( TransactionRecordState recordState ) throws TransactionFailureException
     {
         List<StorageCommand> commands = new ArrayList<>();
-        recordState.extractCommands( commands );
+        recordState.extractCommands( commands, INSTANCE );
         return transaction( commands );
     }
 
     private static void assertDynamicLabelRecordInUse( NeoStores store, long id, boolean inUse )
     {
         DynamicArrayStore dynamicLabelStore = store.getNodeStore().getDynamicLabelStore();
-        DynamicRecord record = dynamicLabelStore.getRecord( id, dynamicLabelStore.nextRecord(), FORCE );
+        DynamicRecord record = dynamicLabelStore.getRecord( id, dynamicLabelStore.nextRecord( NULL ), FORCE, NULL );
         assertEquals( inUse, record.inUse() );
     }
 

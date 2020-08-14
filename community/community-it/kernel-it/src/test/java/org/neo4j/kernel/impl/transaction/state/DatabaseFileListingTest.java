@@ -27,9 +27,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.Resource;
@@ -37,6 +39,10 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.internal.helpers.collection.Iterators;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings;
+import org.neo4j.internal.index.label.TokenScanStore;
+import org.neo4j.io.layout.DatabaseFile;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.database.Database;
 import org.neo4j.kernel.impl.api.index.IndexingService;
@@ -67,7 +73,7 @@ class DatabaseFileListingTest
     private GraphDatabaseAPI db;
     @Inject
     private TestDirectory testDirectory;
-
+    @Inject
     private Database database;
     private static final String[] STANDARD_STORE_DIR_FILES = new String[]{
             "index",
@@ -116,14 +122,14 @@ class DatabaseFileListingTest
     void setUp() throws IOException
     {
         createIndexDbFile();
-        database = db.getDependencyResolver().resolveDependency( Database.class );
     }
 
     @Test
-    void shouldCloseIndexAndLabelScanSnapshots() throws Exception
+    void shouldCloseIndexAndScanStoreSnapshots() throws Exception
     {
         // Given
         LabelScanStore labelScanStore = mock( LabelScanStore.class );
+        RelationshipTypeScanStore relationshipTypeScanStore = mock( RelationshipTypeScanStore.class );
         IndexingService indexingService = mock( IndexingService.class );
         DatabaseLayout databaseLayout = mock( DatabaseLayout.class );
         when( databaseLayout.metadataStore() ).thenReturn( mock( File.class ) );
@@ -131,10 +137,12 @@ class DatabaseFileListingTest
         filesInStoreDirAre( databaseLayout, STANDARD_STORE_DIR_FILES, STANDARD_STORE_DIR_DIRECTORIES );
         StorageEngine storageEngine = mock( StorageEngine.class );
         IdGeneratorFactory idGeneratorFactory = mock( IdGeneratorFactory.class );
-        DatabaseFileListing fileListing = new DatabaseFileListing( databaseLayout, logFiles, labelScanStore,
+        DatabaseFileListing fileListing = new DatabaseFileListing( databaseLayout, logFiles, labelScanStore, relationshipTypeScanStore,
                 indexingService, storageEngine, idGeneratorFactory );
 
-        ResourceIterator<File> scanSnapshot = scanStoreFilesAre( labelScanStore,
+        ResourceIterator<File> labelScanSnapshot = scanStoreFilesAre( labelScanStore,
+                new String[]{"blah/scan.store", "scan.more"} );
+        ResourceIterator<File> relationshipTypeScanSnapshot = scanStoreFilesAre( relationshipTypeScanStore,
                 new String[]{"blah/scan.store", "scan.more"} );
         ResourceIterator<File> indexSnapshot = indexFilesAre( indexingService, new String[]{"schema/index/my.index"} );
 
@@ -144,7 +152,8 @@ class DatabaseFileListingTest
         result.close();
 
         // Then
-        verify( scanSnapshot ).close();
+        verify( labelScanSnapshot ).close();
+        verify( relationshipTypeScanSnapshot ).close();
         verify( indexSnapshot ).close();
     }
 
@@ -190,6 +199,10 @@ class DatabaseFileListingTest
     {
         DatabaseLayout layout = database.getDatabaseLayout();
         Set<File> expectedFiles = layout.storeFiles();
+        if ( !Config.defaults().get( RelationshipTypeScanStoreSettings.enable_relationship_type_scan_store ) )
+        {
+            expectedFiles.removeIf( f -> DatabaseFile.RELATIONSHIP_TYPE_SCAN_STORE.getName().equals( f.getName() ) );
+        }
         // there was no rotation
         ResourceIterator<StoreFileMetadata> storeFiles = database.listStoreFiles( false );
         Set<File> listedStoreFiles = storeFiles.stream()
@@ -225,15 +238,15 @@ class DatabaseFileListingTest
 
     private static void filesInStoreDirAre( DatabaseLayout databaseLayout, String[] filenames, String[] dirs )
     {
-        ArrayList<File> files = new ArrayList<>();
+        List<File> files = new ArrayList<>();
         mockFiles( filenames, files, false );
         mockFiles( dirs, files, true );
         when( databaseLayout.listDatabaseFiles(any()) ).thenReturn( files.toArray( new File[0] ) );
     }
 
-    private static ResourceIterator<File> scanStoreFilesAre( LabelScanStore labelScanStore, String[] fileNames )
+    private static ResourceIterator<File> scanStoreFilesAre( TokenScanStore labelScanStore, String[] fileNames )
     {
-        ArrayList<File> files = new ArrayList<>();
+        List<File> files = new ArrayList<>();
         mockFiles( fileNames, files, false );
         ResourceIterator<File> snapshot = spy( asResourceIterator( files.iterator() ) );
         when( labelScanStore.snapshotStoreFiles() ).thenReturn( snapshot );
@@ -243,7 +256,7 @@ class DatabaseFileListingTest
     private static ResourceIterator<File> indexFilesAre( IndexingService indexingService, String[] fileNames )
             throws IOException
     {
-        ArrayList<File> files = new ArrayList<>();
+        List<File> files = new ArrayList<>();
         mockFiles( fileNames, files, false );
         ResourceIterator<File> snapshot = spy( asResourceIterator( files.iterator() ) );
         when( indexingService.snapshotIndexFiles() ).thenReturn( snapshot );
@@ -260,7 +273,7 @@ class DatabaseFileListingTest
         }
     }
 
-    private static void mockFiles( String[] filenames, ArrayList<File> files, boolean isDirectories )
+    private static void mockFiles( String[] filenames, List<File> files, boolean isDirectories )
     {
         for ( String filename : filenames )
         {

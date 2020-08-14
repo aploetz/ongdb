@@ -28,28 +28,30 @@ import org.neo4j.kernel.impl.store.InvalidRecordException;
  *
  * Roughly this is what happens for the different modes:
  * <ul>
- * <li>{@link RecordLoad#CHECK}: Load at least data to determine whether or not it's in use.
+ * <li>{@link RecordLoad#CHECK}: Load at least data to determine whether it's in use or not.
  * If in use then record is loaded into target and returns {@code true},
  * otherwise return {@code false}.</li>
- * <li>{@link RecordLoad#NORMAL}: Load at least data to determine whether or not it's in use.
+ * <li>{@link RecordLoad#NORMAL}: Load at least data to determine whether it's in use or not.
  * if in use then record is loaded into target returns {@code true},
  * otherwise throws {@link InvalidRecordException}.</li>
- * <li>{@link RecordLoad#FORCE}: Loads record data into target regardless of whether or not record in use.
- * Returns whether or not record is in use.
+ * <li>{@link RecordLoad#FORCE}: Loads record data into target regardless of whether record in use or not.
+ * Returns whether record is in use or not.
+ * <li>{@link RecordLoad#ALWAYS}: always load all record data, even if the record is marked as not in use, but unlike {@link RecordLoad#FORCE} it will
+ * throw decoding and out-of-bounds exceptions. Will not throw InvalidRecordExceptions for records that are not in use.</li>
  *
  */
 public enum RecordLoad
 {
-    NORMAL, CHECK, FORCE;
+    NORMAL, CHECK, FORCE, ALWAYS;
 
     /**
-     * Checks whether or not a record should be fully loaded from {@link PageCursor}, based on inUse status.
+     * Checks whether a record should be fully loaded from {@link PageCursor}, based on inUse status.
      */
     public final boolean shouldLoad( boolean inUse )
     {
         // FORCE mode always return true so that record data will always be loaded, even if not in use.
         // The other modes only loads records that are in use.
-        return this == FORCE || inUse;
+        return inUse || this == ALWAYS || this == FORCE;
     }
 
     /**
@@ -62,7 +64,7 @@ public enum RecordLoad
         {
             throw new InvalidRecordException( record + " not in use" );
         }
-        return this == FORCE || inUse;
+        return shouldLoad( inUse );
     }
 
     /**
@@ -73,7 +75,7 @@ public enum RecordLoad
      */
     public final void clearOrThrowCursorError( PageCursor cursor )
     {
-        if ( this == NORMAL )
+        if ( this != FORCE )
         {
             try
             {
@@ -86,8 +88,8 @@ public enum RecordLoad
         }
         else
         {
-            // The CHECK and FORCE modes do not bother with reporting decoding errors...
-            // ... but they must still clear them, since the page cursor may be reused to read other records
+            // The FORCE mode does not bother with reporting decoding errors...
+            // ... but it must still clear them, since the page cursor may be reused to read other records
             cursor.clearCursorException();
         }
     }
@@ -100,6 +102,6 @@ public enum RecordLoad
      */
     public boolean checkForOutOfBounds( PageCursor cursor )
     {
-        return cursor.checkAndClearBoundsFlag() && this == NORMAL;
+        return cursor.checkAndClearBoundsFlag() && this != FORCE;
     }
 }

@@ -21,9 +21,13 @@ package cypher.features
 
 import java.util
 
-import cypher.features.ScenarioTestHelper.{createTests, printComputedBlacklist}
+import cypher.features.Neo4jAdapter.defaultTestConfig
+import cypher.features.ScenarioTestHelper.createTests
+import cypher.features.ScenarioTestHelper.printComputedBlacklist
 import org.junit.jupiter.api.Assertions.fail
-import org.junit.jupiter.api.{Disabled, DynamicTest, TestFactory}
+import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 import org.neo4j.test.TestDatabaseManagementServiceBuilder
 
 class InterpretedTCKTests extends BaseTCKTests {
@@ -32,7 +36,7 @@ class InterpretedTCKTests extends BaseTCKTests {
 
   @TestFactory
   def runInterpreted(): util.Collection[DynamicTest] = {
-    createTests(scenarios, InterpretedTestConfig, () => new TestDatabaseManagementServiceBuilder())
+    createTests(scenarios, InterpretedTestConfig, () => new TestDatabaseManagementServiceBuilder(), defaultTestConfig)
   }
 
   @Disabled

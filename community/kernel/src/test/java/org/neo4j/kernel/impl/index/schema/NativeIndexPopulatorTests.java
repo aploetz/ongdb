@@ -38,11 +38,14 @@ import org.neo4j.index.internal.gbptree.GBPTreeBuilder;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.fs.StoreChannel;
+import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
+import org.neo4j.test.rule.PageCacheConfig;
 import org.neo4j.values.storable.Values;
 
 import static java.util.Arrays.asList;
@@ -58,6 +61,7 @@ import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_READER;
 import static org.neo4j.internal.kernel.api.InternalIndexState.FAILED;
 import static org.neo4j.internal.kernel.api.InternalIndexState.ONLINE;
 import static org.neo4j.internal.kernel.api.InternalIndexState.POPULATING;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.PhaseTracker.nullInstance;
 import static org.neo4j.kernel.impl.index.schema.NativeIndexPopulator.BYTE_FAILED;
 import static org.neo4j.kernel.impl.index.schema.NativeIndexPopulator.BYTE_ONLINE;
@@ -67,7 +71,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         extends NativeIndexTestUtil<KEY,VALUE>
 {
     private static final int LARGE_AMOUNT_OF_UPDATES = 1_000;
-    static final NodePropertyAccessor null_property_accessor = ( nodeId, propertyKeyId ) ->
+    static final NodePropertyAccessor null_property_accessor = ( nodeId, propertyKeyId, cursorTracer ) ->
     {
         throw new RuntimeException( "Did not expect an attempt to go to store" );
     };
@@ -77,10 +81,10 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     @BeforeEach
     void setupPopulator() throws IOException
     {
-        populator = createPopulator();
+        populator = createPopulator( pageCache );
     }
 
-    abstract NativeIndexPopulator<KEY,VALUE> createPopulator() throws IOException;
+    abstract NativeIndexPopulator<KEY,VALUE> createPopulator( PageCache pageCache ) throws IOException;
 
     @Test
     void createShouldCreateFile()
@@ -93,7 +97,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
 
         // then
         assertFilePresent();
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -113,7 +117,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
             assertNotEquals(
                 someBytes, firstBytes, "Expected previous file content to have been cleared but was still there" );
         }
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -164,11 +168,11 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         List<IndexEntryUpdate<?>> updates = Collections.emptyList();
 
         // when
-        populator.add( updates );
-        populator.scanCompleted( nullInstance );
+        populator.add( updates, NULL );
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
 
         // then
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -179,11 +183,11 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         IndexEntryUpdate<IndexDescriptor>[] updates = valueCreatorUtil.someUpdates( random );
 
         // when
-        populator.add( asList( updates ) );
-        populator.scanCompleted( nullInstance );
+        populator.add( asList( updates ), NULL );
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
 
         // then
-        populator.close( true );
+        populator.close( true, NULL );
         verifyUpdates( updates );
     }
 
@@ -193,7 +197,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         // given
         populator.create();
         IndexEntryUpdate<IndexDescriptor>[] updates = valueCreatorUtil.someUpdates( random );
-        try ( IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor ) )
+        try ( IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor, NULL ) )
         {
             // when
             for ( IndexEntryUpdate<IndexDescriptor> update : updates )
@@ -203,8 +207,8 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         }
 
         // then
-        populator.scanCompleted( nullInstance );
-        populator.close( true );
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
+        populator.close( true, NULL );
         verifyUpdates( updates );
     }
 
@@ -213,13 +217,13 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     {
         // given
         populator.create();
-        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor );
+        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor, NULL );
 
         // when
         updater.close();
 
         assertThrows( IllegalStateException.class, () -> updater.process( valueCreatorUtil.add( 1, Values.of( Long.MAX_VALUE ) ) ) );
-        populator.close( true );
+        populator.close( true, NULL );
     }
 
     @Test
@@ -233,8 +237,8 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         applyInterleaved( updates, populator );
 
         // then
-        populator.scanCompleted( nullInstance );
-        populator.close( true );
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
+        populator.close( true, NULL );
         verifyUpdates( updates );
     }
 
@@ -254,7 +258,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         }
 
         // when
-        populator.close( true );
+        populator.close( true, NULL );
 
         // then
         existingMapping = pageCache.getExistingMapping( indexFiles.getStoreFile() );
@@ -268,7 +272,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.create();
 
         // when
-        populator.close( true );
+        populator.close( true, NULL );
 
         // then
         assertHeader( ONLINE, null, false );
@@ -281,7 +285,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.create();
 
         // then
-        populator.close( false );
+        populator.close( false, NULL );
     }
 
     @Test
@@ -300,7 +304,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         }
 
         // when
-        populator.close( false );
+        populator.close( false, NULL );
 
         // then
         existingMapping = pageCache.getExistingMapping( indexFiles.getStoreFile() );
@@ -314,7 +318,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.create();
 
         // when
-        populator.close( false );
+        populator.close( false, NULL );
 
         // then
         assertHeader( POPULATING, null, false );
@@ -329,7 +333,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         // when
         String failureMessage = "Fly, you fools!";
         populator.markAsFailed( failureMessage );
-        populator.close( false );
+        populator.close( false, NULL );
 
         // then
         assertHeader( FAILED, failureMessage, false );
@@ -344,7 +348,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         // when
         String failureMessage = longString( pageCache.pageSize() );
         populator.markAsFailed( failureMessage );
-        populator.close( false );
+        populator.close( false, NULL );
 
         // then
         assertHeader( FAILED, failureMessage, true );
@@ -360,9 +364,9 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.markAsFailed( "" );
 
         // then
-        var e = assertThrows( RuntimeException.class, () -> populator.close( true ) );
+        var e = assertThrows( RuntimeException.class, () -> populator.close( true, NULL ) );
         assertTrue( hasCause( e, IllegalStateException.class ), "Expected cause to contain " + IllegalStateException.class );
-        populator.close( false );
+        populator.close( false, NULL );
     }
 
     @Test
@@ -378,8 +382,8 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         int count = interleaveLargeAmountOfUpdates( updaterRandom, updates );
 
         // then
-        populator.scanCompleted( nullInstance );
-        populator.close( true );
+        populator.scanCompleted( nullInstance, jobScheduler, NULL );
+        populator.close( true, NULL );
         random.reset();
         verifyUpdates( valueCreatorUtil.randomUpdateGenerator( random ), count );
     }
@@ -389,7 +393,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     {
         // given
         populator.create();
-        populator.close( true );
+        populator.close( true, NULL );
 
         // when
         populator.drop();
@@ -403,7 +407,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     {
         // given
         populator.create();
-        populator.close( false );
+        populator.close( false, NULL );
 
         // when
         populator.drop();
@@ -413,13 +417,33 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     }
 
     @Test
+    void dropShouldNotFlushContent() throws IOException
+    {
+        // given
+        DefaultPageCacheTracer tracer = new DefaultPageCacheTracer();
+        try ( PageCache pageCache = pageCacheExtension.getPageCache( fs, PageCacheConfig.config().withTracer( tracer ) ) )
+        {
+            populator = createPopulator( pageCache );
+            populator.create();
+            long preDrop = tracer.flushes();
+
+            // when
+            populator.drop();
+
+            // then
+            long postDrop = tracer.flushes();
+            assertEquals( preDrop, postDrop );
+        }
+    }
+
+    @Test
     void successfulCloseMustThrowWithoutPriorSuccessfulCreate()
     {
         // given
         assertFileNotPresent();
 
         // when
-        var e = assertThrows( RuntimeException.class, () -> populator.close( true ) );
+        var e = assertThrows( RuntimeException.class, () -> populator.close( true, NULL ) );
         assertTrue( hasCause( e, IllegalStateException.class ), "Expected cause to contain " + IllegalStateException.class );
     }
 
@@ -432,7 +456,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.markAsFailed( failureMessage );
 
         // when
-        populator.close( false );
+        populator.close( false, NULL );
 
         // then
         assertHeader( FAILED, failureMessage, false );
@@ -448,7 +472,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.drop();
 
         // then
-        var e = assertThrows( RuntimeException.class, () -> populator.close( true ) );
+        var e = assertThrows( RuntimeException.class, () -> populator.close( true, NULL ) );
         assertTrue( hasCause( e, IllegalStateException.class ), "Expected cause to contain " + IllegalStateException.class );
     }
 
@@ -462,7 +486,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         populator.drop();
 
         // then
-        var e = assertThrows( RuntimeException.class, () -> populator.close( false ) );
+        var e = assertThrows( RuntimeException.class, () -> populator.close( false, NULL ) );
         assertTrue( hasCause( e, IllegalStateException.class ), "Expected cause to contain " + IllegalStateException.class );
     }
 
@@ -474,7 +498,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         {
             if ( updaterRandom.nextFloat() < 0.1 )
             {
-                try ( IndexUpdater indexUpdater = populator.newPopulatingUpdater( null_property_accessor ) )
+                try ( IndexUpdater indexUpdater = populator.newPopulatingUpdater( null_property_accessor, NULL ) )
                 {
                     int numberOfUpdaterUpdates = updaterRandom.nextInt( 100 );
                     for ( int j = 0; j < numberOfUpdaterUpdates; j++ )
@@ -484,7 +508,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
                     }
                 }
             }
-            populator.add( Collections.singletonList( updates.next() ) );
+            populator.add( Collections.singletonList( updates.next() ), NULL );
             count++;
         }
         return count;
@@ -533,7 +557,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
     {
         boolean useUpdater = true;
         Collection<IndexEntryUpdate<IndexDescriptor>> populatorBatch = new ArrayList<>();
-        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor );
+        IndexUpdater updater = populator.newPopulatingUpdater( null_property_accessor, NULL );
         for ( IndexEntryUpdate<IndexDescriptor> update : updates )
         {
             if ( random.nextInt( 100 ) < 20 )
@@ -545,8 +569,8 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
                 }
                 else
                 {
-                    populator.add( populatorBatch );
-                    updater = populator.newPopulatingUpdater( null_property_accessor );
+                    populator.add( populatorBatch, NULL );
+                    updater = populator.newPopulatingUpdater( null_property_accessor, NULL );
                 }
                 useUpdater = !useUpdater;
             }
@@ -565,7 +589,7 @@ abstract class NativeIndexPopulatorTests<KEY extends NativeIndexKey<KEY>,VALUE e
         }
         else
         {
-            populator.add( populatorBatch );
+            populator.add( populatorBatch, NULL );
         }
     }
 

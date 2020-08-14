@@ -28,6 +28,7 @@ import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.extension.Inject;
@@ -39,6 +40,8 @@ import org.neo4j.values.storable.Values;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -60,7 +63,7 @@ class ShortStringPropertyEncodeTest
     void setupStore()
     {
         neoStores = new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fileSystem, immediate() ),
-                pageCache, fileSystem, NullLogProvider.getInstance() ).openNeoStores( true,
+                pageCache, fileSystem, NullLogProvider.getInstance(), NULL ).openNeoStores( true,
                 StoreType.PROPERTY, StoreType.PROPERTY_ARRAY, StoreType.PROPERTY_STRING );
         propertyStore = neoStores.getPropertyStore();
     }
@@ -194,9 +197,9 @@ class ShortStringPropertyEncodeTest
     {
         PropertyBlock block = new PropertyBlock();
         TextValue expectedValue = Values.stringValue( string );
-        propertyStore.encodeValue( block, KEY_ID, expectedValue );
+        propertyStore.encodeValue( block, KEY_ID, expectedValue, PageCursorTracer.NULL, INSTANCE );
         assertEquals( 0, block.getValueRecords().size() );
-        Value readValue = block.getType().value( block, propertyStore );
+        Value readValue = block.getType().value( block, propertyStore, PageCursorTracer.NULL );
         assertEquals( expectedValue, readValue );
     }
 }

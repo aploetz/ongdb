@@ -19,15 +19,15 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.Expression
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * For each source row, evaluate 'expression'. If 'expression' evaluates to a list, produce one row per list
-  * element, containing the source row and the element assigned to 'variable'.
-  * If 'expression' does evaluate to null, produce nothing.
-  * If 'expression' does not evaluate to a list, produce a single row with the value.
-  */
+ * For each source row, evaluate 'expression'. If 'expression' evaluates to a list, produce one row per list
+ * element, containing the source row and the element assigned to 'variable'.
+ * If 'expression' does evaluate to null, produce nothing.
+ * If 'expression' does not evaluate to a list, produce a single row with the value.
+ */
 case class UnwindCollection(source: LogicalPlan, variable: String, expression: Expression)(implicit idGen: IdGen)
   extends LogicalPlan(idGen) with LazyLogicalPlan {
   val lhs = Some(source)

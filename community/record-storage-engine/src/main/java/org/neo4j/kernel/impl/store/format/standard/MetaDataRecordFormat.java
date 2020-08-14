@@ -34,7 +34,12 @@ public class MetaDataRecordFormat extends BaseOneByteHeaderRecordFormat<MetaData
 
     public MetaDataRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, ID_BITS );
+        this( true );
+    }
+
+    public MetaDataRecordFormat( boolean pageAligned )
+    {
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, ID_BITS, pageAligned );
     }
 
     @Override
@@ -44,7 +49,7 @@ public class MetaDataRecordFormat extends BaseOneByteHeaderRecordFormat<MetaData
     }
 
     @Override
-    public void read( MetaDataRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( MetaDataRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         int id = record.getIntId();
         Position[] values = Position.values();
@@ -63,7 +68,7 @@ public class MetaDataRecordFormat extends BaseOneByteHeaderRecordFormat<MetaData
     }
 
     @Override
-    public void write( MetaDataRecord record, PageCursor cursor, int recordSize )
+    public void write( MetaDataRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         assert record.inUse();
         cursor.putByte( Record.IN_USE.byteValue() );

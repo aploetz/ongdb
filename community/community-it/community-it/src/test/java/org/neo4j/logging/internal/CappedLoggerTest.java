@@ -20,25 +20,22 @@
 package org.neo4j.logging.internal;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.hamcrest.Matcher;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.time.Clocks;
 import org.neo4j.time.FakeClock;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.hamcrest.Matchers.any;
-import static org.hamcrest.Matchers.containsString;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
-@RunWith( Parameterized.class )
 public class CappedLoggerTest
 {
 
@@ -49,8 +46,7 @@ public class CappedLoggerTest
         void log( CappedLogger logger, String msg, Throwable cause );
     }
 
-    @Parameterized.Parameters( name = "{0}" )
-    public static Iterable<Object[]> parameters()
+    private static Stream<Arguments> argumentsProvider()
     {
         LogMethod debug = new LogMethod()
         {
@@ -71,7 +67,7 @@ public class CappedLoggerTest
             @Override
             public void log( CappedLogger logger, String msg )
             {
-                logger.debug( msg );
+                logger.info( msg );
             }
 
             @Override
@@ -85,7 +81,7 @@ public class CappedLoggerTest
             @Override
             public void log( CappedLogger logger, String msg )
             {
-                logger.debug( msg );
+                logger.warn( msg );
             }
 
             @Override
@@ -99,7 +95,7 @@ public class CappedLoggerTest
             @Override
             public void log( CappedLogger logger, String msg )
             {
-                logger.debug( msg );
+                logger.error( msg );
             }
 
             @Override
@@ -108,25 +104,18 @@ public class CappedLoggerTest
                 logger.error( msg, cause );
             }
         };
-        return Arrays.asList(
-                new Object[]{"debug", debug},
-                new Object[]{"info", info},
-                new Object[]{"warn", warn},
-                new Object[]{"error", error}
+        return Stream.of(
+                Arguments.of( debug, "debug" ),
+                Arguments.of( info, "info" ),
+                Arguments.of( warn, "warn" ),
+                Arguments.of( error, "error" )
         );
     }
 
-    private final String logName;
-    private final LogMethod logMethod;
+    private LogMethod logMethod;
 
     private AssertableLogProvider logProvider;
     private CappedLogger logger;
-
-    public CappedLoggerTest( String logName, LogMethod logMethod )
-    {
-        this.logName = logName;
-        this.logMethod = logMethod;
-    }
 
     public String[] logLines( int lineCount )
     {
@@ -152,73 +141,87 @@ public class CappedLoggerTest
 
     public void assertLoggedLines( String[] lines, int count, int skip )
     {
-        Matcher<String>[] matchers = new Matcher[count];
-        int i;
-        for ( i = 0; i < skip; i++ )
+        for ( int i = skip; i < count; i++ )
         {
-            matchers[i] = any( String.class );
+            assertThat( logProvider ).containsMessages( lines[i] );
         }
-        for ( ; i < count; i++ )
-        {
-            String line = lines[i];
-            matchers[i] = containsString( line );
-        }
-
-        logProvider.rawMessageMatcher().assertContains( skip, matchers );
     }
 
-    @Before
+    @BeforeEach
     public void setUp()
     {
         logProvider = new AssertableLogProvider();
         logger = new CappedLogger( logProvider.getLog( CappedLogger.class ) );
     }
 
-    @Test
-    public void mustLogWithoutLimitConfiguration()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustLogWithoutLimitConfiguration( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         int lineCount = 1000;
         String[] lines = logLines( lineCount );
         assertLoggedLines( lines, lineCount );
     }
 
-    @Test
-    public void mustLogExceptions()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustLogExceptions( LogMethod logMethod, String name )
     {
-        logMethod.log( logger, "MESSAGE", new ArithmeticException( "EXCEPTION" ) );
-        AssertableLogProvider.MessageMatcher matcher = logProvider.internalToStringMessageMatcher();
-        matcher.assertContains( "MESSAGE" );
-        matcher.assertContains( "ArithmeticException" );
-        matcher.assertContains( "EXCEPTION" );
+        this.logMethod = logMethod;
+
+        var exception = new ArithmeticException( "EXCEPTION" );
+        logMethod.log( logger, "MESSAGE", exception );
+        assertThat( logProvider ).containsMessageWithException( "MESSAGE", exception );
     }
 
-    @Test( expected = IllegalArgumentException.class )
-    public void mustThrowOnSettingZeroCountLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustThrowOnSettingZeroCountLimit( LogMethod logMethod, String name )
     {
-        logger.setCountLimit( 0 );
+        this.logMethod = logMethod;
+
+        assertThrows( IllegalArgumentException.class, () ->
+                logger.setCountLimit( 0 ) );
     }
 
-    @Test( expected = IllegalArgumentException.class )
-    public void mustThrowOnSettingNegativeCountLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustThrowOnSettingNegativeCountLimit( LogMethod logMethod, String name )
     {
-        logger.setCountLimit( -1 );
+        this.logMethod = logMethod;
+
+        assertThrows( IllegalArgumentException.class, () ->
+                logger.setCountLimit( -1 ) );
     }
 
-    @Test( expected = IllegalArgumentException.class )
-    public void mustThrowOnZeroTimeLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustThrowOnZeroTimeLimit( LogMethod logMethod, String name )
     {
-        logger.setTimeLimit( 0, MILLISECONDS, Clocks.systemClock() );
+        this.logMethod = logMethod;
+
+        assertThrows( IllegalArgumentException.class, () ->
+                logger.setTimeLimit( 0, MILLISECONDS, Clocks.systemClock() ) );
     }
 
-    @Test( expected = IllegalArgumentException.class )
-    public void mustThrowOnNegativeTimeLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustThrowOnNegativeTimeLimit( LogMethod logMethod, String name )
     {
-        logger.setTimeLimit( -1, MILLISECONDS, Clocks.systemClock() );
+        this.logMethod = logMethod;
+
+        assertThrows( IllegalArgumentException.class, () ->
+                logger.setTimeLimit( -1, MILLISECONDS, Clocks.systemClock() ) );
     }
 
-    @Test
-    public void mustAllowConfigurationChaining()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustAllowConfigurationChaining( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         logger.setCountLimit( 1 )
                 .setTimeLimit( 10, MILLISECONDS, Clocks.systemClock() )
                 .unsetCountLimit()
@@ -226,32 +229,41 @@ public class CappedLoggerTest
                 .setCountLimit( 1 );
     }
 
-    @Test
-    public void mustLimitByConfiguredCount()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustLimitByConfiguredCount( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         int limit = 10;
         logger.setCountLimit( limit );
         String[] lines = logLines( limit + 1 );
         assertLoggedLines( lines, limit );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( lines[limit] ) ) );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( lines[limit] );
     }
 
-    @Test
-    public void mustLogAfterResetWithCountLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustLogAfterResetWithCountLimit( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         int limit = 10;
         logger.setCountLimit( limit );
         String[] lines = logLines( limit + 1 );
         logger.reset();
         String[] moreLines = logLines( 1, limit + 1 );
         assertLoggedLines( ArrayUtils.addAll( ArrayUtils.subarray( lines, 0, limit ), moreLines ), 1 + limit );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( lines[limit] ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( moreLines[0] ) );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( lines[limit] );
+        assertThat( logProvider ).containsMessages( moreLines[0] );
     }
 
-    @Test
-    public void unsettingCountLimitMustLetMessagesThrough()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void unsettingCountLimitMustLetMessagesThrough( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         int limit = 10;
         logger.setCountLimit( limit );
         String[] lines = logLines( limit + 1 );
@@ -260,13 +272,16 @@ public class CappedLoggerTest
         String[] moreLines = logLines( moreLineCount, limit + 1 );
         assertLoggedLines( ArrayUtils.addAll( ArrayUtils.subarray( lines, 0, limit ), moreLines ),
                 moreLineCount + limit );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( lines[limit] ) ) );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( lines[limit] );
         assertLoggedLines( moreLines, moreLineCount, limit );
     }
 
-    @Test
-    public void mustNotLogMessagesWithinConfiguredTimeLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustNotLogMessagesWithinConfiguredTimeLimit( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         FakeClock clock = getDefaultFakeClock();
         logger.setTimeLimit( 1, TimeUnit.MILLISECONDS, clock );
         logMethod.log( logger, "### AAA ###" );
@@ -274,14 +289,17 @@ public class CappedLoggerTest
         clock.forward( 1, TimeUnit.MILLISECONDS );
         logMethod.log( logger, "### CCC ###" );
 
-        logProvider.rawMessageMatcher().assertContains( containsString( "### AAA ###" ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### BBB ###" ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( "### CCC ###" ) );
+        assertThat( logProvider ).containsMessages( "### AAA ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### BBB ###" );
+        assertThat( logProvider ).containsMessages( "### CCC ###" );
     }
 
-    @Test
-    public void unsettingTimeLimitMustLetMessagesThrough()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void unsettingTimeLimitMustLetMessagesThrough( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         FakeClock clock = getDefaultFakeClock();
         logger.setTimeLimit( 1, TimeUnit.MILLISECONDS, clock );
         logMethod.log( logger, "### AAA ###" );
@@ -292,16 +310,19 @@ public class CappedLoggerTest
         logger.unsetTimeLimit(); // Note that we are not advancing the clock!
         logMethod.log( logger, "### EEE ###" );
 
-        logProvider.rawMessageMatcher().assertContains( containsString( "### AAA ###" ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### BBB ###" ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( "### CCC ###" ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### DDD ###" ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( "### EEE ###" ) );
+        assertThat( logProvider ).containsMessages( "### AAA ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### BBB ###" );
+        assertThat( logProvider ).containsMessages( "### CCC ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### DDD ###" );
+        assertThat( logProvider ).containsMessages( "### EEE ###" );
     }
 
-    @Test
-    public void mustLogAfterResetWithTimeLimit()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustLogAfterResetWithTimeLimit( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         FakeClock clock = getDefaultFakeClock();
         logger.setTimeLimit( 1, TimeUnit.MILLISECONDS, clock );
         logMethod.log( logger, "### AAA ###" );
@@ -309,14 +330,17 @@ public class CappedLoggerTest
         logger.reset();
         logMethod.log( logger, "### CCC ###" );
 
-        logProvider.rawMessageMatcher().assertContains( containsString( "### AAA ###" ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### BBB ###" ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( "### CCC ###" ) );
+        assertThat( logProvider ).containsMessages( "### AAA ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### BBB ###" );
+        assertThat( logProvider ).containsMessages( "### CCC ###" );
     }
 
-    @Test
-    public void mustOnlyLogMessagesThatPassBothLimits()
+    @ParameterizedTest( name = "{1}" )
+    @MethodSource( "argumentsProvider" )
+    public void mustOnlyLogMessagesThatPassBothLimits( LogMethod logMethod, String name )
     {
+        this.logMethod = logMethod;
+
         FakeClock clock = getDefaultFakeClock();
         logger.setCountLimit( 2 );
         logger.setTimeLimit( 1, TimeUnit.MILLISECONDS, clock );
@@ -327,28 +351,10 @@ public class CappedLoggerTest
         logger.reset();
         logMethod.log( logger, "### DDD ###" );
 
-        logProvider.rawMessageMatcher().assertContains( containsString( "### AAA ###" ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### BBB ###" ) ) );
-        logProvider.assertNone( currentLog( inLog( CappedLogger.class ), containsString( "### CCC ###" ) ) );
-        logProvider.rawMessageMatcher().assertContains( containsString( "### DDD ###" ) );
-    }
-
-    private AssertableLogProvider.LogMatcher currentLog( AssertableLogProvider.LogMatcherBuilder logMatcherBuilder,
-            Matcher<String> stringMatcher )
-    {
-        switch ( logName )
-        {
-        case "debug":
-            return logMatcherBuilder.debug( stringMatcher );
-        case "info":
-            return logMatcherBuilder.info( stringMatcher );
-        case "warn":
-            return logMatcherBuilder.warn( stringMatcher );
-        case "error":
-            return logMatcherBuilder.error( stringMatcher );
-        default:
-            throw new RuntimeException( "Unknown log name" );
-        }
+        assertThat( logProvider ).containsMessages( "### AAA ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### BBB ###" );
+        assertThat( logProvider ).forClass( CappedLogger.class ).doesNotContainMessage( "### CCC ###" );
+        assertThat( logProvider ).containsMessages( "### DDD ###" );
     }
 
     private FakeClock getDefaultFakeClock()

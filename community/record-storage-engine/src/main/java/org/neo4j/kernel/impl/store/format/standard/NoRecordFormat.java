@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.store.format.standard;
 
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.StoreHeader;
 import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
@@ -54,18 +55,18 @@ public class NoRecordFormat<RECORD extends AbstractBaseRecord> implements Record
     }
 
     @Override
-    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( RECORD record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         record.clear();
     }
 
     @Override
-    public void prepare( RECORD record, int recordSize, IdSequence idSequence )
+    public void prepare( RECORD record, int recordSize, IdSequence idSequence, PageCursorTracer cursorTracer )
     {
     }
 
     @Override
-    public void write( RECORD record, PageCursor cursor, int recordSize )
+    public void write( RECORD record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
     }
 
@@ -73,6 +74,12 @@ public class NoRecordFormat<RECORD extends AbstractBaseRecord> implements Record
     public long getNextRecordReference( RECORD record )
     {
         return Record.NULL_REFERENCE.intValue();
+    }
+
+    @Override
+    public int getPageSize( int pageCachePageSize, int recordSize )
+    {
+        return pageCachePageSize;
     }
 
     @Override

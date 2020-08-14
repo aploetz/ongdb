@@ -23,7 +23,7 @@ import java.io.File;
 
 import org.neo4j.annotations.service.ServiceProvider;
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.api.impl.fulltext.FulltextIndexProvider;
@@ -80,10 +80,10 @@ public class FulltextIndexProviderFactory extends ExtensionFactory<FulltextIndex
     public Lifecycle newInstance( ExtensionContext context, Dependencies dependencies )
     {
         Config config = dependencies.getConfig();
-        boolean ephemeral = config.get( GraphDatabaseSettings.ephemeral_lucene );
+        boolean ephemeral = config.get( GraphDatabaseInternalSettings.ephemeral_lucene );
         FileSystemAbstraction fileSystemAbstraction = dependencies.fileSystem();
         DirectoryFactory directoryFactory = directoryFactory( ephemeral );
-        OperationalMode operationalMode = context.databaseInfo().operationalMode;
+        OperationalMode operationalMode = context.dbmsInfo().operationalMode;
         boolean isSingleInstance = operationalMode == OperationalMode.SINGLE;
         JobScheduler scheduler = dependencies.scheduler();
         IndexDirectoryStructure.Factory directoryStructureFactory = subProviderDirectoryStructure( context.directory() );

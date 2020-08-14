@@ -43,9 +43,11 @@ import org.neo4j.graphdb.config.Setting;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.MyRelTypes;
 import org.neo4j.kernel.impl.api.index.IndexProviderMap;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
@@ -67,7 +69,10 @@ import org.neo4j.token.TokenHolders;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.graphdb.Label.label;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.Record.NULL_REFERENCE;
+import static org.neo4j.logging.LogAssertions.assertThat;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @TestDirectoryExtension
 @ExtendWith( RandomExtension.class )
@@ -129,6 +134,7 @@ public class DetectAllRelationshipInconsistenciesIT
             StoreAccess storeAccess = new StoreAccess( neoStores ).initialize();
             DirectStoreAccess directStoreAccess = new DirectStoreAccess( storeAccess,
                     db.getDependencyResolver().resolveDependency( LabelScanStore.class ),
+                    db.getDependencyResolver().resolveDependency( RelationshipTypeScanStore.class ),
                     db.getDependencyResolver().resolveDependency( IndexProviderMap.class ),
                     db.getDependencyResolver().resolveDependency( TokenHolders.class ),
                     db.getDependencyResolver().resolveDependency( IndexStatisticsStore.class ),
@@ -139,12 +145,12 @@ public class DetectAllRelationshipInconsistenciesIT
                     new FullCheck( ProgressMonitorFactory.NONE, Statistics.NONE, threads, ConsistencyFlags.DEFAULT, getTuningConfiguration(), false,
                             NodeBasedMemoryLimiter.DEFAULT );
             AssertableLogProvider logProvider = new AssertableLogProvider( true );
-            ConsistencySummaryStatistics summary =
-                    checker.execute( resolver.resolveDependency( PageCache.class ), directStoreAccess, () -> counts, logProvider.getLog( FullCheck.class ) );
+            ConsistencySummaryStatistics summary = checker.execute( resolver.resolveDependency( PageCache.class ), directStoreAccess, () -> counts,
+                    PageCacheTracer.NULL, INSTANCE, logProvider.getLog( FullCheck.class ) );
             int relationshipInconsistencies = summary.getInconsistencyCountForRecordType( RecordType.RELATIONSHIP );
 
             assertTrue( relationshipInconsistencies > 0, "Couldn't detect sabotaged relationship " + sabotage );
-            logProvider.rawMessageMatcher().assertContains( sabotage.after.toString() );
+            assertThat( logProvider ).containsMessages( sabotage.after.toString() );
         }
         finally
         {
@@ -200,8 +206,8 @@ public class DetectAllRelationshipInconsistenciesIT
 
     private Sabotage sabotage( RelationshipStore store, long id, long lonelyNodeId )
     {
-        RelationshipRecord before = store.getRecord( id, store.newRecord(), RecordLoad.NORMAL );
-        RelationshipRecord after = before.clone();
+        RelationshipRecord before = store.getRecord( id, store.newRecord(), RecordLoad.NORMAL, NULL );
+        RelationshipRecord after = before.copy();
 
         boolean sabotageSourceChain = random.nextBoolean(); // otherwise target chain
         boolean sabotageNodeId = random.nextBoolean();
@@ -244,10 +250,10 @@ public class DetectAllRelationshipInconsistenciesIT
             }
         }
 
-        store.prepareForCommit( after );
-        store.updateRecord( after );
+        store.prepareForCommit( after, NULL );
+        store.updateRecord( after, NULL );
 
-        RelationshipRecord other = NULL_REFERENCE.is( otherReference ) ? null : store.getRecord( otherReference, store.newRecord(), RecordLoad.FORCE );
+        RelationshipRecord other = NULL_REFERENCE.is( otherReference ) ? null : store.getRecord( otherReference, store.newRecord(), RecordLoad.FORCE, NULL );
         return new Sabotage( before, after, other );
     }
 }

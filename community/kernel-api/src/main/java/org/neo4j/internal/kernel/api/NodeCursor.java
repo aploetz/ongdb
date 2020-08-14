@@ -19,6 +19,9 @@
  */
 package org.neo4j.internal.kernel.api;
 
+import org.neo4j.storageengine.api.Degrees;
+import org.neo4j.storageengine.api.RelationshipSelection;
+
 /**
  * Cursor for scanning nodes.
  */
@@ -26,23 +29,47 @@ public interface NodeCursor extends Cursor
 {
     long nodeReference();
 
-    LabelSet labels();
+    TokenSet labels();
 
+<<<<<<< HEAD
     LabelSet labelsIgnoringTxStateSetRemove();
 
     boolean hasLabel( int label );
+=======
+    TokenSet labelsIgnoringTxStateSetRemove();
+>>>>>>> neo4j/4.1
 
-    void relationships( RelationshipGroupCursor cursor );
+    boolean hasLabel( int label );
 
-    void allRelationships( RelationshipTraversalCursor relationships );
+    void relationships( RelationshipTraversalCursor relationships, RelationshipSelection selection );
 
     void properties( PropertyCursor cursor );
 
-    long relationshipGroupReference();
-
-    long allRelationshipsReference();
+    long relationshipsReference();
 
     long propertiesReference();
 
-    boolean isDense();
+    /**
+     * @return whether or not this node cursor can decide degree for various relationship selections cheaper than doing a full scan of all relationships.
+     */
+    boolean supportsFastDegreeLookup();
+
+    int[] relationshipTypes();
+
+    /**
+     * Gathers degrees for types and direction provided by the {@link RelationshipSelection}. The returned {@link Degrees} will contain
+     * this information and will be able to answer degrees for each individual type/direction and also sums.
+     *
+     * @param selection which types/directions to get degrees for.
+     * @return a {@link Degrees} instance with the selected degree information.
+     */
+    Degrees degrees( RelationshipSelection selection );
+
+    /**
+     * Returns a single total degree for types and directions provided by the {@link RelationshipSelection}.
+     *
+     * @param selection which types/directions to get degrees for.
+     * @return the total degree of all selected relationship types and direction.
+     */
+    int degree( RelationshipSelection selection );
 }

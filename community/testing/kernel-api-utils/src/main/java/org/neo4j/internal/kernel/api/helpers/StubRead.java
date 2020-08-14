@@ -20,19 +20,21 @@
 package org.neo4j.internal.kernel.api.helpers;
 
 import org.neo4j.internal.kernel.api.IndexQuery;
+import org.neo4j.internal.kernel.api.IndexQueryConstraints;
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.Read;
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
+import org.neo4j.internal.kernel.api.RelationshipTypeIndexCursor;
 import org.neo4j.internal.kernel.api.Scan;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexOrder;
+import org.neo4j.storageengine.api.RelationshipSelection;
 import org.neo4j.values.storable.Value;
 
 public class StubRead implements Read
@@ -49,19 +51,13 @@ public class StubRead implements Read
     }
 
     @Override
-    public void nodeIndexDistinctValues( IndexDescriptor index, NodeValueIndexCursor cursor, boolean needsValues )
+    public void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void nodeIndexSeek( IndexReadSession index, NodeValueIndexCursor cursor, IndexOrder indexOrder, boolean needsValues, IndexQuery... query )
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQuery... query )
+    public void relationshipIndexSeek( IndexDescriptor index, RelationshipIndexCursor cursor, IndexQueryConstraints constraints, IndexQuery... query )
     {
         throw new UnsupportedOperationException();
     }
@@ -75,13 +71,13 @@ public class StubRead implements Read
     }
 
     @Override
-    public void nodeIndexScan( IndexReadSession index, NodeValueIndexCursor cursor, IndexOrder indexOrder, boolean needsValues )
+    public void nodeIndexScan( IndexReadSession index, NodeValueIndexCursor cursor, IndexQueryConstraints constraints )
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void nodeLabelScan( int label, NodeLabelIndexCursor cursor )
+    public void nodeLabelScan( int label, NodeLabelIndexCursor cursor, IndexOrder order )
     {
         ((StubNodeLabelIndexCursor) cursor).initialize( label );
     }
@@ -183,7 +179,13 @@ public class StubRead implements Read
     }
 
     @Override
-    public void relationships( long nodeReference, long reference, RelationshipTraversalCursor cursor )
+    public void relationshipTypeScan( int type, RelationshipTypeIndexCursor relationshipTypeIndexCursor )
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void relationships( long nodeReference, long reference, RelationshipSelection selection, RelationshipTraversalCursor cursor )
     {
         throw new UnsupportedOperationException();
     }
@@ -196,12 +198,6 @@ public class StubRead implements Read
 
     @Override
     public void relationshipProperties( long nodeReference, long reference, PropertyCursor cursor )
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void relationshipGroups( long nodeReference, long reference, RelationshipGroupCursor cursor )
     {
         throw new UnsupportedOperationException();
     }

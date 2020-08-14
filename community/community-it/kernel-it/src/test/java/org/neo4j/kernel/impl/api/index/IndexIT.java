@@ -58,16 +58,15 @@ import org.neo4j.kernel.impl.index.schema.FulltextIndexProviderFactory;
 import org.neo4j.kernel.impl.index.schema.GenericNativeIndexProvider;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.AssertableLogProvider;
+import org.neo4j.test.InMemoryTokens;
 
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.neo4j.common.TokenNameLookup.idTokenNameLookup;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.helpers.collection.Iterables.single;
@@ -258,8 +257,10 @@ class IndexIT extends KernelIntegrationTest
             SchemaWrite statement = schemaWriteInNewTransaction();
             statement.indexDrop( index );
         } );
-        assertEquals( "Unable to drop index: Index does not exist: Index( 1, 'my index', GENERAL BTREE, :Label(prop), native-btree-1.0 )",
-                e.getUserMessage( idTokenNameLookup ) );
+        assertEquals(
+                "Unable to drop index: Index does not exist: Index( id=1, name='my index', type='GENERAL BTREE', schema=(:Label {prop}), " +
+                        "indexProvider='native-btree-1.0' )",
+                e.getUserMessage( new InMemoryTokens() ) );
         commit();
     }
 
@@ -282,7 +283,7 @@ class IndexIT extends KernelIntegrationTest
         // when
         SchemaWrite statement = schemaWriteInNewTransaction();
         SchemaKernelException e = assertThrows( SchemaKernelException.class, () -> statement.indexDrop( index.schema() ) );
-        assertEquals( "Unable to drop index on :" + LABEL + "(" + PROPERTY_KEY + "). There is no such index.", e.getMessage() );
+        assertEquals( "Unable to drop index on (:" + LABEL + " {" + PROPERTY_KEY + "}). There is no such index.", e.getMessage() );
         commit();
     }
 
@@ -368,7 +369,7 @@ class IndexIT extends KernelIntegrationTest
             statement.indexCreate( schema, "my index" );
             commit();
         } );
-        assertEquals( "There is a uniqueness constraint on :" + LABEL + "(" + PROPERTY_KEY + "), so an index is " +
+        assertEquals( "There is a uniqueness constraint on (:" + LABEL + " {" + PROPERTY_KEY + "}), so an index is " +
             "already created that matches this.", e.getMessage() );
         commit();
     }
@@ -420,7 +421,7 @@ class IndexIT extends KernelIntegrationTest
             assertEquals( 1, indexes.size() );
             IndexDefinition index = indexes.iterator().next();
             assertThrows( IllegalStateException.class, index::getRelationshipTypes );
-            assertThat( index.getLabels(), containsInAnyOrder( label( LABEL ), label( LABEL2 ) ) );
+            assertThat( index.getLabels() ).contains( label( LABEL ), label( LABEL2 ) );
             assertFalse( index.isConstraintIndex(), "should not be a constraint index" );
             assertTrue( index.isMultiTokenIndex(), "should be a multi-token index" );
             assertFalse( index.isCompositeIndex(), "should not be a composite index" );
@@ -446,7 +447,7 @@ class IndexIT extends KernelIntegrationTest
             assertEquals( 1, indexes.size() );
             IndexDefinition index = indexes.iterator().next();
             assertEquals( LABEL, single( index.getLabels() ).name() );
-            assertThat( index.getLabels(), containsInAnyOrder( label( LABEL ) ) );
+            assertThat( index.getLabels() ).contains( label( LABEL ) );
             assertThrows( IllegalStateException.class, index::getRelationshipTypes );
             assertFalse( index.isConstraintIndex(), "should not be a constraint index" );
             assertFalse( index.isMultiTokenIndex(), "should not be a multi-token index" );
@@ -503,7 +504,7 @@ class IndexIT extends KernelIntegrationTest
             assertEquals( 1, indexes.size() );
             IndexDefinition index = indexes.iterator().next();
             assertThrows( IllegalStateException.class, index::getLabels );
-            assertThat( index.getRelationshipTypes(), containsInAnyOrder( withName( REL_TYPE ), withName( REL_TYPE2 ) ) );
+            assertThat( index.getRelationshipTypes() ).contains( withName( REL_TYPE ), withName( REL_TYPE2 ) );
             assertFalse( index.isConstraintIndex(), "should not be a constraint index" );
             assertTrue( index.isMultiTokenIndex(), "should be a multi-token index" );
             assertTrue( index.isCompositeIndex(), "should be a composite index" );
@@ -527,7 +528,7 @@ class IndexIT extends KernelIntegrationTest
         SchemaRead schemaRead = newTransaction().schemaRead();
         IndexDescriptor index2 = Iterators.single( schemaRead.index( constraint.schema() ) );
         List<IndexDescriptor> indexes = Iterators.asList( schemaRead.indexesGetAll() );
-        assertThat( indexes, containsInAnyOrder( index1, index2 ) );
+        assertThat( indexes ).contains( index1, index2 );
         commit();
     }
 

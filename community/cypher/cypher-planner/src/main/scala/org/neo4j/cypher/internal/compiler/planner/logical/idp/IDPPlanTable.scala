@@ -22,13 +22,14 @@ package org.neo4j.cypher.internal.compiler.planner.logical.idp
 import org.neo4j.cypher.internal.compiler.planner.logical.Solvable
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 
-import scala.collection.{Map, mutable}
+import scala.collection.Map
+import scala.collection.mutable
 
 class IDPPlanTable extends (Set[Solvable] => Option[LogicalPlan]) {
   private val table = new mutable.HashMap[Set[Solvable], LogicalPlan]()
 
-  def singleRemainingPlan = {
-    assert(table.size == 1, "Expected a single plan to be left in the plan table")
+  def singleRemainingPlan: LogicalPlan = {
+    require(table.size == 1, "Expected a single plan to be left in the plan table")
     table.head._2
   }
 
@@ -38,7 +39,7 @@ class IDPPlanTable extends (Set[Solvable] => Option[LogicalPlan]) {
     table.put(solved, plan)
   }
 
-  def removeAllTracesOf(solvables: Set[Solvable]) = {
+  def removeAllTracesOf(solvables: Set[Solvable]): Unit = {
     table.retain {
       case (k, _) => (k intersect solvables).isEmpty
     }

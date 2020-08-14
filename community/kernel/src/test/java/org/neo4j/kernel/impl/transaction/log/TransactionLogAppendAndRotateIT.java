@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.TestCommand;
 import org.neo4j.kernel.impl.api.TransactionToApply;
 import org.neo4j.kernel.impl.transaction.SimpleLogVersionRepository;
@@ -50,10 +51,11 @@ import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
 import org.neo4j.kernel.impl.transaction.log.rotation.LogRotation;
 import org.neo4j.kernel.impl.transaction.log.rotation.LogRotationImpl;
 import org.neo4j.kernel.impl.transaction.log.rotation.monitor.LogRotationMonitorAdapter;
+import org.neo4j.kernel.impl.transaction.tracing.LogAppendEvent;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.NullLog;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
+import org.neo4j.kernel.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Health;
 import org.neo4j.storageengine.api.LogVersionRepository;
 import org.neo4j.storageengine.api.StorageCommand;
@@ -66,7 +68,6 @@ import org.neo4j.test.extension.Neo4jLayoutExtension;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,7 +75,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.neo4j.kernel.impl.transaction.log.TestLogEntryReader.logEntryReader;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogVersions.CURRENT_FORMAT_LOG_HEADER_SIZE;
-import static org.neo4j.kernel.impl.transaction.tracing.LogAppendEvent.NULL;
 
 @Neo4jLayoutExtension
 @ExtendWith( LifeExtension.class )
@@ -112,7 +112,7 @@ class TransactionLogAppendAndRotateIT
 
         // WHEN
         Race race = new Race();
-        for ( int i = 0; i < 10; i++ )
+        for ( int i = 0; i < 4; i++ )
         {
             race.addContestant( () ->
             {
@@ -120,7 +120,7 @@ class TransactionLogAppendAndRotateIT
                 {
                     try
                     {
-                        appender.append( new TransactionToApply( sillyTransaction( 1_000 ) ), NULL );
+                        appender.append( new TransactionToApply( sillyTransaction( 1_000 ), PageCursorTracer.NULL ), LogAppendEvent.NULL );
                     }
                     catch ( Exception e )
                     {
@@ -131,17 +131,21 @@ class TransactionLogAppendAndRotateIT
                 }
             } );
         }
-        race.addContestant( endAfterMax( 10, SECONDS, end ) );
+        race.addContestant( endAfterMax( 250, MILLISECONDS, end, monitoring ) );
         race.go();
 
         // THEN
         assertTrue( monitoring.numberOfRotations() > 0 );
     }
 
-    private Runnable endAfterMax( final int time, final TimeUnit unit, final AtomicBoolean end )
+    private Runnable endAfterMax( final int time, final TimeUnit unit, final AtomicBoolean end, AllTheMonitoring monitoring )
     {
         return () ->
         {
+            while ( monitoring.numberOfRotations() < 2 && !end.get() )
+            {
+                parkNanos( MILLISECONDS.toNanos( 50 ) );
+            }
             long endTime = currentTimeMillis() + unit.toMillis( time );
             while ( currentTimeMillis() < endTime && !end.get() )
             {

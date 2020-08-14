@@ -28,6 +28,7 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.CopyOption;
 import java.nio.file.OpenOption;
 import java.util.Set;
@@ -37,6 +38,8 @@ import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.test.impl.ChannelInputStream;
 import org.neo4j.test.impl.ChannelOutputStream;
+
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 public class LimitedFilesystemAbstraction extends DelegatingFileSystemAbstraction
 {
@@ -56,13 +59,13 @@ public class LimitedFilesystemAbstraction extends DelegatingFileSystemAbstractio
     @Override
     public OutputStream openAsOutputStream( File fileName, boolean append ) throws IOException
     {
-        return new ChannelOutputStream( write( fileName ), append );
+        return new ChannelOutputStream( write( fileName ), append, INSTANCE );
     }
 
     @Override
     public InputStream openAsInputStream( File fileName ) throws IOException
     {
-        return new ChannelInputStream( read( fileName ) );
+        return new ChannelInputStream( read( fileName ), INSTANCE );
     }
 
     @Override
@@ -74,7 +77,7 @@ public class LimitedFilesystemAbstraction extends DelegatingFileSystemAbstractio
     @Override
     public Writer openAsWriter( File fileName, Charset charset, boolean append ) throws IOException
     {
-        return new OutputStreamWriter( openAsOutputStream( fileName, append ) );
+        return new OutputStreamWriter( openAsOutputStream( fileName, append ), StandardCharsets.UTF_8 );
     }
 
     @Override

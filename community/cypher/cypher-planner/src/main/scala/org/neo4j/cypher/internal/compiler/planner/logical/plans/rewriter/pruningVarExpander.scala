@@ -19,10 +19,23 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.plans.rewriter
 
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.{Ands, Expression, FunctionInvocation, LogicalVariable}
-import org.neo4j.cypher.internal.v4_0.util.attribution.SameId
-import org.neo4j.cypher.internal.v4_0.util.{Rewriter, topDown}
+import org.neo4j.cypher.internal.expressions.Ands
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.logical.plans.Aggregation
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Distinct
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.Optional
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.PruningVarExpand
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.VarExpand
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.attribution.SameId
+import org.neo4j.cypher.internal.util.topDown
 
 import scala.collection.mutable
 
@@ -67,7 +80,7 @@ case object pruningVarExpander extends Rewriter {
       lowerDistinctLand
     }
 
-    val planStack = new mutable.Stack[(LogicalPlan, Option[Set[String]])]()
+    val planStack = new mutable.ArrayStack[(LogicalPlan, Option[Set[String]])]()
     planStack.push((plan, None))
 
     while(planStack.nonEmpty) {

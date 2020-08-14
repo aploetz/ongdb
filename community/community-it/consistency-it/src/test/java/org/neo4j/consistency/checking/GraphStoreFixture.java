@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.consistency.statistics.AccessStatistics;
 import org.neo4j.consistency.statistics.AccessStatsKeepingStoreAccess;
@@ -48,7 +49,8 @@ import org.neo4j.internal.counts.CountsBuilder;
 import org.neo4j.internal.counts.GBPTreeCountsStore;
 import org.neo4j.internal.id.DefaultIdGeneratorFactory;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.NativeLabelScanStore;
+import org.neo4j.internal.index.label.RelationshipTypeScanStore;
+import org.neo4j.internal.index.label.TokenScanStore;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.internal.recordstorage.RecordStorageReader;
 import org.neo4j.internal.schema.IndexDescriptor;
@@ -58,6 +60,8 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.extension.DatabaseExtensions;
 import org.neo4j.kernel.impl.api.TransactionRepresentationCommitProcess;
 import org.neo4j.kernel.impl.api.TransactionToApply;
@@ -66,7 +70,8 @@ import org.neo4j.kernel.impl.api.index.IndexStoreView;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.api.index.stats.IndexStatisticsStore;
 import org.neo4j.kernel.impl.api.scan.FullLabelStream;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.api.scan.FullRelationshipTypeStream;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.NodeStore;
@@ -91,6 +96,7 @@ import org.neo4j.logging.NullLog;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.SimpleLogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.storageengine.api.EntityUpdates;
 import org.neo4j.storageengine.api.StorageEngine;
@@ -118,6 +124,8 @@ import static org.neo4j.internal.counts.GBPTreeCountsStore.NO_MONITOR;
 import static org.neo4j.internal.kernel.api.TokenRead.ANY_LABEL;
 import static org.neo4j.internal.recordstorage.StoreTokens.allReadableTokens;
 import static org.neo4j.internal.recordstorage.StoreTokens.readOnlyTokenHolders;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 public abstract class GraphStoreFixture implements AutoCloseable
 {
@@ -148,6 +156,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
     private final PageCache pageCache;
     private final TestDirectory testDirectory;
     private LabelScanStore labelScanStore;
+    private RelationshipTypeScanStore relationshipTypeScanStore;
     private IndexStatisticsStore indexStatisticsStore;
     private ThreadPoolJobScheduler jobScheduler;
     private CountsStore counts;
@@ -202,9 +211,13 @@ public abstract class GraphStoreFixture implements AutoCloseable
             fileSystem = new DefaultFileSystemAbstraction();
             jobScheduler = new ThreadPoolJobScheduler( "Fixture-" );
             LogProvider logProvider = NullLogProvider.getInstance();
-            Config config = Config.defaults( GraphDatabaseSettings.read_only, readOnly );
+            Config config = Config.newBuilder()
+                    .set( GraphDatabaseSettings.read_only, readOnly )
+                    .set( getConfig() )
+                    .build();
             DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fileSystem, immediate() );
-            StoreFactory storeFactory = new StoreFactory( databaseLayout(), config, idGeneratorFactory, pageCache, fileSystem, logProvider );
+            StoreFactory storeFactory = new StoreFactory( databaseLayout(), config, idGeneratorFactory, pageCache, fileSystem, logProvider,
+                    PageCacheTracer.NULL );
             neoStore = storeFactory.openAllNeoStores();
             StoreAccess nativeStores;
             if ( keepStatistics )
@@ -228,10 +241,11 @@ public abstract class GraphStoreFixture implements AutoCloseable
 
             Monitors monitors = new Monitors();
             labelScanStore = startLabelScanStore( pageCache, indexStoreView, monitors, readOnly );
+            relationshipTypeScanStore = startRelationshipTypeScanStore( pageCache, indexStoreView, monitors, readOnly, config );
             IndexProviderMap indexes = createIndexes( pageCache, config, logProvider, monitors);
             indexStatisticsStore = startIndexStatisticsStore( readOnly );
-            directStoreAccess = new DirectStoreAccess( nativeStores, labelScanStore, indexes, readOnlyTokenHolders( neoStore ), indexStatisticsStore,
-                    idGeneratorFactory );
+            directStoreAccess = new DirectStoreAccess( nativeStores, labelScanStore, relationshipTypeScanStore, indexes, readOnlyTokenHolders( neoStore, NULL ),
+                    indexStatisticsStore, idGeneratorFactory );
             storeReader = new RecordStorageReader( neoStore );
         }
         return directStoreAccess;
@@ -239,7 +253,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
 
     private IndexStatisticsStore startIndexStatisticsStore( boolean readOnly )
     {
-        final IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( pageCache, databaseLayout(), immediate(), readOnly );
+        final IndexStatisticsStore indexStatisticsStore = new IndexStatisticsStore( pageCache, databaseLayout(), immediate(), readOnly, PageCacheTracer.NULL );
         try
         {
             indexStatisticsStore.init();
@@ -262,7 +276,11 @@ public abstract class GraphStoreFixture implements AutoCloseable
                         new CountsBuilder()
                         {
                             @Override
+<<<<<<< HEAD
                             public void initialize( CountsAccessor.Updater updater )
+=======
+                            public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
+>>>>>>> neo4j/4.1
                             {
                                 throw new UnsupportedOperationException( "Should not be rebuilt" );
                             }
@@ -272,8 +290,13 @@ public abstract class GraphStoreFixture implements AutoCloseable
                             {
                                 return 0;
                             }
+<<<<<<< HEAD
                         }, true, NO_MONITOR );
                 counts.start();
+=======
+                        }, true, PageCacheTracer.NULL, NO_MONITOR );
+                counts.start( NULL, INSTANCE );
+>>>>>>> neo4j/4.1
             }
             return counts;
         };
@@ -281,8 +304,9 @@ public abstract class GraphStoreFixture implements AutoCloseable
 
     private LabelScanStore startLabelScanStore( PageCache pageCache, IndexStoreView indexStoreView, Monitors monitors, boolean readOnly )
     {
-        NativeLabelScanStore labelScanStore =
-                new NativeLabelScanStore( pageCache, databaseLayout(), fileSystem, new FullLabelStream( indexStoreView ), readOnly, monitors, immediate() );
+        FullLabelStream labelStream = new FullLabelStream( indexStoreView );
+        LabelScanStore labelScanStore = TokenScanStore.labelScanStore( pageCache, databaseLayout(), fileSystem, labelStream, readOnly, monitors, immediate(),
+                PageCacheTracer.NULL, INSTANCE );
         try
         {
             labelScanStore.init();
@@ -295,6 +319,25 @@ public abstract class GraphStoreFixture implements AutoCloseable
         return labelScanStore;
     }
 
+    private RelationshipTypeScanStore startRelationshipTypeScanStore( PageCache pageCache, IndexStoreView indexStoreView, Monitors monitors, boolean readOnly,
+            Config config )
+    {
+        FullRelationshipTypeStream typeStream = new FullRelationshipTypeStream( indexStoreView );
+        RelationshipTypeScanStore relationshipTypeScanStore =
+                TokenScanStore.toggledRelationshipTypeScanStore( pageCache, databaseLayout(), fileSystem, typeStream, readOnly, monitors, immediate(), config,
+                        PageCacheTracer.NULL, INSTANCE );
+        try
+        {
+            relationshipTypeScanStore.init();
+            relationshipTypeScanStore.start();
+        }
+        catch ( IOException e )
+        {
+            throw new UncheckedIOException( e );
+        }
+        return relationshipTypeScanStore;
+    }
+
     private IndexProviderMap createIndexes( PageCache pageCache, Config config, LogProvider logProvider, Monitors monitors )
     {
         LogService logService = new SimpleLogService( logProvider, logProvider );
@@ -303,7 +346,8 @@ public abstract class GraphStoreFixture implements AutoCloseable
                 new DelegatingTokenHolder( new ReadOnlyTokenCreator(), TokenHolder.TYPE_LABEL ),
                 new DelegatingTokenHolder( new ReadOnlyTokenCreator(), TokenHolder.TYPE_RELATIONSHIP_TYPE ) );
         DatabaseExtensions extensions = fixtureLife.add( instantiateExtensions( databaseLayout(), fileSystem, config, logService,
-                pageCache, jobScheduler, RecoveryCleanupWorkCollector.ignore(), DatabaseInfo.COMMUNITY, monitors, tokenHolders ) );
+                                                                                pageCache, jobScheduler, RecoveryCleanupWorkCollector.ignore(),
+                                                                                DbmsInfo.COMMUNITY, monitors, tokenHolders ) );
         return fixtureLife.add( new DefaultIndexProviderMap( extensions, config ) );
     }
 
@@ -319,8 +363,8 @@ public abstract class GraphStoreFixture implements AutoCloseable
 
     public EntityUpdates nodeAsUpdates( long nodeId )
     {
-        try ( StorageNodeCursor nodeCursor = storeReader.allocateNodeCursor();
-              StoragePropertyCursor propertyCursor = storeReader.allocatePropertyCursor() )
+        try ( StorageNodeCursor nodeCursor = storeReader.allocateNodeCursor( NULL );
+              StoragePropertyCursor propertyCursor = storeReader.allocatePropertyCursor( NULL, INSTANCE ) )
         {
             nodeCursor.single( nodeId );
             long[] labels;
@@ -365,7 +409,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
             return id;
         } ), TokenHolder.TYPE_RELATIONSHIP_TYPE );
         TokenHolders tokenHolders = new TokenHolders( propertyKeyTokens, labelTokens, relationshipTypeTokens );
-        tokenHolders.setInitialTokens( allReadableTokens( directStoreAccess().nativeStores().getRawNeoStores() ) );
+        tokenHolders.setInitialTokens( allReadableTokens( directStoreAccess().nativeStores().getRawNeoStores() ), NULL );
         return tokenHolders;
     }
 
@@ -510,7 +554,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
             }, TokenHolder.TYPE_RELATIONSHIP_TYPE );
 
             this.tokenHolders = new TokenHolders( propTokens, labelTokens, relTypeTokens );
-            tokenHolders.setInitialTokens( allReadableTokens( neoStores ) );
+            tokenHolders.setInitialTokens( allReadableTokens( neoStores ), NULL );
             tokenHolders.propertyKeyTokens().getAllTokens().forEach( token -> propKeyDynIds.getAndUpdate( id -> Math.max( id, token.id() + 1 ) ) );
             tokenHolders.labelTokens().getAllTokens().forEach( token -> labelDynIds.getAndUpdate( id -> Math.max( id, token.id() + 1 ) ) );
             tokenHolders.relationshipTypeTokens().getAllTokens().forEach( token -> relTypeDynIds.getAndUpdate( id -> Math.max( id, token.id() + 1 ) ) );
@@ -600,12 +644,12 @@ public abstract class GraphStoreFixture implements AutoCloseable
             writer.create( group );
         }
 
-        public void update(  RelationshipGroupRecord before, RelationshipGroupRecord after )
+        public void update( RelationshipGroupRecord before, RelationshipGroupRecord after )
         {
             writer.update( before, after );
         }
 
-        public void delete(  RelationshipGroupRecord group )
+        public void delete( RelationshipGroupRecord group )
         {
             writer.delete( group );
         }
@@ -628,7 +672,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
         private void updateCounts( NodeRecord node, int delta )
         {
             writer.incrementNodeCount( ANY_LABEL, delta );
-            for ( long label : NodeLabelsField.parseLabelsField( node ).get( nodes ) )
+            for ( long label : NodeLabelsField.parseLabelsField( node ).get( nodes, NULL ) )
             {
                 writer.incrementNodeCount( (int)label, delta );
             }
@@ -660,6 +704,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
             storeReader.close();
             neoStore.close();
             labelScanStore.shutdown();
+            relationshipTypeScanStore.shutdown();
             indexStatisticsStore.shutdown();
             jobScheduler.shutdown();
             directStoreAccess = null;
@@ -683,7 +728,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
         Applier()
         {
             managementService = new TestDatabaseManagementServiceBuilder( testDirectory.homeDir() )
-                    .setConfig( GraphDatabaseSettings.consistency_check_on_apply, false )
+                    .setConfig( GraphDatabaseInternalSettings.consistency_check_on_apply, false )
                     .setConfig( getConfig() )
                     .build();
             database = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
@@ -704,7 +749,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
         {
             TransactionRepresentation representation =
                     transaction.representation( idGenerator(), transactionIdStore.getLastCommittedTransactionId(), neoStores, indexingService );
-            commitProcess.commit( new TransactionToApply( representation ), CommitEvent.NULL, TransactionApplicationMode.EXTERNAL );
+            commitProcess.commit( new TransactionToApply( representation, NULL ), CommitEvent.NULL, TransactionApplicationMode.EXTERNAL );
         }
 
         @Override
@@ -739,8 +784,8 @@ public abstract class GraphStoreFixture implements AutoCloseable
                 // Some tests using this fixture were written when the label_block_size was 60 and so hardcoded
                 // tests and records around that. Those tests could change, but the simpler option is to just
                 // keep the block size to 60 and let them be.
-                .setConfig( GraphDatabaseSettings.label_block_size, 60 )
-                .setConfig( GraphDatabaseSettings.consistency_check_on_apply, false )
+                .setConfig( GraphDatabaseInternalSettings.label_block_size, 60 )
+                .setConfig( GraphDatabaseInternalSettings.consistency_check_on_apply, false )
                 .setConfig( getConfig() ).build();
         // Some tests using this fixture were written when the label_block_size was 60 and so hardcoded
         // tests and records around that. Those tests could change, but the simpler option is to just

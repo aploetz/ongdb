@@ -54,6 +54,7 @@ import java.util.function.Predicate;
 import org.neo4j.cli.ExecutionContext;
 import org.neo4j.common.Validator;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.csv.reader.Configuration;
 import org.neo4j.csv.reader.IllegalMultilineFieldException;
@@ -94,20 +95,25 @@ import static java.lang.System.currentTimeMillis;
 import static java.lang.System.lineSeparator;
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.joining;
-import static org.apache.commons.lang3.StringUtils.repeat;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+<<<<<<< HEAD
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
+=======
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
+import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+>>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 import static org.neo4j.configuration.GraphDatabaseSettings.store_internal_log_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
+import static org.neo4j.configuration.SettingValueParsers.FALSE;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.helpers.Exceptions.contains;
@@ -823,7 +829,11 @@ class ImportCommandTest
                 "--additional-config", dbConfig.getAbsolutePath(),
                 "--nodes", nodeData( true, config, nodeIds, TRUE ).getAbsolutePath(),
                 "--database", "__incorrect_db__") );
+<<<<<<< HEAD
         assertThat( e.getMessage(),  containsString( "Invalid database name '__incorrect_db__'." ) );
+=======
+        assertThat( e ).hasMessageContaining( "Invalid database name '__incorrect_db__'." );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -1222,7 +1232,7 @@ class ImportCommandTest
         catch ( MissingParameterException e )
         {
             // THEN
-            assertThat( e.getMessage(), containsString( "Missing required option '--nodes" ) );
+            assertThat( e.getMessage() ).contains( "Missing required option '--nodes" );
         }
     }
 
@@ -1540,7 +1550,7 @@ class ImportCommandTest
         catch ( ParameterException e )
         {
             // THEN
-            assertThat( e.getMessage(), containsString( "bogus" ) );
+            assertThat( e.getMessage() ).contains( "bogus" );
         }
     }
 
@@ -1561,7 +1571,7 @@ class ImportCommandTest
         catch ( InputException e )
         {
             // THEN
-            assertThat( e.getMessage(), containsString( "Multi-line fields are illegal" ) );
+            assertThat( e.getMessage() ).contains( "Multi-line fields are illegal" );
         }
     }
 
@@ -1615,7 +1625,7 @@ class ImportCommandTest
         catch ( InputException e )
         {
             // THEN
-            assertThat( e.getMessage(), containsString( format( "Multi-line fields" ) ) );
+            assertThat( e.getMessage() ).contains( format( "Multi-line fields" ) );
         }
     }
 
@@ -1748,8 +1758,8 @@ class ImportCommandTest
         File dbConfig = file( "neo4j.properties" );
         store( stringMap(
                 databases_root_path.name(), databaseLayout.getNeo4jLayout().databasesDirectory().getAbsolutePath(),
-                GraphDatabaseSettings.array_block_size.name(), String.valueOf( arrayBlockSize ),
-                GraphDatabaseSettings.string_block_size.name(), String.valueOf( stringBlockSize ),
+                GraphDatabaseInternalSettings.array_block_size.name(), String.valueOf( arrayBlockSize ),
+                GraphDatabaseInternalSettings.string_block_size.name(), String.valueOf( stringBlockSize ),
                 transaction_logs_root_path.name(), getTransactionLogsRoot() ), dbConfig );
         List<String> nodeIds = nodeIds();
 
@@ -1798,7 +1808,7 @@ class ImportCommandTest
         // GIVEN
         List<String> lines = new ArrayList<>();
         lines.add( ":ID,name,:LABEL" );
-        lines.add( "id," + repeat( 'l', 2_000 ) + ",Person" );
+        lines.add( "id," + "l".repeat( 2_000 ) + ",Person" );
 
         File dbConfig = prepareDefaultConfigFile();
 
@@ -1815,7 +1825,7 @@ class ImportCommandTest
         catch ( IllegalStateException e )
         {
             // THEN good
-            assertThat( e.getMessage(), containsString( "input data" ) );
+            assertThat( e.getMessage() ).contains( "input data" );
         }
     }
 
@@ -1847,7 +1857,7 @@ class ImportCommandTest
         catch ( ParameterException e )
         {
             // THEN good
-            assertThat( e.getMessage(), containsString( "percent" ) );
+            assertThat( e.getMessage() ).contains( "percent" );
         }
     }
 
@@ -1887,7 +1897,7 @@ class ImportCommandTest
                 "--relationships", relationshipData.getAbsolutePath() );
 
         String badContents = Files.readString( bad.toPath(), Charset.defaultCharset() );
-        assertEquals( 3, occurencesOf( badContents, "is missing data" ), badContents );
+        assertEquals( 3, occurrencesOf( badContents, "is missing data" ), badContents );
     }
 
     @Test
@@ -2043,8 +2053,8 @@ class ImportCommandTest
         catch ( InputException e )
         {
             String message = e.getMessage();
-            assertThat( message, containsString( "1000000" ) );
-            assertThat( message, containsString( "too big" ) );
+            assertThat( message ).contains( "1000000" );
+            assertThat( message ).contains( "too big" );
         }
     }
 
@@ -2061,7 +2071,7 @@ class ImportCommandTest
               " to have at least one line containing the string '" + string + "'" );
     }
 
-    private static int occurencesOf( String text, String lookFor )
+    private static int occurrencesOf( String text, String lookFor )
     {
         int index = -1;
         int count = -1;
@@ -2559,7 +2569,8 @@ class ImportCommandTest
     {
         File dbConfig = file( "neo4j.properties" );
         store( Map.of(
-                neo4j_home.name(), testDirectory.homeDir().getAbsolutePath()
+                neo4j_home.name(), testDirectory.homeDir().getAbsolutePath(),
+                preallocate_logical_logs.name(), FALSE
         ), dbConfig );
 
         return dbConfig;

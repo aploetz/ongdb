@@ -19,7 +19,11 @@
  */
 package org.neo4j.cypher.internal.compiler.helpers
 
-import org.neo4j.cypher.internal.v4_0.expressions._
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.expressions.Property
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.Variable
 
 import scala.annotation.tailrec
 
@@ -58,30 +62,35 @@ object AggregationHelper {
     }.toSet
   }
 
-  @tailrec
   def extractPropertyForValue(expression: Expression,
-                              renamings: Map[String, Expression],
-                              property: Option[Property] = None): Option[Property] = {
-    expression match {
-      case FunctionInvocation(_, _, _, Seq(expr, _*)) =>
-        // Cannot handle a function inside an aggregation
-        if (expr.isInstanceOf[FunctionInvocation])
-          None
-        else
-          extractPropertyForValue(expr, renamings)
-      case prop@Property(Variable(varName), _) =>
-        if (renamings.contains(varName))
-          extractPropertyForValue(renamings(varName), renamings, Some(prop))
-        else
-          Some(prop)
-      case variable@Variable(varName) =>
-        if (renamings.contains(varName) && renamings(varName) != variable)
-          extractPropertyForValue(renamings(varName), renamings)
-        else if (property.nonEmpty)
-          Some(Property(variable, property.get.propertyKey)(property.get.position))
-        else
-          None
-      case _ => None
+                              renamings: Map[String, Expression]): Option[Property] = {
+    @tailrec
+    def inner(expression: Expression,
+              renamings: Map[String, Expression],
+              property: Option[Property] = None): Option[Property] = {
+      expression match {
+        case FunctionInvocation(_, _, _, Seq(expr, _*)) =>
+          // Cannot handle a function inside an aggregation
+          if (expr.isInstanceOf[FunctionInvocation])
+            None
+          else
+            inner(expr, renamings)
+        case prop@Property(Variable(varName), _) =>
+          if (renamings.contains(varName))
+            inner(renamings(varName), renamings, Some(prop))
+          else
+            Some(prop)
+        case variable@Variable(varName) =>
+          if (renamings.contains(varName) && renamings(varName) != variable)
+            inner(renamings(varName), renamings)
+          else if (property.nonEmpty)
+            Some(Property(variable, property.get.propertyKey)(property.get.position))
+          else
+            None
+        case _ => None
+      }
     }
+
+    inner(expression, renamings, None)
   }
 }

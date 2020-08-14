@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.impl.transaction.log;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -30,7 +31,6 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntryVersion;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.files.LogFiles;
 import org.neo4j.kernel.impl.transaction.log.files.LogFilesBuilder;
@@ -38,31 +38,41 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.kernel.recovery.LogTailScanner;
 import org.neo4j.monitoring.Monitors;
+import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.migration.UpgradeNotAllowedException;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
-import org.neo4j.test.matchers.NestedThrowableMatcher;
+import org.neo4j.test.rule.TestDirectory;
 
-import static org.apache.commons.lang3.exception.ExceptionUtils.getRootCause;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.allow_upgrade;
+import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.kernel.impl.transaction.log.entry.LogEntryByteCodes.CHECK_POINT;
+import static org.neo4j.kernel.impl.transaction.log.entry.LogEntryParserSetV2_3.V2_3;
+import static org.neo4j.kernel.impl.transaction.log.entry.LogEntryTypeCodes.CHECK_POINT;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
 class LogVersionUpgradeCheckerIT
 {
     @Inject
-    private DatabaseLayout databaseLayout;
+    private TestDirectory testDirectory;
     @Inject
     private FileSystemAbstraction fileSystem;
     @Inject
     private PageCache pageCache;
+    private DatabaseLayout databaseLayout;
+
+    @BeforeEach
+    void setUp()
+    {
+        databaseLayout = DatabaseLayout.ofFlat( testDirectory.directory( DEFAULT_DATABASE_NAME ) );
+    }
 
     @Test
     void startAsNormalWhenUpgradeIsNotAllowed()
@@ -70,11 +80,7 @@ class LogVersionUpgradeCheckerIT
         createGraphDbAndKillIt();
 
         // Try to start with upgrading disabled
-        DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( databaseLayout )
-                .setFileSystem( fileSystem )
-                .impermanent()
-                .setConfig( allow_upgrade, false )
-                .build();
+        DatabaseManagementService managementService = startDatabaseService( false );
         managementService.database( DEFAULT_DATABASE_NAME );
         managementService.shutdown();
     }
@@ -82,14 +88,10 @@ class LogVersionUpgradeCheckerIT
     @Test
     void failToStartFromOlderTransactionLogsIfNotAllowed() throws Exception
     {
-        createStoreWithLogEntryVersion( LogEntryVersion.V3_0_10 );
+        createStoreWithLogEntryVersion( V2_3.version() );
 
         // Try to start with upgrading disabled
-        DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( databaseLayout )
-                .setFileSystem( fileSystem )
-                .impermanent()
-                .setConfig( allow_upgrade, false )
-                .build();
+        DatabaseManagementService managementService = startDatabaseService( false );
         GraphDatabaseAPI db = (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
         try
         {
@@ -97,7 +99,7 @@ class LogVersionUpgradeCheckerIT
 
             var failure = dbStateService.causeOfFailure( db.databaseId() );
             assertTrue( failure.isPresent() );
-            assertThat( getRootCause( failure.get() ), new NestedThrowableMatcher( UpgradeNotAllowedException.class ) );
+            assertThat( failure.get() ).hasRootCauseInstanceOf( UpgradeNotAllowedException.class );
         }
         finally
         {
@@ -108,24 +110,17 @@ class LogVersionUpgradeCheckerIT
     @Test
     void startFromOlderTransactionLogsIfAllowed() throws Exception
     {
-        createStoreWithLogEntryVersion( LogEntryVersion.V3_0_10 );
+        createStoreWithLogEntryVersion( V2_3.version() );
 
         // Try to start with upgrading enabled
-        DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( databaseLayout )
-                .setFileSystem( fileSystem )
-                .impermanent()
-                .setConfig( allow_upgrade, true )
-                .build();
+        DatabaseManagementService managementService = startDatabaseService( true );
         managementService.database( DEFAULT_DATABASE_NAME );
         managementService.shutdown();
     }
 
     private void createGraphDbAndKillIt()
     {
-        DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder( databaseLayout )
-                .setFileSystem( fileSystem )
-                .impermanent()
-                .build();
+        DatabaseManagementService managementService = startDatabaseService( false );
         final GraphDatabaseService db = managementService.database( DEFAULT_DATABASE_NAME );
 
         try ( Transaction tx = db.beginTx() )
@@ -138,18 +133,18 @@ class LogVersionUpgradeCheckerIT
         managementService.shutdown();
     }
 
-    private void createStoreWithLogEntryVersion( LogEntryVersion logEntryVersion ) throws Exception
+    private void createStoreWithLogEntryVersion( byte logEntryVersion ) throws Exception
     {
         createGraphDbAndKillIt();
         appendCheckpoint( logEntryVersion );
     }
 
-    private void appendCheckpoint( LogEntryVersion logVersion ) throws IOException
+    private void appendCheckpoint( byte logEntryVersion ) throws IOException
     {
-        VersionAwareLogEntryReader logEntryReader = new VersionAwareLogEntryReader();
+        VersionAwareLogEntryReader logEntryReader = new VersionAwareLogEntryReader( StorageEngineFactory.selectStorageEngine().commandReaderFactory() );
         LogFiles logFiles =
                 LogFilesBuilder.activeFilesBuilder( databaseLayout, fileSystem, pageCache ).withLogEntryReader( logEntryReader ).build();
-        LogTailScanner tailScanner = new LogTailScanner( logFiles, logEntryReader, new Monitors() );
+        LogTailScanner tailScanner = new LogTailScanner( logFiles, logEntryReader, new Monitors(), INSTANCE );
         LogTailScanner.LogTailInformation tailInformation = tailScanner.getTailInformation();
 
         try ( Lifespan lifespan = new Lifespan( logFiles ) )
@@ -159,12 +154,21 @@ class LogVersionUpgradeCheckerIT
             LogPosition logPosition = tailInformation.lastCheckPoint.getLogPosition();
 
             // Fake record
-            channel.put( logVersion.version() )
+            channel.put( logEntryVersion )
                     .put( CHECK_POINT )
                     .putLong( logPosition.getLogVersion() )
                     .putLong( logPosition.getByteOffset() );
 
             channel.prepareForFlush().flush();
         }
+    }
+
+    private DatabaseManagementService startDatabaseService( boolean allowUpgrade )
+    {
+        var rootDirectory = databaseLayout.databaseDirectory().getParentFile();
+        return new TestDatabaseManagementServiceBuilder( databaseLayout )
+                .setFileSystem( fileSystem ).impermanent()
+                .setConfig( transaction_logs_root_path, rootDirectory.toPath() )
+                .setConfig( allow_upgrade, allowUpgrade ).build();
     }
 }

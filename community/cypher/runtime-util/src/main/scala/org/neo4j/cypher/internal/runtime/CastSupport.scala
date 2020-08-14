@@ -19,14 +19,42 @@
  */
 package org.neo4j.cypher.internal.runtime
 
-import java.time._
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.OffsetTime
+import java.time.ZonedDateTime
 import java.time.temporal.TemporalAmount
 
+import org.neo4j.cypher.internal.macros.AssertMacros.checkOnlyWhenAssertionsAreEnabled
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.graphdb.spatial.Point
-import org.neo4j.values.storable._
-import org.neo4j.values.virtual.{ListValue, MapValue, NodeValue, RelationshipValue}
-import org.neo4j.values.{AnyValue, AnyValueWriter}
+import org.neo4j.values.AnyValue
+import org.neo4j.values.ReferenceEntityValueWriter
+import org.neo4j.values.storable.ArrayValue
+import org.neo4j.values.storable.BooleanValue
+import org.neo4j.values.storable.ByteValue
+import org.neo4j.values.storable.CharValue
+import org.neo4j.values.storable.CoordinateReferenceSystem
+import org.neo4j.values.storable.DateTimeValue
+import org.neo4j.values.storable.DateValue
+import org.neo4j.values.storable.DoubleValue
+import org.neo4j.values.storable.DurationValue
+import org.neo4j.values.storable.FloatValue
+import org.neo4j.values.storable.IntValue
+import org.neo4j.values.storable.LocalDateTimeValue
+import org.neo4j.values.storable.LocalTimeValue
+import org.neo4j.values.storable.LongValue
+import org.neo4j.values.storable.NumberValue
+import org.neo4j.values.storable.PointValue
+import org.neo4j.values.storable.ShortValue
+import org.neo4j.values.storable.TextValue
+import org.neo4j.values.storable.TimeValue
+import org.neo4j.values.storable.ValueWriter
+import org.neo4j.values.storable.Values
+import org.neo4j.values.virtual.ListValue
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 import scala.reflect.ClassTag
 
@@ -99,10 +127,10 @@ object CastSupport {
       case (_:LocalTimeValue, _:LocalTimeValue) => a
       case (_:DurationValue, _:DurationValue) => a
 
-      case (a, b) if (a eq Values.NO_VALUE) || (b eq Values.NO_VALUE) => throw new CypherTypeException(
+      case _ if (a eq Values.NO_VALUE) || (b eq Values.NO_VALUE) => throw new CypherTypeException(
         "Collections containing null values can not be stored in properties.")
 
-      case (a, b) if a.isInstanceOf[ListValue] || b.isInstanceOf[ListValue] => throw new CypherTypeException(
+      case _ if a.isInstanceOf[ListValue] || b.isInstanceOf[ListValue] => throw new CypherTypeException(
         "Collections containing collections can not be stored in properties.")
 
       case _ => throw new CypherTypeException("Neo4j only supports a subset of Cypher types for storage as singleton or array properties. " +
@@ -159,7 +187,7 @@ object CastSupport {
   }
 
   private class ArrayConverterWriter(typ: Class[_], transformer: AnyRef => ArrayValue)
-    extends AnyValueWriter[RuntimeException] {
+    extends ReferenceEntityValueWriter[RuntimeException] {
 
     private var _array: AnyRef = _
     private var index = 0
@@ -167,25 +195,19 @@ object CastSupport {
     private def fail() = throw new CypherTypeException(
       "Property values can only be of primitive types or arrays thereof")
 
-    private def write(value: Any) = {
+    private def write(value: Any): Unit = {
       java.lang.reflect.Array.set(_array, index, value)
       index += 1
     }
 
     def array: ArrayValue = {
-      assert(_array != null)
+      checkOnlyWhenAssertionsAreEnabled(_array != null)
       transformer(_array)
     }
 
     override def writeNodeReference(nodeId: Long): Unit = fail()
 
-    override def writeNode(nodeId: Long, labels: TextArray,
-                           properties: MapValue): Unit = fail()
-
     override def writeRelationshipReference(relId: Long): Unit = fail()
-
-    override def writeRelationship(relId: Long, startNodeId: Long, endNodeId: Long, `type`: TextValue,
-                                   properties: MapValue): Unit = fail()
 
     override def beginMap(size: Int): Unit = fail()
 

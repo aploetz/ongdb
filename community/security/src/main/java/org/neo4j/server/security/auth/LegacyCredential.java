@@ -88,7 +88,9 @@ public class LegacyCredential implements Credential
     @Override
     public String serialize()
     {
-        return new UserSerialization().serialize( this );
+        String encodedSalt = HexString.encodeHexString( this.salt() );
+        String encodedPassword = HexString.encodeHexString( this.passwordHash() );
+        return String.join( CREDENTIAL_SEPARATOR, LegacyCredential.DIGEST_ALGO, encodedPassword, encodedSalt );
     }
 
     /**

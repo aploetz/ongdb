@@ -53,8 +53,7 @@ public class Dumper
     private final List<ArchiveOperation> operations;
     private final ArchiveProgressPrinter progressPrinter;
 
-    @VisibleForTesting
-    Dumper()
+    public Dumper()
     {
         operations = new ArrayList<>();
         progressPrinter = new ArchiveProgressPrinter( null );
@@ -186,7 +185,7 @@ public class Dumper
 
         private ArchiveEntry createEntry( Path file, Path root, ArchiveOutputStream archive ) throws IOException
         {
-            return archive.createArchiveEntry( file.toFile(), "./" + root.relativize( file ).toString() );
+            return archive.createArchiveEntry( file.toFile(), "./" + root.relativize( file ) );
         }
     }
 }

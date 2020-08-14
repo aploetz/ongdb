@@ -20,10 +20,25 @@
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
 import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
-import org.neo4j.cypher.internal.ir._
+import org.neo4j.cypher.internal.expressions.CountStar
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.expressions.HasLabels
+import org.neo4j.cypher.internal.expressions.LabelName
+import org.neo4j.cypher.internal.expressions.Property
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
+import org.neo4j.cypher.internal.expressions.SemanticDirection.OUTGOING
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.expressions.functions
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.Predicate
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.Selections
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.v4_0.expressions.{functions, _}
 
 case object countStorePlanner {
 
@@ -33,17 +48,24 @@ case object countStorePlanner {
         if groupingKeys.isEmpty && aggregatingExpressions.size == 1 =>
         val (columnName, exp) = aggregatingExpressions.head
         val countStorePlan = checkForValidQueryGraph(query, columnName, exp, context)
-        countStorePlan.map(p => projection(p, groupingKeys, groupingKeys, query.interestingOrder, context))
+        countStorePlan.map(p => projection(p, groupingKeys, groupingKeys, context))
 
       case _ => None
     }
   }
 
-  private def checkForValidQueryGraph(query: SinglePlannerQuery, columnName: String, exp: Expression, context: LogicalPlanningContext): Option[LogicalPlan] = query.queryGraph match {
-    case QueryGraph(patternRelationships, patternNodes, argumentIds, selections, Seq(), hints, shortestPathPatterns, _)
-      if hints.isEmpty && shortestPathPatterns.isEmpty && query.queryGraph.readOnly =>
-      checkForValidAggregations(query, columnName, exp, patternRelationships, patternNodes, argumentIds, selections, context)
-    case _ => None
+  private def checkForValidQueryGraph(query: SinglePlannerQuery, columnName: String, exp: Expression, context: LogicalPlanningContext): Option[LogicalPlan] = {
+    def patternHasNoDependencies: Boolean = {
+      val qg = query.queryGraph
+      (qg.patternNodes ++ qg.patternRelationships.map(_.name)).intersect(qg.argumentIds).isEmpty
+    }
+
+    query.queryGraph match {
+      case QueryGraph(patternRelationships, patternNodes, argumentIds, selections, Seq(), hints, shortestPathPatterns, _)
+        if hints.isEmpty && shortestPathPatterns.isEmpty && query.queryGraph.readOnly && patternHasNoDependencies =>
+        checkForValidAggregations(query, columnName, exp, patternRelationships, patternNodes, argumentIds, selections, context)
+      case _ => None
+    }
   }
 
   private def checkForValidAggregations(query: SinglePlannerQuery, columnName: String, exp: Expression,
@@ -62,16 +84,20 @@ case object countStorePlanner {
         func@FunctionInvocation(_, _, false, Vector(Property(Variable(_), PropertyKeyName(propKeyName))))
         if func.function == functions.Count =>
         val labelCheck: Option[LabelName] => Option[LogicalPlan] => Option[LogicalPlan] = {
-            case None => _ => None
-            case Some(LabelName(labelName)) => (plan: Option[LogicalPlan]) => plan.filter(_ => context.planContext.hasPropertyExistenceConstraint(labelName, propKeyName))
-          }
+          case None => _ => None
+          case Some(LabelName(labelName)) => (plan: Option[LogicalPlan]) => plan.filter(_ => context.planContext.hasPropertyExistenceConstraint(labelName, propKeyName))
+        }
         trySolveNodeAggregation(query, columnName, None, patternRelationships, patternNodes, argumentIds, selections, context, labelCheck)
 
       case _ => None
     }
 
-  private def trySolveNodeAggregation(query: SinglePlannerQuery, columnName: String, variableName: Option[String],
-                                      patternRelationships: Set[PatternRelationship], patternNodes: Set[String], argumentIds: Set[String],
+  private def trySolveNodeAggregation(query: SinglePlannerQuery,
+                                      columnName: String,
+                                      variableName: Option[String],
+                                      patternRelationships: Set[PatternRelationship],
+                                      patternNodes: Set[String],
+                                      argumentIds: Set[String],
                                       selections: Selections,
                                       context: LogicalPlanningContext,
                                       // This function is used when the aggregation needs a specific label to exist,

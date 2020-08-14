@@ -20,8 +20,6 @@
 package org.neo4j.io.fs;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,10 +42,10 @@ import org.neo4j.io.fs.watcher.DefaultFileSystemWatcher;
 import org.neo4j.io.fs.watcher.FileWatcher;
 
 import static java.lang.String.format;
+import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
-import static java.util.Objects.requireNonNull;
 
 /**
  * Default file system abstraction that creates files using the underlying file system.
@@ -57,6 +55,8 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     static final String UNABLE_TO_CREATE_DIRECTORY_FORMAT = "Unable to write directory path [%s] for Neo4j store.";
     public static final Set<OpenOption> WRITE_OPTIONS = Set.of( READ, WRITE, CREATE );
     private static final Set<OpenOption> READ_OPTIONS = Set.of( READ );
+    private static final OpenOption[] APPEND_OPTIONS = new OpenOption[]{CREATE, APPEND};
+    private static final OpenOption[] DEFAULT_OUTPUT_OPTIONS = new OpenOption[0];
 
     @Override
     public FileWatcher fileWatcher() throws IOException
@@ -75,13 +75,13 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public OutputStream openAsOutputStream( File fileName, boolean append ) throws IOException
     {
-        return new FileOutputStream( fileName, append );
+        return Files.newOutputStream( fileName.toPath(), append ? APPEND_OPTIONS : DEFAULT_OUTPUT_OPTIONS );
     }
 
     @Override
     public InputStream openAsInputStream( File fileName ) throws IOException
     {
-        return new FileInputStream( fileName );
+        return Files.newInputStream( fileName.toPath() );
     }
 
     @Override
@@ -115,21 +115,21 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     }
 
     @Override
-    public void mkdirs( File path ) throws IOException
+    public void mkdirs( File file ) throws IOException
     {
-        if ( path.exists() )
+        if ( file.exists() && file.isDirectory() )
         {
             return;
         }
 
-        path.mkdirs();
-
-        if ( path.exists() )
+        try
         {
-            return;
+            Files.createDirectories( file.toPath() );
         }
-
-        throw new IOException( format( UNABLE_TO_CREATE_DIRECTORY_FORMAT, path ) );
+        catch ( IOException e )
+        {
+            throw new IOException( format( UNABLE_TO_CREATE_DIRECTORY_FORMAT, file ), e );
+        }
     }
 
     @Override
@@ -243,8 +243,7 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public int getFileDescriptor( StoreChannel channel )
     {
-        requireNonNull( channel );
-        return FileUtils.getFileDescriptor( channel.fileChannel() );
+        return channel.getFileDescriptor();
     }
 
     protected StoreFileChannel getStoreFileChannel( FileChannel channel )

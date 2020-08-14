@@ -24,15 +24,17 @@ import java.util.function.Function;
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.internal.id.IdValidator;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.IntStoreHeader;
 import org.neo4j.kernel.impl.store.StoreHeader;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.Record;
+import org.neo4j.kernel.impl.store.record.RecordLoad;
 
 /**
  * Basic abstract implementation of a {@link RecordFormat} implementing most functionality except
- * {@link RecordFormat#read(AbstractBaseRecord, PageCursor, org.neo4j.kernel.impl.store.record.RecordLoad, int)} and
- * {@link RecordFormat#write(AbstractBaseRecord, PageCursor, int)}.
+ * {@link RecordFormat#read(AbstractBaseRecord, PageCursor, RecordLoad, int, int)} and
+ * {@link RecordFormat#write(AbstractBaseRecord, PageCursor, int, int)}.
  *
  * @param <RECORD> type of record.
  */
@@ -50,12 +52,14 @@ public abstract class BaseRecordFormat<RECORD extends AbstractBaseRecord> implem
     private final Function<StoreHeader,Integer> recordSize;
     private final int recordHeaderSize;
     private final long maxId;
+    private final boolean pageAligned;
 
-    protected BaseRecordFormat( Function<StoreHeader,Integer> recordSize, int recordHeaderSize, int idBits )
+    protected BaseRecordFormat( Function<StoreHeader,Integer> recordSize, int recordHeaderSize, int idBits, boolean pageAligned )
     {
         this.recordSize = recordSize;
         this.recordHeaderSize = recordHeaderSize;
         this.maxId = (1L << idBits) - 1;
+        this.pageAligned = pageAligned;
     }
 
     @Override
@@ -82,7 +86,7 @@ public abstract class BaseRecordFormat<RECORD extends AbstractBaseRecord> implem
     }
 
     @Override
-    public void prepare( RECORD record, int recordSize, IdSequence idSequence )
+    public void prepare( RECORD record, int recordSize, IdSequence idSequence, PageCursorTracer cursorTracer )
     {   // Do nothing by default
     }
 
@@ -97,6 +101,12 @@ public abstract class BaseRecordFormat<RECORD extends AbstractBaseRecord> implem
     {
         return getClass().hashCode();
 
+    }
+
+    @Override
+    public int getPageSize( int pageCachePageSize, int recordSize )
+    {
+        return pageAligned ? pageCachePageSize : pageCachePageSize - pageCachePageSize % recordSize;
     }
 
     @Override

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -39,18 +40,20 @@ import org.neo4j.io.fs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.extension.EphemeralNeo4jLayoutExtension;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.pagecache.EphemeralPageCacheExtension;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @EphemeralPageCacheExtension
 @EphemeralNeo4jLayoutExtension
@@ -70,7 +73,7 @@ class TestDynamicStore
     void setUp()
     {
         storeFactory = new StoreFactory( databaseLayout, Config.defaults(), new DefaultIdGeneratorFactory( fs, immediate() ),
-                pageCache, fs, NullLogProvider.getInstance() );
+                pageCache, fs, NullLogProvider.getInstance(), PageCacheTracer.NULL );
     }
 
     @AfterEach
@@ -85,7 +88,7 @@ class TestDynamicStore
     private DynamicArrayStore createDynamicArrayStore() throws IOException
     {
         neoStores = storeFactory.openAllNeoStores( true );
-        neoStores.start();
+        neoStores.start( NULL );
         return neoStores.getPropertyStore().getArrayStore();
     }
 
@@ -94,17 +97,17 @@ class TestDynamicStore
     {
         DynamicArrayStore store = createDynamicArrayStore();
         Collection<DynamicRecord> records = new ArrayList<>();
-        store.allocateRecordsFromBytes( records, new byte[10] );
+        store.allocateRecordsFromBytes( records, new byte[10], NULL, INSTANCE );
         long blockId = Iterables.first( records ).getId();
         for ( DynamicRecord record : records )
         {
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
         }
         neoStores.close();
         neoStores = null;
 
-        assertThrows( RuntimeException.class, () -> store.getArrayFor( store.getRecords( blockId, NORMAL, false ) ) );
-        assertThrows( RuntimeException.class, () -> store.getRecords( 0, NORMAL, false ) );
+        assertThrows( RuntimeException.class, () -> store.getArrayFor( store.getRecords( blockId, NORMAL, false, NULL ), NULL ) );
+        assertThrows( RuntimeException.class, () -> store.getRecords( 0, NORMAL, false, NULL ) );
     }
 
     @Test
@@ -115,10 +118,10 @@ class TestDynamicStore
         char[] chars = new char[STR.length()];
         STR.getChars( 0, STR.length(), chars, 0 );
         Collection<DynamicRecord> records = new ArrayList<>();
-        store.allocateRecords( records, chars );
+        store.allocateRecords( records, chars, NULL, INSTANCE );
         for ( DynamicRecord record : records )
         {
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
         }
         // assertEquals( STR, new String( store.getChars( blockId ) ) );
     }
@@ -128,7 +131,7 @@ class TestDynamicStore
     {
         Random random = new Random( System.currentTimeMillis() );
         DynamicArrayStore store = createDynamicArrayStore();
-        ArrayList<Long> idsTaken = new ArrayList<>();
+        List<Long> idsTaken = new ArrayList<>();
         Map<Long, byte[]> byteData = new HashMap<>();
         float deleteIndex = 0.2f;
         float closeIndex = 0.1f;
@@ -141,14 +144,14 @@ class TestDynamicStore
             if ( rIndex < deleteIndex && currentCount > 0 )
             {
                 long blockId = idsTaken.remove( random.nextInt( currentCount ) );
-                store.getRecords( blockId, NORMAL, false );
-                byte[] bytes = (byte[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false ) );
+                store.getRecords( blockId, NORMAL, false, NULL );
+                byte[] bytes = (byte[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false, NULL ), NULL );
                 validateData( bytes, byteData.remove( blockId ) );
-                Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false );
+                Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false, NULL );
                 for ( DynamicRecord record : records )
                 {
                     record.setInUse( false );
-                    store.updateRecord( record );
+                    store.updateRecord( record, NULL );
                     set.remove( record.getId() );
                 }
                 currentCount--;
@@ -157,11 +160,11 @@ class TestDynamicStore
             {
                 byte[] bytes = createRandomBytes( random );
                 Collection<DynamicRecord> records = new ArrayList<>();
-                store.allocateRecords( records, bytes );
+                store.allocateRecords( records, bytes, NULL, INSTANCE );
                 for ( DynamicRecord record : records )
                 {
                     assert !set.contains( record.getId() );
-                    store.updateRecord( record );
+                    store.updateRecord( record, NULL );
                     set.add( record.getId() );
                 }
                 long blockId = Iterables.first( records ).getId();
@@ -171,7 +174,7 @@ class TestDynamicStore
             }
             if ( rIndex > (1.0f - closeIndex) || rIndex < closeIndex )
             {
-                neoStores.flush( IOLimiter.UNLIMITED );
+                neoStores.flush( IOLimiter.UNLIMITED, NULL );
                 neoStores.close();
                 store = createDynamicArrayStore();
             }
@@ -200,10 +203,10 @@ class TestDynamicStore
     private long create( DynamicArrayStore store, Object arrayToStore )
     {
         Collection<DynamicRecord> records = new ArrayList<>();
-        store.allocateRecords( records, arrayToStore );
+        store.allocateRecords( records, arrayToStore, NULL, INSTANCE );
         for ( DynamicRecord record : records )
         {
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
         }
         return Iterables.first( records ).getId();
     }
@@ -214,15 +217,15 @@ class TestDynamicStore
         DynamicArrayStore store = createDynamicArrayStore();
         byte[] emptyToWrite = createBytes( 0 );
         long blockId = create( store, emptyToWrite );
-        store.getRecords( blockId, NORMAL, false );
-        byte[] bytes = (byte[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false ) );
+        store.getRecords( blockId, NORMAL, false, NULL );
+        byte[] bytes = (byte[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false, NULL ), NULL );
         assertEquals( 0, bytes.length );
 
-        Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false );
+        Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false, NULL );
         for ( DynamicRecord record : records )
         {
             record.setInUse( false );
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
         }
     }
 
@@ -231,15 +234,15 @@ class TestDynamicStore
     {
         DynamicArrayStore store = createDynamicArrayStore();
         long blockId = create( store, new String[0] );
-        store.getRecords( blockId, NORMAL, false );
-        String[] readBack = (String[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false ) );
+        store.getRecords( blockId, NORMAL, false, NULL );
+        String[] readBack = (String[]) store.getArrayFor( store.getRecords( blockId, NORMAL, false, NULL ), NULL );
         assertEquals( 0, readBack.length );
 
-        Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false );
+        Collection<DynamicRecord> records = store.getRecords( blockId, NORMAL, false, NULL );
         for ( DynamicRecord record : records )
         {
             record.setInUse( false );
-            store.updateRecord( record );
+            store.updateRecord( record, NULL );
         }
     }
 
@@ -247,18 +250,18 @@ class TestDynamicStore
     void mustThrowOnRecordChainCycle() throws IOException
     {
         DynamicArrayStore store = createDynamicArrayStore();
-        ArrayList<DynamicRecord> records = new ArrayList<>();
-        store.allocateRecords( records, createBytes( 500 ) );
+        List<DynamicRecord> records = new ArrayList<>();
+        store.allocateRecords( records, createBytes( 500 ), NULL, INSTANCE );
         long firstId = records.get( 0 ).getId();
         // Avoid creating this inconsistency at the last record, since that would trip up a data-size check instead.
         DynamicRecord secondLastRecord = records.get( records.size() - 2 );
         long secondLastId = secondLastRecord.getId();
         secondLastRecord.setNextBlock( secondLastId );
-        records.forEach( store::updateRecord );
+        records.forEach( record -> store.updateRecord( record, NULL ) );
 
-        var e = assertThrows( RecordChainCycleDetectedException.class, () -> store.getRecords( firstId, NORMAL, true ) );
+        var e = assertThrows( RecordChainCycleDetectedException.class, () -> store.getRecords( firstId, NORMAL, true, NULL ) );
         String message = e.getMessage();
-        assertThat( message, containsString( "" + firstId ) );
-        assertThat( message, containsString( "" + secondLastRecord.getId() ) );
+        assertThat( message ).contains( "" + firstId );
+        assertThat( message ).contains( "" + secondLastRecord.getId() );
     }
 }

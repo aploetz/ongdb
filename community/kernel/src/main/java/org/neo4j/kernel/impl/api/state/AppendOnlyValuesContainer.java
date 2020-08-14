@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.api.state;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
@@ -34,10 +36,10 @@ import java.util.List;
 import javax.annotation.Nonnull;
 
 import org.neo4j.graphdb.Resource;
-import org.neo4j.internal.unsafe.UnsafeUtil;
 import org.neo4j.io.ByteUnit;
 import org.neo4j.kernel.impl.util.collection.Memory;
 import org.neo4j.kernel.impl.util.collection.MemoryAllocator;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.util.VisibleForTesting;
 import org.neo4j.values.storable.ArrayValue;
 import org.neo4j.values.storable.BooleanArray;
@@ -125,19 +127,21 @@ public class AppendOnlyValuesContainer implements ValuesContainer
     private final List<Memory> allocated = new ArrayList<>();
     private final Writer writer;
     private final MemoryAllocator allocator;
+    private final MemoryTracker memoryTracker;
     private ByteBuffer currentChunk;
     private boolean closed;
 
-    public AppendOnlyValuesContainer( MemoryAllocator allocator )
+    public AppendOnlyValuesContainer( MemoryAllocator allocator, MemoryTracker memoryTracker )
     {
-        this( CHUNK_SIZE, allocator );
+        this( CHUNK_SIZE, allocator, memoryTracker );
     }
 
     @VisibleForTesting
-    AppendOnlyValuesContainer( int chunkSize, MemoryAllocator allocator )
+    AppendOnlyValuesContainer( int chunkSize, MemoryAllocator allocator, MemoryTracker memoryTracker )
     {
         this.chunkSize = chunkSize;
         this.allocator = allocator;
+        this.memoryTracker = memoryTracker;
         this.writer = new Writer();
         this.currentChunk = addNewChunk( chunkSize );
     }
@@ -196,7 +200,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
     {
         assertNotClosed();
         closed = true;
-        allocated.forEach( Memory::free );
+        allocated.forEach( m -> m.free( memoryTracker ) );
         allocated.clear();
         chunks.clear();
         writer.close();
@@ -210,7 +214,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
 
     private ByteBuffer addNewChunk( int size )
     {
-        final Memory memory = allocator.allocate( size, false );
+        final Memory memory = allocator.allocate( size, false, memoryTracker );
         final ByteBuffer chunk = memory.asByteBuffer();
         allocated.add( memory );
         chunks.add( chunk );
@@ -461,7 +465,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
         final int len = chunk.getInt( offset );
         if ( len == 0 )
         {
-            return "";
+            return StringUtils.EMPTY;
         }
         offset += Integer.BYTES;
 
@@ -471,7 +475,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
             chars[i] = chunk.getChar( offset );
             offset += Character.BYTES;
         }
-        return UnsafeUtil.newSharedArrayString( chars );
+        return new String( chars );
     }
 
     private static ShortValue readShort( ByteBuffer chunk, int offset )
@@ -663,7 +667,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
         @Override
         public void close()
         {
-            bufMemory.free();
+            bufMemory.free( memoryTracker );
             bufMemory = null;
             buf = null;
         }
@@ -682,7 +686,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
             catch ( BufferOverflowException e )
             {
                 final int newSize = buf.capacity() * 2;
-                bufMemory.free();
+                bufMemory.free( memoryTracker );
                 allocateBuf( newSize );
                 return write( value );
             }
@@ -690,7 +694,7 @@ public class AppendOnlyValuesContainer implements ValuesContainer
 
         private void allocateBuf( int size )
         {
-            this.bufMemory = allocator.allocate( size, false );
+            this.bufMemory = allocator.allocate( size, false, memoryTracker );
             this.buf = bufMemory.asByteBuffer();
         }
 

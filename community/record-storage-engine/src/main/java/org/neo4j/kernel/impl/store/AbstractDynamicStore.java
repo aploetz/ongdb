@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.file.OpenOption;
@@ -34,10 +36,16 @@ import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.memory.MemoryTracker;
+
+import static java.util.Objects.requireNonNull;
+import static org.neo4j.memory.HeapEstimator.ARRAY_HEADER_BYTES;
+import static org.neo4j.memory.HeapEstimator.alignObjectSize;
 
 /**
  * An abstract representation of a dynamic store. Record size is set at creation as the contents of the
@@ -77,36 +85,51 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
             int dataSizeFromConfiguration,
             RecordFormat<DynamicRecord> recordFormat,
             String storeVersion,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, conf, idType, idGeneratorFactory, pageCache, logProvider, typeDescriptor,
                 recordFormat, new DynamicStoreHeaderFormat( dataSizeFromConfiguration, recordFormat ),
                 storeVersion, openOptions );
     }
 
-    public static void allocateRecordsFromBytes( Collection<DynamicRecord> recordList, byte[] src,
-            DynamicRecordAllocator dynamicRecordAllocator )
+    public static void allocateRecordsFromBytes( Collection<DynamicRecord> recordList, byte[] src, DynamicRecordAllocator dynamicRecordAllocator,
+            PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        assert src != null : "Null src argument";
-        DynamicRecord nextRecord = dynamicRecordAllocator.nextRecord();
-        int srcOffset = 0;
+        requireNonNull( src );
+
         int dataSize = dynamicRecordAllocator.getRecordDataSize();
+        int payloadSize = src.length;
+        int lastBlockSize = payloadSize % dataSize;
+
+        long fullBlockSize = DynamicRecord.SHALLOW_SIZE + alignObjectSize( ARRAY_HEADER_BYTES + dataSize );
+        int numberOfFullBlocks = payloadSize / dataSize;
+        long totalSize = numberOfFullBlocks * fullBlockSize;
+
+        if ( lastBlockSize != 0 )
+        {
+            totalSize += DynamicRecord.SHALLOW_SIZE + alignObjectSize( ARRAY_HEADER_BYTES + lastBlockSize );
+        }
+
+        memoryTracker.allocateHeap( totalSize );
+
+        DynamicRecord nextRecord = dynamicRecordAllocator.nextRecord( cursorTracer );
+        int srcOffset = 0;
         do
         {
             DynamicRecord record = nextRecord;
             record.setStartRecord( srcOffset == 0 );
-            if ( src.length - srcOffset > dataSize )
+            if ( payloadSize - srcOffset > dataSize )
             {
                 byte[] data = new byte[dataSize];
                 System.arraycopy( src, srcOffset, data, 0, dataSize );
                 record.setData( data );
-                nextRecord = dynamicRecordAllocator.nextRecord();
+                nextRecord = dynamicRecordAllocator.nextRecord( cursorTracer );
                 record.setNextBlock( nextRecord.getId() );
                 srcOffset += dataSize;
             }
             else
             {
-                byte[] data = new byte[src.length - srcOffset];
+                byte[] data = new byte[payloadSize - srcOffset];
                 System.arraycopy( src, srcOffset, data, 0, data.length );
                 record.setData( data );
                 nextRecord = null;
@@ -182,14 +205,14 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
     }
 
     @Override
-    public DynamicRecord nextRecord()
+    public DynamicRecord nextRecord( PageCursorTracer cursorTracer )
     {
-        return StandardDynamicRecordAllocator.allocateRecord( nextId() );
+        return StandardDynamicRecordAllocator.allocateRecord( nextId( cursorTracer ) );
     }
 
-    void allocateRecordsFromBytes( Collection<DynamicRecord> target, byte[] src )
+    void allocateRecordsFromBytes( Collection<DynamicRecord> target, byte[] src, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-        allocateRecordsFromBytes( target, src, this );
+        allocateRecordsFromBytes( target, src, this, cursorTracer, memoryTracker );
     }
 
     @Override
@@ -199,11 +222,12 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
                 ", blockSize:" + getRecordDataSize() + "]";
     }
 
-    Pair<byte[]/*header in the first record*/, byte[]/*all other bytes*/> readFullByteArray( Iterable<DynamicRecord> records, PropertyType propertyType )
+    Pair<byte[]/*header in the first record*/, byte[]/*all other bytes*/> readFullByteArray( Iterable<DynamicRecord> records, PropertyType propertyType,
+            PageCursorTracer cursorTracer )
     {
         for ( DynamicRecord record : records )
         {
-            ensureHeavy( record );
+            ensureHeavy( record, cursorTracer );
         }
 
         return readFullByteArrayFromHeavyRecords( records, propertyType );

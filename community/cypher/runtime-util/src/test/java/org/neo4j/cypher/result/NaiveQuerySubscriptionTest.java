@@ -22,10 +22,9 @@ package org.neo4j.cypher.result;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
-import java.util.Optional;
-
 import org.neo4j.cypher.internal.runtime.QueryStatistics;
 import org.neo4j.kernel.impl.query.QuerySubscriber;
+import org.neo4j.memory.OptionalMemoryTracker;
 import org.neo4j.values.AnyValue;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,18 +53,18 @@ class NaiveQuerySubscriptionTest
 
         //record 1
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
         //record 2
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
         //record 3
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
 
         inOrder.verify( subscriber ).onResultCompleted( QueryStatistics.empty() );
@@ -89,8 +88,8 @@ class NaiveQuerySubscriptionTest
 
         //record 1
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
 
         //When, asking for the second record
@@ -101,8 +100,8 @@ class NaiveQuerySubscriptionTest
 
         //record 2
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
 
         //When, asking for the third and last record
@@ -113,8 +112,8 @@ class NaiveQuerySubscriptionTest
 
         //record 3
         inOrder.verify( subscriber ).onRecord();
-        inOrder.verify( subscriber ).onField( stringValue( "hello" ) );
-        inOrder.verify( subscriber ).onField( stringValue( "there" ) );
+        inOrder.verify( subscriber ).onField( 0, stringValue( "hello" ) );
+        inOrder.verify( subscriber ).onField( 1, stringValue( "there" ) );
         inOrder.verify( subscriber ).onRecordCompleted();
 
         inOrder.verify( subscriber ).onResultCompleted( QueryStatistics.empty() );
@@ -171,15 +170,15 @@ class NaiveQuerySubscriptionTest
         }
 
         @Override
-        public Optional<Long> totalAllocatedMemory()
+        public long totalAllocatedMemory()
         {
-            return Optional.empty();
+            return OptionalMemoryTracker.ALLOCATIONS_NOT_TRACKED;
         }
     }
 
     ResultRecord record( AnyValue...fields )
     {
-        return new ResultRecord(  fields );
+        return new ResultRecord( fields );
     }
 
     private class ResultRecord implements QueryResult.Record

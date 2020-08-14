@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.neo4j.internal.helpers.ArrayUtil;
 import org.neo4j.internal.helpers.collection.Iterators;
@@ -40,6 +41,8 @@ import org.neo4j.values.VirtualValue;
 import org.neo4j.values.storable.ArrayValue;
 import org.neo4j.values.storable.Values;
 
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfObjectArray;
 import static org.neo4j.values.SequenceValue.IterationPreference.RANDOM_ACCESS;
 import static org.neo4j.values.storable.Values.NO_VALUE;
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
@@ -59,6 +62,7 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         return "List";
     }
 
+    private static final long ARRAY_VALUE_LIST_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( ArrayValueListValue.class );
     static final class ArrayValueListValue extends ListValue
     {
         private final ArrayValue array;
@@ -103,15 +107,24 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         {
             return array.hashCode();
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return ARRAY_VALUE_LIST_VALUE_SHALLOW_SIZE + array.estimatedHeapUsage();
+        }
     }
 
+    private static final long ARRAY_LIST_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( ArrayListValue.class );
     static final class ArrayListValue extends ListValue
     {
         private final AnyValue[] values;
+        private final long payloadSize;
 
-        ArrayListValue( AnyValue[] values )
+        ArrayListValue( AnyValue[] values, long payloadSize )
         {
             assert values != null;
+            this.payloadSize = shallowSizeOfObjectArray( values.length ) + payloadSize;
             assert !containsNull( values );
 
             this.values = values;
@@ -146,14 +159,23 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         {
             return Arrays.hashCode( values );
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return ARRAY_LIST_VALUE_SHALLOW_SIZE + payloadSize;
+        }
     }
 
+    private static final long JAVA_LIST_LIST_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( JavaListListValue.class );
     static final class JavaListListValue extends ListValue
     {
         private final List<AnyValue> values;
+        private final long payloadSize;
 
-        JavaListListValue( List<AnyValue> values )
+        JavaListListValue( List<AnyValue> values, long payloadSize )
         {
+            this.payloadSize = payloadSize;
             assert values != null;
             assert !containsNull( values );
 
@@ -195,8 +217,15 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         {
             return values.iterator();
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return JAVA_LIST_LIST_VALUE_SHALLOW_SIZE + payloadSize;
+        }
     }
 
+    private static final long LIST_SLICE_SHALLOW_SIZE = shallowSizeOfInstance( ListSlice.class );
     static final class ListSlice extends ListValue
     {
         private final ListValue inner;
@@ -268,8 +297,15 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
                 throw new IllegalStateException( "unknown iteration preference" );
             }
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return LIST_SLICE_SHALLOW_SIZE + inner.estimatedHeapUsage();
+        }
     }
 
+    private static final long REVERSED_LIST_SHALLOW_SIZE = shallowSizeOfInstance( ReversedList.class );
     static final class ReversedList extends ListValue
     {
         private final ListValue inner;
@@ -296,126 +332,15 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         {
             return inner.value( size() - 1 - offset );
         }
-    }
-
-    static final class DropNoValuesListValue extends ListValue
-    {
-        private final ListValue inner;
-        private int size = -1;
-
-        DropNoValuesListValue( ListValue inner )
-        {
-            this.inner = inner;
-        }
 
         @Override
-        public int size()
+        public long estimatedHeapUsage()
         {
-            if ( size < 0 )
-            {
-                int s = 0;
-                for ( int i = 0; i < inner.size(); i++ )
-                {
-                    if ( inner.value( i ) != NO_VALUE )
-                    {
-                        s++;
-                    }
-                }
-                size = s;
-            }
-
-            return size;
-        }
-
-        @Override
-        public AnyValue value( int offset )
-        {
-            int actualOffset = 0;
-            int size = inner.size();
-            for ( int i = 0; i < size; i++ )
-            {
-                AnyValue value = inner.value( i );
-                if ( value != NO_VALUE )
-                {
-                    if ( actualOffset == offset )
-                    {
-                        return value;
-                    }
-                    actualOffset++;
-                }
-            }
-
-            throw new IndexOutOfBoundsException();
-        }
-
-        @Override
-        public Iterator<AnyValue> iterator()
-        {
-            return new FilteredIterator();
-        }
-
-        @Override
-        public IterationPreference iterationPreference()
-        {
-            return IterationPreference.ITERATION;
-        }
-
-        private class FilteredIterator implements Iterator<AnyValue>
-        {
-            private AnyValue next;
-            private int index;
-
-            FilteredIterator()
-            {
-                computeNext();
-            }
-
-            @Override
-            public boolean hasNext()
-            {
-                return next != null;
-            }
-
-            @Override
-            public AnyValue next()
-            {
-                if ( !hasNext() )
-                {
-                    throw new NoSuchElementException();
-                }
-
-                AnyValue current = next;
-                computeNext();
-                return current;
-            }
-
-            private void computeNext()
-            {
-                if ( index >= inner.size() )
-                {
-                    next = null;
-                }
-                else
-                {
-                    while ( true )
-                    {
-                        if ( index >= inner.size() )
-                        {
-                            next = null;
-                            return;
-                        }
-                        AnyValue candidate = inner.value( index++ );
-                        if ( candidate != NO_VALUE )
-                        {
-                            next = candidate;
-                            return;
-                        }
-                    }
-                }
-            }
+            return REVERSED_LIST_SHALLOW_SIZE + inner.estimatedHeapUsage();
         }
     }
 
+    private static final long INTEGRAL_RANGE_LIST_VALUE_SHALLOW_SIZE = shallowSizeOfInstance( IntegralRangeListValue.class );
     static final class IntegralRangeListValue extends ListValue
     {
         private final long start;
@@ -445,20 +370,21 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         @Override
         public int size()
         {
-            if ( length != -1 )
-            {
-                return length;
-            }
-            else
+            if ( length == -1 )
             {
                 long l = ((end - start) / step) + 1;
                 if ( l > ArrayUtil.MAX_ARRAY_SIZE )
                 {
                     throw new OutOfMemoryError( "Cannot index an collection of size " + l );
                 }
+<<<<<<< HEAD
                 length = (int) l;
                 return Math.max( length, 0 );
+=======
+                length = Math.max( (int) l, 0 );
+>>>>>>> neo4j/4.1
             }
+            return length;
         }
 
         @Override
@@ -487,8 +413,14 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
             return hashCode;
         }
 
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return INTEGRAL_RANGE_LIST_VALUE_SHALLOW_SIZE;
+        }
     }
 
+    private static final long CONCAT_LIST_SHALLOW_SIZE = shallowSizeOfInstance( ConcatList.class );
     static final class ConcatList extends ListValue
     {
         private final ListValue[] lists;
@@ -534,14 +466,26 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
             }
             throw new IndexOutOfBoundsException();
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            int s = 0;
+            for ( ListValue list : lists )
+            {
+                s += list.estimatedHeapUsage();
+            }
+            return CONCAT_LIST_SHALLOW_SIZE + s;
+        }
     }
 
+    private static final long APPEND_LIST_SHALLOW_SIZE = shallowSizeOfInstance( AppendList.class );
     static final class AppendList extends ListValue
     {
         private final ListValue base;
-        private final AnyValue[] appended;
+        private final AnyValue appended;
 
-        AppendList( ListValue base, AnyValue[] appended )
+        AppendList( ListValue base, AnyValue appended )
         {
             this.base = base;
             this.appended = appended;
@@ -556,7 +500,7 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         @Override
         public int size()
         {
-            return base.size() + appended.length;
+            return base.size() + 1;
         }
 
         @Override
@@ -567,9 +511,9 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
             {
                 return base.value( offset );
             }
-            else if ( offset < size + appended.length )
+            else if ( offset < size + 1 )
             {
-                return appended[offset - size];
+                return appended;
             }
             else
             {
@@ -590,14 +534,21 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
                 throw new IllegalStateException( "unknown iteration preference" );
             }
         }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return APPEND_LIST_SHALLOW_SIZE + base.estimatedHeapUsage() + appended.estimatedHeapUsage();
+        }
     }
 
+    private static final long PREPEND_LIST_SHALLOW_SIZE = shallowSizeOfInstance( PrependList.class );
     static final class PrependList extends ListValue
     {
         private final ListValue base;
-        private final AnyValue[] prepended;
+        private final AnyValue prepended;
 
-        PrependList( ListValue base, AnyValue[] prepended )
+        PrependList( ListValue base, AnyValue prepended )
         {
             this.base = base;
             this.prepended = prepended;
@@ -612,20 +563,20 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         @Override
         public int size()
         {
-            return prepended.length + base.size();
+            return 1 + base.size();
         }
 
         @Override
         public AnyValue value( int offset )
         {
             int size = base.size();
-            if ( offset < prepended.length )
+            if ( offset < 1 )
             {
-                return prepended[offset];
+                return prepended;
             }
-            else if ( offset < size + prepended.length )
+            else if ( offset < size + 1 )
             {
-                return base.value( offset - prepended.length );
+                return base.value( offset - 1 );
             }
             else
             {
@@ -645,6 +596,12 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
             default:
                 throw new IllegalStateException( "unknown iteration preference" );
             }
+        }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return PREPEND_LIST_SHALLOW_SIZE + base.estimatedHeapUsage() + prepended.estimatedHeapUsage();
         }
     }
 
@@ -666,7 +623,7 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder( getTypeName() + "{" );
+        StringBuilder sb = new StringBuilder().append( getTypeName() ).append( '{' );
         int i = 0;
         for ( ; i < size() - 1; i++ )
         {
@@ -818,19 +775,6 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         }
     }
 
-    @Override
-    protected long estimatedPayloadSize()
-    {
-        int size = size();
-        //assume we store a AnyValue[]
-        return size > 0 ?   28 + (4 + head().estimatedHeapUsage() ) * size  : 0L;
-    }
-
-    public ListValue dropNoValues()
-    {
-        return new DropNoValuesListValue( this );
-    }
-
     public ListValue slice( int from, int to )
     {
         int f = Math.max( from, 0 );
@@ -868,53 +812,35 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
         return new ReversedList( this );
     }
 
-    public ListValue append( AnyValue...values )
+    public ListValue append( AnyValue value )
     {
-        if ( values.length == 0 )
-        {
-            return this;
-        }
-        return new AppendList( this, values );
+        return new AppendList( this, value );
     }
 
-    public ListValue prepend( AnyValue...values )
+    public ListValue prepend( AnyValue value )
     {
-        if ( values.length == 0 )
-        {
-            return this;
-        }
-        return new PrependList( this, values );
-    }
-
-    public boolean contains( AnyValue toFind )
-    {
-        for ( AnyValue value : this )
-        {
-            if ( value.equals( toFind ) )
-            {
-                return true;
-            }
-        }
-        return false;
+        return new PrependList( this, value );
     }
 
     public ListValue distinct()
     {
-        HashSet<AnyValue> seen = new HashSet<>();
-        ArrayList<AnyValue> kept = new ArrayList<>();
+        long keptValuesHeapSize = 0;
+        Set<AnyValue> seen = new HashSet<>();
+        List<AnyValue> kept = new ArrayList<>();
         for ( AnyValue value : this )
         {
             if ( seen.add( value ) )
             {
                 kept.add( value );
+                keptValuesHeapSize += value.estimatedHeapUsage();
             }
         }
-        return new JavaListListValue( kept );
+        return new JavaListListValue( kept, keptValuesHeapSize );
     }
 
     private AnyValue[] iterationAsArray()
     {
-        ArrayList<AnyValue> values = new ArrayList<>();
+        List<AnyValue> values = new ArrayList<>();
         int size = 0;
         for ( AnyValue value : this )
         {

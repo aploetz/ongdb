@@ -19,24 +19,48 @@
  */
 package org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery
 
-import org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery.ClauseConverters._
-import org.neo4j.cypher.internal.ir.{PeriodicCommit, SinglePlannerQuery, PlannerQueryPart, PlannerQuery, UnionQuery}
-import org.neo4j.cypher.internal.v4_0.ast
-import org.neo4j.cypher.internal.v4_0.ast._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.{And, Or, Pattern, PatternPart}
-import org.neo4j.cypher.internal.v4_0.util.{ASTNode, InputPosition}
+import org.neo4j.cypher.internal.ast
+import org.neo4j.cypher.internal.ast.Clause
+import org.neo4j.cypher.internal.ast.Create
+import org.neo4j.cypher.internal.ast.ProjectingUnionAll
+import org.neo4j.cypher.internal.ast.ProjectingUnionDistinct
+import org.neo4j.cypher.internal.ast.Query
+import org.neo4j.cypher.internal.ast.QueryPart
+import org.neo4j.cypher.internal.ast.SingleQuery
+import org.neo4j.cypher.internal.ast.Start
+import org.neo4j.cypher.internal.ast.UnaliasedReturnItem
+import org.neo4j.cypher.internal.ast.UnionAll
+import org.neo4j.cypher.internal.ast.UnionDistinct
+import org.neo4j.cypher.internal.ast.With
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery.ClauseConverters.addToLogicalPlanInput
+import org.neo4j.cypher.internal.expressions.And
+import org.neo4j.cypher.internal.expressions.Or
+import org.neo4j.cypher.internal.expressions.Pattern
+import org.neo4j.cypher.internal.expressions.PatternPart
+import org.neo4j.cypher.internal.ir.PeriodicCommit
+import org.neo4j.cypher.internal.ir.PlannerQuery
+import org.neo4j.cypher.internal.ir.PlannerQueryPart
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.UnionQuery
+import org.neo4j.cypher.internal.util.ASTNode
+import org.neo4j.cypher.internal.util.Foldable.FoldableAny
+import org.neo4j.cypher.internal.util.InputPosition
 import org.neo4j.exceptions.InternalException
 
 import scala.collection.mutable.ArrayBuffer
 
 object StatementConverters {
-  import org.neo4j.cypher.internal.v4_0.util.Foldable._
 
-  def toPlannerQueryBuilder(q: SingleQuery, semanticTable: SemanticTable): PlannerQueryBuilder =
-    flattenCreates(q.clauses).foldLeft(PlannerQueryBuilder(semanticTable)) {
+  def toPlannerQueryBuilder(q: SingleQuery, semanticTable: SemanticTable): PlannerQueryBuilder = {
+    val importedVariables: Set[String] = q.importWith.map((wth: With) =>
+      wth.returnItems.items.map(_.name).toSet
+    ).getOrElse(Set.empty)
+
+    flattenCreates(q.clauses).foldLeft(PlannerQueryBuilder(semanticTable, importedVariables)) {
       case (acc, clause) => addToLogicalPlanInput(acc, clause)
     }
+  }
 
   private val NODE_BLACKLIST: Set[Class[_ <: ASTNode]] = Set(
     classOf[And],
@@ -86,10 +110,10 @@ object StatementConverters {
   }
 
   /**
-    * Flatten consecutive CREATE clauses into one.
-    *
-    *   CREATE (a) CREATE (b) => CREATE (a),(b)
-    */
+   * Flatten consecutive CREATE clauses into one.
+   *
+   *   CREATE (a) CREATE (b) => CREATE (a),(b)
+   */
   def flattenCreates(clauses: Seq[Clause]): Seq[Clause] = {
     val builder = ArrayBuffer.empty[Clause]
     var prevCreate: Option[(Seq[PatternPart], InputPosition)] = None

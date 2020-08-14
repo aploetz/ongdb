@@ -40,20 +40,17 @@ import org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory;
 import org.neo4j.io.ByteUnit;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.NeoStores;
-import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.SchemaStore;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 import org.neo4j.kernel.impl.transaction.log.InMemoryClosableChannel;
 import org.neo4j.lock.LockService;
+import org.neo4j.storageengine.api.EntityTokenUpdateListener;
 import org.neo4j.storageengine.api.IndexUpdateListener;
-import org.neo4j.storageengine.api.NodeLabelUpdateListener;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.util.concurrent.WorkSync;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -61,6 +58,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.store.record.Record.NO_NEXT_PROPERTY;
 import static org.neo4j.storageengine.api.TransactionApplicationMode.INTERNAL;
 
@@ -77,13 +75,14 @@ class SchemaRuleCommandTest
     private final IndexUpdateListener indexUpdateListener = mock( IndexUpdateListener.class );
     private final SchemaCache schemaCache = mock( SchemaCache.class );
     private final StorageEngine storageEngine = mock( StorageEngine.class );
-    private final NodeLabelUpdateListener labelUpdateListener = mock( NodeLabelUpdateListener.class );
-    private NeoStoreBatchTransactionApplier storeApplier;
-    private final WorkSync<NodeLabelUpdateListener,LabelUpdateWork> labelScanStoreSynchronizer = new WorkSync<>( labelUpdateListener );
+    private final EntityTokenUpdateListener labelUpdateListener = mock( EntityTokenUpdateListener.class );
+    private final EntityTokenUpdateListener relationshipTypeUpdateListener = mock( EntityTokenUpdateListener.class );
+    private NeoStoreTransactionApplierFactory storeApplier;
+    private final WorkSync<EntityTokenUpdateListener,TokenUpdateWork> labelScanStoreSynchronizer = new WorkSync<>( labelUpdateListener );
+    private final WorkSync<EntityTokenUpdateListener,TokenUpdateWork> relationshipTypeScanStoreSync = new WorkSync<>( relationshipTypeUpdateListener );
     private final WorkSync<IndexUpdateListener,IndexUpdatesWork> indexUpdatesSync = new WorkSync<>( indexUpdateListener );
     private final PropertyStore propertyStore = mock( PropertyStore.class );
-    private final IndexBatchTransactionApplier indexApplier = new IndexBatchTransactionApplier( indexUpdateListener, labelScanStoreSynchronizer,
-            indexUpdatesSync, mock( NodeStore.class ), propertyStore, storageEngine, schemaCache, new IndexActivator( indexes ) );
+    private final IndexTransactionApplierFactory indexApplier = new IndexTransactionApplierFactory( indexUpdateListener );
     private final BaseCommandReader reader = new PhysicalLogCommandReaderV4_0();
     private final IndexDescriptor rule = IndexPrototype.forSchema( SchemaDescriptor.forLabel( labelId, propertyKey ) ).withName( "index" ).materialise( id );
 
@@ -95,8 +94,7 @@ class SchemaRuleCommandTest
         {
             idGeneratorWorkSyncs.put( idType, new WorkSync<>( mock( IdGenerator.class ) ) );
         }
-        storeApplier = new NeoStoreBatchTransactionApplier( INTERNAL, neoStores, mock( CacheAccessBackDoor.class ), LockService.NO_LOCK_SERVICE,
-                idGeneratorWorkSyncs );
+        storeApplier = new NeoStoreTransactionApplierFactory( INTERNAL, neoStores, mock( CacheAccessBackDoor.class ), LockService.NO_LOCK_SERVICE );
     }
 
     @Test
@@ -112,7 +110,7 @@ class SchemaRuleCommandTest
         visitSchemaRuleCommand( storeApplier, new SchemaRuleCommand( before, after, rule ) );
 
         // THEN
-        verify( schemaStore ).updateRecord( eq( after ), any() );
+        verify( schemaStore ).updateRecord( eq( after ), any(), any() );
     }
 
     @Test
@@ -150,8 +148,8 @@ class SchemaRuleCommandTest
         visitSchemaRuleCommand( storeApplier, new SchemaRuleCommand( before, after, schemaRule ) );
 
         // THEN
-        verify( schemaStore ).updateRecord( eq( after ), any() );
-        verify( metaDataStore ).setLatestConstraintIntroducingTx( txId );
+        verify( schemaStore ).updateRecord( eq( after ), any(), any() );
+        verify( metaDataStore ).setLatestConstraintIntroducingTx( txId, NULL );
     }
 
     @Test
@@ -168,7 +166,7 @@ class SchemaRuleCommandTest
         visitSchemaRuleCommand( storeApplier, new SchemaRuleCommand( before, after, rule ) );
 
         // THEN
-        verify( schemaStore ).updateRecord( eq( after ), any() );
+        verify( schemaStore ).updateRecord( eq( after ), any(), any() );
     }
 
     @Test
@@ -206,7 +204,7 @@ class SchemaRuleCommandTest
         Command readCommand = reader.read( buffer );
 
         // THEN
-        assertThat( readCommand, instanceOf( SchemaRuleCommand.class ) );
+        assertThat( readCommand ).isInstanceOf( SchemaRuleCommand.class );
 
         assertSchemaRule( (SchemaRuleCommand)readCommand );
     }
@@ -228,7 +226,7 @@ class SchemaRuleCommandTest
         Command readCommand = reader.read( buffer );
 
         // THEN
-        assertThat( readCommand, instanceOf( SchemaRuleCommand.class ) );
+        assertThat( readCommand ).isInstanceOf( SchemaRuleCommand.class );
 
         assertSchemaRule( (SchemaRuleCommand) readCommand );
     }
@@ -255,7 +253,7 @@ class SchemaRuleCommandTest
 
         // THEN
         assertEquals( ruleId, readCommand.getKey() );
-        assertThat( readCommand.getSchemaRule(), equalTo( rule ) );
+        assertThat( readCommand.getSchemaRule() ).isEqualTo( rule );
     }
 
     /**
@@ -283,7 +281,7 @@ class SchemaRuleCommandTest
         assertTrue( SchemaDescriptorPredicates.hasProperty( readSchemaCommand.getSchemaRule(), propertyKey ) );
     }
 
-    private void visitSchemaRuleCommand( BatchTransactionApplier applier, SchemaRuleCommand command ) throws Exception
+    private void visitSchemaRuleCommand( TransactionApplierFactory applier, SchemaRuleCommand command ) throws Exception
     {
         CommandHandlerContract.apply( applier, new GroupOfCommands( txId, command ) );
     }

@@ -19,15 +19,58 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
-import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.{CostModel, QueryGraphSolverInput}
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.CostModel
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
+import org.neo4j.cypher.internal.expressions.HasLabels
+import org.neo4j.cypher.internal.expressions.Property
 import org.neo4j.cypher.internal.ir.LazyMode
-import org.neo4j.cypher.internal.logical.plans._
+import org.neo4j.cypher.internal.logical.plans.AbstractLetSelectOrSemiApply
+import org.neo4j.cypher.internal.logical.plans.AbstractLetSemiApply
+import org.neo4j.cypher.internal.logical.plans.AbstractSelectOrSemiApply
+import org.neo4j.cypher.internal.logical.plans.AbstractSemiApply
+import org.neo4j.cypher.internal.logical.plans.AggregatingPlan
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.AntiConditionalApply
+import org.neo4j.cypher.internal.logical.plans.Apply
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.ConditionalApply
+import org.neo4j.cypher.internal.logical.plans.DirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandInto
+import org.neo4j.cypher.internal.logical.plans.FindShortestPaths
+import org.neo4j.cypher.internal.logical.plans.ForeachApply
+import org.neo4j.cypher.internal.logical.plans.LeftOuterHashJoin
+import org.neo4j.cypher.internal.logical.plans.Limit
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NodeByIdSeek
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeHashJoin
+import org.neo4j.cypher.internal.logical.plans.NodeIndexContainsScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexEndsWithScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexScan
+import org.neo4j.cypher.internal.logical.plans.NodeIndexSeek
+import org.neo4j.cypher.internal.logical.plans.NodeUniqueIndexSeek
+import org.neo4j.cypher.internal.logical.plans.Optional
+import org.neo4j.cypher.internal.logical.plans.ProcedureCall
+import org.neo4j.cypher.internal.logical.plans.ProjectEndpoints
+import org.neo4j.cypher.internal.logical.plans.RightOuterHashJoin
+import org.neo4j.cypher.internal.logical.plans.RollUpApply
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.Skip
+import org.neo4j.cypher.internal.logical.plans.Sort
+import org.neo4j.cypher.internal.logical.plans.UndirectedRelationshipByIdSeek
+import org.neo4j.cypher.internal.logical.plans.Union
+import org.neo4j.cypher.internal.logical.plans.UnwindCollection
+import org.neo4j.cypher.internal.logical.plans.ValueHashJoin
+import org.neo4j.cypher.internal.logical.plans.VarExpand
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.v4_0.expressions.{HasLabels, Property}
-import org.neo4j.cypher.internal.v4_0.util.{Cardinality, Cost, CostPerRow, Multiplier}
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.Cost
+import org.neo4j.cypher.internal.util.CostPerRow
+import org.neo4j.cypher.internal.util.Multiplier
 
-case class CardinalityCostModel(config: CypherPlannerConfiguration) extends CostModel {
+object CardinalityCostModel extends CostModel {
 
   private val DEFAULT_COST_PER_ROW: CostPerRow = 0.1
   private val PROBE_BUILD_COST: CostPerRow = 3.1
@@ -58,6 +101,12 @@ case class CardinalityCostModel(config: CypherPlannerConfiguration) extends Cost
 
     case _: AllNodesScan
     => 1.2
+
+    case e: Expand if e.mode == ExpandInto
+    => 4.5
+
+    case e: VarExpand if e.mode == ExpandInto
+    => 4.5
 
     case _: Expand |
          _: VarExpand

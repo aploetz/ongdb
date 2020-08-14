@@ -28,16 +28,14 @@ Third-party licenses
 Apache Software License, Version 2.0
   Apache Commons Codec
   Apache Commons Lang
-  Apache Commons Text
   Byte Buddy (without dependencies)
-  Byte Buddy Java agent
+  Byte Buddy agent
   Objenesis
   org.apiguardian:apiguardian-api
   org.opentest4j:opentest4j
 
 BSD License
   asm
-  Hamcrest
 
 Bouncy Castle License
   Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
@@ -59,6 +57,9 @@ Eclipse Public License v2.0
   JUnit Platform Engine API
   JUnit Platform Launcher
   JUnit Vintage Engine
+
+GNU Lesser General Public License, Version 2.1
+  Java Native Access
 
 MIT License
   mockito-core

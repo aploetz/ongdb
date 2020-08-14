@@ -19,9 +19,9 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.ast.UnresolvedCall
-import org.neo4j.cypher.internal.v4_0.expressions.FunctionInvocation
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
+import org.neo4j.cypher.internal.ast.UnresolvedCall
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.util.symbols.CypherType
 
 case class ProcedureSignature(name: QualifiedName,
                               inputSignature: IndexedSeq[FieldSignature],
@@ -69,7 +69,7 @@ case class QualifiedName(namespace: Seq[String], name: String) {
 }
 
 case class CypherValue(value: AnyRef, cypherType: CypherType)
-case class FieldSignature(name: String, typ: CypherType, default: Option[CypherValue] = None, deprecated: Boolean = false) {
+case class FieldSignature(name: String, typ: CypherType, default: Option[CypherValue] = None, deprecated: Boolean = false, sensitive: Boolean = false) {
   override def toString: String = {
     val nameValue = default.map( d => s"$name  =  ${d.value}").getOrElse(name)
     s"$nameValue :: ${typ.toNeoTypeString}"

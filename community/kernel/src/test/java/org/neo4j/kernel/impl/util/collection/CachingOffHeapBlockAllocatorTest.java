@@ -29,7 +29,7 @@ import java.util.List;
 
 import org.neo4j.kernel.impl.util.collection.OffHeapBlockAllocator.MemoryBlock;
 import org.neo4j.memory.LocalMemoryTracker;
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,14 +45,14 @@ class CachingOffHeapBlockAllocatorTest
     private static final int CACHE_SIZE = 4;
     private static final int MAX_CACHEABLE_BLOCK_SIZE = 128;
 
-    private final MemoryAllocationTracker memoryTracker = new LocalMemoryTracker();
+    private final MemoryTracker memoryTracker = new LocalMemoryTracker();
     private final CachingOffHeapBlockAllocator allocator = spy( new CachingOffHeapBlockAllocator( MAX_CACHEABLE_BLOCK_SIZE, CACHE_SIZE ) );
 
     @AfterEach
     void afterEach()
     {
         allocator.release();
-        assertEquals( 0, memoryTracker.usedDirectMemory(), "Native memory is leaking" );
+        assertEquals( 0, memoryTracker.usedNativeMemory(), "Native memory is leaking" );
     }
 
     @Test
@@ -75,18 +75,18 @@ class CachingOffHeapBlockAllocatorTest
     void allocateAndFree()
     {
         final MemoryBlock block1 = allocator.allocate( 128, memoryTracker );
-        assertEquals( block1.size, 128 );
-        assertEquals( 128 + Long.BYTES - 1, block1.unalignedSize );
-        assertEquals( block1.unalignedSize, memoryTracker.usedDirectMemory() );
+        assertEquals( 128, block1.size );
+        assertEquals( 128, block1.size );
+        assertEquals( block1.size, memoryTracker.usedNativeMemory() );
 
         final MemoryBlock block2 = allocator.allocate( 256, memoryTracker );
-        assertEquals( block2.size, 256 );
-        assertEquals( 256 + Long.BYTES - 1, block2.unalignedSize );
-        assertEquals( block1.unalignedSize + block2.unalignedSize, memoryTracker.usedDirectMemory() );
+        assertEquals( 256, block2.size );
+        assertEquals( 256, block2.size );
+        assertEquals( block1.size + block2.size, memoryTracker.usedNativeMemory() );
 
         allocator.free( block1, memoryTracker );
         allocator.free( block2, memoryTracker );
-        assertEquals( 0, memoryTracker.usedDirectMemory() );
+        assertEquals( 0, memoryTracker.usedNativeMemory() );
     }
 
     @ParameterizedTest
@@ -102,7 +102,7 @@ class CachingOffHeapBlockAllocatorTest
         verify( allocator, times( 2 ) ).allocateNew( eq( bytes ), any() );
         verify( allocator ).doFree( eq( block1 ), any() );
         verify( allocator ).doFree( eq( block2 ), any() );
-        assertEquals( 0, memoryTracker.usedDirectMemory() );
+        assertEquals( 0, memoryTracker.usedNativeMemory() );
     }
 
     @ParameterizedTest
@@ -117,7 +117,7 @@ class CachingOffHeapBlockAllocatorTest
 
         verify( allocator ).allocateNew( eq( bytes ), any() );
         verify( allocator, never() ).doFree( any(), any() );
-        assertEquals( 0, memoryTracker.usedDirectMemory() );
+        assertEquals( 0, memoryTracker.usedNativeMemory() );
     }
 
     @Test
@@ -134,13 +134,13 @@ class CachingOffHeapBlockAllocatorTest
 
         verify( allocator, times( CACHE_SIZE + EXTRA ) ).allocateNew( eq( 64L ), any() );
         verify( allocator, times( CACHE_SIZE + EXTRA ) ).allocateNew( eq( 128L ), any() );
-        assertEquals( (CACHE_SIZE + EXTRA) * (64 + 128 + 2 * (Long.BYTES - 1)), memoryTracker.usedDirectMemory() );
+        assertEquals( (CACHE_SIZE + EXTRA) * (64 + 128), memoryTracker.usedNativeMemory() );
 
         blocks64.forEach( it -> allocator.free( it, memoryTracker ) );
-        assertEquals( (CACHE_SIZE + EXTRA) * (128 + Long.BYTES - 1), memoryTracker.usedDirectMemory() );
+        assertEquals( (CACHE_SIZE + EXTRA) * 128, memoryTracker.usedNativeMemory() );
 
         blocks128.forEach( it -> allocator.free( it, memoryTracker ) );
-        assertEquals( 0, memoryTracker.usedDirectMemory() );
+        assertEquals( 0, memoryTracker.usedNativeMemory() );
 
         verify( allocator, times( EXTRA * 2 ) ).doFree( any(), any() );
     }

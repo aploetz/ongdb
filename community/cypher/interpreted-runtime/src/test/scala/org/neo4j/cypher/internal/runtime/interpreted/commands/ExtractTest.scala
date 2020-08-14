@@ -19,11 +19,14 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.ImplicitValueConversion._
-import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.{ExpressionVariable, ExtractFunction, SizeFunction, Variable}
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.ImplicitValueConversion.toListValue
 import org.neo4j.cypher.internal.runtime.interpreted.QueryStateHelper
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ExpressionVariable
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.ExtractFunction
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.SizeFunction
+import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Variable
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.values.storable.Values.intValue
 import org.neo4j.values.virtual.VirtualValues.list
 
@@ -32,7 +35,7 @@ class ExtractTest extends CypherFunSuite {
     val l = Seq("x", "xxx", "xx")
     val expression = SizeFunction(ExpressionVariable(0, "n"))
     val collection = Variable("l")
-    val m = ExecutionContext.from("l" -> l)
+    val m = CypherRow.from("l" -> l)
 
     val extract = ExtractFunction(collection, "n", 0, expression)
 

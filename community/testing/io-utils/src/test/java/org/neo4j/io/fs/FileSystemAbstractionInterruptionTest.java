@@ -36,11 +36,11 @@ import java.util.Arrays;
 import org.neo4j.function.Factory;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.neo4j.io.memory.ByteBuffers.allocate;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @RunWith( Parameterized.class )
 public class FileSystemAbstractionInterruptionTest
@@ -69,7 +69,6 @@ public class FileSystemAbstractionInterruptionTest
     @Before
     public void createWorkingDirectoryAndTestFile() throws IOException
     {
-        Thread.interrupted();
         fs.mkdirs( testdir.homeDir() );
         file = testdir.file( "a" );
         fs.write( file ).close();
@@ -85,9 +84,9 @@ public class FileSystemAbstractionInterruptionTest
     public void verifyInterruptionAndChannelState() throws IOException
     {
         assertTrue( Thread.interrupted() );
-        assertThat( "channelShouldBeClosed? " + channelShouldBeClosed,
-                channel.isOpen(),
-                is( !channelShouldBeClosed ) );
+        assertThat( channel.isOpen() )
+                .describedAs( "channelShouldBeClosed? " + channelShouldBeClosed )
+                .isEqualTo( !channelShouldBeClosed );
 
         if ( channelShouldBeClosed )
         {
@@ -151,25 +150,25 @@ public class FileSystemAbstractionInterruptionTest
     @Test( expected = ClosedByInterruptException.class )
     public void ch_writeAll_ByteBuffer() throws IOException
     {
-        chan( true ).writeAll( allocate( 1 ) );
+        chan( true ).writeAll( allocate( 1, INSTANCE ) );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_writeAll_ByteBuffer_position() throws IOException
     {
-        chan( true ).writeAll( allocate( 1 ), 1 );
+        chan( true ).writeAll( allocate( 1, INSTANCE ), 1 );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_read_ByteBuffer() throws IOException
     {
-        chan( true ).read( allocate( 1 ) );
+        chan( true ).read( allocate( 1, INSTANCE ) );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_write_ByteBuffer() throws IOException
     {
-        chan( true ).write( allocate( 1 ) );
+        chan( true ).write( allocate( 1, INSTANCE ) );
     }
 
     @Test( expected = ClosedByInterruptException.class )
@@ -187,24 +186,24 @@ public class FileSystemAbstractionInterruptionTest
     @Test( expected = ClosedByInterruptException.class )
     public void ch_write_ByteBuffers_offset_length() throws IOException
     {
-        chan( true ).write( new ByteBuffer[]{allocate( 1 )}, 0, 1 );
+        chan( true ).write( new ByteBuffer[]{allocate( 1, INSTANCE )}, 0, 1 );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_write_ByteBuffers() throws IOException
     {
-        chan( true ).write( new ByteBuffer[]{allocate( 1 )} );
+        chan( true ).write( new ByteBuffer[]{allocate( 1, INSTANCE )} );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_read_ByteBuffers_offset_length() throws IOException
     {
-        chan( true ).read( new ByteBuffer[]{allocate( 1 )}, 0, 1 );
+        chan( true ).read( new ByteBuffer[]{allocate( 1, INSTANCE )}, 0, 1 );
     }
 
     @Test( expected = ClosedByInterruptException.class )
     public void ch_read_ByteBuffers() throws IOException
     {
-        chan( true ).read( new ByteBuffer[]{allocate( 1 )} );
+        chan( true ).read( new ByteBuffer[]{allocate( 1, INSTANCE )} );
     }
 }

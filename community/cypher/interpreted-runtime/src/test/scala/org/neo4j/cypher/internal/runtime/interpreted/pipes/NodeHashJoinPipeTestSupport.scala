@@ -19,12 +19,15 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.v4_0.expressions.{NODE_TYPE, CachedProperty, PropertyKeyName, Variable}
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.NODE_TYPE
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.Variable
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.graphdb.Node
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Value
@@ -38,13 +41,13 @@ trait NodeHashJoinPipeTestSupport extends CypherFunSuite {
   protected def prop(node: String, prop: String) =
     CachedProperty(node, Variable(node)(InputPosition.NONE), PropertyKeyName(prop)(InputPosition.NONE), NODE_TYPE)(InputPosition.NONE)
 
-  protected def row(values: (String, AnyValue)*) = ExecutionContext.from(values: _*)
+  protected def row(values: (String, AnyValue)*) = CypherRow.from(values: _*)
 
-  protected def rowWithCached(values: (String, AnyValue)*) = ExecutionContext.from(values: _*)
+  protected def rowWithCached(values: (String, AnyValue)*) = CypherRow.from(values: _*)
 
   case class rowWith(variables: (String, AnyValue)*) {
-    def cached(cachedNodePropeties: (CachedProperty, Value)*): ExecutionContext = {
-      val row = ExecutionContext.from(variables: _*)
+    def cached(cachedNodePropeties: (CachedProperty, Value)*): CypherRow = {
+      val row = CypherRow.from(variables: _*)
       for ((cnp, value) <- cachedNodePropeties) row.setCachedProperty(cnp, value)
       row
     }
@@ -57,7 +60,7 @@ trait NodeHashJoinPipeTestSupport extends CypherFunSuite {
     node
   }
 
-  protected def newMockedPipe(rows: ExecutionContext*): Pipe = {
+  protected def newMockedPipe(rows: CypherRow*): Pipe = {
     val pipe = mock[Pipe]
     when(pipe.createResults(any())).thenReturn(rows.iterator)
     pipe

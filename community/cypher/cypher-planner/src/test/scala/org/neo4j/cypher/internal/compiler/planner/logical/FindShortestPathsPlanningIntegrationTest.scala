@@ -20,10 +20,21 @@
 package org.neo4j.cypher.internal.compiler.planner.logical
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.ir.{PatternRelationship, ShortestPathPattern, SimplePatternLength, RegularSinglePlannerQuery}
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.ir.PatternRelationship
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ShortestPathPattern
+import org.neo4j.cypher.internal.ir.SimplePatternLength
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.Expand
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.FindShortestPaths
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.NodeHashJoin
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class FindShortestPathsPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -97,10 +108,10 @@ class FindShortestPathsPlanningIntegrationTest extends CypherFunSuite with Logic
           NodeHashJoin(
             Set("b"),
             Expand(
-              NodeByLabelScan("a", labelName("X"), Set.empty),
+              NodeByLabelScan("a", labelName("X"), Set.empty, IndexOrderNone),
               "a", SemanticDirection.INCOMING, Seq.empty, "b", "r1", ExpandAll),
             Expand(
-              NodeByLabelScan("c", labelName("X"), Set.empty),
+              NodeByLabelScan("c", labelName("X"), Set.empty, IndexOrderNone),
               "c", SemanticDirection.INCOMING, Seq.empty, "b", "r2", ExpandAll)
           )
         ),

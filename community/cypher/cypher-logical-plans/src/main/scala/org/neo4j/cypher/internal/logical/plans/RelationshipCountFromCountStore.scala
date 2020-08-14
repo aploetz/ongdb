@@ -19,18 +19,20 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
-import org.neo4j.cypher.internal.v4_0.expressions.{LabelName, RelTypeName}
+import org.neo4j.cypher.internal.expressions.LabelName
+import org.neo4j.cypher.internal.expressions.RelTypeName
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SameId
 
 /**
-  * Produce a single row with the contents of argument and a new value 'idName'. For each
-  * relationship type in 'typeNames', the number of relationship matching
-  *
-  *   (:startLabel)-[:type]->(:endLabel)
-  *
-  * is fetched from the counts store. These counts are summed, and the result is
-  * assigned to 'idName'.
-  */
+ * Produce a single row with the contents of argument and a new value 'idName'. For each
+ * relationship type in 'typeNames', the number of relationship matching
+ *
+ *   (:startLabel)-[:type]->(:endLabel)
+ *
+ * is fetched from the counts store. These counts are summed, and the result is
+ * assigned to 'idName'.
+ */
 case class RelationshipCountFromCountStore(idName: String,
                                            startLabel: Option[LabelName],
                                            typeNames: Seq[RelTypeName],
@@ -40,4 +42,8 @@ case class RelationshipCountFromCountStore(idName: String,
   extends LogicalLeafPlan(idGen) {
 
   override val availableSymbols = Set(idName)
+
+  override def usedVariables: Set[String] = Set.empty
+
+  override def withoutArgumentIds(argsToExclude: Set[String]): RelationshipCountFromCountStore = copy(argumentIds = argumentIds -- argsToExclude)(SameId(this.id))
 }

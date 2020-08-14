@@ -20,23 +20,35 @@
 package org.neo4j.cypher.internal
 
 import org.neo4j.cypher.internal.plandescription.Argument
-import org.neo4j.cypher.internal.runtime._
+import org.neo4j.cypher.internal.runtime.ExecutionMode
+import org.neo4j.cypher.internal.runtime.ExplainMode
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.ProfileMode
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryIndexRegistrator
+import org.neo4j.cypher.internal.runtime.expressionVariableAllocation
 import org.neo4j.cypher.internal.runtime.expressionVariableAllocation.Result
-import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.{CommunityExpressionConverter, ExpressionConverters}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{NestedPipeExpressions, PipeTreeBuilder}
-import org.neo4j.cypher.internal.runtime.interpreted.profiler.{InterpretedProfileInformation, Profiler}
-import org.neo4j.cypher.internal.runtime.interpreted.{ExecutionResultBuilderFactory, InterpretedExecutionResultBuilderFactory, InterpretedPipeMapper, UpdateCountingQueryContext}
-import org.neo4j.cypher.internal.v4_0.util.InternalNotification
+import org.neo4j.cypher.internal.runtime.interpreted.ExecutionResultBuilderFactory
+import org.neo4j.cypher.internal.runtime.interpreted.InterpretedExecutionResultBuilderFactory
+import org.neo4j.cypher.internal.runtime.interpreted.InterpretedPipeMapper
+import org.neo4j.cypher.internal.runtime.interpreted.UpdateCountingQueryContext
+import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.CommunityExpressionConverter
+import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.ExpressionConverters
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.NestedPipeExpressions
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.PipeTreeBuilder
+import org.neo4j.cypher.internal.runtime.interpreted.profiler.InterpretedProfileInformation
+import org.neo4j.cypher.internal.runtime.interpreted.profiler.Profiler
+import org.neo4j.cypher.internal.runtime.slottedParameters
+import org.neo4j.cypher.internal.util.InternalNotification
 import org.neo4j.cypher.result.RuntimeResult
 import org.neo4j.exceptions.PeriodicCommitInOpenTransactionException
-import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.virtual.MapValue
 
 object InterpretedRuntime extends CypherRuntime[RuntimeContext] {
   override def name: String = "interpreted"
 
-  override def compileToExecutable(query: LogicalQuery, context: RuntimeContext, securityContext: SecurityContext): ExecutionPlan = {
+  override def compileToExecutable(query: LogicalQuery, context: RuntimeContext): ExecutionPlan = {
     val Result(logicalPlan, nExpressionSlots, availableExpressionVars) = expressionVariableAllocation.allocate(query.logicalPlan)
     val (withSlottedParameters, parameterMapping) = slottedParameters(logicalPlan)
 
@@ -48,27 +60,27 @@ object InterpretedRuntime extends CypherRuntime[RuntimeContext] {
     val pipe = pipeTreeBuilder.build(logicalPlanWithConvertedNestedPlans)
     val columns = query.resultColumns
     val resultBuilderFactory = InterpretedExecutionResultBuilderFactory(pipe,
-                                                                        queryIndexRegistrator.result(),
-                                                                        nExpressionSlots,
-                                                                        parameterMapping,
-                                                                        query.readOnly,
-                                                                        columns,
-                                                                        withSlottedParameters,
-                                                                        context.config.lenientCreateRelationship,
-                                                                        context.config.memoryTrackingController,
-                                                                        query.hasLoadCSV)
+      queryIndexRegistrator.result(),
+      nExpressionSlots,
+      parameterMapping,
+      query.readOnly,
+      columns,
+      withSlottedParameters,
+      context.config.lenientCreateRelationship,
+      context.config.memoryTrackingController,
+      query.hasLoadCSV)
 
     new InterpretedExecutionPlan(query.periodicCommitInfo,
-                                 resultBuilderFactory,
-                                 InterpretedRuntimeName,
-                                 query.readOnly,
-                                 IndexedSeq.empty)
+      resultBuilderFactory,
+      InterpretedRuntimeName,
+      query.readOnly,
+      IndexedSeq.empty)
   }
 
   /**
-    * Executable plan for a single cypher query. Warning, this class will get cached! Do not leak transaction objects
-    * or other resources in here.
-    */
+   * Executable plan for a single cypher query. Warning, this class will get cached! Do not leak transaction objects
+   * or other resources in here.
+   */
   class InterpretedExecutionPlan(periodicCommit: Option[PeriodicCommitInfo],
                                  resultBuilderFactory: ExecutionResultBuilderFactory,
                                  override val runtimeName: RuntimeName,
@@ -94,14 +106,9 @@ object InterpretedRuntime extends CypherRuntime[RuntimeContext] {
       }
 
       if (doProfile)
-        builder.addProfileDecorator(new Profiler(queryContext.transactionalContext.databaseInfo, profileInformation))
+        builder.addProfileDecorator(new Profiler(queryContext.transactionalContext.dbmsInfo, profileInformation))
 
-      builder.build(params,
-                    readOnly,
-                    profileInformation,
-                    prePopulateResults,
-                    input,
-                    subscriber)
+      builder.build(params, readOnly, profileInformation, prePopulateResults, input, subscriber, doProfile)
     }
 
     override def notifications: Set[InternalNotification] = Set.empty

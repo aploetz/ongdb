@@ -21,8 +21,10 @@ package org.neo4j.cypher.internal.runtime
 
 import org.neo4j.cypher.internal.runtime.ResourceManager.INITIAL_CAPACITY
 import org.neo4j.internal.helpers.Exceptions
-import org.neo4j.internal.kernel.api.{AutoCloseablePlus, CloseListener}
-import org.neo4j.util.Preconditions
+import org.neo4j.internal.kernel.api.AutoCloseablePlus
+import org.neo4j.internal.kernel.api.CloseListener
+
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 class ResourceManager(monitor: ResourceMonitor = ResourceMonitor.NOOP) extends CloseableResource with CloseListener {
   protected val resources: ResourcePool = new SingleThreadedResourcePool(INITIAL_CAPACITY, monitor)
@@ -93,11 +95,11 @@ trait ResourcePool {
 }
 
 /**
-  * Similar to an ArrayList[AutoCloseablePlus] but does faster removes since it simply set the element to null and
-  * does not reorder the backing array.
-  * @param capacity the intial capacity of the pool
-  * @param monitor the monitor to call on close
-  */
+ * Similar to an ArrayList[AutoCloseablePlus] but does faster removes since it simply set the element to null and
+ * does not reorder the backing array.
+ * @param capacity the intial capacity of the pool
+ * @param monitor the monitor to call on close
+ */
 class SingleThreadedResourcePool(capacity: Int, monitor: ResourceMonitor) extends ResourcePool {
   private var highMark: Int = 0
   private var closeables: Array[AutoCloseablePlus] = new Array[AutoCloseablePlus](capacity)
@@ -182,7 +184,6 @@ class SingleThreadedResourcePool(capacity: Int, monitor: ResourceMonitor) extend
 }
 
 class ThreadSafeResourcePool(monitor: ResourceMonitor) extends ResourcePool {
-  import scala.collection.JavaConverters._
 
   val resources: java.util.Collection[AutoCloseablePlus] = new java.util.concurrent.ConcurrentLinkedQueue[AutoCloseablePlus]()
 

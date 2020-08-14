@@ -19,15 +19,17 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, LabelToken, Property}
-import org.neo4j.cypher.internal.v4_0.util.attribution.{IdGen, SameId}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SameId
 
 /**
-  * This operator does a full scan of an index, producing rows for all entries that end with a string value
-  *
-  * It's much slower than an index seek, since all index entries must be examined, but also much faster than an
-  * all-nodes scan or label scan followed by a property value filter.
-  */
+ * This operator does a full scan of an index, producing rows for all entries that end with a string value
+ *
+ * It's much slower than an index seek, since all index entries must be examined, but also much faster than an
+ * all-nodes scan or label scan followed by a property value filter.
+ */
 case class NodeIndexEndsWithScan(idName: String,
                                  label: LabelToken,
                                  property: IndexedProperty,
@@ -41,9 +43,13 @@ case class NodeIndexEndsWithScan(idName: String,
 
   val availableSymbols: Set[String] = argumentIds + idName
 
+  override def usedVariables: Set[String] = valueExpr.dependencies.map(_.name)
+
+  override def withoutArgumentIds(argsToExclude: Set[String]): NodeIndexEndsWithScan = copy(argumentIds = argumentIds -- argsToExclude)(SameId(this.id))
+
   override def copyWithoutGettingValues: NodeIndexEndsWithScan =
     NodeIndexEndsWithScan(idName, label, IndexedProperty(property.propertyKeyToken, DoNotGetValue), valueExpr, argumentIds, indexOrder)(SameId(this.id))
 
-  override def withProperties(properties: Seq[IndexedProperty]): IndexLeafPlan =
-    NodeIndexEndsWithScan(idName, label, properties.head, valueExpr, argumentIds, indexOrder)(SameId(this.id))
+  override def withMappedProperties(f: IndexedProperty => IndexedProperty): IndexLeafPlan =
+    NodeIndexEndsWithScan(idName, label, f(property), valueExpr, argumentIds, indexOrder)(SameId(this.id))
 }

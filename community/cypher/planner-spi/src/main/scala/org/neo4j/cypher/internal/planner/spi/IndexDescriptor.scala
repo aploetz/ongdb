@@ -19,13 +19,17 @@
  */
 package org.neo4j.cypher.internal.planner.spi
 
-import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.{OrderCapability, ValueCapability}
-import org.neo4j.cypher.internal.logical.plans.{DoNotGetValue, GetValueFromIndexBehavior}
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
-import org.neo4j.cypher.internal.v4_0.util.{LabelId, PropertyKeyId}
+import org.neo4j.cypher.internal.logical.plans.DoNotGetValue
+import org.neo4j.cypher.internal.logical.plans.GetValueFromIndexBehavior
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.OrderCapability
+import org.neo4j.cypher.internal.planner.spi.IndexDescriptor.ValueCapability
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.symbols.CypherType
 
-sealed trait IndexLimitation
-case object SlowContains extends IndexLimitation
+sealed trait IndexBehaviour
+case object SlowContains extends IndexBehaviour
+case object SkipAndLimit extends IndexBehaviour
 
 sealed trait IndexOrderCapability {
   def asc: Boolean
@@ -42,16 +46,16 @@ object IndexOrderCapability {
 
 object IndexDescriptor {
   /**
-    * Given the actual types of properties (one for a single-property index and multiple for a composite index)
-    * can this index guarantee ordered retrieval?
-    */
+   * Given the actual types of properties (one for a single-property index and multiple for a composite index)
+   * can this index guarantee ordered retrieval?
+   */
   type OrderCapability = Seq[CypherType] => IndexOrderCapability
   val noOrderCapability: OrderCapability = _ => IndexOrderCapability.NONE
 
   /**
-    * Given the actual types of properties (one for a single-property index and multiple for a composite index)
-    * does the index provide the actual values?
-    */
+   * Given the actual types of properties (one for a single-property index and multiple for a composite index)
+   * does the index provide the actual values?
+   */
   type ValueCapability = Seq[CypherType] => Seq[GetValueFromIndexBehavior]
   val noValueCapability: ValueCapability = s => s.map(_ => DoNotGetValue)
 
@@ -62,7 +66,7 @@ object IndexDescriptor {
 
 case class IndexDescriptor(label: LabelId,
                            properties: Seq[PropertyKeyId],
-                           limitations: Set[IndexLimitation] = Set.empty[IndexLimitation],
+                           behaviours: Set[IndexBehaviour] = Set.empty[IndexBehaviour],
                            orderCapability: OrderCapability = IndexDescriptor.noOrderCapability,
                            valueCapability: ValueCapability = IndexDescriptor.noValueCapability,
                            isUnique: Boolean = false) {
@@ -72,20 +76,19 @@ case class IndexDescriptor(label: LabelId,
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[IndexDescriptor]
 
-  // The lambda functions `orderCapability` and `valueCapability`cannot be compared for
-  // equality in a sensible way. By excluding them from equals and hashCode, we make
-  // the assumption that they should be always the same for (label, properties) combination
+  // The lambda functions `orderCapability` and `valueCapability` cannot sensibly be compared for equality.
+  // By excluding them from equals and hashCode, we make the assumption that they should be always the same for (label, properties) combination
   override def equals(other: Any): Boolean = other match {
     case that: IndexDescriptor =>
       (that canEqual this) &&
         label == that.label &&
         properties == that.properties &&
-        limitations == that.limitations
+        behaviours == that.behaviours
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(label, properties, limitations)
+    val state = Seq(label, properties, behaviours)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

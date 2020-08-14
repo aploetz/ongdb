@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.graphdb.ConstraintViolationException;
+import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Entity;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -40,18 +41,17 @@ import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.collection.Iterators;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.internal.helpers.NamedThreadFactory.named;
+import static org.neo4j.internal.helpers.collection.Iterables.count;
 import static org.neo4j.test.DoubleLatch.awaitLatch;
 
 public class NodeEntityTest extends EntityTest
@@ -71,6 +71,99 @@ public class NodeEntityTest extends EntityTest
     }
 
     @Test
+    void traceNodePageCacheAccessOnDegreeCount()
+    {
+        long sourceId;
+        try ( Transaction tx = db.beginTx() )
+        {
+            var source = tx.createNode();
+            var relationshipType = RelationshipType.withName( "connection" );
+            for ( int i = 0; i < 100; i++ )
+            {
+                source.createRelationshipTo( tx.createNode(), relationshipType );
+            }
+            sourceId = source.getId();
+            tx.commit();
+        }
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            var cursorTracer = ((InternalTransaction) tx).kernelTransaction().pageCursorTracer();
+            var source = tx.getNodeById( sourceId );
+            cursorTracer.reportEvents();
+            assertZeroTracer( cursorTracer );
+
+            source.getDegree( Direction.OUTGOING );
+
+            assertThat( cursorTracer.hits() ).isEqualTo( 3 );
+            assertThat( cursorTracer.unpins() ).isEqualTo( 0 );
+            assertThat( cursorTracer.pins() ).isEqualTo( 3 );
+        }
+    }
+
+    @Test
+    void traceNodePageCacheAccessOnRelationshipTypeAndDegreeCount()
+    {
+        long targetId;
+        var relationshipType = RelationshipType.withName( "connection" );
+        try ( Transaction tx = db.beginTx() )
+        {
+            var target = tx.createNode();
+            for ( int i = 0; i < 100; i++ )
+            {
+                tx.createNode().createRelationshipTo( target, relationshipType );
+            }
+            targetId = target.getId();
+            tx.commit();
+        }
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            var cursorTracer = ((InternalTransaction) tx).kernelTransaction().pageCursorTracer();
+            var source = tx.getNodeById( targetId );
+            cursorTracer.reportEvents();
+            assertZeroTracer( cursorTracer );
+
+            source.getDegree( relationshipType, Direction.INCOMING );
+
+            assertThat( cursorTracer.hits() ).isEqualTo( 3 );
+            assertThat( cursorTracer.unpins() ).isEqualTo( 0 );
+            assertThat( cursorTracer.pins() ).isEqualTo( 3 );
+        }
+    }
+
+    @Test
+    void traceNodePageCacheAccessOnRelationshipsAccess()
+    {
+        long targetId;
+        var relationshipType = RelationshipType.withName( "connection" );
+        try ( Transaction tx = db.beginTx() )
+        {
+            var target = tx.createNode();
+            for ( int i = 0; i < 100; i++ )
+            {
+                tx.createNode().createRelationshipTo( target, relationshipType );
+            }
+            targetId = target.getId();
+            tx.commit();
+        }
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            var cursorTracer = ((InternalTransaction) tx).kernelTransaction().pageCursorTracer();
+            var source = tx.getNodeById( targetId );
+            cursorTracer.reportEvents();
+            assertZeroTracer( cursorTracer );
+
+            assertThat( count( source.getRelationships( Direction.INCOMING, relationshipType ) ) ).isGreaterThan( 0 );
+
+            assertThat( cursorTracer.hits() ).isEqualTo( 3 );
+            assertThat( cursorTracer.unpins() ).isEqualTo( 2 );
+            assertThat( cursorTracer.pins() ).isEqualTo( 3 );
+        }
+    }
+
+    @Test
     void shouldThrowHumaneExceptionsWhenPropertyDoesNotExistOnNode()
     {
         // Given a database with PROPERTY_KEY in it
@@ -85,7 +178,7 @@ public class NodeEntityTest extends EntityTest
                 node.getProperty( PROPERTY_KEY );
             }
         } );
-        assertThat( exception.getMessage(), containsString( PROPERTY_KEY ) );
+        assertThat( exception.getMessage() ).contains( PROPERTY_KEY );
     }
 
     @Test
@@ -174,7 +267,7 @@ public class NodeEntityTest extends EntityTest
         // Then
         catch ( NotFoundException exception )
         {
-            assertThat( exception.getMessage(), containsString( PROPERTY_KEY ) );
+            assertThat( exception.getMessage() ).contains( PROPERTY_KEY );
         }
     }
 
@@ -207,7 +300,7 @@ public class NodeEntityTest extends EntityTest
         }
 
         // Then
-        assertThat( exceptionThrownBySecondDelete, instanceOf( NotFoundException.class ) );
+        assertThat( exceptionThrownBySecondDelete ).isInstanceOf( NotFoundException.class );
 
         assertThrows( NotFoundException.class, () ->
         {
@@ -303,7 +396,7 @@ public class NodeEntityTest extends EntityTest
                     while ( !writerDone.get() )
                     {
                         int size = node.getAllProperties().size();
-                        assertThat( size, greaterThan( 0 ) );
+                        assertThat( size ).isGreaterThan( 0 );
                     }
                     tx.commit();
                 }
@@ -353,7 +446,7 @@ public class NodeEntityTest extends EntityTest
         // Then
         try ( Transaction tx = db.beginTx() )
         {
-            assertThat( tx.getNodeById( node.getId() ).getProperty( "prop" ), instanceOf( Double.class ) );
+            assertThat( tx.getNodeById( node.getId() ).getProperty( "prop" ) ).isInstanceOf( Double.class );
         }
     }
 
@@ -374,8 +467,8 @@ public class NodeEntityTest extends EntityTest
         // Then
         try ( Transaction tx = db.beginTx() )
         {
-            assertThat( Iterables.asList( tx.getNodeById( node.getId() ).getRelationshipTypes() ),
-                    equalTo( singletonList( RelationshipType.withName( "R" ) ) ) );
+            assertThat( Iterables.asList( tx.getNodeById( node.getId() ).getRelationshipTypes() ) ).isEqualTo(
+                    singletonList( RelationshipType.withName( "R" ) ) );
         }
     }
 
@@ -418,5 +511,12 @@ public class NodeEntityTest extends EntityTest
             node.setProperty( key, 1 );
             tx.commit();
         }
+    }
+
+    private void assertZeroTracer( PageCursorTracer cursorTracer )
+    {
+        assertThat( cursorTracer.hits() ).isZero();
+        assertThat( cursorTracer.unpins() ).isZero();
+        assertThat( cursorTracer.pins() ).isZero();
     }
 }

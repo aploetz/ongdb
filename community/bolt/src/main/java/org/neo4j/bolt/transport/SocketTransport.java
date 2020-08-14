@@ -19,12 +19,15 @@
  */
 package org.neo4j.bolt.transport;
 
-import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.handler.ssl.SslContext;
 
+import java.time.Duration;
+
 import org.neo4j.bolt.BoltChannel;
+import org.neo4j.bolt.transport.pipeline.UnauthenticatedChannelProtector;
 import org.neo4j.configuration.helpers.SocketAddress;
 import org.neo4j.kernel.api.net.NetworkConnectionTracker;
 import org.neo4j.logging.LogProvider;
@@ -42,10 +45,14 @@ public class SocketTransport implements NettyServer.ProtocolInitializer
     private final TransportThrottleGroup throttleGroup;
     private final BoltProtocolFactory boltProtocolFactory;
     private final NetworkConnectionTracker connectionTracker;
+    private final Duration channelTimeout;
+    private final long maxMessageSize;
+    private final ByteBufAllocator allocator;
 
     public SocketTransport( String connector, SocketAddress address, SslContext sslCtx, boolean encryptionRequired,
             LogProvider logging, TransportThrottleGroup throttleGroup,
-            BoltProtocolFactory boltProtocolFactory, NetworkConnectionTracker connectionTracker )
+            BoltProtocolFactory boltProtocolFactory, NetworkConnectionTracker connectionTracker,
+            Duration channelTimeout, long maxMessageSize, ByteBufAllocator allocator )
     {
         this.connector = connector;
         this.address = address;
@@ -55,6 +62,9 @@ public class SocketTransport implements NettyServer.ProtocolInitializer
         this.throttleGroup = throttleGroup;
         this.boltProtocolFactory = boltProtocolFactory;
         this.connectionTracker = connectionTracker;
+        this.channelTimeout = channelTimeout;
+        this.maxMessageSize = maxMessageSize;
+        this.allocator = allocator;
     }
 
     @Override
@@ -65,7 +75,7 @@ public class SocketTransport implements NettyServer.ProtocolInitializer
             @Override
             public void initChannel( Channel ch )
             {
-                ch.config().setAllocator( PooledByteBufAllocator.DEFAULT );
+                ch.config().setAllocator( allocator );
 
                 BoltChannel boltChannel = newBoltChannel( ch );
                 connectionTracker.add( boltChannel );
@@ -77,9 +87,9 @@ public class SocketTransport implements NettyServer.ProtocolInitializer
                 // add a close listener that will uninstall throttles
                 ch.closeFuture().addListener( future -> throttleGroup.uninstall( ch ) );
 
-                TransportSelectionHandler transportSelectionHandler = new TransportSelectionHandler( boltChannel, sslCtx,
-                                                                                                     encryptionRequired, false, logging, boltProtocolFactory );
-
+                TransportSelectionHandler transportSelectionHandler =
+                        new TransportSelectionHandler( boltChannel, sslCtx,
+                                encryptionRequired, false, logging, boltProtocolFactory );
                 ch.pipeline().addLast( transportSelectionHandler );
             }
         };
@@ -93,6 +103,7 @@ public class SocketTransport implements NettyServer.ProtocolInitializer
 
     private BoltChannel newBoltChannel( Channel ch )
     {
-        return new BoltChannel( connectionTracker.newConnectionId( connector ), connector, ch );
+        var protector = new UnauthenticatedChannelProtector( ch.pipeline(), channelTimeout, maxMessageSize );
+        return new BoltChannel( connectionTracker.newConnectionId( connector ), connector, ch, protector );
     }
 }

@@ -28,15 +28,15 @@ import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
-import org.neo4j.internal.kernel.api.helpers.RelationshipSelectionCursor;
+import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
 import org.neo4j.internal.kernel.api.helpers.RelationshipSelections;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.StatementConstants;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.storable.DurationValue;
 import org.neo4j.values.storable.PointValue;
 import org.neo4j.values.storable.TemporalValue;
 import org.neo4j.values.storable.Value;
-import org.neo4j.values.storable.Values;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.VirtualNodeValue;
 import org.neo4j.values.virtual.VirtualRelationshipValue;
@@ -47,7 +47,7 @@ import static org.neo4j.values.storable.Values.NO_VALUE;
 /**
  * Utilities for working with cursors from within generated code
  */
-@SuppressWarnings( {"Duplicates", "unused"} )
+@SuppressWarnings( {"Duplicates"} )
 public final class CursorUtils
 {
     /**
@@ -79,6 +79,7 @@ public final class CursorUtils
     {
         return nodeGetProperty( read, nodeCursor, node, propertyCursor, prop, true );
     }
+
     /**
      * Fetches a given property from a node
      *
@@ -102,7 +103,7 @@ public final class CursorUtils
     {
         if ( prop == StatementConstants.NO_SUCH_PROPERTY_KEY )
         {
-            return Values.NO_VALUE;
+            return NO_VALUE;
         }
         read.singleNode( node, nodeCursor );
         if ( !nodeCursor.next() )
@@ -113,19 +114,42 @@ public final class CursorUtils
             }
             else
             {
-                return Values.NO_VALUE;
+                return NO_VALUE;
             }
         }
         nodeCursor.properties( propertyCursor );
-        while ( propertyCursor.next() )
-        {
-            if ( propertyCursor.propertyKey() == prop )
-            {
-                return propertyCursor.propertyValue();
-            }
-        }
+        return propertyCursor.seekProperty( prop ) ? propertyCursor.propertyValue() : NO_VALUE;
+    }
 
-        return Values.NO_VALUE;
+    /**
+     * Checks if a given node has the given property
+     *
+     * @param read The current Read instance
+     * @param nodeCursor The node cursor to use
+     * @param node The id of the node
+     * @param propertyCursor The property cursor to use
+     * @param prop The id of the property to find
+     * @return <code>true</code> if node has property otherwise <code>false</code>
+     */
+    public static boolean nodeHasProperty(
+            Read read,
+            NodeCursor nodeCursor,
+            long node,
+            PropertyCursor propertyCursor,
+            int prop
+    ) throws EntityNotFoundException
+    {
+        if ( prop == StatementConstants.NO_SUCH_PROPERTY_KEY )
+        {
+            return false;
+        }
+        read.singleNode( node, nodeCursor );
+        if ( !nodeCursor.next() )
+        {
+           return false;
+        }
+        nodeCursor.properties( propertyCursor );
+        return propertyCursor.seekProperty( prop );
     }
 
     /**
@@ -148,22 +172,22 @@ public final class CursorUtils
         return nodeCursor.hasLabel( label );
     }
 
-    public static RelationshipSelectionCursor nodeGetRelationships( Read read, CursorFactory cursors, NodeCursor node,
-            long nodeId, Direction direction, int[] types )
+    public static RelationshipTraversalCursor nodeGetRelationships( Read read, CursorFactory cursors, NodeCursor node,
+            long nodeId, Direction direction, int[] types, PageCursorTracer cursorTracer )
     {
         read.singleNode( nodeId, node );
         if ( !node.next() )
         {
-            return RelationshipSelectionCursor.EMPTY;
+            return RelationshipTraversalCursor.EMPTY;
         }
         switch ( direction )
         {
         case OUTGOING:
-            return RelationshipSelections.outgoingCursor( cursors, node, types );
+            return RelationshipSelections.outgoingCursor( cursors, node, types, cursorTracer );
         case INCOMING:
-            return RelationshipSelections.incomingCursor( cursors, node, types );
+            return RelationshipSelections.incomingCursor( cursors, node, types, cursorTracer );
         case BOTH:
-            return RelationshipSelections.allCursor( cursors, node, types );
+            return RelationshipSelections.allCursor( cursors, node, types, cursorTracer );
         default:
             throw new IllegalStateException( "Unknown direction " + direction );
         }
@@ -214,7 +238,7 @@ public final class CursorUtils
     {
         if ( prop == StatementConstants.NO_SUCH_PROPERTY_KEY )
         {
-            return Values.NO_VALUE;
+            return NO_VALUE;
         }
         read.singleRelationship( relationship, relationshipCursor );
         if ( !relationshipCursor.next() )
@@ -226,26 +250,48 @@ public final class CursorUtils
             }
             else
             {
-                return Values.NO_VALUE;
+                return NO_VALUE;
             }
         }
         relationshipCursor.properties( propertyCursor );
-        while ( propertyCursor.next() )
-        {
-            if ( propertyCursor.propertyKey() == prop )
-            {
-                return propertyCursor.propertyValue();
-            }
-        }
-
-        return Values.NO_VALUE;
+        return propertyCursor.seekProperty( prop ) ? propertyCursor.propertyValue() : NO_VALUE;
     }
 
-    public static RelationshipSelectionCursor nodeGetRelationships( Read read, CursorFactory cursors, NodeCursor node,
-            long nodeId,
-            Direction direction )
+    /**
+     * Checks if a given relationship has the given property
+     *
+     * @param read The current Read instance
+     * @param relationshipCursor The relationship cursor to use
+     * @param relationship The id of the relationship
+     * @param propertyCursor The property cursor to use
+     * @param prop The id of the property to find
+     * @return <code>true</code> if relationship has property otherwise <code>false</code>
+     */
+    public static Boolean relationshipHasProperty(
+            Read read,
+            RelationshipScanCursor relationshipCursor,
+            long relationship,
+            PropertyCursor propertyCursor,
+            int prop
+    ) throws EntityNotFoundException
     {
-        return nodeGetRelationships( read, cursors, node, nodeId, direction, null );
+        if ( prop == StatementConstants.NO_SUCH_PROPERTY_KEY )
+        {
+            return false;
+        }
+        read.singleRelationship( relationship, relationshipCursor );
+        if ( !relationshipCursor.next() )
+        {
+            return false;
+        }
+        relationshipCursor.properties( propertyCursor );
+        return propertyCursor.seekProperty( prop );
+    }
+
+    public static RelationshipTraversalCursor nodeGetRelationships( Read read, CursorFactory cursors, NodeCursor node,
+            long nodeId, Direction direction, PageCursorTracer cursorTracer )
+    {
+        return nodeGetRelationships( read, cursors, node, nodeId, direction, null, cursorTracer );
     }
 
     public static AnyValue propertyGet( String key,
@@ -293,7 +339,7 @@ public final class CursorUtils
         }
         else
         {
-            throw new CypherTypeException( format( "Type mismatch: expected a map but was %s", container.toString() ),
+            throw new CypherTypeException( format( "Type mismatch: expected a map but was %s", container ),
                     null );
         }
     }

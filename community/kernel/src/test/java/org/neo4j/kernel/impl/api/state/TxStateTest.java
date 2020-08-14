@@ -59,6 +59,8 @@ import org.neo4j.kernel.impl.util.collection.CollectionsFactory;
 import org.neo4j.kernel.impl.util.collection.CollectionsFactorySupplier;
 import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSets;
 import org.neo4j.kernel.impl.util.diffsets.MutableLongDiffSetsImpl;
+import org.neo4j.memory.LocalMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageProperty;
 import org.neo4j.storageengine.api.txstate.DiffSets;
 import org.neo4j.storageengine.api.txstate.LongDiffSets;
@@ -71,10 +73,8 @@ import org.neo4j.values.storable.ValueTuple;
 import org.neo4j.values.storable.Values;
 
 import static java.util.Collections.singleton;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.eclipse.collections.impl.set.mutable.primitive.LongHashSet.newSetWith;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -103,6 +103,7 @@ abstract class TxStateTest
     private final CollectionsFactorySupplier collectionsFactorySupplier;
     private CollectionsFactory collectionsFactory;
     private TxState state;
+    private MemoryTracker memoryTracker;
 
     TxStateTest( CollectionsFactorySupplier collectionsFactorySupplier )
     {
@@ -112,15 +113,16 @@ abstract class TxStateTest
     @BeforeEach
     void before()
     {
+        memoryTracker = new LocalMemoryTracker();
         collectionsFactory = spy( collectionsFactorySupplier.create() );
-        state = new TxState( collectionsFactory );
+        state = new TxState( collectionsFactory, memoryTracker );
     }
 
     @AfterEach
     void after()
     {
         collectionsFactory.release();
-        assertEquals( 0L, collectionsFactory.getMemoryTracker().usedDirectMemory(), "Seems like native memory is leaking" );
+        assertEquals( 0L, memoryTracker.usedNativeMemory(), "Seems like native memory is leaking" );
     }
 
     @Test
@@ -198,6 +200,84 @@ abstract class TxStateTest
 
         // THEN
         assertEquals( newSetWith( 0L, 2L ), nodes );
+    }
+
+    @Test
+    void shouldGetAddedRelationshipsByType()
+    {
+        // GIVEN
+        state.relationshipDoCreate( 1, 1, 1, 1 );
+        state.relationshipDoCreate( 2, 1, 1, 1 );
+        state.relationshipDoCreate( 3, 2, 1, 1 );
+
+        // WHEN
+        LongSet addedRelationshipsWithType = state.relationshipsWithTypeChanged( 1 ).getAdded();
+
+        // THEN
+        assertEquals( newSetWith( 1, 2 ), addedRelationshipsWithType );
+    }
+
+    @Test
+    void shouldGetRemovedRelationshipsByType()
+    {
+        // GIVEN
+        state.relationshipDoDelete( 1, 1, 1, 1 );
+        state.relationshipDoDelete( 2, 1, 1, 1 );
+        state.relationshipDoDelete( 3, 2, 1, 1 );
+
+        // WHEN
+        LongSet removedRelationshipsWithType = state.relationshipsWithTypeChanged( 1 ).getRemoved();
+
+        // THEN
+        assertEquals( newSetWith( 1, 2 ), removedRelationshipsWithType );
+    }
+
+    @Test
+    void removeAddedRelationshipTypeShouldRemoveFromAdded()
+    {
+        // GIVEN
+        state.relationshipDoCreate( 1, 1, 1, 1 );
+        state.relationshipDoCreate( 2, 1, 1, 1 );
+        state.relationshipDoCreate( 3, 2, 1, 1 );
+
+        // WHEN
+        state.relationshipDoDelete( 2, 1, 1, 1 );
+        LongSet addedRelationshipsWithType = state.relationshipsWithTypeChanged( 1 ).getAdded();
+
+        // THEN
+        assertEquals( newSetWith( 1 ), addedRelationshipsWithType );
+    }
+
+    @Test
+    void addRemovedRelationshipTypeShouldRemoveFromRemoved()
+    {
+        // GIVEN
+        state.relationshipDoDelete( 1, 1, 1, 1 );
+        state.relationshipDoDelete( 2, 1, 1, 1 );
+        state.relationshipDoDelete( 3, 2, 1, 1 );
+
+        // WHEN
+        state.relationshipDoCreate( 2, 1, 1, 1 );
+        LongSet removedRelationshipsWithType = state.relationshipsWithTypeChanged( 1 ).getRemoved();
+
+        // THEN
+        assertEquals( newSetWith( 1 ), removedRelationshipsWithType );
+    }
+
+    @Test
+    void removeRelationshipAddedInThisTxShouldRemoveFromTypeChanges()
+    {
+        // GIVEN
+        state.relationshipDoCreate( 1, 1, 1, 1 );
+        state.relationshipDoCreate( 2, 1, 1, 1 );
+        state.relationshipDoCreate( 3, 2, 1, 1 );
+
+        // WHEN
+        state.relationshipDoDeleteAddedInThisTx( 2 );
+        LongSet addedRelationshipsWithType = state.relationshipsWithTypeChanged( 1 ).getAdded();
+
+        // THEN
+        assertEquals( newSetWith( 1 ), addedRelationshipsWithType );
     }
 
     @Test
@@ -296,7 +376,7 @@ abstract class TxStateTest
         SchemaDescriptor schema = indexOn_1_1.schema();
         int[] labels = schema.getEntityTokenIds();
         assertEquals( schema.entityType(), EntityType.NODE );
-        assertEquals( labels.length, 1 );
+        assertEquals( 1, labels.length );
         assertEquals( asSet( indexOn_1_1 ), state.indexDiffSetsByLabel( labels[0] ).getAdded() );
     }
 
@@ -331,7 +411,7 @@ abstract class TxStateTest
         state.nodeDoDelete( nodeId );
 
         // Then
-        assertThat( state.addedAndRemovedNodes().getRemoved(), equalTo( newSetWith( nodeId ) ) );
+        assertThat( state.addedAndRemovedNodes().getRemoved() ).isEqualTo( newSetWith( nodeId ) );
     }
 
     @Test
@@ -814,7 +894,7 @@ abstract class TxStateTest
     @Test
     void dataRevisionMustChangeOnDataChange()
     {
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
         LongHashSet observedRevisions = new LongHashSet();
         observedRevisions.add( 0L );
@@ -875,55 +955,55 @@ abstract class TxStateTest
     @Test
     void dataRevisionMustNotChangeOnSchemaChanges()
     {
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.indexDoAdd( indexOn_1_1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.indexDoDrop( indexOn_1_1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.indexDoUnRemove( indexOn_1_1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         UniquenessConstraintDescriptor constraint1 = ConstraintDescriptorFactory.uniqueForLabel( 1, 17 );
         state.constraintDoAdd( constraint1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.constraintDoDrop( constraint1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.constraintDoUnRemove( constraint1 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         IndexBackedConstraintDescriptor constraint2 = ConstraintDescriptorFactory.nodeKeyForLabel( 0, 0 );
         state.constraintDoAdd( constraint2, IndexPrototype.uniqueForSchema( forLabel( 0, 0 ) ).withName( "index" ).materialise( 0 ) );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.labelDoCreateForName( "Label", false, 0 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.relationshipTypeDoCreateForName( "REL", false, 0 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         state.propertyKeyDoCreateForName( "prop", false, 0 );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
 
         // This is not strictly a schema-change, but it is a "non-data" change in that these will not transform into store updates.
         // Or schema updates for that matter. We only do these to speed up the transaction state filtering of schema index query results.
         state.indexDoUpdateEntry( indexOn_1_1.schema(), 0, ValueTuple.of( Values.booleanValue( true ) ), ValueTuple.of( Values.booleanValue( false ) ) );
-        assertThat( state.getDataRevision(), is( 0L ) );
+        assertThat( state.getDataRevision() ).isEqualTo( 0L );
         assertFalse( state.hasDataChanges() );
     }
 
@@ -938,8 +1018,8 @@ abstract class TxStateTest
         nodeState.removeProperty( 3 );
         nodeState.changeProperty( 4, stringValue( "bar" ) );
 
-        verify( collectionsFactory, times( 2 ) ).newValuesMap();
-        verify( collectionsFactory ).newLongSet();
+        verify( collectionsFactory, times( 2 ) ).newValuesMap( memoryTracker );
+        verify( collectionsFactory ).newLongSet( memoryTracker );
         verifyNoMoreInteractions( collectionsFactory );
     }
 
@@ -951,7 +1031,19 @@ abstract class TxStateTest
         diffSets.add( 1 );
         diffSets.remove( 2 );
 
-        verify( collectionsFactory, times( 2 ) ).newLongSet();
+        verify( collectionsFactory, times( 2 ) ).newLongSet( memoryTracker );
+        verifyNoMoreInteractions( collectionsFactory );
+    }
+
+    @Test
+    void getOrCreateTypeStateRelationshipDiffSets_useCollectionsFactory()
+    {
+        final MutableLongDiffSets diffSets = state.getOrCreateTypeStateRelationshipDiffSets(1);
+
+        diffSets.add( 1 );
+        diffSets.remove( 2 );
+
+        verify( collectionsFactory, times( 2 ) ).newLongSet( memoryTracker );
         verifyNoMoreInteractions( collectionsFactory );
     }
 
@@ -961,13 +1053,13 @@ abstract class TxStateTest
         final MutableLongDiffSets diffSets = state.getOrCreateIndexUpdatesForSeek( new HashMap<>(), ValueTuple.of( stringValue( "test" ) ) );
         diffSets.add( 1 );
         diffSets.remove( 2 );
-        verify( collectionsFactory, times( 2 ) ).newLongSet();
+        verify( collectionsFactory, times( 2 ) ).newLongSet( memoryTracker );
         verifyNoMoreInteractions( collectionsFactory );
     }
 
     private LongDiffSets addedNodes( long... added )
     {
-        return new MutableLongDiffSetsImpl( LongSets.mutable.of( added ), LongSets.mutable.empty(), collectionsFactory );
+        return new MutableLongDiffSetsImpl( LongSets.mutable.of( added ), LongSets.mutable.empty(), collectionsFactory, memoryTracker );
     }
 
     private TreeMap<ValueTuple,LongDiffSets> sortedAddedNodesDiffSets( long... added )
@@ -1071,8 +1163,8 @@ abstract class TxStateTest
                 SchemaDescriptor schema = descriptor.schema();
                 int[] labelIds = schema.getEntityTokenIds();
                 int[] propertyKeyIds = schema.getPropertyIds();
-                assertEquals( labelIds.length, 1 );
-                assertEquals( propertyKeyIds.length, 1 );
+                assertEquals( 1, labelIds.length );
+                assertEquals( 1, propertyKeyIds.length );
                 for ( Pair<Long,T> entry : nodesWithValues )
                 {
                     long nodeId = entry.first();

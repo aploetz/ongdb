@@ -19,7 +19,6 @@
  */
 package org.neo4j.internal.batchimport.store;
 
-import java.io.Closeable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -29,12 +28,14 @@ import java.util.function.IntFunction;
 import java.util.function.ToIntFunction;
 
 import org.neo4j.internal.helpers.collection.Iterables;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.TokenStore;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
 import org.neo4j.kernel.impl.store.record.PropertyKeyTokenRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.TokenRecord;
+import org.neo4j.memory.EmptyMemoryTracker;
 
 import static java.lang.Math.max;
 import static java.lang.Math.toIntExact;
@@ -42,11 +43,10 @@ import static org.neo4j.kernel.impl.store.PropertyStore.encodeString;
 
 /**
  * Batching version of a {@link TokenStore} where tokens can be created and retrieved, but only persisted
- * to storage as part of {@link #close() closing}. Instances of this class are thread safe
+ * to storage as part of {@link #flush(PageCursorTracer) flush}. Instances of this class are thread safe
  * to call {@link #getOrCreateId(String)} methods on.
  */
-public abstract class BatchingTokenRepository<RECORD extends TokenRecord>
-        implements ToIntFunction<Object>, Closeable
+public abstract class BatchingTokenRepository<RECORD extends TokenRecord> implements ToIntFunction<Object>
 {
     private final Map<String,Integer> tokens = new HashMap<>();
     private final TokenStore<RECORD> store;
@@ -163,42 +163,33 @@ public abstract class BatchingTokenRepository<RECORD extends TokenRecord>
         return highId;
     }
 
-    /**
-     * Closes this repository and writes all created tokens to the underlying store.
-     */
-    @Override
-    public void close()
-    {
-        flush();
-    }
-
-    public void flush()
+    public void flush( PageCursorTracer cursorTracer )
     {
         int highest = highestCreatedId;
         for ( Map.Entry<Integer,String> tokenToCreate : sortCreatedTokensById() )
         {
             if ( tokenToCreate.getKey() > highestCreatedId )
             {
-                createToken( tokenToCreate.getValue(), tokenToCreate.getKey() );
+                createToken( tokenToCreate.getValue(), tokenToCreate.getKey(), cursorTracer );
                 highest = Math.max( highest, tokenToCreate.getKey() );
             }
         }
         // Store them
-        int highestId = max( toIntExact( store.getHighestPossibleIdInUse() ), highest );
+        int highestId = max( toIntExact( store.getHighestPossibleIdInUse( cursorTracer ) ), highest );
         store.setHighestPossibleIdInUse( highestId );
         highestCreatedId = highestId;
     }
 
-    private void createToken( String name, int tokenId )
+    private void createToken( String name, int tokenId, PageCursorTracer cursorTracer )
     {
         RECORD record = recordInstantiator.apply( tokenId );
         record.setInUse( true );
         record.setCreated();
-        Collection<DynamicRecord> nameRecords = store.allocateNameRecords( encodeString( name ) );
+        Collection<DynamicRecord> nameRecords = store.allocateNameRecords( encodeString( name ), cursorTracer, EmptyMemoryTracker.INSTANCE );
         record.setNameId( (int) Iterables.first( nameRecords ).getId() );
         record.addNameRecords( nameRecords );
-        store.updateRecord( record );
-        nameRecords.forEach( store.getNameStore()::updateRecord );
+        store.updateRecord( record, cursorTracer );
+        nameRecords.forEach( nameRecord -> store.getNameStore().updateRecord( nameRecord, cursorTracer ) );
     }
 
     private Iterable<Map.Entry<Integer,String>> sortCreatedTokensById()

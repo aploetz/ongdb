@@ -19,22 +19,22 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.{AggregationTable, AggregationTableFactory}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation.{OrderedGroupingAggTable, OrderedNonGroupingAggTable}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTable
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTableFactory
+import org.neo4j.cypher.internal.util.attribution.Id
 
 /**
-  * Specialization of [[EagerAggregationPipe]] that leverages the order of some or all grouping columns.
-  * Will use [[OrderedGroupingAggTable]] if some grouping columns do not have a provided order and
-  * [[OrderedNonGroupingAggTable]] if all grouping columns have a provided order.
-  */
+ * Specialization of [[EagerAggregationPipe]] that leverages the order of some or all grouping columns.
+ * Will use [[OrderedGroupingAggTable]] if some grouping columns do not have a provided order and
+ * [[OrderedNonGroupingAggTable]] if all grouping columns have a provided order.
+ */
 case class OrderedAggregationPipe(source: Pipe,
                                   tableFactory: OrderedAggregationTableFactory)
                                  (val id: Id = Id.INVALID_ID)
   extends AggregationPipe(source, tableFactory) with OrderedInputPipe {
-  override def getReceiver(state: QueryState): OrderedChunkReceiver = tableFactory.table(state, executionContextFactory)
+  override def getReceiver(state: QueryState): OrderedChunkReceiver = tableFactory.table(state, executionContextFactory, id)
 }
 
 trait OrderedAggregationTableFactory extends AggregationTableFactory {
-  override def table(state: QueryState, executionContextFactory: ExecutionContextFactory): AggregationTable with OrderedChunkReceiver
+  override def table(state: QueryState, executionContextFactory: ExecutionContextFactory, operatorId: Id): AggregationTable with OrderedChunkReceiver
 }

@@ -27,6 +27,7 @@ import org.neo4j.internal.batchimport.input.Group;
 import org.neo4j.internal.batchimport.input.InputChunk;
 import org.neo4j.internal.batchimport.store.BatchingNeoStores;
 import org.neo4j.internal.batchimport.store.BatchingTokenRepository;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.InlineNodeLabels;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
@@ -34,6 +35,7 @@ import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.PrimitiveRecord;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Values;
 
 import static java.lang.Long.max;
@@ -61,9 +63,9 @@ public class NodeImporter extends EntityImporter
     private long highestId = -1;
     private boolean hasLabelField;
 
-    NodeImporter( BatchingNeoStores stores, IdMapper idMapper, Monitor monitor )
+    NodeImporter( BatchingNeoStores stores, IdMapper idMapper, Monitor monitor, PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
     {
-        super( stores, monitor );
+        super( stores, monitor, pageCacheTracer, memoryTracker );
         this.labelTokenRepository = stores.getLabelRepository();
         this.idMapper = idMapper;
         this.nodeStore = stores.getNodeStore();
@@ -85,18 +87,18 @@ public class NodeImporter extends EntityImporter
     @Override
     public boolean id( Object id, Group group )
     {
-        long nodeId = nodeIds.next();
+        long nodeId = nodeIds.nextId( cursorTracer );
         nodeRecord.setId( nodeId );
         idMapper.put( id, nodeId, group );
 
         // also store this id as property in temp property store
         if ( id != null )
         {
-            idPropertyStore.encodeValue( idPropertyBlock, 0, Values.of( id ) );
+            idPropertyStore.encodeValue( idPropertyBlock, 0, Values.of( id ), cursorTracer, memoryTracker );
             idPropertyRecord.addPropertyBlock( idPropertyBlock );
             idPropertyRecord.setId( nodeId ); // yes nodeId
             idPropertyRecord.setInUse( true );
-            idPropertyStore.updateRecord( idPropertyRecord, IGNORE );
+            idPropertyStore.updateRecord( idPropertyRecord, IGNORE, cursorTracer );
             idPropertyRecord.clear();
         }
         return true;
@@ -130,21 +132,21 @@ public class NodeImporter extends EntityImporter
         // Make sure we have an ID
         if ( nodeRecord.getId() == NULL_REFERENCE.longValue() )
         {
-            nodeRecord.setId( nodeIds.next() );
+            nodeRecord.setId( nodeIds.nextId( cursorTracer ) );
         }
 
         // Compose the labels
         if ( !hasLabelField )
         {
             long[] labelIds = labelTokenRepository.getOrCreateIds( labels, labelsCursor );
-            InlineNodeLabels.putSorted( nodeRecord, labelIds, null, nodeStore.getDynamicLabelStore() );
+            InlineNodeLabels.putSorted( nodeRecord, labelIds, null, nodeStore.getDynamicLabelStore(), cursorTracer, memoryTracker );
         }
         labelsCursor = 0;
 
         // Write data to stores
-        nodeRecord.setNextProp( createAndWritePropertyChain() );
+        nodeRecord.setNextProp( createAndWritePropertyChain( cursorTracer ) );
         nodeRecord.setInUse( true );
-        nodeStore.updateRecord( nodeRecord, IGNORE );
+        nodeStore.updateRecord( nodeRecord, IGNORE, cursorTracer );
         nodeCount++;
         nodeRecord.clear();
         nodeRecord.setId( NULL_REFERENCE.longValue() );
@@ -164,12 +166,13 @@ public class NodeImporter extends EntityImporter
         super.close();
         monitor.nodesImported( nodeCount );
         nodeStore.setHighestPossibleIdInUse( highestId ); // for the case of #id(long)
+        cursorTracer.close();
     }
 
     @Override
     void freeUnusedIds()
     {
         super.freeUnusedIds();
-        freeUnusedIds( nodeStore, nodeIds );
+        freeUnusedIds( nodeStore, nodeIds, cursorTracer );
     }
 }

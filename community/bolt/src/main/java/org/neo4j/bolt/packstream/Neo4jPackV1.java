@@ -25,8 +25,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetTime;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.neo4j.bolt.messaging.BoltIOException;
 import org.neo4j.bolt.messaging.StructType;
@@ -39,6 +37,7 @@ import org.neo4j.values.storable.TextArray;
 import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.Values;
 import org.neo4j.values.virtual.ListValue;
+import org.neo4j.values.virtual.ListValueBuilder;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.MapValueBuilder;
 import org.neo4j.values.virtual.NodeValue;
@@ -114,6 +113,12 @@ public class Neo4jPackV1 implements Neo4jPack
         public void pack( AnyValue value ) throws IOException
         {
             value.writeTo( this );
+        }
+
+        @Override
+        public EntityMode entityMode()
+        {
+            return EntityMode.FULL;
         }
 
         @Override
@@ -277,23 +282,21 @@ public class Neo4jPackV1 implements Neo4jPack
             packListHeader( size );
             if ( size > 0 )
             {
+                RelationshipValue edge = relationships[0];
+                for ( long id : relationshipIndexes.keys() )
                 {
-                    RelationshipValue edge = relationships[0];
-                    for ( long id : relationshipIndexes.keys() )
+                    int i = 1;
+                    while ( edge.id() != id )
                     {
-                        int i = 1;
-                        while ( edge.id() != id )
-                        {
-                            edge = relationships[i++];
-                        }
-                        //Note that we are not doing relationship.writeTo(this) here since the serialization protocol
-                        //requires these to be _unbound relationships_, thus relationships without any start node nor
-                        // end node.
-                        packStructHeader( UNBOUND_RELATIONSHIP_SIZE, UNBOUND_RELATIONSHIP );
-                        pack( edge.id() );
-                        edge.type().writeTo( this );
-                        edge.properties().writeTo( this );
+                        edge = relationships[i++];
                     }
+                    //Note that we are not doing relationship.writeTo(this) here since the serialization protocol
+                    //requires these to be _unbound relationships_, thus relationships without any start node nor
+                    // end node.
+                    packStructHeader( UNBOUND_RELATIONSHIP_SIZE, UNBOUND_RELATIONSHIP );
+                    pack( edge.id() );
+                    edge.type().writeTo( this );
+                    edge.properties().writeTo( this );
                 }
             }
         }
@@ -468,13 +471,9 @@ public class Neo4jPackV1 implements Neo4jPack
                 unpackNull();
                 return Values.NO_VALUE;
             case LIST:
-            {
                 return unpackList();
-            }
             case MAP:
-            {
                 return unpackMap();
-            }
             case STRUCT:
             {
                 long size = unpackStructHeader();
@@ -500,31 +499,31 @@ public class Neo4jPackV1 implements Neo4jPack
             }
             else if ( size == UNKNOWN_SIZE )
             {
-                List<AnyValue> list = new ArrayList<>();
+                ListValueBuilder builder = ListValueBuilder.newListBuilder();
                 boolean more = true;
                 while ( more )
                 {
                     PackType keyType = peekNextType();
-                    switch ( keyType )
+                    if ( keyType == PackType.END_OF_STREAM )
                     {
-                    case END_OF_STREAM:
                         unpack();
                         more = false;
-                        break;
-                    default:
-                        list.add( unpack() );
+                    }
+                    else
+                    {
+                        builder.add( unpack() );
                     }
                 }
-                return VirtualValues.list( list.toArray( new AnyValue[0] ) );
+                return builder.build();
             }
             else
             {
-                AnyValue[] values = new AnyValue[size];
+                ListValueBuilder builder = ListValueBuilder.newListBuilder( size );
                 for ( int i = 0; i < size; i++ )
                 {
-                    values[i] = unpack();
+                    builder.add( unpack() );
                 }
-                return VirtualValues.list( values );
+                return builder.build();
             }
         }
 

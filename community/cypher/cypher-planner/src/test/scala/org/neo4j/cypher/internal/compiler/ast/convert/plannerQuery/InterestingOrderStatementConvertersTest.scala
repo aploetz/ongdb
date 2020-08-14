@@ -20,11 +20,21 @@
 package org.neo4j.cypher.internal.compiler.ast.convert.plannerQuery
 
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.ir.InterestingOrder.{Asc, Desc}
-import org.neo4j.cypher.internal.ir._
-import org.neo4j.cypher.internal.v4_0.expressions.CountStar
-import org.neo4j.cypher.internal.logical.plans.{QualifiedName, ResolvedFunctionInvocation}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.expressions.CountStar
+import org.neo4j.cypher.internal.ir.AggregatingQueryProjection
+import org.neo4j.cypher.internal.ir.DistinctQueryProjection
+import org.neo4j.cypher.internal.ir.QueryGraph
+import org.neo4j.cypher.internal.ir.RegularQueryProjection
+import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
+import org.neo4j.cypher.internal.ir.SinglePlannerQuery
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder.Asc
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrder.Desc
+import org.neo4j.cypher.internal.ir.ordering.InterestingOrderCandidate
+import org.neo4j.cypher.internal.ir.ordering.RequiredOrderCandidate
+import org.neo4j.cypher.internal.logical.plans.QualifiedName
+import org.neo4j.cypher.internal.logical.plans.ResolvedFunctionInvocation
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class InterestingOrderStatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSupport {
 
@@ -184,7 +194,7 @@ class InterestingOrderStatementConvertersTest extends CypherFunSuite with Logica
   }
 
   test("Do not propagate unfulfillable order to previous query graph") {
-    val result = buildSinglePlannerQuery("MATCH (n) WITH n AS secretN MATCH (m) RETURN m ORDER BY m.prop")
+    val result = buildSinglePlannerQuery("MATCH (n) WITH n AS secretN MATCH (m) WHERE m.prop = secretN.prop RETURN m ORDER BY m.prop")
 
     interestingOrders(result).take(2) should be(List(
       InterestingOrder.empty,
@@ -386,5 +396,5 @@ class InterestingOrderStatementConvertersTest extends CypherFunSuite with Logica
     plannerQuery.tail match {
       case None => List(plannerQuery.interestingOrder)
       case Some(tail) => plannerQuery.interestingOrder :: interestingOrders(tail)
-  }
+    }
 }

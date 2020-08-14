@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
@@ -45,10 +46,10 @@ import static java.lang.String.format;
  * <pre>
  *   public class SomeTest
  *   {
- *     @Rule
+ *    {@literal @}Rule
  *     public TestDirectory dir = TestDirectory.testDirectory();
  *
- *     @Test
+ *    {@literal @}Test
  *     public void shouldDoSomething()
  *     {
  *       File storeDir = dir.homeDir();
@@ -76,7 +77,7 @@ public class TestDirectory extends ExternalResource
     private File testClassBaseFolder;
     private Class<?> owningTest;
     private boolean keepDirectoryAfterSuccessfulTest;
-    private File testDirectory;
+    private File directory;
 
     private TestDirectory( FileSystemAbstraction fileSystem )
     {
@@ -161,7 +162,7 @@ public class TestDirectory extends ExternalResource
         {
             throw new IllegalStateException( "Not initialized" );
         }
-        return testDirectory;
+        return directory;
     }
 
     public File homeDir( String homeDirName )
@@ -171,7 +172,7 @@ public class TestDirectory extends ExternalResource
 
     public boolean isInitialised()
     {
-        return testDirectory != null;
+        return directory != null;
     }
 
     public File directory( String name, String... path )
@@ -201,7 +202,7 @@ public class TestDirectory extends ExternalResource
     @Override
     public String toString()
     {
-        String testDirectoryName = testDirectory == null ? "<uninitialized>" : testDirectory.toString();
+        String testDirectoryName = directory == null ? "<uninitialized>" : directory.toString();
         return format( "%s[\"%s\"]", getClass().getSimpleName(), testDirectoryName );
     }
 
@@ -216,10 +217,9 @@ public class TestDirectory extends ExternalResource
         {
             if ( success && isInitialised() && !keepDirectoryAfterSuccessfulTest )
             {
-                fileSystem.deleteRecursively( testDirectory );
+                fileSystem.deleteRecursively( directory );
             }
-            testDirectory = null;
-
+            directory = null;
         }
         finally
         {
@@ -237,7 +237,7 @@ public class TestDirectory extends ExternalResource
         {
             test = "static";
         }
-        testDirectory = prepareDirectoryForTest( test );
+        directory = prepareDirectoryForTest( test );
 
     }
 
@@ -330,7 +330,7 @@ public class TestDirectory extends ExternalResource
     private void register( String test, String dir )
     {
         try ( PrintStream printStream =
-                    new PrintStream( fileSystem.openAsOutputStream( new File( ensureBase(), ".register" ), true ) ) )
+                new PrintStream( fileSystem.openAsOutputStream( new File( ensureBase(), ".register" ), true ), false, StandardCharsets.UTF_8 ) )
         {
             printStream.print( format( "%s = %s%n", dir, test ) );
         }

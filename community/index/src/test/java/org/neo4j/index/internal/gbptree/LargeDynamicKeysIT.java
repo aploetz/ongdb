@@ -47,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.index.internal.gbptree.TreeNodeDynamicSize.keyValueSizeCapFromPageSize;
 import static org.neo4j.io.pagecache.PageCache.PAGE_SIZE;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @PageCacheExtension
 @ExtendWith( RandomExtension.class )
@@ -62,14 +63,14 @@ class LargeDynamicKeysIT
     private TestDirectory testDirectory;
 
     @Test
-    void putSingleKeyLargeThanInlineCap() throws IOException
+    void putSingleKeyLargerThanInlineCap() throws IOException
     {
         try ( GBPTree<RawBytes,RawBytes> tree = createIndex() )
         {
             int keySize = tree.inlineKeyValueSizeCap();
             RawBytes key = key( keySize + 1 );
             RawBytes value = value( 0 );
-            try ( Writer<RawBytes,RawBytes> writer = tree.writer() )
+            try ( Writer<RawBytes,RawBytes> writer = tree.writer( NULL ) )
             {
                 writer.put( key, value );
             }
@@ -78,14 +79,14 @@ class LargeDynamicKeysIT
     }
 
     @Test
-    void removeSingleKeyLargeThanInlineCap() throws IOException
+    void removeSingleKeyLargerThanInlineCap() throws IOException
     {
         try ( GBPTree<RawBytes,RawBytes> tree = createIndex() )
         {
             int keySize = tree.inlineKeyValueSizeCap();
             RawBytes key = key( keySize + 1 );
             RawBytes value = value( 0 );
-            try ( Writer<RawBytes,RawBytes> writer = tree.writer() )
+            try ( Writer<RawBytes,RawBytes> writer = tree.writer( NULL ) )
             {
                 writer.put( key, value );
                 writer.remove( key );
@@ -102,7 +103,7 @@ class LargeDynamicKeysIT
             int keySize = tree.keyValueSizeCap();
             RawBytes key = key( keySize );
             RawBytes value = value( 0 );
-            try ( Writer<RawBytes,RawBytes> writer = tree.writer() )
+            try ( Writer<RawBytes,RawBytes> writer = tree.writer( NULL ) )
             {
                 writer.put( key, value );
             }
@@ -118,7 +119,7 @@ class LargeDynamicKeysIT
             int keySize = tree.keyValueSizeCap() + 1;
             RawBytes key = key( keySize );
             RawBytes value = value( 0 );
-            try ( Writer<RawBytes,RawBytes> writer = tree.writer() )
+            try ( Writer<RawBytes,RawBytes> writer = tree.writer( NULL ) )
             {
                 assertThrows( IllegalArgumentException.class, () -> writer.put( key, value ) );
             }
@@ -141,9 +142,9 @@ class LargeDynamicKeysIT
             }
             Collections.shuffle( entries, random.random() );
             insertAndValidate( tree, entries );
-            tree.consistencyCheck();
+            tree.consistencyCheck( NULL );
             removeAndValidate( tree, entries );
-            tree.consistencyCheck();
+            tree.consistencyCheck( NULL );
         }
     }
 
@@ -176,7 +177,7 @@ class LargeDynamicKeysIT
             }
 
             insertAndValidate( index, entries );
-            index.consistencyCheck();
+            index.consistencyCheck( NULL );
         }
     }
 
@@ -224,8 +225,7 @@ class LargeDynamicKeysIT
             for ( int i = 0; i < 1_000; i++ )
             {
                 // value, based on i
-                RawBytes value = new RawBytes();
-                value.bytes = new byte[random.nextInt( minValueSize, maxValueSize )];
+                RawBytes value = new RawBytes( new byte[random.nextInt( minValueSize, maxValueSize )] );
                 random.nextBytes( value.bytes );
 
                 // key, randomly generated
@@ -235,13 +235,12 @@ class LargeDynamicKeysIT
                     string = random.nextAlphaNumericString( minKeySize, maxKeySize );
                 }
                 while ( !generatedStrings.add( string ) );
-                RawBytes key = new RawBytes();
-                key.bytes = UTF8.encode( string );
+                RawBytes key = new RawBytes( UTF8.encode( string ) );
                 entries.add( Pair.of( key, value ) );
             }
 
             insertAndValidate( tree, entries );
-            tree.consistencyCheck();
+            tree.consistencyCheck( NULL );
         }
     }
 
@@ -277,7 +276,7 @@ class LargeDynamicKeysIT
         Iterator<Pair<RawBytes,RawBytes>> iterator = entries.iterator();
         while ( iterator.hasNext() )
         {
-            try ( Writer<RawBytes,RawBytes> writer = tree.writer() )
+            try ( Writer<RawBytes,RawBytes> writer = tree.writer( NULL ) )
             {
                 while ( iterator.hasNext() && random.nextDouble() > checkpointFrequency )
                 {
@@ -285,13 +284,13 @@ class LargeDynamicKeysIT
                     writerAction.accept( writer, entry );
                 }
             }
-            tree.checkpoint( IOLimiter.UNLIMITED );
+            tree.checkpoint( IOLimiter.UNLIMITED, NULL );
         }
     }
 
     private void assertDontFind( GBPTree<RawBytes,RawBytes> tree, RawBytes key ) throws IOException
     {
-        try ( Seeker<RawBytes,RawBytes> seek = tree.seek( key, key ) )
+        try ( Seeker<RawBytes,RawBytes> seek = tree.seek( key, key, NULL ) )
         {
             assertFalse( seek.next() );
         }
@@ -299,7 +298,7 @@ class LargeDynamicKeysIT
 
     private void assertFindExact( GBPTree<RawBytes,RawBytes> tree, RawBytes key, RawBytes value ) throws IOException
     {
-        try ( Seeker<RawBytes,RawBytes> seek = tree.seek( key, key ) )
+        try ( Seeker<RawBytes,RawBytes> seek = tree.seek( key, key, NULL ) )
         {
             assertTrue( seek.next() );
             assertEquals( 0, layout.compare( key, seek.key() ) );
@@ -308,7 +307,7 @@ class LargeDynamicKeysIT
         }
     }
 
-    private GBPTree<RawBytes,RawBytes> createIndex() throws IOException
+    private GBPTree<RawBytes,RawBytes> createIndex()
     {
         // some random padding
         return new GBPTreeBuilder<>( pageCache, testDirectory.file( "index" ), layout ).build();

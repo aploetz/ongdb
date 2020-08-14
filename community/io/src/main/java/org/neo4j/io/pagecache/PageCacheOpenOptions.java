@@ -19,11 +19,14 @@
  */
 package org.neo4j.io.pagecache;
 
+import com.sun.nio.file.ExtendedOpenOption;
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.file.OpenOption;
 
 /**
- * {@link OpenOption}s that are specific to {@link PageCache#map(File, int, OpenOption...)},
+ * {@link OpenOption}s that are specific to {@link PageCache#map(File, int, ImmutableSet)},
  * and not normally supported by file systems.
  */
 public enum PageCacheOpenOptions implements OpenOption
@@ -36,7 +39,10 @@ public enum PageCacheOpenOptions implements OpenOption
     ANY_PAGE_SIZE,
 
     /**
-     * Mapped file will only use a single channel, overriding the otherwise configured striping amount, e.g. one channel per core.
+     * Map the file with direct I/O flag.
+     * Please note that support for this option is limited.
+     * Please check that your platform is supported before providing this option.
+     * @see ExtendedOpenOption for details.
      */
-    NO_CHANNEL_STRIPING
+    DIRECT
 }

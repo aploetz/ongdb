@@ -20,7 +20,7 @@
 package org.neo4j.server.rest.repr;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -31,16 +31,13 @@ import org.neo4j.server.rest.domain.JsonHelper;
 import org.neo4j.server.rest.domain.JsonParseException;
 import org.neo4j.server.rest.repr.formats.MapWrappingWriter;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.kernel.api.exceptions.Status.General.UnknownError;
 
-public class ExceptionRepresentationTest
+class ExceptionRepresentationTest
 {
-
     @Test
-    public void shouldIncludeCause() throws Exception
+    void shouldIncludeCause() throws Exception
     {
         // Given
         ExceptionRepresentation rep = new ExceptionRepresentation(
@@ -50,12 +47,12 @@ public class ExceptionRepresentationTest
         JsonNode out = serialize( rep );
 
         // Then
-        assertThat( out.get("cause").get("message").asText(), is( "Haha" ) );
-        assertThat( out.get( "cause" ).get("cause").get("message").asText(), is( "HAHA!") );
+        assertThat( out.get( "cause" ).get( "message" ).asText() ).isEqualTo( "Haha" );
+        assertThat( out.get( "cause" ).get( "cause" ).get( "message" ).asText() ).isEqualTo( "HAHA!" );
     }
 
     @Test
-    public void shouldRenderErrorsWithNeo4jStatusCode() throws Exception
+    void shouldRenderErrorsWithNeo4jStatusCode() throws Exception
     {
         // Given
         ExceptionRepresentation rep = new ExceptionRepresentation( new KernelException( UnknownError, "Hello" )
@@ -66,12 +63,12 @@ public class ExceptionRepresentationTest
         JsonNode out = serialize( rep );
 
         // Then
-        assertThat(out.get("errors").get(0).get("code").asText(), equalTo("Neo.DatabaseError.General.UnknownError"));
-        assertThat(out.get("errors").get(0).get("message").asText(), equalTo("Hello"));
+        assertThat( out.get( "errors" ).get( 0 ).get( "code" ).asText() ).isEqualTo( "Neo.DatabaseError.General.UnknownError" );
+        assertThat( out.get( "errors" ).get( 0 ).get( "message" ).asText() ).isEqualTo( "Hello" );
     }
 
     @Test
-    public void shouldExcludeLegacyFormatIfAsked() throws Exception
+    void shouldExcludeLegacyFormatIfAsked() throws Exception
     {
         // Given
         ExceptionRepresentation rep = new ExceptionRepresentation( new KernelException( UnknownError, "Hello" )
@@ -82,9 +79,9 @@ public class ExceptionRepresentationTest
         JsonNode out = serialize( rep );
 
         // Then
-        assertThat(out.get("errors").get(0).get("code").asText(), equalTo("Neo.DatabaseError.General.UnknownError"));
-        assertThat(out.get("errors").get(0).get("message").asText(), equalTo("Hello"));
-        assertThat(out.has( "message" ), equalTo(false));
+        assertThat( out.get( "errors" ).get( 0 ).get( "code" ).asText() ).isEqualTo( "Neo.DatabaseError.General.UnknownError" );
+        assertThat( out.get( "errors" ).get( 0 ).get( "message" ).asText() ).isEqualTo( "Hello" );
+        assertThat( out.has( "message" ) ).isEqualTo( false );
     }
 
     private JsonNode serialize( ExceptionRepresentation rep ) throws JsonParseException

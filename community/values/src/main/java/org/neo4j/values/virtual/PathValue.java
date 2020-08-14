@@ -29,6 +29,11 @@ import org.neo4j.values.TernaryComparator;
 import org.neo4j.values.ValueMapper;
 import org.neo4j.values.VirtualValue;
 
+<<<<<<< HEAD
+=======
+import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
+
+>>>>>>> neo4j/4.1
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 
 public abstract class PathValue extends VirtualValue
@@ -147,32 +152,24 @@ public abstract class PathValue extends VirtualValue
         return "Path";
     }
 
-    @Override
-    protected long estimatedPayloadSize()
-    {
-        int length = size();
-        //nodes are assumed to be 32 bytes and relationships 48
-        return 4 + length * 48 + (length + 1) * 32;
-    }
-
     public ListValue asList()
     {
         NodeValue[] nodes = nodes();
         RelationshipValue[] relationships = relationships();
         int size = nodes.length + relationships.length;
-        AnyValue[] anyValues = new AnyValue[size];
+        ListValueBuilder builder = ListValueBuilder.newListBuilder( size );
         for ( int i = 0; i < size; i++ )
         {
             if ( i % 2 == 0 )
             {
-                anyValues[i] = nodes[i / 2];
+                builder.add( nodes[i / 2] );
             }
             else
             {
-                anyValues[i] = relationships[i / 2];
+                builder.add( relationships[i / 2] );
             }
         }
-        return VirtualValues.list( anyValues );
+        return builder.build();
     }
 
     public int size()
@@ -180,12 +177,14 @@ public abstract class PathValue extends VirtualValue
         return relationships().length;
     }
 
-    public static class DirectPathValue extends PathValue
+    private static final long DIRECT_PATH_SHALLOW_SIZE = shallowSizeOfInstance( DirectPathValue.class );
+    static class DirectPathValue extends PathValue
     {
         private final NodeValue[] nodes;
         private final RelationshipValue[] edges;
+        private final long payloadSize;
 
-        DirectPathValue( NodeValue[] nodes, RelationshipValue[] edges )
+        DirectPathValue( NodeValue[] nodes, RelationshipValue[] edges, long payloadSize )
         {
             assert nodes != null;
             assert edges != null;
@@ -193,6 +192,7 @@ public abstract class PathValue extends VirtualValue
 
             this.nodes = nodes;
             this.edges = edges;
+            this.payloadSize = payloadSize;
         }
 
         @Override
@@ -224,6 +224,12 @@ public abstract class PathValue extends VirtualValue
         public RelationshipValue[] relationships()
         {
             return edges;
+        }
+
+        @Override
+        public long estimatedHeapUsage()
+        {
+            return DIRECT_PATH_SHALLOW_SIZE + payloadSize;
         }
     }
 }

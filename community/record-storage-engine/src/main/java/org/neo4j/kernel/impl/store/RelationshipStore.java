@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store;
 
+import org.eclipse.collections.api.set.ImmutableSet;
+
 import java.io.File;
 import java.nio.file.OpenOption;
 
@@ -26,6 +28,7 @@ import org.neo4j.configuration.Config;
 import org.neo4j.internal.id.IdGeneratorFactory;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.logging.LogProvider;
@@ -47,7 +50,7 @@ public class RelationshipStore extends CommonAbstractStore<RelationshipRecord,No
             PageCache pageCache,
             LogProvider logProvider,
             RecordFormats recordFormats,
-            OpenOption... openOptions )
+            ImmutableSet<OpenOption> openOptions )
     {
         super( file, idFile, configuration, IdType.RELATIONSHIP, idGeneratorFactory,
                 pageCache, logProvider, TYPE_DESCRIPTOR, recordFormats.relationship(), NO_STORE_HEADER_FORMAT,
@@ -55,9 +58,8 @@ public class RelationshipStore extends CommonAbstractStore<RelationshipRecord,No
     }
 
     @Override
-    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, RelationshipRecord record )
-            throws FAILURE
+    public <FAILURE extends Exception> void accept( Processor<FAILURE> processor, RelationshipRecord record, PageCursorTracer cursorTracer ) throws FAILURE
     {
-        processor.processRelationship( this, record );
+        processor.processRelationship( this, record, cursorTracer );
     }
 }

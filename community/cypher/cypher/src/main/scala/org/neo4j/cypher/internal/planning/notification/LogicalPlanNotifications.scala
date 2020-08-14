@@ -20,9 +20,9 @@
 package org.neo4j.cypher.internal.planning.notification
 
 import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
-import org.neo4j.cypher.internal.planner.spi.PlanContext
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.util.InternalNotification
+import org.neo4j.cypher.internal.planner.spi.PlanContext
+import org.neo4j.cypher.internal.util.InternalNotification
 
 trait NotificationChecker {
   def apply(plan: LogicalPlan): TraversableOnce[InternalNotification]
@@ -35,7 +35,7 @@ object LogicalPlanNotifications {
     val notificationCheckers = Seq(
       checkForEagerLoadCsv,
       checkForLoadCsvAndMatchOnLargeLabel(planContext, config.nonIndexedLabelWarningThreshold),
-      checkForIndexLimitation(planContext))
+      checkForSuboptimalIndexBehaviours(planContext))
 
     notificationCheckers.flatMap(_ (logicalPlan))
   }

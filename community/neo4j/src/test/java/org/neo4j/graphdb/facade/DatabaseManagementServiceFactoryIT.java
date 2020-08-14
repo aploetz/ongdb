@@ -32,18 +32,18 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.event.DatabaseEventContext;
 import org.neo4j.graphdb.event.DatabaseEventListenerAdapter;
 import org.neo4j.graphdb.factory.module.edition.CommunityEditionModule;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 
 @TestDirectoryExtension
 class DatabaseManagementServiceFactoryIT
@@ -80,7 +80,7 @@ class DatabaseManagementServiceFactoryIT
     @Test
     void haveTwoDatabasesByDefault()
     {
-        assertThat( managementService.listDatabases(), hasSize( 2 ) );
+        assertThat( managementService.listDatabases() ).hasSize( 2 );
     }
 
     @Test
@@ -119,8 +119,11 @@ class DatabaseManagementServiceFactoryIT
     private DatabaseManagementService getDatabaseManagementService()
     {
         DatabaseManagementServiceFactory databaseManagementServiceFactory =
-                new DatabaseManagementServiceFactory( DatabaseInfo.COMMUNITY, CommunityEditionModule::new );
-        Config cfg = Config.defaults( neo4j_home, testDirectory.absolutePath().toPath() );
+                new DatabaseManagementServiceFactory( DbmsInfo.COMMUNITY, CommunityEditionModule::new );
+        Config cfg = Config.newBuilder()
+                .set( neo4j_home, testDirectory.absolutePath().toPath() )
+                .set( preallocate_logical_logs, false )
+                .build();
         return databaseManagementServiceFactory.build( cfg, GraphDatabaseDependencies.newDependencies() );
     }
 

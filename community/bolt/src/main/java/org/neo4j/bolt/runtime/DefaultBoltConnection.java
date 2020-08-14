@@ -21,6 +21,7 @@ package org.neo4j.bolt.runtime;
 
 import io.netty.channel.Channel;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -31,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.bolt.BoltChannel;
 import org.neo4j.bolt.BoltServer;
-import org.neo4j.bolt.packstream.PackOutput;
+import org.neo4j.bolt.messaging.BoltResponseMessageWriter;
 import org.neo4j.bolt.runtime.scheduling.BoltConnectionLifetimeListener;
 import org.neo4j.bolt.runtime.scheduling.BoltConnectionQueueMonitor;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachine;
@@ -53,7 +54,6 @@ public class DefaultBoltConnection implements BoltConnection
     private final BoltStateMachine machine;
     private final BoltConnectionLifetimeListener listener;
     private final BoltConnectionQueueMonitor queueMonitor;
-    private final PackOutput output;
 
     private final Log log;
     private final Log userLog;
@@ -68,13 +68,15 @@ public class DefaultBoltConnection implements BoltConnection
 
     private final BoltConnectionMetricsMonitor metricsMonitor;
     private final Clock clock;
+    private final BoltResponseMessageWriter messageWriter;
 
-    DefaultBoltConnection( BoltChannel channel, PackOutput output, BoltStateMachine machine, LogService logService, BoltConnectionLifetimeListener listener,
-            BoltConnectionQueueMonitor queueMonitor, int maxBatchSize, BoltConnectionMetricsMonitor metricsMonitor, Clock clock )
+    DefaultBoltConnection( BoltChannel channel, BoltResponseMessageWriter messageWriter, BoltStateMachine machine,
+            LogService logService, BoltConnectionLifetimeListener listener,
+            BoltConnectionQueueMonitor queueMonitor, int maxBatchSize, BoltConnectionMetricsMonitor metricsMonitor,
+            Clock clock )
     {
         this.id = channel.id();
         this.channel = channel;
-        this.output = output;
         this.machine = machine;
         this.listener = listener;
         this.queueMonitor = queueMonitor;
@@ -84,6 +86,7 @@ public class DefaultBoltConnection implements BoltConnection
         this.batch = new ArrayList<>( maxBatchSize );
         this.metricsMonitor = metricsMonitor;
         this.clock = clock;
+        this.messageWriter = messageWriter;
     }
 
     @Override
@@ -116,12 +119,6 @@ public class DefaultBoltConnection implements BoltConnection
     public Channel channel()
     {
         return channel.rawChannel();
-    }
-
-    @Override
-    public PackOutput output()
-    {
-        return output;
     }
 
     @Override
@@ -210,7 +207,7 @@ public class DefaultBoltConnection implements BoltConnection
                     queue.drainTo( batch, batchCount );
                     // if we expect one message but did not get any (because it was already
                     // processed), silently exit
-                    if ( batch.size() == 0 && !exitIfNoJobsAvailable )
+                    if ( batch.isEmpty() && !exitIfNoJobsAvailable )
                     {
                         // loop until we get a new job, if we cannot then validate
                         // transaction to check for termination condition. We'll
@@ -233,7 +230,7 @@ public class DefaultBoltConnection implements BoltConnection
                     notifyDrained( batch );
 
                     // execute each job that's in the batch
-                    while ( batch.size() > 0 )
+                    while ( !batch.isEmpty() )
                     {
                         Job current = batch.remove( 0 );
 
@@ -248,18 +245,15 @@ public class DefaultBoltConnection implements BoltConnection
                 }
 
                 // we processed all pending messages, let's flush underlying channel
-                if ( queue.size() == 0 )
+                if ( queue.isEmpty() )
                 {
-                    output.flush();
+                    messageWriter.flush();
                 }
             }
             while ( loop );
 
             // assert only if we'll stay alive
-            if ( !willClose() )
-            {
-                assert !machine.hasOpenStatement();
-            }
+            assert willClose() || !machine.hasOpenStatement();
         }
         catch ( BoltConnectionAuthFatality ex )
         {
@@ -351,6 +345,26 @@ public class DefaultBoltConnection implements BoltConnection
         }
     }
 
+    @Override
+    public void keepAlive()
+    {
+        try
+        {
+            messageWriter.keepAlive();
+        }
+        catch ( Throwable e )
+        {
+            log.error( "Failed to perform keep alive check.", e );
+            shouldClose.set( true );
+        }
+    }
+
+    @Override
+    public void initKeepAliveTimer()
+    {
+        messageWriter.initKeepAliveTimer();
+    }
+
     private boolean willClose()
     {
         return shouldClose.get();
@@ -362,7 +376,7 @@ public class DefaultBoltConnection implements BoltConnection
         {
             try
             {
-                output.close();
+                messageWriter.close();
             }
             catch ( Throwable t )
             {
@@ -416,7 +430,7 @@ public class DefaultBoltConnection implements BoltConnection
 
     private void notifyDrained( List<Job> jobs )
     {
-        if ( queueMonitor != null && jobs.size() > 0 )
+        if ( queueMonitor != null && !jobs.isEmpty() )
         {
             queueMonitor.drained( this, jobs );
         }

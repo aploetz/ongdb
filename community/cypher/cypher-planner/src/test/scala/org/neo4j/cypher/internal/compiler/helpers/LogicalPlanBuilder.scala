@@ -19,14 +19,20 @@
  */
 package org.neo4j.cypher.internal.compiler.helpers
 
+import org.neo4j.cypher.internal.ast.semantics.ExpressionTypeInfo
+import org.neo4j.cypher.internal.ast.semantics.SemanticTable
+import org.neo4j.cypher.internal.compiler.helpers.LogicalPlanBuilder.FakeLeafPlan
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.Variable
 import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder
+import org.neo4j.cypher.internal.logical.plans.LogicalLeafPlan
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
 import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.v4_0.ast.semantics.{ExpressionTypeInfo, SemanticTable}
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, Variable}
-import org.neo4j.cypher.internal.v4_0.util.Cardinality
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.cypher.internal.v4_0.util.symbols.{CTNode, CypherType}
+import org.neo4j.cypher.internal.util.Cardinality
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SameId
+import org.neo4j.cypher.internal.util.symbols.CypherType
 
 class LogicalPlanBuilder extends AbstractLogicalPlanBuilder[LogicalPlan, LogicalPlanBuilder](new LogicalPlanResolver) {
 
@@ -39,12 +45,18 @@ class LogicalPlanBuilder extends AbstractLogicalPlanBuilder[LogicalPlan, Logical
 
   private var semanticTable = new SemanticTable()
 
+  def fakeLeafPlan(args: String*): LogicalPlanBuilder = appendAtCurrentIndent(LeafOperator(FakeLeafPlan(args.toSet)(_)))
+
   override def newNode(node: Variable): Unit = {
     semanticTable = semanticTable.addNode(node)
   }
 
   override def newRelationship(relationship: Variable): Unit = {
     semanticTable = semanticTable.addRelationship(relationship)
+  }
+
+  override def newVariable(variable: Variable): Unit = {
+    semanticTable = semanticTable.addVariable(variable)
   }
 
   def getSemanticTable: SemanticTable = semanticTable
@@ -62,5 +74,13 @@ class LogicalPlanBuilder extends AbstractLogicalPlanBuilder[LogicalPlan, Logical
 
   def build(readOnly: Boolean = true): LogicalPlan = {
     buildLogicalPlan()
+  }
+}
+
+object LogicalPlanBuilder {
+  case class FakeLeafPlan(argumentIds: Set[String] = Set.empty)(implicit idGen: IdGen) extends LogicalLeafPlan(idGen) {
+    override val availableSymbols: Set[String] = argumentIds
+    override def usedVariables: Set[String] = Set.empty
+    override def withoutArgumentIds(argsToExclude: Set[String]): LogicalLeafPlan = copy(argumentIds = argumentIds -- argsToExclude)(SameId(this.id))
   }
 }

@@ -20,26 +20,28 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.util.attribution.Id
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.values.AnyValue
 import org.neo4j.values.virtual.VirtualNodeValue
 
 import scala.collection.mutable.ListBuffer
-import scala.collection.{AbstractIterator, Iterator}
+import scala.collection.AbstractIterator
+import scala.collection.Iterator
 
 case class TriadicSelectionPipe(positivePredicate: Boolean, left: Pipe, source: String, seen: String, target: String, right: Pipe)
                                (val id: Id = Id.INVALID_ID)
 extends PipeWithSource(left) {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     var triadicState: LongHashSet = null
     // 1. Build
-    new LazyGroupingIterator[ExecutionContext](input) {
-      override def getKey(row: ExecutionContext): AnyValue = row.getByName(source)
+    new LazyGroupingIterator[CypherRow](input) {
+      override def getKey(row: CypherRow): AnyValue = row.getByName(source)
 
-      override def getValue(row: ExecutionContext): Option[Long] = row.getByName(seen) match {
+      override def getValue(row: CypherRow): Option[Long] = row.getByName(seen) match {
         case n: VirtualNodeValue => Some(n.id())
         case IsNoValue() => None
         case x => throw new CypherTypeException(s"Expected a node at `$seen` but got $x")

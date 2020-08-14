@@ -19,11 +19,15 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher._
+import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher.beLike
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
 import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
-import org.neo4j.cypher.internal.logical.plans.{AllNodesScan, CartesianProduct, NodeByLabelScan, Selection}
+import org.neo4j.cypher.internal.logical.plans.AllNodesScan
+import org.neo4j.cypher.internal.logical.plans.CartesianProduct
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.NodeByLabelScan
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class CartesianProductPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
@@ -61,10 +65,10 @@ class CartesianProductPlanningIntegrationTest extends CypherFunSuite with Logica
 
     plan._2 should equal(
       CartesianProduct(
-        NodeByLabelScan("a", labelName("A"), Set.empty),
+        NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone),
         CartesianProduct(
-          NodeByLabelScan("c", labelName("C"), Set.empty),
-          NodeByLabelScan("b", labelName("B"), Set.empty)
+          NodeByLabelScan("c", labelName("C"), Set.empty, IndexOrderNone),
+          NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone)
         )
       )
     )
@@ -83,8 +87,8 @@ class CartesianProductPlanningIntegrationTest extends CypherFunSuite with Logica
 
     plan._2 should equal(
       CartesianProduct(
-        NodeByLabelScan("b", labelName("B"), Set.empty),
-        NodeByLabelScan("a", labelName("A"), Set.empty)
+        NodeByLabelScan("b", labelName("B"), Set.empty, IndexOrderNone),
+        NodeByLabelScan("a", labelName("A"), Set.empty, IndexOrderNone)
       )
     )
   }

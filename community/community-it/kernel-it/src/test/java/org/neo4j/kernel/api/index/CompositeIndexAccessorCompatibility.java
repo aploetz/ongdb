@@ -48,6 +48,7 @@ import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.storageengine.api.IndexEntryUpdate;
 import org.neo4j.storageengine.api.schema.SimpleNodeValueClient;
+import org.neo4j.test.InMemoryTokens;
 import org.neo4j.values.storable.ArrayValue;
 import org.neo4j.values.storable.BooleanValue;
 import org.neo4j.values.storable.CoordinateReferenceSystem;
@@ -70,10 +71,8 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.EMPTY_LIST;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.neo4j.internal.helpers.collection.Iterables.single;
 import static org.neo4j.internal.helpers.collection.Pair.of;
@@ -83,8 +82,10 @@ import static org.neo4j.internal.kernel.api.IndexQuery.range;
 import static org.neo4j.internal.kernel.api.IndexQuery.stringContains;
 import static org.neo4j.internal.kernel.api.IndexQuery.stringPrefix;
 import static org.neo4j.internal.kernel.api.IndexQuery.stringSuffix;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.internal.kernel.api.QueryContext.NULL_CONTEXT;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.values.storable.CoordinateReferenceSystem.Cartesian;
 import static org.neo4j.values.storable.CoordinateReferenceSystem.WGS84;
 import static org.neo4j.values.storable.DateTimeValue.datetime;
@@ -173,10 +174,10 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 2L, descriptor.schema(), b, b ),
                 add( 3L, descriptor.schema(), a, b ) ) );
 
-        assertThat( query( exact( 0, a ), exact( 1, a ) ), equalTo( singletonList( 1L ) ) );
-        assertThat( query( exact( 0, b ), exact( 1, b ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( exact( 0, a ), exact( 1, b ) ), equalTo( singletonList( 3L ) ) );
-        assertThat( query( exists( 1 ) ), equalTo( asList( 1L, 2L, 3L ) ) );
+        assertThat( query( exact( 0, a ), exact( 1, a ) ) ).isEqualTo( singletonList( 1L ) );
+        assertThat( query( exact( 0, b ), exact( 1, b ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( exact( 0, a ), exact( 1, b ) ) ).isEqualTo( singletonList( 3L ) );
+        assertThat( query( exists( 1 ) ) ).isEqualTo( asList( 1L, 2L, 3L ) );
     }
 
     @Test
@@ -198,13 +199,13 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 6L, descriptor.schema(), gps, car3d )
         ) );
 
-        assertThat( query( exact( 0, gps ), exact( 1, gps ) ), equalTo( singletonList( 1L ) ) );
-        assertThat( query( exact( 0, car ), exact( 1, car ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( exact( 0, gps ), exact( 1, car ) ), equalTo( singletonList( 3L ) ) );
-        assertThat( query( exact( 0, gps3d ), exact( 1, gps3d ) ), equalTo( singletonList( 4L ) ) );
-        assertThat( query( exact( 0, car3d ), exact( 1, car3d ) ), equalTo( singletonList( 5L ) ) );
-        assertThat( query( exact( 0, gps ), exact( 1, car3d ) ), equalTo( singletonList( 6L ) ) );
-        assertThat( query( exists( 1 ) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L, 6L ) ) );
+        assertThat( query( exact( 0, gps ), exact( 1, gps ) ) ).isEqualTo( singletonList( 1L ) );
+        assertThat( query( exact( 0, car ), exact( 1, car ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( exact( 0, gps ), exact( 1, car ) ) ).isEqualTo( singletonList( 3L ) );
+        assertThat( query( exact( 0, gps3d ), exact( 1, gps3d ) ) ).isEqualTo( singletonList( 4L ) );
+        assertThat( query( exact( 0, car3d ), exact( 1, car3d ) ) ).isEqualTo( singletonList( 5L ) );
+        assertThat( query( exact( 0, gps ), exact( 1, car3d ) ) ).isEqualTo( singletonList( 6L ) );
+        assertThat( query( exists( 1 ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L, 6L ) );
     }
 
     /* testIndexExactAndRangeExact_Range */
@@ -327,34 +328,34 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 9L, descriptor.schema(), base2, obj4 ),
                 add( 10L, descriptor.schema(), base2, obj5 ) ) );
 
-        assertThat( query( exact( 0, base1 ), range( 1, obj2, true, obj4, false ) ), equalTo( asList( 2L, 3L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj4, true, null, false ) ), equalTo( asList( 4L, 5L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj4, false, null, true ) ), equalTo( singletonList( 5L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj5, false, obj2, true ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, base1 ), range( 1, null, false, obj3, false ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, null, true, obj3, true ) ), equalTo( asList( 1L, 2L, 3L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, true ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj3, false ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj2, true, obj4, false ) ), equalTo( asList( 7L, 8L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj4, true, null, false ) ), equalTo( asList( 9L, 10L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj4, false, null, true ) ), equalTo( singletonList( 10L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj5, false, obj2, true ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, base2 ), range( 1, null, false, obj3, false ) ), equalTo( asList( 6L, 7L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, null, true, obj3, true ) ), equalTo( asList( 6L, 7L, 8L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, true ) ), equalTo( singletonList( 7L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj3, false ) ), equalTo( singletonList( 7L ) ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj2, true, obj4, false ) ) ).isEqualTo( asList( 2L, 3L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj4, true, null, false ) ) ).isEqualTo( asList( 4L, 5L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj4, false, null, true ) ) ).isEqualTo( singletonList( 5L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj5, false, obj2, true ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, base1 ), range( 1, null, false, obj3, false ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, null, true, obj3, true ) ) ).isEqualTo( asList( 1L, 2L, 3L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, true ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj3, false ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj2, true, obj4, false ) ) ).isEqualTo( asList( 7L, 8L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj4, true, null, false ) ) ).isEqualTo( asList( 9L, 10L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj4, false, null, true ) ) ).isEqualTo( singletonList( 10L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj5, false, obj2, true ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, base2 ), range( 1, null, false, obj3, false ) ) ).isEqualTo( asList( 6L, 7L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, null, true, obj3, true ) ) ).isEqualTo( asList( 6L, 7L, 8L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, true ) ) ).isEqualTo( singletonList( 7L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj3, false ) ) ).isEqualTo( singletonList( 7L ) );
 
         ValueGroup valueGroup = obj1.valueGroup();
         if ( valueGroup != GEOMETRY && valueGroup != GEOMETRY_ARRAY )
         {
-            assertThat( query( exact( 0, base1 ), range( 1, valueGroup ) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L ) ) );
-            assertThat( query( exact( 0, base2 ), range( 1, valueGroup ) ), equalTo( asList( 6L, 7L, 8L, 9L, 10L ) ) );
+            assertThat( query( exact( 0, base1 ), range( 1, valueGroup ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L ) );
+            assertThat( query( exact( 0, base2 ), range( 1, valueGroup ) ) ).isEqualTo( asList( 6L, 7L, 8L, 9L, 10L ) );
         }
         else
         {
             CoordinateReferenceSystem crs = getCrs( obj1 );
-            assertThat( query( exact( 0, base1 ), range( 1, crs ) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L ) ) );
-            assertThat( query( exact( 0, base2 ), range( 1, crs ) ), equalTo( asList( 6L, 7L, 8L, 9L, 10L ) ) );
+            assertThat( query( exact( 0, base1 ), range( 1, crs ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L ) );
+            assertThat( query( exact( 0, base2 ), range( 1, crs ) ) ).isEqualTo( asList( 6L, 7L, 8L, 9L, 10L ) );
         }
     }
 
@@ -380,22 +381,22 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 3L, descriptor.schema(), base2, obj1 ),
                 add( 4L, descriptor.schema(), base2, obj2 ) ) );
 
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, obj2, true ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, true ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, obj2, false ) ), equalTo( singletonList( 1L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, false ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, base1 ), range( 1, null, true, obj2, true ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, null, true ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj1.valueGroup() ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( exact( 0, base1 ), range( 1, obj2, true, obj1, true ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, obj2, true ) ), equalTo( asList( 3L, 4L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, true ) ), equalTo( singletonList( 4L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, obj2, false ) ), equalTo( singletonList( 3L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, false ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, base2 ), range( 1, null, true, obj2, true ) ), equalTo( asList( 3L, 4L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, null, true ) ), equalTo( asList( 3L, 4L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj1.valueGroup() ) ), equalTo( asList( 3L, 4L ) ) );
-        assertThat( query( exact( 0, base2 ), range( 1, obj2, true, obj1, true ) ), equalTo( EMPTY_LIST ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, obj2, true ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, true ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, obj2, false ) ) ).isEqualTo( singletonList( 1L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, false, obj2, false ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, base1 ), range( 1, null, true, obj2, true ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1, true, null, true ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj1.valueGroup() ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( exact( 0, base1 ), range( 1, obj2, true, obj1, true ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, obj2, true ) ) ).isEqualTo( asList( 3L, 4L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, true ) ) ).isEqualTo( singletonList( 4L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, obj2, false ) ) ).isEqualTo( singletonList( 3L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, false, obj2, false ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, base2 ), range( 1, null, true, obj2, true ) ) ).isEqualTo( asList( 3L, 4L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1, true, null, true ) ) ).isEqualTo( asList( 3L, 4L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj1.valueGroup() ) ) ).isEqualTo( asList( 3L, 4L ) );
+        assertThat( query( exact( 0, base2 ), range( 1, obj2, true, obj1, true ) ) ).isEqualTo( EMPTY_LIST );
     }
 
     /* stringPrefix */
@@ -417,14 +418,14 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 9L, descriptor.schema(), "b", "apA" ),
                 add( 10L, descriptor.schema(), "b", "b" ) ) );
 
-        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "a" ) ) ), equalTo( asList( 1L, 3L, 4L ) ) );
-        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "A" )) ), equalTo( Collections.singletonList( 2L ) ) );
-        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "ba") ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "" )) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L ) ) );
-        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "a" )) ), equalTo( asList( 6L, 8L, 9L ) ) );
-        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "A" )) ), equalTo( Collections.singletonList( 7L ) ) );
-        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "ba") ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "" ) ) ), equalTo( asList( 6L, 7L, 8L, 9L, 10L ) ) );
+        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "a" ) ) ) ).isEqualTo( asList( 1L, 3L, 4L ) );
+        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "A" ) ) ) ).isEqualTo( Collections.singletonList( 2L ) );
+        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "ba" ) ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, "a" ), IndexQuery.stringPrefix( 1, stringValue( "" ) ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L ) );
+        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "a" ) ) ) ).isEqualTo( asList( 6L, 8L, 9L ) );
+        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "A" ) ) ) ).isEqualTo( Collections.singletonList( 7L ) );
+        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "ba" ) ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( exact( 0, "b" ), IndexQuery.stringPrefix( 1, stringValue( "" ) ) ) ).isEqualTo( asList( 6L, 7L, 8L, 9L, 10L ) );
     }
 
     @Test
@@ -445,10 +446,10 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 10L, descriptor.schema(), "b", false )
         ) );
 
-        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "a" )), exists( 1 ) ), equalTo( asList( 1L, 3L, 4L, 6L, 8L, 9L ) ) );
-        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "A" )), exists( 1 ) ), equalTo( asList( 2L, 7L) ) );
-        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "ba") ), exists( 1 ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "" )), exists( 1 ) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L ) ) );
+        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "a" ) ), exists( 1 ) ) ).isEqualTo( asList( 1L, 3L, 4L, 6L, 8L, 9L ) );
+        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "A" ) ), exists( 1 ) ) ).isEqualTo( asList( 2L, 7L ) );
+        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "ba" ) ), exists( 1 ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( IndexQuery.stringPrefix( 0, stringValue( "" ) ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L ) );
     }
 
     /* testIndexSeekExactWithExists */
@@ -528,8 +529,8 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 2L, descriptor.schema(), b, Values.of( "abv" ) ),
                 add( 3L, descriptor.schema(), a, Values.of( false ) ) ) );
 
-        assertThat( query( exact( 0, a ), exists( 1 ) ), equalTo( asList( 1L, 3L ) ) );
-        assertThat( query( exact( 0, b ), exists( 1 ) ), equalTo( singletonList( 2L ) ) );
+        assertThat( query( exact( 0, a ), exists( 1 ) ) ).isEqualTo( asList( 1L, 3L ) );
+        assertThat( query( exact( 0, b ), exists( 1 ) ) ).isEqualTo( singletonList( 2L ) );
     }
 
     /* testIndexSeekRangeWithExists */
@@ -554,7 +555,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
         DateTimeValue d3 = datetime( 10000, 100, ZoneId.of( "+01:00" ) );
         DateTimeValue d4 = datetime( 10000, 100, ZoneId.of( "Europe/Stockholm" ) );
         DateTimeValue d5 = datetime( 10000, 100, ZoneId.of( "+03:00" ) );
-        testIndexSeekRangeWithExists( d1, d2, d3, d4, d5  );
+        testIndexSeekRangeWithExists( d1, d2, d3, d4, d5 );
     }
 
     @Test
@@ -567,13 +568,13 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 1L, descriptor.schema(), false, "someString" ),
                 add( 2L, descriptor.schema(), true, 1000 ) ) );
 
-        assertThat( query( range( 0, BooleanValue.FALSE, true, BooleanValue.TRUE, true ), exists( 1 ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( range( 0, BooleanValue.FALSE, false, BooleanValue.TRUE, true ), exists( 1 ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( range( 0, BooleanValue.FALSE, true, BooleanValue.TRUE, false ), exists( 1 ) ), equalTo( singletonList( 1L ) ) );
-        assertThat( query( range( 0, BooleanValue.FALSE, false, BooleanValue.TRUE, false ), exists( 1 ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( range( 0, null, true, BooleanValue.TRUE, true ), exists( 1 ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( range( 0, BooleanValue.FALSE, true, null, true ), exists( 1 ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( range( 0, BooleanValue.TRUE, true, BooleanValue.FALSE, true ), exists( 1 ) ), equalTo( EMPTY_LIST ) );
+        assertThat( query( range( 0, BooleanValue.FALSE, true, BooleanValue.TRUE, true ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( range( 0, BooleanValue.FALSE, false, BooleanValue.TRUE, true ), exists( 1 ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( range( 0, BooleanValue.FALSE, true, BooleanValue.TRUE, false ), exists( 1 ) ) ).isEqualTo( singletonList( 1L ) );
+        assertThat( query( range( 0, BooleanValue.FALSE, false, BooleanValue.TRUE, false ), exists( 1 ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( range( 0, null, true, BooleanValue.TRUE, true ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( range( 0, BooleanValue.FALSE, true, null, true ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( range( 0, BooleanValue.TRUE, true, BooleanValue.FALSE, true ), exists( 1 ) ) ).isEqualTo( EMPTY_LIST );
     }
 
     @Test
@@ -664,12 +665,13 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
         updateAndCommit( updates );
 
         // when
+        InMemoryTokens tokenNameLookup = new InMemoryTokens();
         for ( IndexEntryUpdate<?> update : updates )
         {
             // then
             List<Long> hits = query( exact( 0, update.values()[0] ), exact( 1, update.values()[1] ) );
-            assertEquals( update + " " + hits.toString(), 1, hits.size() );
-            assertThat( single( hits ), equalTo( update.getEntityId() ) );
+            assertEquals( update.describe( tokenNameLookup ) + " " + hits, 1, hits.size() );
+            assertThat( single( hits ) ).isEqualTo( update.getEntityId() );
         }
     }
 
@@ -688,21 +690,21 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 add( 4L, descriptor.schema(), obj4, Values.of( true ) ),
                 add( 5L, descriptor.schema(), obj5, Values.of( 42 ) ) ) );
 
-        assertThat( query( range( 0, obj2, true, obj4, false ), exists( 1 ) ), equalTo( asList( 2L, 3L ) ) );
-        assertThat( query( range( 0, obj4, true, null, false ), exists( 1 ) ), equalTo( asList( 4L, 5L ) ) );
-        assertThat( query( range( 0, obj4, false, null, true ), exists( 1 ) ), equalTo( singletonList( 5L ) ) );
-        assertThat( query( range( 0, obj5, false, obj2, true ), exists( 1 ) ), equalTo( EMPTY_LIST ) );
-        assertThat( query( range( 0, null, false, obj3, false ), exists( 1 ) ), equalTo( asList( 1L, 2L ) ) );
-        assertThat( query( range( 0, null, true, obj3, true ), exists( 1 ) ), equalTo( asList( 1L, 2L, 3L ) ) );
+        assertThat( query( range( 0, obj2, true, obj4, false ), exists( 1 ) ) ).isEqualTo( asList( 2L, 3L ) );
+        assertThat( query( range( 0, obj4, true, null, false ), exists( 1 ) ) ).isEqualTo( asList( 4L, 5L ) );
+        assertThat( query( range( 0, obj4, false, null, true ), exists( 1 ) ) ).isEqualTo( singletonList( 5L ) );
+        assertThat( query( range( 0, obj5, false, obj2, true ), exists( 1 ) ) ).isEqualTo( EMPTY_LIST );
+        assertThat( query( range( 0, null, false, obj3, false ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L ) );
+        assertThat( query( range( 0, null, true, obj3, true ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L, 3L ) );
         ValueGroup valueGroup = obj1.valueGroup();
         if ( valueGroup != GEOMETRY && valueGroup != GEOMETRY_ARRAY )
         {
             // This cannot be done for spatial values because each bound in a spatial query needs a coordinate reference system,
             // and those are provided by Value instances, e.g. PointValue
-            assertThat( query( range( 0, obj1.valueGroup() ), exists( 1 ) ), equalTo( asList( 1L, 2L, 3L, 4L, 5L ) ) );
+            assertThat( query( range( 0, obj1.valueGroup() ), exists( 1 ) ) ).isEqualTo( asList( 1L, 2L, 3L, 4L, 5L ) );
         }
-        assertThat( query( range( 0, obj1, false, obj2, true ), exists( 1 ) ), equalTo( singletonList( 2L ) ) );
-        assertThat( query( range( 0, obj1, false, obj3, false ), exists( 1 ) ), equalTo( singletonList( 2L ) ) );
+        assertThat( query( range( 0, obj1, false, obj2, true ), exists( 1 ) ) ).isEqualTo( singletonList( 2L ) );
+        assertThat( query( range( 0, obj1, false, obj3, false ), exists( 1 ) ) ).isEqualTo( singletonList( 2L ) );
     }
 
     /* IndexOrder */
@@ -1071,7 +1073,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
     public void shouldRangeSeekInOrderAscendingLocalTimeArray() throws Exception
     {
         Object o0 = new LocalTime[]{LocalTime.of( 10, 0 )};
-        Object o1 = new LocalTime[]{LocalTime.of( 10, 1  )};
+        Object o1 = new LocalTime[]{LocalTime.of( 10, 1 )};
         Object o2 = new LocalTime[]{LocalTime.of( 10, 2 )};
         Object o3 = new LocalTime[]{LocalTime.of( 10, 3 )};
         Object o4 = new LocalTime[]{LocalTime.of( 10, 4 )};
@@ -1136,7 +1138,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
         try ( AutoCloseable ignored = query( client, order, exact, range ) )
         {
             List<Long> seenIds = assertClientReturnValuesInOrder( client, order );
-            assertThat( seenIds.size(), equalTo( 6 ) );
+            assertThat( seenIds.size() ).isEqualTo( 6 );
         }
     }
 
@@ -1242,7 +1244,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                 if ( legal )
                 {
                     // when
-                    reader.query( NULL_CONTEXT, client, IndexOrder.NONE, false, theQuery );
+                    reader.query( NULL_CONTEXT, client, unconstrained(), theQuery );
 
                     // then should not throw
                 }
@@ -1251,13 +1253,13 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                     try
                     {
                         // when
-                        reader.query( NULL_CONTEXT, client, IndexOrder.NONE, false, theQuery );
+                        reader.query( NULL_CONTEXT, client, unconstrained(), theQuery );
                         fail( "Expected index reader to throw for illegal composite query. Query was, " + Arrays.toString( theQuery ) );
                     }
                     catch ( IllegalArgumentException e )
                     {
                         // then
-                        assertThat( e.getMessage(), containsString( "Tried to query index with illegal composite query." ));
+                        assertThat( e.getMessage() ).contains( "Tried to query index with illegal composite query." );
                     }
                 }
             }
@@ -1403,7 +1405,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                     add( 1L, descriptor.schema(), value, value ),
                     add( 2L, descriptor.schema(), value, value ) ) );
 
-            assertThat( query( exact( 0, value ), exact( 1, value ) ), equalTo( asList( 1L, 2L ) ) );
+            assertThat( query( exact( 0, value ), exact( 1, value ) ) ).containsExactly( 1L, 2L );
         }
     }
 
@@ -1430,7 +1432,7 @@ public abstract class CompositeIndexAccessorCompatibility extends IndexAccessorC
                     add( 1L, descriptor.schema(), "a", "a" ),
                     add( 2L, descriptor.schema(), "a", "a" ) ) );
 
-            assertThat( query( exact( 0, "a" ), exact( 1, "a" ) ), equalTo( asList( 1L, 2L ) ) );
+            assertThat( query( exact( 0, "a" ), exact( 1, "a" ) ) ).containsExactly( 1L, 2L );
         }
     }
 

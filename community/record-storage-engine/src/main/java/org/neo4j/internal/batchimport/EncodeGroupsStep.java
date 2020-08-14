@@ -22,6 +22,8 @@ package org.neo4j.internal.batchimport;
 import org.neo4j.internal.batchimport.staging.BatchSender;
 import org.neo4j.internal.batchimport.staging.ProcessorStep;
 import org.neo4j.internal.batchimport.staging.StageControl;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 
@@ -34,14 +36,14 @@ public class EncodeGroupsStep extends ProcessorStep<RelationshipGroupRecord[]>
     private long nextId = -1;
     private final RecordStore<RelationshipGroupRecord> store;
 
-    public EncodeGroupsStep( StageControl control, Configuration config, RecordStore<RelationshipGroupRecord> store )
+    public EncodeGroupsStep( StageControl control, Configuration config, RecordStore<RelationshipGroupRecord> store, PageCacheTracer pageCacheTracer )
     {
-        super( control, "ENCODE", config, 1 );
+        super( control, "ENCODE", config, 1, pageCacheTracer );
         this.store = store;
     }
 
     @Override
-    protected void process( RelationshipGroupRecord[] batch, BatchSender sender )
+    protected void process( RelationshipGroupRecord[] batch, BatchSender sender, PageCursorTracer cursorTracer )
     {
         int groupStartIndex = 0;
         for ( int i = 0; i < batch.length; i++ )
@@ -53,10 +55,10 @@ public class EncodeGroupsStep extends ProcessorStep<RelationshipGroupRecord[]>
             long count = group.getNext();
             boolean lastInChain = count == 0;
 
-            group.setId( nextId == -1 ? nextId = store.nextId() : nextId );
+            group.setId( nextId == -1 ? nextId = store.nextId( cursorTracer ) : nextId );
             if ( !lastInChain )
             {
-                group.setNext( nextId = store.nextId() );
+                group.setNext( nextId = store.nextId( cursorTracer ) );
             }
             else
             {
@@ -67,7 +69,7 @@ public class EncodeGroupsStep extends ProcessorStep<RelationshipGroupRecord[]>
                 // secondary units ends up very close by.
                 for ( int j = groupStartIndex; j <= i; j++ )
                 {
-                    store.prepareForCommit( batch[j] );
+                    store.prepareForCommit( batch[j], cursorTracer );
                 }
 
                 groupStartIndex = i + 1;

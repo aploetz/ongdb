@@ -33,7 +33,12 @@ public class NodeRecordFormat extends BaseOneByteHeaderRecordFormat<NodeRecord>
 
     public NodeRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, StandardFormatSettings.NODE_MAXIMUM_ID_BITS );
+        this( false );
+    }
+
+    public NodeRecordFormat( boolean pageAligned )
+    {
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, StandardFormatSettings.NODE_MAXIMUM_ID_BITS, pageAligned );
     }
 
     @Override
@@ -43,7 +48,7 @@ public class NodeRecordFormat extends BaseOneByteHeaderRecordFormat<NodeRecord>
     }
 
     @Override
-    public void read( NodeRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( NodeRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         byte headerByte = cursor.getByte();
         boolean inUse = isInUse( headerByte );
@@ -74,7 +79,7 @@ public class NodeRecordFormat extends BaseOneByteHeaderRecordFormat<NodeRecord>
     }
 
     @Override
-    public void write( NodeRecord record, PageCursor cursor, int recordSize )
+    public void write( NodeRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

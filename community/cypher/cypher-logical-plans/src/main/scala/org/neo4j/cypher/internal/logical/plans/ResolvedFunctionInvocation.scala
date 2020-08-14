@@ -19,12 +19,21 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticCheckResult._
-import org.neo4j.cypher.internal.v4_0.ast.semantics._
-import org.neo4j.cypher.internal.v4_0.expressions.Expression.SemanticContext
-import org.neo4j.cypher.internal.v4_0.expressions.functions.UserDefinedFunctionInvocation
-import org.neo4j.cypher.internal.v4_0.expressions.{CoerceTo, Expression, FunctionInvocation}
-import org.neo4j.cypher.internal.v4_0.util.InputPosition
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheck
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheckResult.error
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheckResult.success
+import org.neo4j.cypher.internal.ast.semantics.SemanticCheckableExpression
+import org.neo4j.cypher.internal.ast.semantics.SemanticError
+import org.neo4j.cypher.internal.ast.semantics.SemanticExpressionCheck
+import org.neo4j.cypher.internal.ast.semantics.SemanticState
+import org.neo4j.cypher.internal.expressions.CoerceTo
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.Expression.SemanticContext
+import org.neo4j.cypher.internal.expressions.FunctionInvocation
+import org.neo4j.cypher.internal.expressions.FunctionName
+import org.neo4j.cypher.internal.expressions.Namespace
+import org.neo4j.cypher.internal.expressions.functions.UserDefinedFunctionInvocation
+import org.neo4j.cypher.internal.util.InputPosition
 
 object ResolvedFunctionInvocation {
 
@@ -36,15 +45,15 @@ object ResolvedFunctionInvocation {
 }
 
 /**
-  * A ResolvedFunctionInvocation is a user-defined function where the signature
-  * has been resolved, i.e. verified that it exists in the database
-  *
-  * @param qualifiedName The qualified name of the function.
-  * @param fcnSignature Either `Some(signature)` if the signature was resolved, or
-  *                     `None` if the function didn't exist
-  * @param callArguments The argument list to the function
-  * @param position The position in the original query string.
-  */
+ * A ResolvedFunctionInvocation is a user-defined function where the signature
+ * has been resolved, i.e. verified that it exists in the database
+ *
+ * @param qualifiedName The qualified name of the function.
+ * @param fcnSignature Either `Some(signature)` if the signature was resolved, or
+ *                     `None` if the function didn't exist
+ * @param callArguments The argument list to the function
+ * @param position The position in the original query string.
+ */
 case class ResolvedFunctionInvocation(qualifiedName: QualifiedName,
                                       fcnSignature: Option[UserFunctionSignature],
                                       callArguments: IndexedSeq[Expression])
@@ -109,4 +118,12 @@ case class ResolvedFunctionInvocation(qualifiedName: QualifiedName,
   }
 
   override def isAggregate: Boolean = fcnSignature.exists(_.isAggregate)
+
+ override def asUnresolvedFunction: FunctionInvocation = FunctionInvocation(
+    namespace = Namespace(qualifiedName.namespace.toList)(position),
+    functionName = FunctionName(qualifiedName.name)(position),
+    distinct = false,
+    args = arguments.toIndexedSeq,
+  )(position)
+
 }

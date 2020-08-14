@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.ToIntBiFunction;
 import java.util.function.ToIntFunction;
 
 import org.neo4j.collection.RawIterator;
@@ -43,13 +44,19 @@ import org.neo4j.internal.batchimport.input.IdType;
 import org.neo4j.internal.batchimport.input.Input;
 import org.neo4j.internal.batchimport.input.InputEntity;
 import org.neo4j.internal.batchimport.input.Inputs;
+import org.neo4j.internal.batchimport.input.PropertySizeCalculator;
 import org.neo4j.internal.batchimport.input.ReadableGroups;
+import org.neo4j.io.ByteUnit;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.values.storable.Value;
 
+import static org.apache.commons.lang3.SystemUtils.IS_OS_LINUX;
 import static org.neo4j.csv.reader.CharSeekers.charSeeker;
 import static org.neo4j.internal.batchimport.input.Collector.EMPTY;
 import static org.neo4j.internal.batchimport.input.csv.CsvInputIterator.extractHeader;
 import static org.neo4j.io.ByteUnit.mebiBytes;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 /**
  * Provides {@link Input} from data contained in tabular/csv form. Expects factories for instantiating
@@ -68,6 +75,7 @@ public class CsvInput implements Input
     private final Configuration config;
     private final Monitor monitor;
     private final Groups groups;
+    private final MemoryTracker memoryTracker;
 
     /**
      * @param nodeDataFactory multiple {@link DataFactory} instances providing data, each {@link DataFactory}
@@ -85,16 +93,17 @@ public class CsvInput implements Input
     public CsvInput(
             Iterable<DataFactory> nodeDataFactory, Header.Factory nodeHeaderFactory,
             Iterable<DataFactory> relationshipDataFactory, Header.Factory relationshipHeaderFactory,
-            IdType idType, Configuration config, Monitor monitor )
+            IdType idType, Configuration config, Monitor monitor, MemoryTracker memoryTracker )
     {
-        this( nodeDataFactory, nodeHeaderFactory, relationshipDataFactory, relationshipHeaderFactory, idType, config, monitor, new Groups() );
+        this( nodeDataFactory, nodeHeaderFactory, relationshipDataFactory, relationshipHeaderFactory, idType, config, monitor, new Groups(), memoryTracker );
     }
 
     CsvInput(
             Iterable<DataFactory> nodeDataFactory, Header.Factory nodeHeaderFactory,
             Iterable<DataFactory> relationshipDataFactory, Header.Factory relationshipHeaderFactory,
-            IdType idType, Configuration config, Monitor monitor, Groups groups )
+            IdType idType, Configuration config, Monitor monitor, Groups groups, MemoryTracker memoryTracker )
     {
+        this.memoryTracker = memoryTracker;
         assertSaneConfiguration( config );
 
         this.nodeDataFactory = nodeDataFactory;
@@ -235,19 +244,20 @@ public class CsvInput implements Input
     }
 
     @Override
-    public Estimates calculateEstimates( ToIntFunction<Value[]> valueSizeCalculator ) throws IOException
+    public Estimates calculateEstimates( PropertySizeCalculator valueSizeCalculator ) throws IOException
     {
         long[] nodeSample = sample( nodeDataFactory, nodeHeaderFactory, valueSizeCalculator, node -> node.labels().length );
         long[] relationshipSample = sample( relationshipDataFactory, relationshipHeaderFactory, valueSizeCalculator, entity -> 0 );
+        long propPreAllocAdditional = propertyPreAllocateRounding( nodeSample[2] + relationshipSample[2] ) / 2;
         return Input.knownEstimates(
                 nodeSample[0], relationshipSample[0],
                 nodeSample[1], relationshipSample[1],
-                nodeSample[2], relationshipSample[2],
+                nodeSample[2] + propPreAllocAdditional, relationshipSample[2] + propPreAllocAdditional,
                 nodeSample[3] );
     }
 
     private long[] sample( Iterable<DataFactory> dataFactories, Header.Factory headerFactory,
-            ToIntFunction<Value[]> valueSizeCalculator, ToIntFunction<InputEntity> additionalCalculator ) throws IOException
+            PropertySizeCalculator valueSizeCalculator, ToIntFunction<InputEntity> additionalCalculator ) throws IOException
     {
         long[] estimates = new long[4]; // [entity count, property count, property size, labels (for nodes only)]
         try ( CsvInputChunkProxy chunk = new CsvInputChunkProxy() )
@@ -283,7 +293,7 @@ public class CsvInput implements Input
                                 for ( ; chunk.next( entity ); entities++ )
                                 {
                                     properties += entity.propertyCount();
-                                    propertySize += Inputs.calculatePropertySize( entity, valueSizeCalculator );
+                                    propertySize += Inputs.calculatePropertySize( entity, valueSizeCalculator, NULL, memoryTracker );
                                     additional += additionalCalculator.applyAsInt( entity );
                                 }
                             }
@@ -301,6 +311,25 @@ public class CsvInput implements Input
             }
         }
         return estimates;
+    }
+
+    private long propertyPreAllocateRounding( long initialEstimatedPropertyStoreSize )
+    {
+        if ( !IS_OS_LINUX )
+        {
+            // Only linux systems does pre-allocation of store files, so the pre-allocation rounding is zero for all other systems.
+            return 0;
+        }
+        // By default, the page cache will grow large store files in 32 MiB sized chunks.
+        long preAllocSize = ByteUnit.mebiBytes( 32 );
+        if ( initialEstimatedPropertyStoreSize < preAllocSize )
+        {
+            return 0;
+        }
+        long chunks = 1 + initialEstimatedPropertyStoreSize / preAllocSize;
+        long estimatedFinalPropertyStoreSize = chunks * preAllocSize;
+        // Compute the difference from the initial estimate, to what we anticipate when we account for pre-allocation.
+        return estimatedFinalPropertyStoreSize - initialEstimatedPropertyStoreSize;
     }
 
     public static Extractor<?> idExtractor( IdType idType, Extractors extractors )

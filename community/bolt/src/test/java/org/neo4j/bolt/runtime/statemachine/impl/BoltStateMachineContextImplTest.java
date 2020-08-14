@@ -33,15 +33,20 @@ import org.neo4j.bolt.runtime.statemachine.BoltStateMachineSPI;
 import org.neo4j.bolt.runtime.statemachine.MutableConnectionState;
 import org.neo4j.bolt.runtime.statemachine.StatementProcessor;
 
+<<<<<<< HEAD
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+>>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.bolt.runtime.statemachine.StatementProcessor.EMPTY;
+import static org.neo4j.bolt.testing.BoltTestUtil.newTestBoltChannel;
 
 class BoltStateMachineContextImplTest
 {
@@ -90,8 +95,8 @@ class BoltStateMachineContextImplTest
         // When & Then
         BoltProtocolBreachFatality error = assertThrows( BoltProtocolBreachFatality.class,
                     () -> context.setCurrentStatementProcessorForDatabase( "Bossi" ) );
-        assertThat( error.getMessage(), containsString( "Changing database without closing the previous is forbidden." ) );
-        assertThat( context.connectionState().getStatementProcessor(), equalTo( txStateMachine ) );
+        assertThat( error.getMessage() ).contains( "Changing database without closing the previous is forbidden." );
+        assertThat( context.connectionState().getStatementProcessor() ).isEqualTo( txStateMachine );
     }
 
     @Test
@@ -104,7 +109,7 @@ class BoltStateMachineContextImplTest
 
         // When & Then
         StatementProcessor processor = context.setCurrentStatementProcessorForDatabase( DB_NAME );
-        assertThat( processor, equalTo( molly ) );
+        assertThat( processor ).isEqualTo( molly );
     }
 
     @Test
@@ -118,7 +123,7 @@ class BoltStateMachineContextImplTest
         context.releaseStatementProcessor();
 
         // Then
-        assertThat( context.connectionState().getStatementProcessor(), equalTo( EMPTY ) );
+        assertThat( context.connectionState().getStatementProcessor() ).isEqualTo( EMPTY );
     }
 
     @Test
@@ -181,17 +186,18 @@ class BoltStateMachineContextImplTest
         BoltStateMachineContextImpl context = newContext( mock( BoltStateMachine.class ), mock( BoltStateMachineSPI.class ),
                                                           renameThreads, defaultDatabaseName );
         context.setStatementProcessorProvider( provider );
-        assertThat( context.connectionState().getStatementProcessor(), equalTo( EMPTY ) );
+        assertThat( context.connectionState().getStatementProcessor() ).isEqualTo( EMPTY );
 
         StatementProcessor processor = context.setCurrentStatementProcessorForDatabase( databaseName );
 
-        assertThat( processor, equalTo( txStateMachine ) );
-        assertThat( context.connectionState().getStatementProcessor(), equalTo( txStateMachine ) );
+        assertThat( processor ).isEqualTo( txStateMachine );
+        assertThat( context.connectionState().getStatementProcessor() ).isEqualTo( txStateMachine );
         return context;
     }
 
     private static BoltStateMachineContextImpl newContext( BoltStateMachine machine, BoltStateMachineSPI boltSPI )
     {
+<<<<<<< HEAD
         return newContext( machine, boltSPI, false, DB_NAME_DEFAULT );
     }
 
@@ -201,5 +207,9 @@ class BoltStateMachineContextImplTest
         BoltChannel boltChannel = new BoltChannel( "bolt-1", "bolt", mock( Channel.class ) );
         return new BoltStateMachineContextImpl( machine, boltChannel, boltSPI, new MutableConnectionState(), Clock.systemUTC(),
                                                 renameThreads, defaultDatabaseName );
+=======
+        BoltChannel boltChannel = newTestBoltChannel( mock( Channel.class ) );
+        return new BoltStateMachineContextImpl( machine, boltChannel, boltSPI, new MutableConnectionState(), Clock.systemUTC() );
+>>>>>>> neo4j/4.1
     }
 }

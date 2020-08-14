@@ -19,16 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.{AstNode, coerce}
+import org.neo4j.cypher.internal.runtime.ReadableRow
+import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
+import org.neo4j.cypher.internal.runtime.interpreted.commands.coerce
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.internal.v4_0.util.symbols._
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.values.AnyValue
-
 
 case class CoerceTo(expr: Expression, typ: CypherType) extends Expression {
 
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = coerce(expr(ctx, state), state, typ)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = coerce(expr(row, state), state, typ)
 
   override def rewrite(f: Expression => Expression): Expression = f(CoerceTo(expr.rewrite(f), typ))
 

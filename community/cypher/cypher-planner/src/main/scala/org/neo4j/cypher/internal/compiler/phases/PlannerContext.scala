@@ -21,14 +21,27 @@ package org.neo4j.cypher.internal.compiler.phases
 
 import java.time.Clock
 
-import org.neo4j.cypher.internal.compiler.planner.logical.{ExpressionEvaluator, Metrics, MetricsFactory, QueryGraphSolver}
-import org.neo4j.cypher.internal.compiler.{ContextCreator, CypherPlannerConfiguration, Neo4jCypherExceptionFactory, SyntaxExceptionCreator, UpdateStrategy}
+import org.neo4j.cypher.internal.ast.semantics.SemanticErrorDef
+import org.neo4j.cypher.internal.compiler.ContextCreator
+import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
+import org.neo4j.cypher.internal.compiler.Neo4jCypherExceptionFactory
+import org.neo4j.cypher.internal.compiler.SyntaxExceptionCreator
+import org.neo4j.cypher.internal.compiler.UpdateStrategy
+import org.neo4j.cypher.internal.compiler.helpers.ParameterValueTypeHelper
+import org.neo4j.cypher.internal.compiler.planner.logical.ExpressionEvaluator
+import org.neo4j.cypher.internal.compiler.planner.logical.Metrics
+import org.neo4j.cypher.internal.compiler.planner.logical.MetricsFactory
+import org.neo4j.cypher.internal.compiler.planner.logical.QueryGraphSolver
+import org.neo4j.cypher.internal.frontend.phases.BaseContext
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer
+import org.neo4j.cypher.internal.frontend.phases.InternalNotificationLogger
+import org.neo4j.cypher.internal.frontend.phases.Monitors
 import org.neo4j.cypher.internal.planner.spi.PlanContext
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticErrorDef
-import org.neo4j.cypher.internal.v4_0.frontend.phases.{BaseContext, CompilationPhaseTracer, InternalNotificationLogger, Monitors}
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.InnerVariableNamer
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
-import org.neo4j.cypher.internal.v4_0.util.{CypherException, CypherExceptionFactory, InputPosition}
+import org.neo4j.cypher.internal.rewriting.rewriters.InnerVariableNamer
+import org.neo4j.cypher.internal.util.CypherExceptionFactory
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.values.virtual.MapValue
 
 class PlannerContext(val cypherExceptionFactory: CypherExceptionFactory,
@@ -46,8 +59,12 @@ class PlannerContext(val cypherExceptionFactory: CypherExceptionFactory,
                      val innerVariableNamer: InnerVariableNamer,
                      val params: MapValue) extends BaseContext {
 
-  override def errorHandler: Seq[SemanticErrorDef] => Unit =
-    (errors: Seq[SemanticErrorDef]) => errors.foreach(e => throw cypherExceptionFactory.syntaxException(e.msg, e.position))
+  override val errorHandler: Seq[SemanticErrorDef] => Unit =
+    SyntaxExceptionCreator.throwOnError(cypherExceptionFactory)
+
+  def getParameterValueTypeMapping: Map[String, CypherType] = {
+    ParameterValueTypeHelper.asCypherTypeMap(params)
+  }
 
 }
 

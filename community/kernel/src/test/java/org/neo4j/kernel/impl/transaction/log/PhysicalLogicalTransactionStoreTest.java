@@ -30,8 +30,11 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.common.ProgressReporter;
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.api.TestCommand;
 import org.neo4j.kernel.impl.api.TransactionToApply;
 import org.neo4j.kernel.impl.transaction.CommittedTransactionRepresentation;
@@ -68,9 +71,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.transaction.log.TestLogEntryReader.logEntryReader;
 import static org.neo4j.kernel.impl.transaction.log.rotation.LogRotation.NO_ROTATION;
 import static org.neo4j.kernel.recovery.RecoveryStartupChecker.EMPTY_CHECKER;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 class PhysicalLogicalTransactionStoreTest
@@ -102,12 +107,7 @@ class PhysicalLogicalTransactionStoreTest
         long latestCommittedTxWhenStarted = 4545;
         long timeCommitted = timeStarted + 10;
         LifeSupport life = new LifeSupport();
-        final LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
-                .withTransactionIdStore( transactionIdStore )
-                .withLogVersionRepository( mock( LogVersionRepository.class ) )
-                .withLogEntryReader( logEntryReader() )
-                .withStoreId( StoreId.UNKNOWN )
-                .build();
+        final LogFiles logFiles = buildLogFiles( transactionIdStore );
         life.add( logFiles );
         life.start();
         try
@@ -136,12 +136,7 @@ class PhysicalLogicalTransactionStoreTest
         TransactionMetadataCache positionCache = new TransactionMetadataCache();
 
         LifeSupport life = new LifeSupport();
-        final LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
-                .withTransactionIdStore( transactionIdStore )
-                .withLogVersionRepository( mock( LogVersionRepository.class ) )
-                .withLogEntryReader( logEntryReader() )
-                .withStoreId( StoreId.UNKNOWN )
-                .build();
+        final LogFiles logFiles = buildLogFiles( transactionIdStore );
         life.add( logFiles );
 
         life.add( new BatchingTransactionAppender( logFiles, NO_ROTATION, positionCache, transactionIdStore, DATABASE_HEALTH ) );
@@ -168,12 +163,7 @@ class PhysicalLogicalTransactionStoreTest
         long latestCommittedTxWhenStarted = 4545;
         long timeCommitted = timeStarted + 10;
         LifeSupport life = new LifeSupport();
-        final LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
-                .withTransactionIdStore( transactionIdStore )
-                .withLogVersionRepository( mock( LogVersionRepository.class ) )
-                .withLogEntryReader( logEntryReader() )
-                .withStoreId( StoreId.UNKNOWN )
-                .build();
+        final LogFiles logFiles = buildLogFiles( transactionIdStore );
 
         life.start();
         life.add( logFiles );
@@ -197,40 +187,10 @@ class PhysicalLogicalTransactionStoreTest
 
         life.add( new BatchingTransactionAppender( logFiles, NO_ROTATION, positionCache,
                 transactionIdStore, DATABASE_HEALTH ) );
-        CorruptedLogsTruncator logPruner = new CorruptedLogsTruncator( databaseDirectory, logFiles, fileSystem );
-        life.add( new TransactionLogsRecovery( new RecoveryService()
-        {
-            @Override
-            public RecoveryApplier getRecoveryApplier( TransactionApplicationMode mode )
-            {
-                return mode == TransactionApplicationMode.REVERSE_RECOVERY ? mock( RecoveryApplier.class ) : visitor;
-            }
-
-            @Override
-            public RecoveryStartInformation getRecoveryStartInformation() throws IOException
-            {
-                return new RecoveryStartInformation( logFiles.extractHeader( 0 ).getStartPosition(), 1 );
-            }
-
-            @Override
-            public TransactionCursor getTransactions( LogPosition position ) throws IOException
-            {
-                return txStore.getTransactions( position );
-            }
-
-            @Override
-            public TransactionCursor getTransactionsInReverseOrder( LogPosition position ) throws IOException
-            {
-                return txStore.getTransactionsInReverseOrder( position );
-            }
-
-            @Override
-            public void transactionsRecovered( CommittedTransactionRepresentation lastRecoveredTransaction, LogPosition lastTransactionPosition,
-                    LogPosition positionAfterLastRecoveredTransaction, boolean missingLogs )
-            {
-                recoveryPerformed.set( true );
-            }
-        }, logPruner, new LifecycleAdapter(), mock( RecoveryMonitor.class ), ProgressReporter.SILENT, false, EMPTY_CHECKER ) );
+        CorruptedLogsTruncator logPruner = new CorruptedLogsTruncator( databaseDirectory, logFiles, fileSystem, INSTANCE );
+        life.add( new TransactionLogsRecovery( new TestRecoveryService( visitor, logFiles, txStore, recoveryPerformed ),
+                logPruner, new LifecycleAdapter(), mock( RecoveryMonitor.class ), ProgressReporter.SILENT, false, EMPTY_CHECKER,
+                PageCacheTracer.NULL ) );
 
         // WHEN
         try
@@ -258,12 +218,7 @@ class PhysicalLogicalTransactionStoreTest
         long latestCommittedTxWhenStarted = 4545;
         long timeCommitted = timeStarted + 10;
         LifeSupport life = new LifeSupport();
-        final LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
-                .withTransactionIdStore( transactionIdStore )
-                .withLogVersionRepository( mock( LogVersionRepository.class ) )
-                .withLogEntryReader( logEntryReader() )
-                .withStoreId( StoreId.UNKNOWN )
-                .build();
+        final LogFiles logFiles = buildLogFiles( transactionIdStore );
         life.start();
         life.add( logFiles );
         try
@@ -321,7 +276,17 @@ class PhysicalLogicalTransactionStoreTest
         {
             life.shutdown();
         }
+    }
 
+    private LogFiles buildLogFiles( TransactionIdStore transactionIdStore ) throws IOException
+    {
+        return LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( ByteUnit.mebiBytes( 1 ) )
+                .withTransactionIdStore( transactionIdStore )
+                .withLogVersionRepository( mock( LogVersionRepository.class ) )
+                .withLogEntryReader( logEntryReader() )
+                .withStoreId( StoreId.UNKNOWN )
+                .build();
     }
 
     private void addATransactionAndRewind( LifeSupport life, LogFiles logFiles,
@@ -335,7 +300,7 @@ class PhysicalLogicalTransactionStoreTest
         PhysicalTransactionRepresentation transaction =
                 new PhysicalTransactionRepresentation( singleTestCommand() );
         transaction.setHeader( additionalHeader, timeStarted, latestCommittedTxWhenStarted, timeCommitted, -1 );
-        appender.append( new TransactionToApply( transaction ), LogAppendEvent.NULL );
+        appender.append( new TransactionToApply( transaction, NULL ), LogAppendEvent.NULL );
     }
 
     private Collection<StorageCommand> singleTestCommand()
@@ -397,6 +362,53 @@ class PhysicalLogicalTransactionStoreTest
         @Override
         public void close()
         {
+        }
+    }
+
+    private static class TestRecoveryService implements RecoveryService
+    {
+        private final FakeRecoveryVisitor visitor;
+        private final LogFiles logFiles;
+        private final LogicalTransactionStore txStore;
+        private final AtomicBoolean recoveryPerformed;
+
+        TestRecoveryService( FakeRecoveryVisitor visitor, LogFiles logFiles, LogicalTransactionStore txStore, AtomicBoolean recoveryPerformed )
+        {
+            this.visitor = visitor;
+            this.logFiles = logFiles;
+            this.txStore = txStore;
+            this.recoveryPerformed = recoveryPerformed;
+        }
+
+        @Override
+        public RecoveryApplier getRecoveryApplier( TransactionApplicationMode mode, PageCursorTracer cursorTracer )
+        {
+            return mode == TransactionApplicationMode.REVERSE_RECOVERY ? mock( RecoveryApplier.class ) : visitor;
+        }
+
+        @Override
+        public RecoveryStartInformation getRecoveryStartInformation() throws IOException
+        {
+            return new RecoveryStartInformation( logFiles.extractHeader( 0 ).getStartPosition(), 1 );
+        }
+
+        @Override
+        public TransactionCursor getTransactions( LogPosition position ) throws IOException
+        {
+            return txStore.getTransactions( position );
+        }
+
+        @Override
+        public TransactionCursor getTransactionsInReverseOrder( LogPosition position ) throws IOException
+        {
+            return txStore.getTransactionsInReverseOrder( position );
+        }
+
+        @Override
+        public void transactionsRecovered( CommittedTransactionRepresentation lastRecoveredTransaction, LogPosition lastTransactionPosition,
+                LogPosition positionAfterLastRecoveredTransaction, boolean missingLogs, PageCursorTracer cursorTracer )
+        {
+            recoveryPerformed.set( true );
         }
     }
 }

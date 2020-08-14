@@ -40,9 +40,7 @@ import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -50,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogVersions.CURRENT_FORMAT_LOG_HEADER_SIZE;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogVersions.LOG_HEADER_SIZE_3_5;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogVersions.LOG_VERSION_3_5;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 class TransactionLogFilesTest
@@ -125,10 +124,9 @@ class TransactionLogFilesTest
         } );
 
         // then
-        assertThat( seenFiles, containsInAnyOrder(
-                createTransactionLogFile( databaseLayout, getVersionedLogFileName( filename, "1" ) ),
-                createTransactionLogFile( databaseLayout, getVersionedLogFileName( filename, "3" ) ) )  );
-        assertThat( seenVersions, containsInAnyOrder( 1L, 3L ) );
+        assertThat( seenFiles ).contains( createTransactionLogFile( databaseLayout, getVersionedLogFileName( filename, "1" ) ),
+                createTransactionLogFile( databaseLayout, getVersionedLogFileName( filename, "3" ) ) );
+        assertThat( seenVersions ).contains( 1L, 3L );
         files.shutdown();
     }
 
@@ -229,7 +227,7 @@ class TransactionLogFilesTest
         LogFiles logFiles = createLogFiles();
         try ( PhysicalLogVersionedStoreChannel channel = logFiles.createLogChannelForVersion( 1, () -> 1L ) )
         {
-            assertThat( channel.size(), greaterThanOrEqualTo( (long) CURRENT_FORMAT_LOG_HEADER_SIZE ) );
+            assertThat( channel.size() ).isGreaterThanOrEqualTo( (long) CURRENT_FORMAT_LOG_HEADER_SIZE );
             assertFalse( logFiles.hasAnyEntries( 1 ) );
         }
     }
@@ -238,7 +236,7 @@ class TransactionLogFilesTest
     {
         try ( StoreChannel storeChannel = fileSystem.write( createTransactionLogFile( databaseLayout, getVersionedLogFileName( version ) ) ) )
         {
-            ByteBuffer byteBuffer = ByteBuffers.allocate( LOG_HEADER_SIZE_3_5 + bytesOfData);
+            ByteBuffer byteBuffer = ByteBuffers.allocate( LOG_HEADER_SIZE_3_5 + bytesOfData, INSTANCE );
             while ( byteBuffer.hasRemaining() )
             {
                 byteBuffer.put( LOG_VERSION_3_5 );

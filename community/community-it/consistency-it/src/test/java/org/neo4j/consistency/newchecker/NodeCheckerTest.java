@@ -31,22 +31,23 @@ import org.neo4j.consistency.report.ConsistencyReport.LabelScanConsistencyReport
 import org.neo4j.consistency.report.ConsistencyReport.NodeConsistencyReport;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.helpers.collection.LongRange;
-import org.neo4j.internal.index.label.LabelScanWriter;
+import org.neo4j.internal.index.label.TokenScanWriter;
 import org.neo4j.internal.kernel.api.TokenWrite;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.store.InlineNodeLabels;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
+import org.neo4j.storageengine.api.EntityTokenUpdate;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.neo4j.collection.PrimitiveLongCollections.EMPTY_LONG_ARRAY;
 import static org.neo4j.internal.helpers.collection.Iterables.first;
 import static org.neo4j.internal.helpers.collection.Iterables.last;
-import static org.neo4j.storageengine.api.NodeLabelUpdate.labelChanges;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class NodeCheckerTest extends CheckerTestBase
 {
@@ -79,7 +80,7 @@ class NodeCheckerTest extends CheckerTestBase
         try ( AutoCloseable ignored = tx() )
         {
             // (N) w/ some labels
-            node( nodeStore.nextId(), NULL, NULL, labels );
+            node( nodeStore.nextId( PageCursorTracer.NULL ), NULL, NULL, labels );
         }
 
         // when
@@ -114,9 +115,9 @@ class NodeCheckerTest extends CheckerTestBase
         try ( AutoCloseable ignored = tx() )
         {
             // Label index having (N) which is not in use in the store
-            try ( LabelScanWriter writer = labelIndex.newWriter() )
+            try ( TokenScanWriter writer = labelIndex.newWriter( PageCursorTracer.NULL ) )
             {
-                writer.write( labelChanges( nodeStore.nextId(), EMPTY_LONG_ARRAY, new long[]{label1} ) );
+                writer.write( EntityTokenUpdate.tokenChanges( nodeStore.nextId( PageCursorTracer.NULL ), EMPTY_LONG_ARRAY, new long[]{label1} ) );
             }
         }
 
@@ -134,19 +135,19 @@ class NodeCheckerTest extends CheckerTestBase
         try ( AutoCloseable ignored = tx() )
         {
             // A couple of nodes w/ correct label indexing
-            try ( LabelScanWriter writer = labelIndex.newWriter() )
+            try ( TokenScanWriter writer = labelIndex.newWriter( PageCursorTracer.NULL ) )
             {
                 for ( int i = 0; i < 10; i++ )
                 {
-                    long nodeId = node( nodeStore.nextId(), NULL, NULL, label1 );
-                    writer.write( labelChanges( nodeId, EMPTY_LONG_ARRAY, new long[]{label1} ) );
+                    long nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), NULL, NULL, label1 );
+                    writer.write( EntityTokenUpdate.tokenChanges( nodeId, EMPTY_LONG_ARRAY, new long[]{label1} ) );
                 }
             }
 
             // Label index having (N) which is not in use in the store
-            try ( LabelScanWriter writer = labelIndex.newWriter() )
+            try ( TokenScanWriter writer = labelIndex.newWriter( PageCursorTracer.NULL ) )
             {
-                writer.write( labelChanges( nodeStore.nextId(), EMPTY_LONG_ARRAY, new long[]{label1} ) );
+                writer.write( EntityTokenUpdate.tokenChanges( nodeStore.nextId( PageCursorTracer.NULL ), EMPTY_LONG_ARRAY, new long[]{label1} ) );
             }
         }
 
@@ -197,7 +198,7 @@ class NodeCheckerTest extends CheckerTestBase
         // (N)────>(L1)─...─>(LN)
         //                    *empty
         testDynamicRecordChain( node ->
-                last( node.getDynamicLabelRecords() ).setLength( 0 ), DynamicConsistencyReport.class,
+                last( node.getDynamicLabelRecords() ).setData( DynamicRecord.NO_DATA ), DynamicConsistencyReport.class,
                 DynamicConsistencyReport::emptyBlock );
     }
 
@@ -209,7 +210,7 @@ class NodeCheckerTest extends CheckerTestBase
         testDynamicRecordChain( node ->
         {
             DynamicRecord first = first( node.getDynamicLabelRecords() );
-            first.setLength( first.getLength() / 2 );
+            first.setData( Arrays.copyOf( first.getData(), first.getLength() / 2 ) );
         }, DynamicConsistencyReport.class, DynamicConsistencyReport::recordNotFullReferencesNext );
     }
 
@@ -219,13 +220,13 @@ class NodeCheckerTest extends CheckerTestBase
         // given
         try ( AutoCloseable ignored = tx() )
         {
-            long nodeId = nodeStore.nextId();
+            long nodeId = nodeStore.nextId( PageCursorTracer.NULL );
             NodeRecord node = new NodeRecord( nodeId ).initialize( true, NULL, false, NULL, 0 );
-            new InlineNodeLabels( node ).put( toLongs( otherLabels ), nodeStore, nodeStore.getDynamicLabelStore() );
-            assertThat( node.getDynamicLabelRecords().size(), greaterThanOrEqualTo( 2 ) );
-            nodeStore.updateRecord( node );
+            new InlineNodeLabels( node ).put( toLongs( otherLabels ), nodeStore, nodeStore.getDynamicLabelStore(), PageCursorTracer.NULL, INSTANCE );
+            assertThat( node.getDynamicLabelRecords().size() ).isGreaterThanOrEqualTo( 2 );
+            nodeStore.updateRecord( node, PageCursorTracer.NULL );
             vandal.accept( node );
-            nodeStore.updateRecord( node );
+            nodeStore.updateRecord( node, PageCursorTracer.NULL );
         }
 
         // when
@@ -243,10 +244,10 @@ class NodeCheckerTest extends CheckerTestBase
         {
             // (N) w/ label L
             // LabelIndex does not have the N:L entry
-            long nodeId = node( nodeStore.nextId(), NULL, NULL );
-            try ( LabelScanWriter writer = labelIndex.newWriter() )
+            long nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), NULL, NULL );
+            try ( TokenScanWriter writer = labelIndex.newWriter( PageCursorTracer.NULL ) )
             {
-                writer.write( labelChanges( nodeId, EMPTY_LONG_ARRAY, new long[]{label1} ) );
+                writer.write( EntityTokenUpdate.tokenChanges( nodeId, EMPTY_LONG_ARRAY, new long[]{label1} ) );
             }
         }
 
@@ -265,7 +266,7 @@ class NodeCheckerTest extends CheckerTestBase
         {
             // (N) w/ label L
             // LabelIndex does not have the N:L entry
-            node( nodeStore.nextId(), NULL, NULL, label1 );
+            node( nodeStore.nextId( PageCursorTracer.NULL ), NULL, NULL, label1 );
         }
 
         // when
@@ -281,13 +282,13 @@ class NodeCheckerTest extends CheckerTestBase
         // given
         try ( AutoCloseable ignored = tx() )
         {
-            try ( LabelScanWriter writer = labelIndex.newWriter() )
+            try ( TokenScanWriter writer = labelIndex.newWriter( PageCursorTracer.NULL ) )
             {
                 for ( int i = 0; i < 20; i++ )
                 {
-                    long nodeId = node( nodeStore.nextId(), NULL, NULL, label1, label2 );
+                    long nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), NULL, NULL, label1, label2 );
                     // node 10 missing label2 in index
-                    writer.write( labelChanges( nodeId, EMPTY_LONG_ARRAY,
+                    writer.write( EntityTokenUpdate.tokenChanges( nodeId, EMPTY_LONG_ARRAY,
                             i == 10 ? new long[]{label1} : new long[]{label1, label2} ) );
                 }
             }
@@ -306,8 +307,8 @@ class NodeCheckerTest extends CheckerTestBase
         // given
         try ( AutoCloseable ignored = tx() )
         {
-            NodeRecord node = new NodeRecord( nodeStore.nextId() ).initialize( true, NULL, false, NULL, 0x171f5bd081L );
-            nodeStore.updateRecord( node );
+            NodeRecord node = new NodeRecord( nodeStore.nextId( PageCursorTracer.NULL ) ).initialize( true, NULL, false, NULL, 0x171f5bd081L );
+            nodeStore.updateRecord( node, PageCursorTracer.NULL );
         }
 
         // when

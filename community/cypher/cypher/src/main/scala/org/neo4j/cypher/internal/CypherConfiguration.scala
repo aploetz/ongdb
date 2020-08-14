@@ -21,55 +21,66 @@ package org.neo4j.cypher.internal
 
 import java.io.File
 
-import org.neo4j.configuration.{Config, GraphDatabaseSettings, SettingChangeListener}
-import org.neo4j.cypher._
-import org.neo4j.cypher.internal.compiler.{CypherPlannerConfiguration, StatsDivergenceCalculator}
-import org.neo4j.cypher.internal.runtime._
+import org.neo4j.configuration.Config
+import org.neo4j.configuration.GraphDatabaseInternalSettings
+import org.neo4j.configuration.GraphDatabaseSettings
+import org.neo4j.configuration.SettingChangeListener
+import org.neo4j.cypher.CypherExpressionEngineOption
+import org.neo4j.cypher.CypherInterpretedPipesFallbackOption
+import org.neo4j.cypher.CypherOperatorEngineOption
+import org.neo4j.cypher.CypherPlannerOption
+import org.neo4j.cypher.CypherRuntimeOption
+import org.neo4j.cypher.CypherVersion
+import org.neo4j.cypher.internal.compiler.CypherPlannerConfiguration
+import org.neo4j.cypher.internal.compiler.StatsDivergenceCalculator
+import org.neo4j.cypher.internal.runtime.MEMORY_TRACKING
+import org.neo4j.cypher.internal.runtime.MemoryTracking
+import org.neo4j.cypher.internal.runtime.MemoryTrackingController
+import org.neo4j.cypher.internal.runtime.NO_TRACKING
 
 /**
-  * Holds all configuration options for the Neo4j Cypher execution engine, compilers and runtimes.
-  */
+ * Holds all configuration options for the Neo4j Cypher execution engine, compilers and runtimes.
+ */
 object CypherConfiguration {
   def fromConfig(config: Config): CypherConfiguration = {
     CypherConfiguration(
       CypherVersion(config.get(GraphDatabaseSettings.cypher_parser_version).toString),
       CypherPlannerOption(config.get(GraphDatabaseSettings.cypher_planner).toString),
-      CypherRuntimeOption(config.get(GraphDatabaseSettings.cypher_runtime).toString),
+      CypherRuntimeOption(config.get(GraphDatabaseInternalSettings.cypher_runtime).toString),
       config.get(GraphDatabaseSettings.query_cache_size).toInt,
       statsDivergenceFromConfig(config),
       config.get(GraphDatabaseSettings.cypher_hints_error),
-      config.get(GraphDatabaseSettings.cypher_idp_solver_table_threshold).toInt,
-      config.get(GraphDatabaseSettings.cypher_idp_solver_duration_threshold).toLong,
+      config.get(GraphDatabaseInternalSettings.cypher_idp_solver_table_threshold).toInt,
+      config.get(GraphDatabaseInternalSettings.cypher_idp_solver_duration_threshold).toLong,
       config.get(GraphDatabaseSettings.forbid_exhaustive_shortestpath),
       config.get(GraphDatabaseSettings.forbid_shortestpath_common_nodes),
       config.get(GraphDatabaseSettings.csv_legacy_quote_escaping),
       config.get(GraphDatabaseSettings.csv_buffer_size).intValue(),
-      CypherExpressionEngineOption(config.get(GraphDatabaseSettings.cypher_expression_engine).toString),
+      CypherExpressionEngineOption(config.get(GraphDatabaseInternalSettings.cypher_expression_engine).toString),
       config.get(GraphDatabaseSettings.cypher_lenient_create_relationship),
-      config.get(GraphDatabaseSettings.cypher_worker_count),
-      config.get(GraphDatabaseSettings.cypher_pipelined_batch_size_small),
-      config.get(GraphDatabaseSettings.cypher_pipelined_batch_size_big),
-      config.get(GraphDatabaseSettings.enable_pipelined_runtime_trace),
-      config.get(GraphDatabaseSettings.pipelined_scheduler_trace_filename).toFile,
-      config.get(GraphDatabaseSettings.cypher_expression_recompilation_limit),
-      CypherOperatorEngineOption(config.get(GraphDatabaseSettings.cypher_operator_engine).toString),
-      CypherInterpretedPipesFallbackOption(config.get(GraphDatabaseSettings.cypher_pipelined_interpreted_pipes_fallback).toString),
+      config.get(GraphDatabaseInternalSettings.cypher_pipelined_batch_size_small),
+      config.get(GraphDatabaseInternalSettings.cypher_pipelined_batch_size_big),
+      config.get(GraphDatabaseInternalSettings.enable_pipelined_runtime_trace),
+      config.get(GraphDatabaseInternalSettings.pipelined_scheduler_trace_filename).toFile,
+      config.get(GraphDatabaseInternalSettings.cypher_expression_recompilation_limit),
+      CypherOperatorEngineOption(config.get(GraphDatabaseInternalSettings.cypher_operator_engine).toString),
+      CypherInterpretedPipesFallbackOption(config.get(GraphDatabaseInternalSettings.cypher_pipelined_interpreted_pipes_fallback).toString),
       new ConfigMemoryTrackingController(config),
-      config.get(GraphDatabaseSettings.cypher_enable_runtime_monitors)
+      config.get(GraphDatabaseInternalSettings.cypher_enable_runtime_monitors)
     )
   }
 
   def statsDivergenceFromConfig(config: Config): StatsDivergenceCalculator = {
     val divergenceThreshold = config.get(GraphDatabaseSettings.query_statistics_divergence_threshold).doubleValue()
-    val targetThreshold = config.get(GraphDatabaseSettings.query_statistics_divergence_target).doubleValue()
+    val targetThreshold = config.get(GraphDatabaseInternalSettings.query_statistics_divergence_target).doubleValue()
     val minReplanTime = config.get(GraphDatabaseSettings.cypher_min_replan_interval).toMillis.longValue()
-    val targetReplanTime = config.get(GraphDatabaseSettings.cypher_replan_interval_target).toMillis.longValue()
-    val divergenceAlgorithm = config.get(GraphDatabaseSettings.cypher_replan_algorithm).toString
+    val targetReplanTime = config.get(GraphDatabaseInternalSettings.cypher_replan_interval_target).toMillis.longValue()
+    val divergenceAlgorithm = config.get(GraphDatabaseInternalSettings.cypher_replan_algorithm).toString
     StatsDivergenceCalculator.divergenceCalculatorFor(divergenceAlgorithm,
-                                                      divergenceThreshold,
-                                                      targetThreshold,
-                                                      minReplanTime,
-                                                      targetReplanTime)
+      divergenceThreshold,
+      targetThreshold,
+      minReplanTime,
+      targetReplanTime)
   }
 }
 
@@ -77,26 +88,23 @@ class ConfigMemoryTrackingController(config: Config) extends MemoryTrackingContr
 
   @volatile private var _memoryTracking: MemoryTracking =
     getMemoryTracking(
-      config.get(GraphDatabaseSettings.track_query_allocation),
-      config.get(GraphDatabaseSettings.query_max_memory))
+      config.get(GraphDatabaseSettings.track_query_allocation)
+    )
 
-  override def memoryTracking: MemoryTracking = _memoryTracking
+  override def memoryTracking(doProfile: Boolean): MemoryTracking = if (doProfile && _memoryTracking == NO_TRACKING) {
+    getMemoryTracking(trackQueryAllocation = true)
+  } else {
+    _memoryTracking
+  }
 
   config.addListener(GraphDatabaseSettings.track_query_allocation,
-                     new SettingChangeListener[java.lang.Boolean] {
-                       override def accept(before: java.lang.Boolean, after: java.lang.Boolean): Unit =
-                         _memoryTracking = getMemoryTracking(after, config.get(GraphDatabaseSettings.query_max_memory))
-                     })
+    new SettingChangeListener[java.lang.Boolean] {
+      override def accept(before: java.lang.Boolean, after: java.lang.Boolean): Unit =
+        _memoryTracking = getMemoryTracking(after)
+    })
 
-  config.addListener(GraphDatabaseSettings.query_max_memory,
-                     new SettingChangeListener[java.lang.Long] {
-                       override def accept(before: java.lang.Long, after: java.lang.Long): Unit =
-                        _memoryTracking = getMemoryTracking(config.get(GraphDatabaseSettings.track_query_allocation), after)
-                     })
-
-  private def getMemoryTracking(trackQueryAllocation: Boolean, queryMaxMemory: Long): MemoryTracking =
-    if (trackQueryAllocation && queryMaxMemory > 0) MEMORY_BOUND(queryMaxMemory)
-    else if (trackQueryAllocation) MEMORY_TRACKING
+  private def getMemoryTracking(trackQueryAllocation: Boolean): MemoryTracking =
+    if (trackQueryAllocation) MEMORY_TRACKING
     else NO_TRACKING
 }
 
@@ -114,7 +122,6 @@ case class CypherConfiguration(version: CypherVersion,
                                csvBufferSize: Int,
                                expressionEngineOption: CypherExpressionEngineOption,
                                lenientCreateRelationship: Boolean,
-                               workers: Int,
                                pipelinedBatchSizeSmall: Int,
                                pipelinedBatchSizeBig: Int,
                                doSchedulerTracing: Boolean,
@@ -127,7 +134,6 @@ case class CypherConfiguration(version: CypherVersion,
 
   def toCypherRuntimeConfiguration: CypherRuntimeConfiguration =
     CypherRuntimeConfiguration(
-      workers = workers,
       pipelinedBatchSizeSmall = pipelinedBatchSizeSmall,
       pipelinedBatchSizeBig = pipelinedBatchSizeBig,
       schedulerTracing = toSchedulerTracingConfiguration(doSchedulerTracing, schedulerTracingFile),
@@ -154,7 +160,8 @@ case class CypherConfiguration(version: CypherVersion,
       errorIfShortestPathHasCommonNodesAtRuntime = errorIfShortestPathHasCommonNodesAtRuntime,
       legacyCsvQuoteEscaping = legacyCsvQuoteEscaping,
       csvBufferSize = csvBufferSize,
-      nonIndexedLabelWarningThreshold = config.get(GraphDatabaseSettings.query_non_indexed_label_warning_threshold).longValue(),
-      planSystemCommands = planSystemCommands
+      nonIndexedLabelWarningThreshold = config.get(GraphDatabaseInternalSettings.query_non_indexed_label_warning_threshold).longValue(),
+      planSystemCommands = planSystemCommands,
+      readPropertiesFromCursor = config.get(GraphDatabaseInternalSettings.cypher_read_properties_from_cursor)
     )
 }

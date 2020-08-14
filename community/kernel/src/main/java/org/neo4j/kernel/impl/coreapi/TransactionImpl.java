@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.neo4j.common.EntityType;
 import org.neo4j.exceptions.KernelException;
@@ -73,7 +75,6 @@ import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexType;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.Status.Classification;
 import org.neo4j.kernel.api.exceptions.Status.Code;
@@ -101,6 +102,7 @@ import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyMap;
 import static org.neo4j.internal.helpers.collection.Iterators.emptyResourceIterator;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.kernel.api.exceptions.Status.Transaction.Terminated;
 import static org.neo4j.values.storable.Values.utf8Value;
 
@@ -109,22 +111,28 @@ import static org.neo4j.values.storable.Values.utf8Value;
  */
 public class TransactionImpl implements InternalTransaction
 {
+    private static final String UNABLE_TO_COMPLETE_TRANSACTION = "Unable to complete transaction.";
     private static final EntityLocker locker = new EntityLocker();
     private final TokenHolders tokenHolders;
     private final TransactionalContextFactory contextFactory;
     private final DatabaseAvailabilityGuard availabilityGuard;
     private final QueryExecutionEngine executionEngine;
+    private final Consumer<Status> terminationCallback;
+    private final Function<Exception, RuntimeException> customSafeTerminalOperationErrorMapper;
     private KernelTransaction transaction;
     private boolean closed;
 
     public TransactionImpl( TokenHolders tokenHolders, TransactionalContextFactory contextFactory,
             DatabaseAvailabilityGuard availabilityGuard, QueryExecutionEngine executionEngine,
-            KernelTransaction transaction )
+            KernelTransaction transaction, Consumer<Status> terminationCallback,
+            Function<Exception, RuntimeException> customSafeTerminalOperationErrorMapper )
     {
         this.tokenHolders = tokenHolders;
         this.contextFactory = contextFactory;
         this.availabilityGuard = availabilityGuard;
         this.executionEngine = executionEngine;
+        this.terminationCallback = terminationCallback;
+        this.customSafeTerminalOperationErrorMapper = customSafeTerminalOperationErrorMapper;
         setTransaction( transaction );
     }
 
@@ -410,7 +418,7 @@ public class TransactionImpl implements InternalTransaction
         KernelTransaction ktx = kernelTransaction();
         return () ->
         {
-            NodeCursor cursor = ktx.cursors().allocateNodeCursor();
+            NodeCursor cursor = ktx.cursors().allocateNodeCursor( ktx.pageCursorTracer() );
             ktx.dataRead().allNodesScan( cursor );
             return new PrefetchingResourceIterator<>()
             {
@@ -443,7 +451,7 @@ public class TransactionImpl implements InternalTransaction
         KernelTransaction ktx = kernelTransaction();
         return () ->
         {
-            RelationshipScanCursor cursor = ktx.cursors().allocateRelationshipScanCursor();
+            RelationshipScanCursor cursor = ktx.cursors().allocateRelationshipScanCursor( ktx.pageCursorTracer() );
             ktx.dataRead().allRelationshipsScan( cursor );
             return new PrefetchingResourceIterator<>()
             {
@@ -474,7 +482,17 @@ public class TransactionImpl implements InternalTransaction
     @Override
     public final void terminate()
     {
-        transaction.markForTermination( Terminated );
+        terminate( Terminated );
+    }
+
+    @Override
+    public void terminate( Status reason )
+    {
+        transaction.markForTermination( reason );
+        if ( terminationCallback != null )
+        {
+            terminationCallback.accept( reason );
+        }
     }
 
     @Override
@@ -485,34 +503,49 @@ public class TransactionImpl implements InternalTransaction
 
     private void safeTerminalOperation( TransactionalOperation operation )
     {
-        try
+        if ( customSafeTerminalOperationErrorMapper != null )
         {
-            operation.perform( transaction );
-            closed = true;
-        }
-        catch ( TransientFailureException e )
-        {
-            // We let transient exceptions pass through unchanged since they aren't really transaction failures
-            // in the same sense as unexpected failures are. Such exception signals that the transaction
-            // can be retried and might be successful the next time.
-            throw e;
-        }
-        catch ( ConstraintViolationTransactionFailureException e )
-        {
-            throw new ConstraintViolationException( e.getMessage(), e );
-        }
-        catch ( KernelException | TransactionTerminatedException e )
-        {
-            Code statusCode = e.status().code();
-            if ( statusCode.classification() == Classification.TransientError )
+            try
             {
-                throw new TransientTransactionFailureException( closeFailureMessage() + ": " + statusCode.description(), e );
+                operation.perform( transaction );
+                closed = true;
             }
-            throw new TransactionFailureException( closeFailureMessage(), e );
+            catch ( Exception e )
+            {
+                throw customSafeTerminalOperationErrorMapper.apply( e );
+            }
         }
-        catch ( Exception e )
+        else
         {
-            throw new TransactionFailureException( closeFailureMessage(), e );
+            try
+            {
+                operation.perform( transaction );
+                closed = true;
+            }
+            catch ( TransientFailureException e )
+            {
+                // We let transient exceptions pass through unchanged since they aren't really transaction failures
+                // in the same sense as unexpected failures are. Such exception signals that the transaction
+                // can be retried and might be successful the next time.
+                throw e;
+            }
+            catch ( ConstraintViolationTransactionFailureException e )
+            {
+                throw new ConstraintViolationException( e.getMessage(), e );
+            }
+            catch ( KernelException | TransactionTerminatedException e )
+            {
+                Code statusCode = e.status().code();
+                if ( statusCode.classification() == Classification.TransientError )
+                {
+                    throw new TransientTransactionFailureException( UNABLE_TO_COMPLETE_TRANSACTION + ": " + statusCode.description(), e );
+                }
+                throw new TransactionFailureException( UNABLE_TO_COMPLETE_TRANSACTION, e );
+            }
+            catch ( Exception e )
+            {
+                throw new TransactionFailureException( UNABLE_TO_COMPLETE_TRANSACTION, e );
+            }
         }
     }
 
@@ -521,11 +554,6 @@ public class TransactionImpl implements InternalTransaction
     {
         this.transaction = transaction;
         transaction.bindToUserTransaction( this );
-    }
-
-    private String closeFailureMessage()
-    {
-        return "Unable to complete transaction.";
     }
 
     @Override
@@ -644,9 +672,9 @@ public class TransactionImpl implements InternalTransaction
             // Ha! We found an index - let's use it to find matching nodes
             try
             {
-                NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor();
+                NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor( transaction.pageCursorTracer() );
                 IndexReadSession indexSession = read.indexReadSession( index );
-                read.nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, query );
+                read.nodeIndexSeek( indexSession, cursor, unconstrained(), query );
 
                 return new NodeCursorResourceIterator<>( cursor, this::newNodeEntity );
             }
@@ -683,11 +711,11 @@ public class TransactionImpl implements InternalTransaction
     {
         KernelTransaction transaction = kernelTransaction();
 
-        NodeLabelIndexCursor nodeLabelCursor = transaction.cursors().allocateNodeLabelIndexCursor();
-        NodeCursor nodeCursor = transaction.cursors().allocateNodeCursor();
-        PropertyCursor propertyCursor = transaction.cursors().allocatePropertyCursor();
+        NodeLabelIndexCursor nodeLabelCursor = transaction.cursors().allocateNodeLabelIndexCursor( transaction.pageCursorTracer() );
+        NodeCursor nodeCursor = transaction.cursors().allocateNodeCursor( transaction.pageCursorTracer() );
+        PropertyCursor propertyCursor = transaction.cursors().allocatePropertyCursor( transaction.pageCursorTracer(), transaction.memoryTracker() );
 
-        transaction.dataRead().nodeLabelScan( labelId, nodeLabelCursor );
+        transaction.dataRead().nodeLabelScan( labelId, nodeLabelCursor, IndexOrder.NONE );
 
         return new NodeLabelPropertyIterator( transaction.dataRead(),
                 nodeLabelCursor,
@@ -714,9 +742,9 @@ public class TransactionImpl implements InternalTransaction
         {
             try
             {
-                NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor();
+                NodeValueIndexCursor cursor = transaction.cursors().allocateNodeValueIndexCursor( transaction.pageCursorTracer() );
                 IndexReadSession indexSession = read.indexReadSession( index );
-                read.nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, getReorderedIndexQueries( index.schema().getPropertyIds(), queries ) );
+                read.nodeIndexSeek( indexSession, cursor, unconstrained(), getReorderedIndexQueries( index.schema().getPropertyIds(), queries ) );
                 return new NodeCursorResourceIterator<>( cursor, this::newNodeEntity );
             }
             catch ( KernelException e )
@@ -755,8 +783,8 @@ public class TransactionImpl implements InternalTransaction
             return Iterators.emptyResourceIterator();
         }
 
-        NodeLabelIndexCursor cursor = ktx.cursors().allocateNodeLabelIndexCursor();
-        ktx.dataRead().nodeLabelScan( labelId, cursor );
+        NodeLabelIndexCursor cursor = ktx.cursors().allocateNodeLabelIndexCursor( transaction.pageCursorTracer() );
+        ktx.dataRead().nodeLabelScan( labelId, cursor, IndexOrder.NONE );
         return new NodeCursorResourceIterator<>( cursor, this::newNodeEntity );
     }
 
@@ -803,10 +831,9 @@ public class TransactionImpl implements InternalTransaction
             int curr = propertyIds[i];
             if ( curr == prev )
             {
-                SilentTokenNameLookup tokenLookup = new SilentTokenNameLookup( tokenRead );
                 throw new IllegalArgumentException(
                         format( "Provided two queries for property %s. Only one query per property key can be performed",
-                                tokenLookup.propertyKeyGetName( curr ) ) );
+                                tokenRead.propertyKeyGetName( curr ) ) );
             }
             prev = curr;
         }

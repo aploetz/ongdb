@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.internal.nativeimpl.NativeAccess;
 import org.neo4j.internal.nativeimpl.NativeCallResult;
+import org.neo4j.io.ByteUnit;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.ReadableChannel;
 import org.neo4j.io.fs.StoreChannel;
@@ -58,9 +59,11 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.transaction.log.TestLogEntryReader.logEntryReader;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderReader.readLogHeader;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogVersions.CURRENT_FORMAT_LOG_HEADER_SIZE;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_COMMIT_TIMESTAMP;
 
 @Neo4jLayoutExtension
@@ -74,14 +77,15 @@ class TransactionLogFileTest
     @Inject
     private LifeSupport life;
 
+    private final long rotationThreshold = ByteUnit.mebiBytes( 1 );
     private final LogVersionRepository logVersionRepository = new SimpleLogVersionRepository( 1L );
-    private final TransactionIdStore transactionIdStore =
-            new SimpleTransactionIdStore( 2L, 0, BASE_TX_COMMIT_TIMESTAMP, 0, 0 );
+    private final TransactionIdStore transactionIdStore = new SimpleTransactionIdStore( 2L, 0, BASE_TX_COMMIT_TIMESTAMP, 0, 0 );
 
     @Test
     void skipLogFileWithoutHeader() throws IOException
     {
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -91,9 +95,9 @@ class TransactionLogFileTest
         life.start();
 
         // simulate new file without header presence
-        logVersionRepository.incrementAndGetVersion();
+        logVersionRepository.incrementAndGetVersion( NULL );
         fileSystem.write( logFiles.getLogFileForVersion( logVersionRepository.getCurrentLogVersion() ) ).close();
-        transactionIdStore.transactionCommitted( 5L, 5, 5L );
+        transactionIdStore.transactionCommitted( 5L, 5, 5L, NULL );
 
         PhysicalLogicalTransactionStore.LogVersionLocator versionLocator = new PhysicalLogicalTransactionStore.LogVersionLocator( 4L );
         logFiles.accept( versionLocator );
@@ -106,7 +110,7 @@ class TransactionLogFileTest
     void preAllocateOnStartAndEvictOnShutdownNewLogFile() throws IOException
     {
         final CapturingNativeAccess capturingNativeAccess = new CapturingNativeAccess();
-        LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+        LogFilesBuilder.builder( databaseLayout, fileSystem )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -143,6 +147,7 @@ class TransactionLogFileTest
     {
         // GIVEN
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -158,7 +163,7 @@ class TransactionLogFileTest
         File file =  LogFilesBuilder.logFilesBasedOnlyBuilder( databaseLayout.getTransactionLogsDirectory(), fileSystem )
                 .withLogEntryReader( logEntryReader() )
                 .build().getLogFileForVersion( 1L );
-        LogHeader header = readLogHeader( fileSystem, file );
+        LogHeader header = readLogHeader( fileSystem, file, INSTANCE );
         assertEquals( 1L, header.getLogVersion() );
         assertEquals( 2L, header.getLastCommittedTxId() );
     }
@@ -168,6 +173,7 @@ class TransactionLogFileTest
     {
         // GIVEN
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -199,6 +205,7 @@ class TransactionLogFileTest
     {
         // GIVEN
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -246,6 +253,7 @@ class TransactionLogFileTest
     {
         // GIVEN
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )
@@ -330,6 +338,7 @@ class TransactionLogFileTest
     void closeChannelThrowExceptionOnAttemptToAppendTransactionLogRecords() throws IOException
     {
         LogFiles logFiles = LogFilesBuilder.builder( databaseLayout, fileSystem )
+                .withRotationThreshold( rotationThreshold )
                 .withTransactionIdStore( transactionIdStore )
                 .withLogVersionRepository( logVersionRepository )
                 .withLogEntryReader( logEntryReader() )

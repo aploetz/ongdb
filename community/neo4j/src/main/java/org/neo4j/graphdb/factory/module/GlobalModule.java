@@ -29,12 +29,14 @@ import org.neo4j.annotations.api.IgnoreApiCheck;
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.configuration.connectors.ConnectorPortRegister;
-import org.neo4j.exceptions.UnsatisfiedDependencyException;
+import org.neo4j.dbms.database.SystemGraphComponents;
 import org.neo4j.graphdb.event.DatabaseEventListener;
 import org.neo4j.graphdb.facade.DatabaseManagementServiceFactory;
 import org.neo4j.graphdb.facade.ExternalDependencies;
+import org.neo4j.internal.collector.RecentQueryBuffer;
 import org.neo4j.internal.diagnostics.DiagnosticsManager;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
@@ -52,7 +54,7 @@ import org.neo4j.kernel.extension.ExtensionFailureStrategies;
 import org.neo4j.kernel.extension.GlobalExtensions;
 import org.neo4j.kernel.extension.context.GlobalExtensionContext;
 import org.neo4j.kernel.impl.cache.VmPauseMonitorComponent;
-import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.pagecache.ConfiguringPageCacheFactory;
 import org.neo4j.kernel.impl.pagecache.PageCacheLifecycle;
 import org.neo4j.kernel.impl.scheduler.JobSchedulerFactory;
@@ -72,14 +74,16 @@ import org.neo4j.kernel.internal.locker.GlobalLockerService;
 import org.neo4j.kernel.internal.locker.Locker;
 import org.neo4j.kernel.internal.locker.LockerLifecycleAdapter;
 import org.neo4j.kernel.lifecycle.LifeSupport;
+import org.neo4j.kernel.monitoring.DatabaseEventListeners;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Level;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.logging.internal.StoreLogService;
-import org.neo4j.monitoring.CompositeDatabaseHealth;
-import org.neo4j.monitoring.DatabaseEventListeners;
+import org.neo4j.memory.GlobalMemoryGroupTracker;
+import org.neo4j.memory.MemoryGroup;
+import org.neo4j.memory.MemoryPools;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.scheduler.DeferredExecutor;
 import org.neo4j.scheduler.Group;
@@ -90,7 +94,10 @@ import org.neo4j.time.SystemNanoClock;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.data_collector_max_recent_query_count;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_database;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_tracking;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_transaction_global_max_size;
 import static org.neo4j.configuration.GraphDatabaseSettings.store_internal_log_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.tx_state_off_heap_block_cache_size;
 import static org.neo4j.configuration.GraphDatabaseSettings.tx_state_off_heap_max_cacheable_block_size;
@@ -108,7 +115,7 @@ public class GlobalModule
     private final LogService logService;
     private final LifeSupport globalLife;
     private final Neo4jLayout neo4jLayout;
-    private final DatabaseInfo databaseInfo;
+    private final DbmsInfo dbmsInfo;
     private final DbmsDiagnosticsManager dbmsDiagnosticsManager;
     private final Tracers tracers;
     private final Config globalConfig;
@@ -120,7 +127,6 @@ public class GlobalModule
     private final CollectionsFactorySupplier collectionsFactorySupplier;
     private final ConnectorPortRegister connectorPortRegister;
     private final CompositeDatabaseAvailabilityGuard globalAvailabilityGuard;
-    private final CompositeDatabaseHealth globalHealthService;
     private final FileSystemWatcherService fileSystemWatcher;
     private final DatabaseEventListeners databaseEventListeners;
     private final GlobalTransactionEventListeners transactionEventListeners;
@@ -128,15 +134,20 @@ public class GlobalModule
     private final StorageEngineFactory storageEngineFactory;
     private final DependencyResolver externalDependencyResolver;
     private final FileLockerService fileLockerService;
+    private final MemoryPools memoryPools;
+    private final RecentQueryBuffer recentQueryBuffer;
+    private final GlobalMemoryGroupTracker transactionsMemoryPool;
+    private final GlobalMemoryGroupTracker otherMemoryPool;
+    private final SystemGraphComponents systemGraphComponents;
 
-    public GlobalModule( Config globalConfig, DatabaseInfo databaseInfo, ExternalDependencies externalDependencies )
+    public GlobalModule( Config globalConfig, DbmsInfo dbmsInfo, ExternalDependencies externalDependencies )
     {
         externalDependencyResolver = externalDependencies.dependencies() != null ? externalDependencies.dependencies() : new Dependencies();
 
-        this.databaseInfo = databaseInfo;
+        this.dbmsInfo = dbmsInfo;
 
         globalDependencies = new Dependencies();
-        globalDependencies.satisfyDependency( databaseInfo );
+        globalDependencies.satisfyDependency( dbmsInfo );
 
         globalClock = globalDependencies.satisfyDependency( createClock() );
         globalLife = createLife();
@@ -153,9 +164,9 @@ public class GlobalModule
         globalMonitors = externalDependencies.monitors() == null ? new Monitors() : externalDependencies.monitors();
         globalDependencies.satisfyDependency( globalMonitors );
 
-        JobScheduler jobScheduler = tryResolveOrCreate( JobScheduler.class, this::createJobScheduler );
-        this.jobScheduler = globalLife.add( globalDependencies.satisfyDependency( jobScheduler ) );
-        startDeferredExecutors( this.jobScheduler, externalDependencies.deferredExecutors() );
+        JobScheduler createdOrResolvedScheduler = tryResolveOrCreate( JobScheduler.class, this::createJobScheduler );
+        jobScheduler = globalLife.add( globalDependencies.satisfyDependency( createdOrResolvedScheduler ) );
+        startDeferredExecutors( jobScheduler, externalDependencies.deferredExecutors() );
 
         // If no logging was passed in from the outside then create logging and register
         // with this life
@@ -170,24 +181,35 @@ public class GlobalModule
         new JvmChecker( logService.getInternalLog( JvmChecker.class ),
                 new JvmMetadataRepository() ).checkJvmCompatibilityAndIssueWarning();
 
-        globalLife.add( new VmPauseMonitorComponent( globalConfig, logService.getInternalLog( VmPauseMonitorComponent.class ), this.jobScheduler ) );
+        memoryPools = new MemoryPools( globalConfig.get( memory_tracking ) );
+        otherMemoryPool = memoryPools.pool( MemoryGroup.OTHER, 0, null );
+        transactionsMemoryPool =
+                memoryPools.pool( MemoryGroup.TRANSACTION, globalConfig.get( memory_transaction_global_max_size ), memory_transaction_global_max_size.name() );
+        globalConfig.addListener( memory_transaction_global_max_size, ( before, after ) -> transactionsMemoryPool.setSize( after ) );
+        globalDependencies.satisfyDependency( memoryPools );
+
+        recentQueryBuffer = new RecentQueryBuffer( globalConfig.get( data_collector_max_recent_query_count ),
+                                                   memoryPools.pool( MemoryGroup.RECENT_QUERY_BUFFER, 0, null ).getPoolMemoryTracker() );
+        globalDependencies.satisfyDependency( recentQueryBuffer );
+
+        systemGraphComponents = tryResolveOrCreate( SystemGraphComponents.class, SystemGraphComponents::new );
+        globalDependencies.satisfyDependency( systemGraphComponents );
+
+        globalLife.add( new VmPauseMonitorComponent( globalConfig, logService.getInternalLog( VmPauseMonitorComponent.class ), jobScheduler, globalMonitors ) );
 
         globalAvailabilityGuard = new CompositeDatabaseAvailabilityGuard( globalClock );
         globalDependencies.satisfyDependency( globalAvailabilityGuard );
         globalLife.setLast( globalAvailabilityGuard );
 
-        globalHealthService = new CompositeDatabaseHealth();
-        globalDependencies.satisfyDependency( globalHealthService );
-
-        String desiredImplementationName = globalConfig.get( GraphDatabaseSettings.tracer );
+        String desiredImplementationName = globalConfig.get( GraphDatabaseInternalSettings.tracer );
         tracers = globalDependencies.satisfyDependency( new Tracers( desiredImplementationName,
-                logService.getInternalLog( Tracers.class ), globalMonitors, this.jobScheduler, globalClock ) );
+                logService.getInternalLog( Tracers.class ), globalMonitors, jobScheduler, globalClock ) );
         globalDependencies.satisfyDependency( tracers.getPageCacheTracer() );
 
         collectionsFactorySupplier = createCollectionsFactorySupplier( globalConfig, globalLife );
 
         pageCache = tryResolveOrCreate( PageCache.class,
-                () -> createPageCache( fileSystem, globalConfig, logService, tracers, this.jobScheduler ) );
+                () -> createPageCache( fileSystem, globalConfig, logService, tracers, jobScheduler, globalClock, memoryPools ) );
 
         globalLife.add( new PageCacheLifecycle( pageCache ) );
 
@@ -196,13 +218,13 @@ public class GlobalModule
 
         dbmsDiagnosticsManager.dumpSystemDiagnostics();
 
-        fileSystemWatcher = createFileSystemWatcherService( fileSystem, logService, this.jobScheduler, globalConfig );
+        fileSystemWatcher = createFileSystemWatcherService( fileSystem, logService, jobScheduler, globalConfig );
         globalLife.add( fileSystemWatcher );
         globalDependencies.satisfyDependency( fileSystemWatcher );
 
         extensionFactories = externalDependencies.extensions();
         globalExtensions = globalDependencies.satisfyDependency(
-                new GlobalExtensions( new GlobalExtensionContext( neo4jLayout, databaseInfo, globalDependencies ), extensionFactories, globalDependencies,
+                new GlobalExtensions( new GlobalExtensionContext( neo4jLayout, dbmsInfo, globalDependencies ), extensionFactories, globalDependencies,
                         ExtensionFailureStrategies.fail() ) );
 
         globalDependencies.satisfyDependency( URLAccessRules.combined( externalDependencies.urlAccessRules() ) );
@@ -229,14 +251,7 @@ public class GlobalModule
 
     private <T> T tryResolveOrCreate( Class<T> clazz, Supplier<T> newInstanceMethod )
     {
-        try
-        {
-            return externalDependencyResolver.resolveDependency( clazz );
-        }
-        catch ( IllegalArgumentException | UnsatisfiedDependencyException e )
-        {
-            return newInstanceMethod.get();
-        }
+        return externalDependencyResolver.containsDependency( clazz ) ? externalDependencyResolver.resolveDependency( clazz ) : newInstanceMethod.get();
     }
 
     private void checkLegacyDefaultDatabase()
@@ -331,9 +346,10 @@ public class GlobalModule
         builder.withRotationListener(
                 logProvider -> dbmsDiagnosticsManager.dumpAll( logProvider.getLog( DiagnosticsManager.class ) ) );
 
-        builder.withLevels( asDebugLogLevels( globalConfig.get( GraphDatabaseSettings.store_internal_debug_contexts ) ) );
+        builder.withLevels( asDebugLogLevels( globalConfig.get( GraphDatabaseInternalSettings.store_internal_debug_contexts ) ) );
         builder.withDefaultLevel( globalConfig.get( GraphDatabaseSettings.store_internal_log_level ) )
-               .withTimeZone( globalConfig.get( GraphDatabaseSettings.db_timezone ).getZoneId() );
+               .withTimeZone( globalConfig.get( GraphDatabaseSettings.db_timezone ).getZoneId() )
+               .withFormat( globalConfig.get( GraphDatabaseInternalSettings.log_format ) );
 
         File logFile = globalConfig.get( store_internal_log_path ).toFile();
         if ( !logFile.getParentFile().exists() )
@@ -352,7 +368,7 @@ public class GlobalModule
         // Listen to changes to the dynamic log level settings.
         globalConfig.addListener( GraphDatabaseSettings.store_internal_log_level,
                 ( before, after ) -> logService.setDefaultLogLevel( after ) );
-        globalConfig.addListener( GraphDatabaseSettings.store_internal_debug_contexts,
+        globalConfig.addListener( GraphDatabaseInternalSettings.store_internal_debug_contexts,
                 ( before, after ) -> logService.setContextLogLevels( asDebugLogLevels( after ) ) );
         return globalLife.add( logService );
     }
@@ -365,20 +381,22 @@ public class GlobalModule
     private JobScheduler createJobScheduler()
     {
         JobScheduler jobScheduler = JobSchedulerFactory.createInitialisedScheduler( globalClock );
-        jobScheduler.setParallelism( Group.INDEX_SAMPLING, globalConfig.get( GraphDatabaseSettings.index_sampling_parallelism ) );
+        jobScheduler.setParallelism( Group.INDEX_SAMPLING, globalConfig.get( GraphDatabaseInternalSettings.index_sampling_parallelism ) );
+        jobScheduler.setParallelism( Group.INDEX_POPULATION, globalConfig.get( GraphDatabaseInternalSettings.index_population_parallelism ) );
+        jobScheduler.setParallelism( Group.INDEX_POPULATION_WORK, globalConfig.get( GraphDatabaseInternalSettings.index_population_workers ) );
+        jobScheduler.setParallelism( Group.PAGE_CACHE_PRE_FETCHER, globalConfig.get( GraphDatabaseSettings.pagecache_scan_prefetch ) );
         return jobScheduler;
     }
 
-    protected PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, LogService logging,
-            Tracers tracers, JobScheduler jobScheduler )
+    protected PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, LogService logging, Tracers tracers, JobScheduler jobScheduler,
+            SystemNanoClock clock, MemoryPools memoryPools )
     {
         Log pageCacheLog = logging.getInternalLog( PageCache.class );
-        ConfiguringPageCacheFactory pageCacheFactory = new ConfiguringPageCacheFactory( fileSystem, config, tracers.getPageCacheTracer(),
-                tracers.getPageCursorTracerSupplier(), pageCacheLog,
-                GuardVersionContextSupplier.INSTANCE, jobScheduler );
+        ConfiguringPageCacheFactory pageCacheFactory = new ConfiguringPageCacheFactory( fileSystem, config, tracers.getPageCacheTracer(), pageCacheLog,
+                GuardVersionContextSupplier.INSTANCE, jobScheduler, clock, memoryPools );
         PageCache pageCache = pageCacheFactory.getOrCreatePageCache();
 
-        if ( config.get( GraphDatabaseSettings.dump_configuration ) )
+        if ( config.get( GraphDatabaseInternalSettings.dump_configuration ) )
         {
             pageCacheFactory.dumpConfiguration();
         }
@@ -468,9 +486,9 @@ public class GlobalModule
         return neo4jLayout;
     }
 
-    public DatabaseInfo getDatabaseInfo()
+    public DbmsInfo getDbmsInfo()
     {
-        return databaseInfo;
+        return dbmsInfo;
     }
 
     public LifeSupport getGlobalLife()
@@ -503,11 +521,6 @@ public class GlobalModule
         return globalAvailabilityGuard;
     }
 
-    public CompositeDatabaseHealth getGlobalHealthService()
-    {
-        return globalHealthService;
-    }
-
     public DatabaseEventListeners getDatabaseEventListeners()
     {
         return databaseEventListeners;
@@ -531,5 +544,25 @@ public class GlobalModule
     FileLockerService getFileLockerService()
     {
         return fileLockerService;
+    }
+
+    public MemoryPools getMemoryPools()
+    {
+        return memoryPools;
+    }
+
+    public GlobalMemoryGroupTracker getTransactionsMemoryPool()
+    {
+        return transactionsMemoryPool;
+    }
+
+    public GlobalMemoryGroupTracker getOtherMemoryPool()
+    {
+        return otherMemoryPool;
+    }
+
+    public SystemGraphComponents getSystemGraphComponents()
+    {
+        return systemGraphComponents;
     }
 }

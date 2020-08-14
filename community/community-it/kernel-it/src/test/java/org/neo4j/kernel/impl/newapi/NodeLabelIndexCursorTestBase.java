@@ -27,13 +27,13 @@ import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.Write;
+import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.api.KernelTransaction;
 
 import static org.neo4j.kernel.impl.newapi.IndexReadAsserts.assertNodeCount;
 import static org.neo4j.kernel.impl.newapi.IndexReadAsserts.assertNodes;
 
-public abstract class NodeLabelIndexCursorTestBase<G extends KernelAPIWriteTestSupport>
-        extends KernelAPIWriteTestBase<G>
+abstract class NodeLabelIndexCursorTestBase<G extends KernelAPIWriteTestSupport> extends KernelAPIWriteTestBase<G>
 {
     private int labelOne = 1;
     private int labelTwo = 2;
@@ -67,31 +67,31 @@ public abstract class NodeLabelIndexCursorTestBase<G extends KernelAPIWriteTestS
         {
             org.neo4j.internal.kernel.api.Read read = tx.dataRead();
 
-            try ( NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+            try ( NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
             {
                 MutableLongSet uniqueIds = new LongHashSet();
 
                 // WHEN
-                read.nodeLabelScan( labelOne, cursor );
+                read.nodeLabelScan( labelOne, cursor, IndexOrder.NONE );
 
                 // THEN
                 assertNodeCount( cursor, 1, uniqueIds );
 
                 // WHEN
-                read.nodeLabelScan( labelTwo, cursor );
+                read.nodeLabelScan( labelTwo, cursor, IndexOrder.NONE );
 
                 // THEN
                 assertNodeCount( cursor, 2, uniqueIds );
 
                 // WHEN
-                read.nodeLabelScan( labelThree, cursor );
+                read.nodeLabelScan( labelThree, cursor, IndexOrder.NONE );
 
                 // THEN
                 assertNodeCount( cursor, 3, uniqueIds );
 
                 // WHEN
                 uniqueIds.clear();
-                read.nodeLabelScan( labelFirst, cursor );
+                read.nodeLabelScan( labelFirst, cursor, IndexOrder.NONE );
 
                 // THEN
                 assertNodeCount( cursor, 3, uniqueIds );
@@ -123,12 +123,12 @@ public abstract class NodeLabelIndexCursorTestBase<G extends KernelAPIWriteTestS
 
             Read read = tx.dataRead();
 
-            try ( NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor() )
+            try ( NodeLabelIndexCursor cursor = tx.cursors().allocateNodeLabelIndexCursor( tx.pageCursorTracer() ) )
             {
                 MutableLongSet uniqueIds = new LongHashSet();
 
                 // when
-                read.nodeLabelScan( labelOne, cursor );
+                read.nodeLabelScan( labelOne, cursor, IndexOrder.NONE );
 
                 // then
                 assertNodes( cursor, uniqueIds, inStore, createdInTx );

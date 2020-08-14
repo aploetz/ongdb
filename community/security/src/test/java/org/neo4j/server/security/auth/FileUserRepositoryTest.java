@@ -44,15 +44,14 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.CoreMatchers.startsWith;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.neo4j.test.assertion.Assert.assertException;
+import static org.neo4j.logging.AssertableLogProvider.Level.ERROR;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 @EphemeralTestDirectoryExtension
 class FileUserRepositoryTest
@@ -83,7 +82,7 @@ class FileUserRepositoryTest
         User result = users.getUserByName( user.name() );
 
         // Then
-        assertThat( result, equalTo( user ) );
+        assertThat( result ).isEqualTo( user );
     }
 
     @Test
@@ -101,7 +100,7 @@ class FileUserRepositoryTest
         User resultByName = users.getUserByName( user.name() );
 
         // Then
-        assertThat( resultByName, equalTo( user ) );
+        assertThat( resultByName ).isEqualTo( user );
     }
 
     @Test
@@ -116,7 +115,7 @@ class FileUserRepositoryTest
         users.delete( user );
 
         // Then
-        assertThat( users.getUserByName( user.name() ), nullValue() );
+        assertThat( users.getUserByName( user.name() ) ).isNull();
     }
 
     @Test
@@ -130,22 +129,18 @@ class FileUserRepositoryTest
         users.assertValidUsername( "johnosbourne" );
         users.assertValidUsername( "john_osbourne" );
 
-        assertException( () -> users.assertValidUsername( null ), InvalidArgumentsException.class,
-                "The provided username is empty." );
-        assertException( () -> users.assertValidUsername( "" ), InvalidArgumentsException.class,
-                "The provided username is empty." );
-        assertException( () -> users.assertValidUsername( "," ), InvalidArgumentsException.class,
-                "Username ',' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces" +
-                        "." );
-        assertException( () -> users.assertValidUsername( "with space" ), InvalidArgumentsException.class,
-                "Username 'with space' contains illegal characters. Use ascii characters that are not ',', ':' or " +
-                        "whitespaces." );
-        assertException( () -> users.assertValidUsername( "with:colon" ), InvalidArgumentsException.class,
-                "Username 'with:colon' contains illegal characters. Use ascii characters that are not ',', ':' or " +
-                        "whitespaces." );
-        assertException( () -> users.assertValidUsername( "withå" ), InvalidArgumentsException.class,
-                "Username 'withå' contains illegal characters. Use ascii characters that are not ',', ':' or " +
-                        "whitespaces." );
+        assertThatThrownBy( () -> users.assertValidUsername( null ) ).isInstanceOf( InvalidArgumentsException.class )
+                .hasMessage( "The provided username is empty." );
+        assertThatThrownBy( () -> users.assertValidUsername( "" ) ).isInstanceOf( InvalidArgumentsException.class )
+                .hasMessage( "The provided username is empty." );
+        assertThatThrownBy( () -> users.assertValidUsername( "," ) ).isInstanceOf( InvalidArgumentsException.class)
+                .hasMessage( "Username ',' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces." );
+        assertThatThrownBy( () -> users.assertValidUsername( "with space" ) ).isInstanceOf( InvalidArgumentsException.class )
+                .hasMessage( "Username 'with space' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces." );
+        assertThatThrownBy( () -> users.assertValidUsername( "with:colon" ) ).isInstanceOf( InvalidArgumentsException.class )
+                .hasMessage( "Username 'with:colon' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces." );
+        assertThatThrownBy( () -> users.assertValidUsername( "withå" ) ).isInstanceOf( InvalidArgumentsException.class )
+                .hasMessage( "Username 'withå' contains illegal characters. Use ascii characters that are not ',', ':' or whitespaces." );
     }
 
     @Test
@@ -177,7 +172,7 @@ class FileUserRepositoryTest
 
         // Then
         assertFalse( crashingFileSystem.fileExists( authFile ) );
-        assertThat( crashingFileSystem.listFiles( authFile.getParentFile() ).length, equalTo( 0 ) );
+        assertThat( crashingFileSystem.listFiles( authFile.getParentFile() ).length ).isEqualTo( 0 );
     }
 
     @Test
@@ -192,7 +187,7 @@ class FileUserRepositoryTest
         User updatedUser = new User.Builder( "john", LegacyCredential.INACCESSIBLE ).withRequiredPasswordChange( true )
                 .build();
         assertThrows( IllegalArgumentException.class, () -> users.update( user, updatedUser ) );
-        assertThat( users.getUserByName( user.name() ), equalTo( user ) );
+        assertThat( users.getUserByName( user.name() ) ).isEqualTo( user );
     }
 
     @Test
@@ -224,16 +219,14 @@ class FileUserRepositoryTest
         // When
         FileUserRepository users = new FileUserRepository( fs, authFile, logProvider );
 
-        var e = assertThrows( IllegalStateException.class, () -> users.start() );
-        assertThat( e.getMessage(), startsWith( "Failed to read authentication file: " ) );
+        var e = assertThrows( IllegalStateException.class, users::start );
+        assertThat( e.getMessage() ).startsWith( "Failed to read authentication file: " );
 
-        assertThat( users.numberOfUsers(), equalTo( 0 ) );
-        logProvider.assertExactly(
-                AssertableLogProvider.inLog( FileUserRepository.class ).error(
+        assertThat( users.numberOfUsers() ).isEqualTo( 0 );
+        assertThat( logProvider ).forClass( FileUserRepository.class ).forLevel( ERROR )
+                .containsMessageWithArguments(
                         "Failed to read authentication file \"%s\" (%s)", authFile.getAbsolutePath(),
-                        "wrong number of line fields, expected 3, got 4 [line 2]"
-                )
-        );
+                        "wrong number of line fields, expected 3, got 4 [line 2]" );
     }
 
     @Test
@@ -280,7 +273,7 @@ class FileUserRepositoryTest
 
         HangingListSnapshot( DoubleLatch latch, long timestamp, List<User> values )
         {
-            super( timestamp, values, true );
+            super( timestamp, values );
             this.latch = latch;
         }
 

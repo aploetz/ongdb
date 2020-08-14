@@ -49,6 +49,10 @@ import org.neo4j.internal.helpers.Exceptions;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.test.OtherThreadExecutor;
 import org.neo4j.test.Race;
 import org.neo4j.test.extension.Inject;
@@ -61,9 +65,7 @@ import org.neo4j.util.concurrent.OutOfOrderSequence;
 
 import static java.lang.String.format;
 import static org.apache.commons.lang3.ArrayUtils.EMPTY_LONG_ARRAY;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -78,9 +80,13 @@ import static org.neo4j.internal.counts.CountsKey.nodeKey;
 import static org.neo4j.internal.counts.CountsKey.relationshipKey;
 import static org.neo4j.internal.counts.GBPTreeCountsStore.NO_MONITOR;
 import static org.neo4j.io.pagecache.IOLimiter.UNLIMITED;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_ID;
 import static org.neo4j.test.OtherThreadExecutor.command;
 import static org.neo4j.test.Race.throwing;
+import static org.neo4j.token.api.TokenConstants.ANY_LABEL;
+import static org.neo4j.token.api.TokenConstants.ANY_RELATIONSHIP_TYPE;
 
 @PageCacheExtension
 @ExtendWith( RandomExtension.class )
@@ -119,31 +125,99 @@ class GBPTreeCountsStoreTest
     }
 
     @Test
-    void shouldUpdateAndReadSomeCounts() throws IOException
+    void tracePageCacheAccessOnCountStoreOpen() throws IOException
     {
-        // given
-        long txId = BASE_TX_ID;
-        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId ) )
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var file = directory.file( "another.file" );
+
+        assertZeroGlobalTracer( pageCacheTracer );
+
+        try ( var counts = new GBPTreeCountsStore( pageCache, file, directory.getFileSystem(), immediate(), CountsBuilder.EMPTY, false, pageCacheTracer,
+                NO_MONITOR ) )
+        {
+            assertThat( pageCacheTracer.pins() ).isEqualTo( 14 );
+            assertThat( pageCacheTracer.unpins() ).isEqualTo( 14 );
+            assertThat( pageCacheTracer.hits() ).isEqualTo( 9 );
+            assertThat( pageCacheTracer.faults() ).isEqualTo( 5 );
+        }
+
+        assertThat( pageCacheTracer.pins() ).isEqualTo( 18 );
+        assertThat( pageCacheTracer.unpins() ).isEqualTo( 18 );
+        assertThat( pageCacheTracer.hits() ).isEqualTo( 13 );
+        assertThat( pageCacheTracer.faults() ).isEqualTo( 5 );
+    }
+
+    @Test
+    void tracePageCacheAccessOnNodeCount()
+    {
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var cursorTracer = pageCacheTracer.createPageCursorTracer( "tracePageCacheAccessOnNodeCount" );
+        assertZeroTracer( cursorTracer );
+        assertEquals( 0, countsStore.nodeCount( 0, cursorTracer ) );
+
+        assertThat( cursorTracer.pins() ).isEqualTo( 1 );
+        assertThat( cursorTracer.unpins() ).isEqualTo( 1 );
+        assertThat( cursorTracer.hits() ).isEqualTo( 1 );
+    }
+
+    @Test
+    void tracePageCacheAccessOnRelationshipCount()
+    {
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var cursorTracer = pageCacheTracer.createPageCursorTracer( "tracePageCacheAccessOnRelationshipCount" );
+        assertZeroTracer( cursorTracer );
+        assertEquals( 0, countsStore.relationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, cursorTracer ) );
+
+        assertThat( cursorTracer.pins() ).isEqualTo( 1 );
+        assertThat( cursorTracer.unpins() ).isEqualTo( 1 );
+        assertThat( cursorTracer.hits() ).isEqualTo( 1 );
+    }
+
+    @Test
+    void tracePageCacheAccessOnApply()
+    {
+        var pageCacheTracer = new DefaultPageCacheTracer();
+        var cursorTracer = pageCacheTracer.createPageCursorTracer( "tracePageCacheAccessOnApply" );
+        assertZeroTracer( cursorTracer );
+
+        try ( CountsAccessor.Updater updater = countsStore.apply( 1 + BASE_TX_ID, cursorTracer ) )
         {
             updater.incrementNodeCount( LABEL_ID_1, 10 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, 3 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, 7 );
         }
-        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId ) )
+
+        assertThat( cursorTracer.pins() ).isEqualTo( 3 );
+        assertThat( cursorTracer.unpins() ).isEqualTo( 3 );
+        assertThat( cursorTracer.hits() ).isEqualTo( 3 );
+    }
+
+    @Test
+    void shouldUpdateAndReadSomeCounts() throws IOException
+    {
+        // given
+        long txId = BASE_TX_ID;
+        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId, NULL ) )
+        {
+            updater.incrementNodeCount( LABEL_ID_1, 10 );
+            updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, 3 );
+            updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, 7 );
+        }
+        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId, NULL ) )
         {
             updater.incrementNodeCount( LABEL_ID_1, 5 ); // now at 15
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, 2 ); // now at 5
         }
 
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
 
         // when/then
-        assertEquals( 15, countsStore.nodeCount( LABEL_ID_1 ) );
-        assertEquals( 5, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2 ) );
-        assertEquals( 7, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2 ) );
+        assertEquals( 15, countsStore.nodeCount( LABEL_ID_1, NULL ) );
+        assertEquals( 5, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, NULL ) );
+        assertEquals( 7, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, NULL ) );
 
         // and when
-        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId ) )
+        try ( CountsAccessor.Updater updater = countsStore.apply( ++txId, NULL ) )
         {
             updater.incrementNodeCount( LABEL_ID_1, -7 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, -5 );
@@ -151,9 +225,9 @@ class GBPTreeCountsStoreTest
         }
 
         // then
-        assertEquals( 8, countsStore.nodeCount( LABEL_ID_1 ) );
-        assertEquals( 0, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2 ) );
-        assertEquals( 5, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2 ) );
+        assertEquals( 8, countsStore.nodeCount( LABEL_ID_1, NULL ) );
+        assertEquals( 0, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, NULL ) );
+        assertEquals( 5, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, NULL ) );
     }
 
     @Test
@@ -170,7 +244,7 @@ class GBPTreeCountsStoreTest
 
         // Start at some number > 0 so that we can do negative deltas now and then
         long baseCount = 10_000;
-        try ( CountsAccessor.Updater initialApplier = countsStore.apply( nextTxId.incrementAndGet() ) )
+        try ( CountsAccessor.Updater initialApplier = countsStore.apply( nextTxId.incrementAndGet(), NULL ) )
         {
             for ( int s = -1; s < HIGH_TOKEN_ID; s++ )
             {
@@ -202,7 +276,7 @@ class GBPTreeCountsStoreTest
             race.addContestant( throwing( () ->
             {
                 long checkpointTxId = lastClosedTxId.getHighestGapFreeNumber();
-                countsStore.checkpoint( UNLIMITED );
+                countsStore.checkpoint( UNLIMITED, NULL );
                 lastCheckPointedTxId.set( checkpointTxId );
                 Thread.sleep( ThreadLocalRandom.current().nextInt( roundTimeMillis / 5 ) );
             } ) );
@@ -212,7 +286,7 @@ class GBPTreeCountsStoreTest
             // and we know the last committed tx id as well as the (pessimistic) last check-pointed tx id.
             crashAndRestartCountsStore();
             recover( lastCheckPointedTxId.get(), nextTxId.get() );
-            assertThat( nextTxId.get(), greaterThan( lastRoundClosedAt ) );
+            assertThat( nextTxId.get() ).isGreaterThan( lastRoundClosedAt );
             lastRoundClosedAt = nextTxId.get();
 
             // then
@@ -232,7 +306,7 @@ class GBPTreeCountsStoreTest
             incrementNodeCount( txId, labelId, delta );
             expectedCount += delta;
         }
-        assertEquals( expectedCount, countsStore.nodeCount( labelId ) );
+        assertEquals( expectedCount, countsStore.nodeCount( labelId, NULL ) );
 
         // when reapplying after a restart
         checkpointAndRestartCountsStore();
@@ -242,7 +316,7 @@ class GBPTreeCountsStoreTest
             incrementNodeCount( txId, labelId, delta );
         }
         // then it should not change the delta
-        assertEquals( expectedCount, countsStore.nodeCount( labelId ) );
+        assertEquals( expectedCount, countsStore.nodeCount( labelId, NULL ) );
     }
 
     @Test
@@ -257,11 +331,11 @@ class GBPTreeCountsStoreTest
         // when
         checkpointAndRestartCountsStore();
         incrementNodeCount( BASE_TX_ID + 3, labelId, 7 );
-        assertEquals( 5 + 7, countsStore.nodeCount( labelId ) );
+        assertEquals( 5 + 7, countsStore.nodeCount( labelId, NULL ) );
         incrementNodeCount( BASE_TX_ID + 2, labelId, 3 );
 
         // then
-        assertEquals( 5 + 7 + 3, countsStore.nodeCount( labelId ) );
+        assertEquals( 5 + 7 + 3, countsStore.nodeCount( labelId, NULL ) );
     }
 
     @Test
@@ -279,9 +353,9 @@ class GBPTreeCountsStoreTest
         TestableCountsBuilder builder = new TestableCountsBuilder( rebuiltAtTransactionId )
         {
             @Override
-            public void initialize( CountsAccessor.Updater updater )
+            public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
             {
-                super.initialize( updater );
+                super.initialize( updater, cursorTracer, memoryTracker );
                 updater.incrementNodeCount( labelId, 10 );
                 updater.incrementRelationshipCount( labelId, relationshipTypeId, labelId2, 14 );
             }
@@ -289,21 +363,21 @@ class GBPTreeCountsStoreTest
         openCountsStore( builder );
         assertTrue( builder.lastCommittedTxIdCalled );
         assertTrue( builder.initializeCalled );
-        assertEquals( 10, countsStore.nodeCount( labelId ) );
-        assertEquals( 0, countsStore.nodeCount( labelId2 ) );
-        assertEquals( 14, countsStore.relationshipCount( labelId, relationshipTypeId, labelId2 ) );
+        assertEquals( 10, countsStore.nodeCount( labelId, NULL ) );
+        assertEquals( 0, countsStore.nodeCount( labelId2, NULL ) );
+        assertEquals( 14, countsStore.relationshipCount( labelId, relationshipTypeId, labelId2, NULL ) );
 
         // and when
         checkpointAndRestartCountsStore();
         // Re-applying a txId below or equal to the "rebuild transaction id" should not apply it
         incrementNodeCount( rebuiltAtTransactionId - 1, labelId, 100 );
-        assertEquals( 10, countsStore.nodeCount( labelId ) );
+        assertEquals( 10, countsStore.nodeCount( labelId, NULL ) );
         incrementNodeCount( rebuiltAtTransactionId, labelId, 100 );
-        assertEquals( 10, countsStore.nodeCount( labelId ) );
+        assertEquals( 10, countsStore.nodeCount( labelId, NULL ) );
 
         // then
         incrementNodeCount( rebuiltAtTransactionId + 1, labelId, 100 );
-        assertEquals( 110, countsStore.nodeCount( labelId ) );
+        assertEquals( 110, countsStore.nodeCount( labelId, NULL ) );
     }
 
     @Test
@@ -312,7 +386,7 @@ class GBPTreeCountsStoreTest
         // given
         int labelId = 123;
         incrementNodeCount( BASE_TX_ID + 1, labelId, 4 );
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
         incrementNodeCount( BASE_TX_ID + 2, labelId, -2 );
         closeCountsStore();
         deleteCountsStore();
@@ -321,7 +395,7 @@ class GBPTreeCountsStoreTest
         instantiateCountsStore( new CountsBuilder()
         {
             @Override
-            public void initialize( CountsAccessor.Updater updater )
+            public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
             {
                 updater.incrementNodeCount( labelId, 2 );
             }
@@ -337,23 +411,23 @@ class GBPTreeCountsStoreTest
         // applying this negative delta would have failed in the updater.
         incrementNodeCount( BASE_TX_ID + 2, labelId, -2 );
         verify( monitor ).ignoredTransaction( BASE_TX_ID + 2 );
-        countsStore.start();
+        countsStore.start( NULL, INSTANCE );
 
         // then
-        assertEquals( 2, countsStore.nodeCount( labelId ) );
+        assertEquals( 2, countsStore.nodeCount( labelId, NULL ) );
     }
 
     @Test
     void checkpointShouldWaitForApplyingTransactionsToClose() throws Exception
     {
         // given
-        CountsAccessor.Updater updater1 = countsStore.apply( BASE_TX_ID + 1 );
-        CountsAccessor.Updater updater2 = countsStore.apply( BASE_TX_ID + 2 );
+        CountsAccessor.Updater updater1 = countsStore.apply( BASE_TX_ID + 1, NULL );
+        CountsAccessor.Updater updater2 = countsStore.apply( BASE_TX_ID + 2, NULL );
 
         try ( OtherThreadExecutor<Void> checkpointer = new OtherThreadExecutor<>( "Checkpointer", null ) )
         {
             // when
-            Future<Object> checkpoint = checkpointer.executeDontWait( command( () -> countsStore.checkpoint( UNLIMITED ) ) );
+            Future<Object> checkpoint = checkpointer.executeDontWait( command( () -> countsStore.checkpoint( UNLIMITED, NULL ) ) );
             checkpointer.waitUntilWaiting();
 
             // and when closing one of the updaters it should still wait
@@ -371,19 +445,19 @@ class GBPTreeCountsStoreTest
     void checkpointShouldBlockApplyingNewTransactions() throws Exception
     {
         // given
-        CountsAccessor.Updater updaterBeforeCheckpoint = countsStore.apply( BASE_TX_ID + 1 );
+        CountsAccessor.Updater updaterBeforeCheckpoint = countsStore.apply( BASE_TX_ID + 1, NULL );
 
         try ( OtherThreadExecutor<Void> checkpointer = new OtherThreadExecutor<>( "Checkpointer", null );
               OtherThreadExecutor<AtomicReference<CountsStore.Updater>> applier = new OtherThreadExecutor<>( "Applier", new AtomicReference<>() ) )
         {
             // when
-            Future<Object> checkpoint = checkpointer.executeDontWait( command( () -> countsStore.checkpoint( UNLIMITED ) ) );
+            Future<Object> checkpoint = checkpointer.executeDontWait( command( () -> countsStore.checkpoint( UNLIMITED, NULL ) ) );
             checkpointer.waitUntilWaiting();
 
             // and when trying to open another applier it must wait
             Future<Void> applierAfterCheckpoint = applier.executeDontWait( state ->
             {
-                state.set( countsStore.apply( BASE_TX_ID + 2 ) );
+                state.set( countsStore.apply( BASE_TX_ID + 2, NULL ) );
                 return null;
             } );
             applier.waitUntilWaiting();
@@ -409,7 +483,11 @@ class GBPTreeCountsStoreTest
     {
         final File file = directory.file( "non-existing" );
         final IllegalStateException e = assertThrows( IllegalStateException.class,
+<<<<<<< HEAD
                 () -> new GBPTreeCountsStore( pageCache, file, fs, immediate(), CountsBuilder.EMPTY, true, NO_MONITOR ) );
+=======
+                () -> new GBPTreeCountsStore( pageCache, file, fs, immediate(), CountsBuilder.EMPTY, true, PageCacheTracer.NULL, NO_MONITOR ) );
+>>>>>>> neo4j/4.1
         assertTrue( Exceptions.contains( e, t -> t instanceof NoSuchFileException ) );
         assertTrue( Exceptions.contains( e, t -> t instanceof TreeFileNotFoundException ) );
         assertTrue( Exceptions.contains( e, t -> t instanceof IllegalStateException ) );
@@ -419,26 +497,26 @@ class GBPTreeCountsStoreTest
     void shouldFailApplyInReadOnlyMode() throws IOException
     {
         // given
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
         closeCountsStore();
         instantiateCountsStore( CountsBuilder.EMPTY, true, NO_MONITOR );
-        countsStore.start();
+        countsStore.start( NULL, INSTANCE );
 
         // then
-        assertThrows( IllegalStateException.class, () -> countsStore.apply( BASE_TX_ID + 1 ) );
+        assertThrows( IllegalStateException.class, () -> countsStore.apply( BASE_TX_ID + 1, NULL ) );
     }
 
     @Test
     void shouldNotCheckpointInReadOnlyMode() throws IOException
     {
         // given
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
         closeCountsStore();
         instantiateCountsStore( CountsBuilder.EMPTY, true, NO_MONITOR );
-        countsStore.start();
+        countsStore.start( NULL, INSTANCE );
 
         // then it's fine to call checkpoint, because no changes can actually be made on a read-only counts store anyway
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
     }
 
     @Test
@@ -446,32 +524,32 @@ class GBPTreeCountsStoreTest
     {
         // given
         long txId = BASE_TX_ID + 1;
-        try ( CountsAccessor.Updater updater = countsStore.apply( txId ) )
+        try ( CountsAccessor.Updater updater = countsStore.apply( txId, NULL ) )
         {
             updater.incrementNodeCount( LABEL_ID_1, 10 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, 3 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, 7 );
         }
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
         closeCountsStore();
 
         // when
         ByteArrayOutputStream out = new ByteArrayOutputStream( 1024 );
-        GBPTreeCountsStore.dump( pageCache, countsStoreFile(), new PrintStream( out ) );
+        GBPTreeCountsStore.dump( pageCache, countsStoreFile(), new PrintStream( out ), NULL );
 
         // then
         String dump = out.toString();
-        assertThat( dump, containsString( nodeKey( LABEL_ID_1 ) + " = 10" ) );
-        assertThat( dump, containsString( relationshipKey( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2 ) + " = 3" ) );
-        assertThat( dump, containsString( relationshipKey( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2 ) + " = 7" ) );
-        assertThat( dump, containsString( "Highest gap-free txId: " + txId ) );
+        assertThat( dump ).contains( nodeKey( LABEL_ID_1 ) + " = 10" );
+        assertThat( dump ).contains( relationshipKey( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2 ) + " = 3" );
+        assertThat( dump ).contains( relationshipKey( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2 ) + " = 7" );
+        assertThat( dump ).contains( "Highest gap-free txId: " + txId );
     }
 
     @Test
     void shouldNotSeeOutdatedCountsOnCheckpoint() throws Throwable
     {
         // given
-        try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1 ) )
+        try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1, NULL ) )
         {
             updater.incrementNodeCount( LABEL_ID_1, 10 );
             updater.incrementRelationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, 3 );
@@ -480,15 +558,12 @@ class GBPTreeCountsStoreTest
 
         // when
         Race race = new Race();
-        race.addContestant( throwing( () ->
-        {
-            countsStore.checkpoint( UNLIMITED );
-        } ), 1 );
+        race.addContestant( throwing( () -> countsStore.checkpoint( UNLIMITED, NULL ) ), 1 );
         race.addContestants( 10, throwing( () ->
         {
-            assertEquals( 10, countsStore.nodeCount( LABEL_ID_1 ) );
-            assertEquals( 3, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2 ) );
-            assertEquals( 7, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2 ) );
+            assertEquals( 10, countsStore.nodeCount( LABEL_ID_1, NULL ) );
+            assertEquals( 3, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_1, LABEL_ID_2, NULL ) );
+            assertEquals( 7, countsStore.relationshipCount( LABEL_ID_1, RELATIONSHIP_TYPE_ID_2, LABEL_ID_2, NULL ) );
         } ), 1 );
 
         // then
@@ -502,7 +577,7 @@ class GBPTreeCountsStoreTest
         File file = directory.file( "abcd" );
 
         // when
-        assertThrows( NoSuchFileException.class, () -> GBPTreeCountsStore.dump( pageCache, file, System.out ) );
+        assertThrows( NoSuchFileException.class, () -> GBPTreeCountsStore.dump( pageCache, file, System.out, NULL ) );
 
         // then
         assertFalse( fs.fileExists( file ) );
@@ -512,7 +587,11 @@ class GBPTreeCountsStoreTest
     void shouldDeleteAndMarkForRebuildOnCorruptStore() throws Exception
     {
         // given
+<<<<<<< HEAD
         try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1 ) )
+=======
+        try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1, NULL ) )
+>>>>>>> neo4j/4.1
         {
             updater.incrementNodeCount( LABEL_ID_1, 9 );
         }
@@ -536,17 +615,26 @@ class GBPTreeCountsStoreTest
             CountsAccessor.Updater updater = invocationOnMock.getArgument( 0, CountsAccessor.Updater.class );
             updater.incrementNodeCount( LABEL_ID_1, 3 );
             return null;
+<<<<<<< HEAD
         } ).when( countsBuilder ).initialize( any() );
         openCountsStore( countsBuilder );
 
         // then rebuild store instead of throwing exception
         verify( countsBuilder ).initialize( any() );
         assertEquals( 3, countsStore.nodeCount( LABEL_ID_1 ) );
+=======
+        } ).when( countsBuilder ).initialize( any(), any(), any() );
+        openCountsStore( countsBuilder );
+
+        // then rebuild store instead of throwing exception
+        verify( countsBuilder ).initialize( any(), any(), any() );
+        assertEquals( 3, countsStore.nodeCount( LABEL_ID_1, NULL ) );
+>>>>>>> neo4j/4.1
     }
 
     private void incrementNodeCount( long txId, int labelId, int delta )
     {
-        try ( CountsAccessor.Updater updater = countsStore.apply( txId ) )
+        try ( CountsAccessor.Updater updater = countsStore.apply( txId, NULL ) )
         {
             updater.incrementNodeCount( labelId, delta );
         }
@@ -584,7 +672,7 @@ class GBPTreeCountsStoreTest
                     assertEquals( baseCount + expectedCount.get(), count, () -> format( "Counts store has wrong count for %s", key ) );
                 }
             }
-        } );
+        }, NULL );
         assertTrue( expected.isEmpty(), expected::toString );
     }
 
@@ -607,7 +695,7 @@ class GBPTreeCountsStoreTest
     private void generateAndApplyTransaction( ConcurrentMap<CountsKey,AtomicLong> expected, long txId )
     {
         Random rng = new Random( random.seed() + txId );
-        try ( CountsAccessor.Updater updater = countsStore.apply( txId ) )
+        try ( CountsAccessor.Updater updater = countsStore.apply( txId, NULL ) )
         {
             int numberOfKeys = rng.nextInt( 10 );
             for ( int j = 0; j < numberOfKeys; j++ )
@@ -641,7 +729,7 @@ class GBPTreeCountsStoreTest
 
     private void checkpointAndRestartCountsStore() throws Exception
     {
-        countsStore.checkpoint( UNLIMITED );
+        countsStore.checkpoint( UNLIMITED, NULL );
         closeCountsStore();
         openCountsStore();
     }
@@ -665,12 +753,32 @@ class GBPTreeCountsStoreTest
     private void openCountsStore( CountsBuilder builder ) throws IOException
     {
         instantiateCountsStore( builder, false, NO_MONITOR );
-        countsStore.start();
+        countsStore.start( NULL, INSTANCE );
     }
 
     private void instantiateCountsStore( CountsBuilder builder, boolean readOnly, GBPTreeCountsStore.Monitor monitor ) throws IOException
     {
+<<<<<<< HEAD
         countsStore = new GBPTreeCountsStore( pageCache, countsStoreFile(), fs, immediate(), builder, readOnly, monitor );
+=======
+        countsStore = new GBPTreeCountsStore( pageCache, countsStoreFile(), fs, immediate(), builder, readOnly, PageCacheTracer.NULL, monitor );
+    }
+
+    private void assertZeroGlobalTracer( PageCacheTracer pageCacheTracer )
+    {
+        assertThat( pageCacheTracer.faults() ).isZero();
+        assertThat( pageCacheTracer.pins() ).isZero();
+        assertThat( pageCacheTracer.unpins() ).isZero();
+        assertThat( pageCacheTracer.hits() ).isZero();
+    }
+
+    private void assertZeroTracer( PageCursorTracer pageCacheTracer )
+    {
+        assertThat( pageCacheTracer.faults() ).isZero();
+        assertThat( pageCacheTracer.pins() ).isZero();
+        assertThat( pageCacheTracer.unpins() ).isZero();
+        assertThat( pageCacheTracer.hits() ).isZero();
+>>>>>>> neo4j/4.1
     }
 
     private static class TestableCountsBuilder implements CountsBuilder
@@ -685,7 +793,7 @@ class GBPTreeCountsStoreTest
         }
 
         @Override
-        public void initialize( CountsAccessor.Updater updater )
+        public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
         {
             initializeCalled = true;
         }

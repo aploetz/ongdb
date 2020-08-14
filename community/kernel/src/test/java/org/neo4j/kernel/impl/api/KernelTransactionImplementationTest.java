@@ -39,7 +39,9 @@ import org.neo4j.graphdb.TransactionTerminatedException;
 import org.neo4j.internal.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.DefaultPageCursorTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.security.AnonymousContext;
@@ -52,8 +54,9 @@ import org.neo4j.kernel.impl.locking.StatementLocks;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
 import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
 import org.neo4j.lock.ResourceLocker;
+import org.neo4j.memory.MemoryLimitExceededException;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.resources.CpuClock;
-import org.neo4j.resources.HeapAllocation;
 import org.neo4j.storageengine.api.CommandCreationContext;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.StorageReader;
@@ -77,25 +80,23 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.neo4j.configuration.GraphDatabaseSettings.memory_transaction_max_size;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
 import static org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo.EMBEDDED_CONNECTION;
 import static org.neo4j.internal.kernel.api.security.LoginContext.AUTH_DISABLED;
+import static org.neo4j.io.ByteUnit.mebiBytes;
 import static org.neo4j.storageengine.api.TransactionIdStore.BASE_TX_COMMIT_TIMESTAMP;
 
 class KernelTransactionImplementationTest extends KernelTransactionTestBase
 {
     private static Stream<Arguments> parameters()
     {
-        Consumer<KernelTransaction> readTxInitializer = tx ->
-        {
-        };
+        Consumer<KernelTransaction> readTxInitializer = tx -> { };
         Consumer<KernelTransaction> writeTxInitializer = tx ->
-        {
-            ((KernelTransactionImplementation) tx).txState().nodeDoCreate( 42 );
-        };
+                ((KernelTransactionImplementation) tx).txState().nodeDoCreate( 42 );
         return Stream.of(
-            arguments( "readOperationsInNewTransaction", false, readTxInitializer ),
-            arguments( "write", true, writeTxInitializer )
+                arguments( "readOperationsInNewTransaction", false, readTxInitializer ),
+                arguments( "write", true, writeTxInitializer )
         );
     }
 
@@ -218,7 +219,6 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
     @ParameterizedTest
     @MethodSource( "parameters" )
     void shouldRollbackOnClosingTerminatedTransaction( String name, boolean isWriteTx, Consumer<KernelTransaction> transactionInitializer )
-            throws TransactionFailureException
     {
         // GIVEN
         KernelTransaction transaction = newTransaction( loginContext( isWriteTx ) );
@@ -256,7 +256,6 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
     @ParameterizedTest
     @MethodSource( "parameters" )
     void shouldRollbackOnClosingTerminatedButSuccessfulTransaction( String name, boolean isWriteTx, Consumer<KernelTransaction> transactionInitializer )
-            throws TransactionFailureException
     {
         // GIVEN
         KernelTransaction transaction = newTransaction( loginContext( isWriteTx ) );
@@ -321,7 +320,7 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
 
     @ParameterizedTest
     @MethodSource( "parameters" )
-    void shouldThrowOnTerminationInCommit( String name, boolean isWriteTx, Consumer<KernelTransaction> transactionInitializer ) throws Exception
+    void shouldThrowOnTerminationInCommit( String name, boolean isWriteTx, Consumer<KernelTransaction> transactionInitializer )
     {
         KernelTransaction transaction = newTransaction( loginContext( isWriteTx ) );
         transactionInitializer.accept( transaction );
@@ -391,7 +390,6 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
         long startingTime = clock.millis();
         doAnswer( invocation ->
         {
-            @SuppressWarnings( "unchecked" )
             Collection<StorageCommand> commands = invocation.getArgument( 0 );
             commands.add( mock( StorageCommand.class ) );
             return null;
@@ -401,12 +399,12 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
             any( StorageReader.class ),
             any( CommandCreationContext.class ),
             any( ResourceLocker.class ),
-            anyLong(), any( TxStateVisitor.Decorator.class ) );
+            anyLong(), any( TxStateVisitor.Decorator.class ), any( PageCursorTracer.class ), any( MemoryTracker.class ) );
 
         try ( KernelTransactionImplementation transaction = newTransaction( loginContext( isWriteTx ) ) )
         {
             SimpleStatementLocks statementLocks = new SimpleStatementLocks( mock( Locks.Client.class ) );
-            transaction.initialize( 5L, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.implicit,
+            transaction.initialize( 5L, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.IMPLICIT,
                 SecurityContext.AUTH_DISABLED, 0L, 1L, EMBEDDED_CONNECTION );
             transaction.txState().nodeDoCreate( 1L );
             // WHEN committing it at a later point
@@ -468,7 +466,7 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
         // WHEN
         transaction.close();
         SimpleStatementLocks statementLocks = new SimpleStatementLocks( new NoOpClient() );
-        transaction.initialize( 1, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.implicit,
+        transaction.initialize( 1, BASE_TX_COMMIT_TIMESTAMP, statementLocks, KernelTransaction.Type.IMPLICIT,
             loginContext( isWriteTx ).authorize( LoginContext.IdLookup.EMPTY, GraphDatabaseSettings.DEFAULT_DATABASE_NAME ), 0L, 1L, EMBEDDED_CONNECTION );
 
         // THEN
@@ -642,7 +640,7 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
 
         Locks.Client locksClient = mock( Locks.Client.class );
         SimpleStatementLocks statementLocks = new SimpleStatementLocks( locksClient );
-        tx.initialize( 42, 42, statementLocks, KernelTransaction.Type.implicit,
+        tx.initialize( 42, 42, statementLocks, KernelTransaction.Type.IMPLICIT,
             loginContext( isWriteTx ).authorize( LoginContext.IdLookup.EMPTY, GraphDatabaseSettings.DEFAULT_DATABASE_NAME ), 0L, 0L, EMBEDDED_CONNECTION );
 
         assertTrue( tx.markForTermination( reuseCount, terminationReason ) );
@@ -664,7 +662,7 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
 
         Locks.Client locksClient = mock( Locks.Client.class );
         SimpleStatementLocks statementLocks = new SimpleStatementLocks( locksClient );
-        tx.initialize( 42, 42, statementLocks, KernelTransaction.Type.implicit,
+        tx.initialize( 42, 42, statementLocks, KernelTransaction.Type.IMPLICIT,
             loginContext( isWriteTx ).authorize( LoginContext.IdLookup.EMPTY, GraphDatabaseSettings.DEFAULT_DATABASE_NAME ), 0L, 0L, EMBEDDED_CONNECTION );
 
         assertFalse( tx.markForTermination( nextReuseCount, terminationReason ) );
@@ -688,24 +686,31 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
     void reportTransactionStatistics()
     {
         KernelTransactionImplementation transaction = newTransaction( 100 );
+        transaction.memoryTracker().allocateHeap( 13 );
+        transaction.memoryTracker().allocateNative( 14 );
         KernelTransactionImplementation.Statistics statistics =
-            new KernelTransactionImplementation.Statistics( transaction, new AtomicReference<>( new ThreadBasedCpuClock() ),
-                new AtomicReference<>( new ThreadBasedAllocation() ) );
+            new KernelTransactionImplementation.Statistics( transaction, new AtomicReference<>( new ThreadBasedCpuClock() ) );
         PredictablePageCursorTracer tracer = new PredictablePageCursorTracer();
         statistics.init( 2, tracer );
 
         assertEquals( 2, statistics.cpuTimeMillis() );
-        assertEquals( 2, statistics.heapAllocatedBytes() );
+        assertEquals( 13, statistics.estimatedHeapMemory() );
+        assertEquals( 14, statistics.usedNativeMemory() );
+        assertEquals( 0, statistics.heapAllocatedBytes() );
         assertEquals( 1, statistics.totalTransactionPageCacheFaults() );
         assertEquals( 4, statistics.totalTransactionPageCacheHits() );
         statistics.addWaitingTime( 1 );
         assertEquals( 1, statistics.getWaitingTimeNanos( 0 ) );
 
+        transaction.memoryTracker().releaseNative( 14 );
         statistics.reset();
+        transaction.memoryTracker().reset();
 
         statistics.init( 4, tracer );
         assertEquals( 4, statistics.cpuTimeMillis() );
-        assertEquals( 4, statistics.heapAllocatedBytes() );
+        assertEquals( 0, statistics.estimatedHeapMemory() );
+        assertEquals( 0, statistics.usedNativeMemory() );
+        assertEquals( 0, statistics.heapAllocatedBytes() );
         assertEquals( 2, statistics.totalTransactionPageCacheFaults() );
         assertEquals( 6, statistics.totalTransactionPageCacheHits() );
         assertEquals( 0, statistics.getWaitingTimeNanos( 0 ) );
@@ -731,11 +736,37 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
             }
         } );
         KernelTransactionImplementation transaction = newNotInitializedTransaction( leaseClient );
+<<<<<<< HEAD
         transaction.initialize( 0, BASE_TX_COMMIT_TIMESTAMP, mock( StatementLocks.class ), KernelTransaction.Type.implicit,
+=======
+        transaction.initialize( 0, BASE_TX_COMMIT_TIMESTAMP, mock( StatementLocks.class ), KernelTransaction.Type.IMPLICIT,
+>>>>>>> neo4j/4.1
                 mock( SecurityContext.class ), 0, 1L, EMBEDDED_CONNECTION );
         assertEquals( "KernelTransaction[lease:" + leaseId + "]", transaction.toString() );
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void dynamicChangeTransactionHeapLimit() throws TransactionFailureException
+    {
+        config.set( memory_transaction_max_size, mebiBytes( 2 ) );
+        try ( KernelTransactionImplementation transaction = newTransaction( 1000 ) )
+        {
+            // Limit should prevent this from succeeding
+            assertThrows( MemoryLimitExceededException.class, () -> transaction.memoryTracker().allocateHeap( mebiBytes( 3 ) ) );
+            transaction.closeTransaction();
+
+            // Increase limit and try again
+            config.setDynamic( memory_transaction_max_size, mebiBytes( 4 ), "test" );
+            transaction.initialize( 5L, BASE_TX_COMMIT_TIMESTAMP, new SimpleStatementLocks( new NoOpClient() ), KernelTransaction.Type.IMPLICIT,
+                    SecurityContext.AUTH_DISABLED, 0L, 1L, EMBEDDED_CONNECTION );
+
+            transaction.memoryTracker().allocateHeap( mebiBytes( 3 ) );
+        }
+    }
+
+>>>>>>> neo4j/4.1
     private LoginContext loginContext( boolean isWriteTx )
     {
         return isWriteTx ? AnonymousContext.write() : AnonymousContext.read();
@@ -746,7 +777,7 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
         for ( int i = 0; i < times; i++ )
         {
             SimpleStatementLocks statementLocks = new SimpleStatementLocks( new NoOpClient() );
-            tx.initialize( i + 10, i + 10, statementLocks, KernelTransaction.Type.implicit,
+            tx.initialize( i + 10, i + 10, statementLocks, KernelTransaction.Type.IMPLICIT,
                 loginContext( isWriteTx ).authorize( LoginContext.IdLookup.EMPTY, GraphDatabaseSettings.DEFAULT_DATABASE_NAME ), 0L, 0L, EMBEDDED_CONNECTION );
             tx.close();
         }
@@ -769,21 +800,14 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
         }
     }
 
-    private static class ThreadBasedAllocation extends HeapAllocation
-    {
-        private long iteration;
-
-        @Override
-        public long allocatedBytes( long threadId )
-        {
-            iteration++;
-            return iteration * threadId;
-        }
-    }
-
     private static class PredictablePageCursorTracer extends DefaultPageCursorTracer
     {
         private long iteration = 1;
+
+        PredictablePageCursorTracer()
+        {
+            super( new DefaultPageCacheTracer(), "ktxTest" );
+        }
 
         @Override
         public long hits()

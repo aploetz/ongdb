@@ -20,12 +20,12 @@
 package org.neo4j.cypher.internal.logical.plans
 
 import org.neo4j.cypher.internal.ir.StrictnessMode
-import org.neo4j.cypher.internal.v4_0.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.IdGen
 
 /**
-  * For every source row, produce a row containing only the variables in 'columns'. The ProduceResult operator is
-  * always planned as the root operator in a logical plan tree.
-  */
+ * For every source row, produce a row containing only the variables in 'columns'. The ProduceResult operator is
+ * always planned as the root operator in a logical plan tree.
+ */
 case class ProduceResult(source: LogicalPlan, columns: Seq[String])(implicit idGen: IdGen) extends LogicalPlan(idGen) {
 
   val lhs = Some(source)

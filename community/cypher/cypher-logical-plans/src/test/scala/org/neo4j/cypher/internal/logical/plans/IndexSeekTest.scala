@@ -19,10 +19,21 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util.attribution.{Id, IdGen, SameId}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.{InputPosition, LabelId, NonEmptyList, PropertyKeyId}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.expressions.ListLiteral
+import org.neo4j.cypher.internal.expressions.Literal
+import org.neo4j.cypher.internal.expressions.PropertyKeyToken
+import org.neo4j.cypher.internal.expressions.SignedDecimalIntegerLiteral
+import org.neo4j.cypher.internal.expressions.StringLiteral
+import org.neo4j.cypher.internal.util.InputPosition
+import org.neo4j.cypher.internal.util.LabelId
+import org.neo4j.cypher.internal.util.NonEmptyList
+import org.neo4j.cypher.internal.util.PropertyKeyId
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SameId
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 class IndexSeekTest extends CypherFunSuite {
 
@@ -58,6 +69,10 @@ class IndexSeekTest extends CypherFunSuite {
     (getValue, args, indexOrder) => "b:Y(name <= 'hi')" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), lte(string("hi")), args, indexOrder),
     (getValue, args, indexOrder) => "b:Y(name > 'hi')" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gt(string("hi")), args, indexOrder),
     (getValue, args, indexOrder) => "b:Y(name >= 'hi')" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gte(string("hi")), args, indexOrder),
+    (getValue, args, indexOrder) => "b:Y(3 < name < 4)" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gt_lt(intLiteral(3), intLiteral(4)), args, indexOrder),
+    (getValue, args, indexOrder) => "b:Y(3 <= name < 4)" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gte_lt(intLiteral(3), intLiteral(4)), args, indexOrder),
+    (getValue, args, indexOrder) => "b:Y(3 < name <= 4)" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gt_lte(intLiteral(3), intLiteral(4)), args, indexOrder),
+    (getValue, args, indexOrder) => "b:Y(3 <= name <= 4)" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), gte_lte(intLiteral(3), intLiteral(4)), args, indexOrder),
     (getValue, args, indexOrder) => "b:Y(dogs < 3, cats >= 4)" -> createSeek("b", label("Y"), Seq(prop("dogs", getValue, 0), prop("cats", getValue, 1)), CompositeQueryExpression(Seq(lt(intLiteral(3)), exists())), args, indexOrder),
     (getValue, args, indexOrder) => "b:Y(dogs = 3, cats >= 4)" -> createSeek("b", label("Y"), Seq(prop("dogs", getValue, 0), prop("cats", getValue, 1)), CompositeQueryExpression(Seq(exactInt(3), gte(intLiteral(4)))), args, indexOrder),
     (getValue, args, indexOrder) => "b:Y(name STARTS WITH 'hi')" -> createSeek("b", label("Y"), Seq(prop("name", getValue)), startsWith("hi"), args, indexOrder),
@@ -117,6 +132,10 @@ class IndexSeekTest extends CypherFunSuite {
   private def lte(x: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeLessThan(NonEmptyList(InclusiveBound(x))))(pos))
   private def gt(x: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeGreaterThan(NonEmptyList(ExclusiveBound(x))))(pos))
   private def gte(x: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeGreaterThan(NonEmptyList(InclusiveBound(x))))(pos))
+  private def gt_lt(x: Literal, y: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeBetween(RangeGreaterThan(NonEmptyList(ExclusiveBound(x))), RangeLessThan(NonEmptyList(ExclusiveBound(y)))))(pos))
+  private def gte_lt(x: Literal, y: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeBetween(RangeGreaterThan(NonEmptyList(InclusiveBound(x))), RangeLessThan(NonEmptyList(ExclusiveBound(y)))))(pos))
+  private def gt_lte(x: Literal, y: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeBetween(RangeGreaterThan(NonEmptyList(ExclusiveBound(x))), RangeLessThan(NonEmptyList(InclusiveBound(y)))))(pos))
+  private def gte_lte(x: Literal, y: Literal) = RangeQueryExpression(InequalitySeekRangeWrapper(RangeBetween(RangeGreaterThan(NonEmptyList(InclusiveBound(x))), RangeLessThan(NonEmptyList(InclusiveBound(y)))))(pos))
 
   private def startsWith(x: String) = RangeQueryExpression(PrefixSeekRangeWrapper(PrefixRange(string(x)))(pos))
 

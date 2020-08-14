@@ -118,10 +118,7 @@ public class LoggingPhaseTracker implements PhaseTracker
     private String mainReportString( String title )
     {
         StringJoiner joiner = new StringJoiner( ", ", title + ": ", "" );
-        times.values().forEach( logger ->
-        {
-            reportToJoiner( joiner, logger );
-        } );
+        times.values().forEach( logger -> reportToJoiner( joiner, logger ) );
         return joiner.toString();
     }
 
@@ -140,7 +137,7 @@ public class LoggingPhaseTracker implements PhaseTracker
         return joiner.toString();
     }
 
-    private void reportToJoiner( StringJoiner joiner, Counter counter )
+    private static void reportToJoiner( StringJoiner joiner, Counter counter )
     {
         if ( counter.nbrOfReports > 0 )
         {
@@ -184,7 +181,7 @@ public class LoggingPhaseTracker implements PhaseTracker
         }
     }
 
-    public class Counter
+    public static class Counter
     {
         private final Phase phase;
         long totalTime;
@@ -216,7 +213,7 @@ public class LoggingPhaseTracker implements PhaseTracker
         @Override
         public String toString()
         {
-            StringJoiner joiner = new StringJoiner( ", ", phase.toString() + "[", "]" );
+            StringJoiner joiner = new StringJoiner( ", ", phase + "[", "]" );
             if ( nbrOfReports == 0 )
             {
                 addToString( "nbrOfReports", nbrOfReports, joiner, false );

@@ -27,26 +27,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.security.PrivateKey;
-import java.security.cert.Certificate;
 
-import org.neo4j.io.fs.FileUtils;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.ssl.SelfSignedCertificateFactory;
 
-import static java.nio.file.StandardOpenOption.WRITE;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestDirectoryExtension
 class PkiUtilsTest
@@ -68,11 +58,11 @@ class PkiUtilsTest
         // Then
         // Attempt to load certificate
         var certificates = PkiUtils.loadCertificates( cPath );
-        assertThat( certificates.length, is( greaterThan( 0 ) ) );
+        assertThat( certificates.length ).isGreaterThan( 0 );
 
         // Attempt to load private key
         PrivateKey pk = PkiUtils.loadPrivateKey( pkPath, null );
-        assertThat( pk, notNullValue() );
+        assertThat( pk ).isNotNull();
     }
 
     @Test
@@ -87,7 +77,7 @@ class PkiUtilsTest
         var certificates = PkiUtils.loadCertificates( pemCertificate );
 
         // Then
-        assertThat( certificates.length, equalTo( 1 ) );
+        assertThat( certificates.length ).isEqualTo( 1 );
     }
 
     @Test
@@ -105,32 +95,6 @@ class PkiUtilsTest
         assertNotNull( pk );
     }
 
-    /**
-     * For backwards-compatibility reasons, we support both PEM-encoded certificates *and* raw binary files containing
-     * the certificate data.
-     */
-    @Test
-    void shouldLoadBinaryCertificates() throws Throwable
-    {
-        // Given
-        var cert = new SelfSignedCertificate( "example.com" );
-
-        var cPath = testDirectory.file( "certificate" );
-        assertTrue( cPath.createNewFile() );
-        var raw = PkiUtils.loadCertificates( cert.certificate() )[0].getEncoded();
-
-        try ( FileChannel ch = FileChannel.open( cPath.toPath(), WRITE ) )
-        {
-            FileUtils.writeAll( ch, ByteBuffer.wrap( raw ) );
-        }
-
-        // When
-        Certificate[] certificates = PkiUtils.loadCertificates( cPath );
-
-        // Then
-        assertThat( certificates.length, equalTo( 1 ) );
-    }
-
     @Test
     void shouldReadEncryptedPrivateKey() throws Exception
     {
@@ -139,7 +103,7 @@ class PkiUtilsTest
         copy( resource, keyFile );
 
         PrivateKey pk = PkiUtils.loadPrivateKey( keyFile, "neo4j" );
-        assertThat( pk.getAlgorithm(), is( "RSA") );
+        assertThat( pk.getAlgorithm() ).isEqualTo( "RSA" );
     }
 
     @Test
@@ -157,12 +121,7 @@ class PkiUtilsTest
         try ( InputStream is = in.openStream();
                 OutputStream os = testDirectory.getFileSystem().openAsOutputStream( outFile, false ) )
         {
-            while ( is.available() > 0 )
-            {
-                byte[] buf = new byte[8192];
-                int nBytes = is.read( buf );
-                os.write( buf, 0, nBytes );
-            }
+            is.transferTo( os );
         }
     }
 }

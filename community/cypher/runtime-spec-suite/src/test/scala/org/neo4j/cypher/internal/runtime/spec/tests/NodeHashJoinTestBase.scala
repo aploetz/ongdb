@@ -19,12 +19,17 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.logical.plans.{Ascending, Descending}
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
-import org.neo4j.graphdb.{Direction, Node}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Descending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
+import org.neo4j.graphdb.Direction
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.iterableAsScalaIterableConverter
 
 abstract class NodeHashJoinTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT],
                                                                runtime: CypherRuntime[CONTEXT],
@@ -484,19 +489,151 @@ abstract class NodeHashJoinTestBase[CONTEXT <: RuntimeContext](edition: Edition[
       .|.expand("(x2)-->(x3)")
       .|.expand("(x1)-->(x2)")
       .|.expand("(y)-->(x1)")
-      .|.nodeByLabelScan("y", "B")
+      .|.nodeByLabelScan("y", "B", IndexOrderNone)
       .expand("(x6)-->(z)")
       .expand("(x5)-->(x6)")
       .expand("(x4)-->(x5)")
       .expand("(x3)-->(x4)")
       .expand("(x2)-->(x3)")
       .expand("(x1)-->(x2)")
-      .nodeByLabelScan("x1", "A")
+      .nodeByLabelScan("x1", "A", IndexOrderNone)
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
 
     // then
     runtimeResult should beColumns("x1").withRows(rowCount(limitCount))
+  }
+
+  test("should pass cached properties through after join") {
+    val nodes = given {
+      nodePropertyGraph(sizeHint, { case i => Map("prop" -> i) })
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("prop")
+      .projection("cache[a.prop] AS prop")
+      .nodeHashJoin("a")
+      .|.filter("cache[a.prop] % 10 = 0")
+      .|.cacheProperties("cache[a.prop]")
+      .|.allNodeScan("a")
+      .filter("cache[a.prop] < 100")
+      .allNodeScan("a")
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    // then
+    val expectedResultRows = for {n <- nodes
+                                  i = n.getProperty("prop").asInstanceOf[Int]
+                                  if i % 10 == 0 && i < 100
+                                  } yield Array(i)
+
+    runtimeResult should beColumns("prop").withRows(expectedResultRows)
+  }
+
+  test("should join with alias on non-join-key on RHS") {
+    // given
+    val (unfilteredNodes, _) = given { circleGraph(sizeHint) }
+    val nodes = select(unfilteredNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.1)
+    val lhsRows = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y", "y2")
+      .nodeHashJoin("x")
+      .|.projection("y AS y2")
+      .|.expand("(y)--(x)")
+      .|.allNodeScan("y")
+      .input(nodes = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, lhsRows)
+
+    // then
+    val expectedResultRows = for {node <- nodes if node != null
+                                  rel <- node.getRelationships().asScala
+                                  otherNode = rel.getOtherNode(node)
+                                  } yield Array(node, otherNode, otherNode)
+    runtimeResult should beColumns("x", "y", "y2").withRows(expectedResultRows)
+  }
+
+  test("should join with alias on join-key on RHS") {
+    // given
+    val (unfilteredNodes, _) = given { circleGraph(sizeHint) }
+    val nodes = select(unfilteredNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.1)
+    val lhsRows = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "x2", "y")
+      .nodeHashJoin("x")
+      .|.projection("x AS x2")
+      .|.expand("(y)--(x)")
+      .|.allNodeScan("y")
+      .input(nodes = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, lhsRows)
+
+    // then
+    val expectedResultRows = for {node <- nodes if node != null
+                                  rel <- node.getRelationships().asScala
+                                  otherNode = rel.getOtherNode(node)
+                                  } yield Array(node, node, otherNode)
+    runtimeResult should beColumns("x", "x2", "y").withRows(expectedResultRows)
+  }
+
+  test("should join with alias on non-join-key on LHS") {
+    // given
+    val (unfilteredNodes, _) = given { circleGraph(sizeHint) }
+    val nodes = select(unfilteredNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.1)
+    val lhsRows = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y", "y2")
+      .nodeHashJoin("x")
+      .|.allNodeScan("x")
+      .projection("y AS y2")
+      .expand("(x)--(y)")
+      .input(nodes = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, lhsRows)
+
+    // then
+    val expectedResultRows = for {node <- nodes if node != null
+                                  rel <- node.getRelationships().asScala
+                                  otherNode = rel.getOtherNode(node)
+                                  } yield Array(node, otherNode, otherNode)
+    runtimeResult should beColumns("x", "y", "y2").withRows(expectedResultRows)
+  }
+
+  test("should join with alias on join-key on LHS") {
+    // given
+    val (unfilteredNodes, _) = given { circleGraph(sizeHint) }
+    val nodes = select(unfilteredNodes, selectivity = 0.5, duplicateProbability = 0.5, nullProbability = 0.1)
+    val lhsRows = batchedInputValues(sizeHint / 8, nodes.map(n => Array[Any](n)): _*).stream()
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "x2", "y")
+      .nodeHashJoin("x")
+      .|.expand("(y)--(x)")
+      .|.allNodeScan("y")
+      .projection("x AS x2")
+      .input(nodes = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, lhsRows)
+
+    // then
+    val expectedResultRows = for {node <- nodes if node != null
+                                  rel <- node.getRelationships().asScala
+                                  otherNode = rel.getOtherNode(node)
+                                  } yield Array(node, node, otherNode)
+    runtimeResult should beColumns("x", "x2", "y").withRows(expectedResultRows)
   }
 }

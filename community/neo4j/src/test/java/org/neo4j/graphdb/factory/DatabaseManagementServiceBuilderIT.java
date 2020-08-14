@@ -35,14 +35,16 @@ import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-import static co.unruly.matchers.OptionalMatchers.empty;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
+<<<<<<< HEAD
 import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
+=======
+>>>>>>> neo4j/4.1
 import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.io.fs.FileSystemUtils.isEmptyOrNonExistingDirectory;
 import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;
@@ -66,8 +68,8 @@ class DatabaseManagementServiceBuilderIT
         {
             DependencyResolver dependencyResolver = database.getDependencyResolver();
             DatabaseManager<?> databaseManager = dependencyResolver.resolveDependency( DatabaseManager.class );
-            assertThat( databaseManager.getDatabaseContext( DEFAULT_DATABASE_NAME ), not( empty() ) );
-            assertThat( databaseManager.getDatabaseContext( NAMED_SYSTEM_DATABASE_ID ), not( empty() ) );
+            assertThat( databaseManager.getDatabaseContext( DEFAULT_DATABASE_NAME ) ).isNotEmpty();
+            assertThat( databaseManager.getDatabaseContext( NAMED_SYSTEM_DATABASE_ID ) ).isNotEmpty();
         }
         finally
         {

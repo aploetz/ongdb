@@ -19,9 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-import org.neo4j.cypher.internal.logical.plans.{Ascending, Descending}
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
+import org.neo4j.cypher.internal.CypherRuntime
+import org.neo4j.cypher.internal.RuntimeContext
+import org.neo4j.cypher.internal.logical.plans.Ascending
+import org.neo4j.cypher.internal.logical.plans.Descending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.runtime.TestSubscriber
+import org.neo4j.cypher.internal.runtime.spec.Edition
+import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
+import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 
 abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
                                                                edition: Edition[CONTEXT],
@@ -47,11 +54,7 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
 
   test("partial sort with one column already sorted with only one distinct value") {
     // when
-    val input = inputValues(
-      Array(3, 1),
-      Array(3, 3),
-      Array(3, 2)
-    )
+    val input = inputColumns(nBatches = sizeHint / 10, batchSize = 10, _ => 1, row => row % 10)
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y")
@@ -62,24 +65,12 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
     val runtimeResult = execute(logicalQuery, runtime, input)
 
     // then
-    runtimeResult should beColumns("x", "y").withRows(inOrder(Seq(
-      Array(3, 1),
-      Array(3, 2),
-      Array(3, 3)
-    )))
+    runtimeResult should beColumns("x", "y").withRows(inOrder(input.flatten.sortBy(_(1).asInstanceOf[Int])))
   }
 
   test("partial sort with one column already sorted") {
     // when
-    val input = inputValues(
-      Array(3, 1),
-      Array(3, 3),
-      Array(3, 2),
-      Array(5, 9),
-      Array(5, 9),
-      Array(5, 0),
-      Array(5, 7)
-    )
+    val input = inputColumns(nBatches = sizeHint / 10, batchSize = 10, row => row / 10, row => row % 10)
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y")
@@ -90,28 +81,12 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
     val runtimeResult = execute(logicalQuery, runtime, input)
 
     // then
-    runtimeResult should beColumns("x", "y").withRows(inOrder(Seq(
-      Array(3, 1),
-      Array(3, 2),
-      Array(3, 3),
-      Array(5, 0),
-      Array(5, 7),
-      Array(5, 9),
-      Array(5, 9)
-    )))
+    runtimeResult should beColumns("x", "y").withRows(inOrder(input.flatten.sortBy(row => (row(0).asInstanceOf[Int], row(1).asInstanceOf[Int]))))
   }
 
   test("partial sort with chunk size 1") {
     // when
-    val input = inputValues(
-      Array(1, 1),
-      Array(2, 3),
-      Array(3, 2),
-      Array(4, 9),
-      Array(5, 9),
-      Array(6, 0),
-      Array(7, 7)
-    )
+    val input = inputColumns(nBatches = sizeHint / 10, batchSize = 10, row => row, row => row % 10)
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y")
@@ -122,28 +97,16 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
     val runtimeResult = execute(logicalQuery, runtime, input)
 
     // then
-    runtimeResult should beColumns("x", "y").withRows(inOrder(Seq(
-      Array(1, 1),
-      Array(2, 3),
-      Array(3, 2),
-      Array(4, 9),
-      Array(5, 9),
-      Array(6, 0),
-      Array(7, 7)
-    )))
+    runtimeResult should beColumns("x", "y").withRows(inOrder(input.flatten.sortBy(row => (row(0).asInstanceOf[Int], row(1).asInstanceOf[Int]))))
   }
 
   test("partial sort with two sorted and two unsorted columns") {
     // when
-    val input = inputValues(
-      Array(3, 3, 0, 1),
-      Array(3, 1, 9, 2),
-      Array(3, 1, 3, 3),
-      Array(5, 5, 4, 0),
-      Array(5, 5, 2, 0),
-      Array(5, 5, 2, 6),
-      Array(5, 0, 2, 0)
-    )
+    val input = inputColumns(nBatches = sizeHint / 10, batchSize = 10,
+      row => row / 20,
+      row => -row / 4,
+      row => row % 13,
+      row => row % 7)
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y", "z", "a")
@@ -154,28 +117,15 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
     val runtimeResult = execute(logicalQuery, runtime, input)
 
     // then
-    runtimeResult should beColumns("x", "y", "z", "a").withRows(inOrder(Seq(
-      Array(3, 3, 0, 1),
-      Array(3, 1, 3, 3),
-      Array(3, 1, 9, 2),
-      Array(5, 5, 2, 6),
-      Array(5, 5, 2, 0),
-      Array(5, 5, 4, 0),
-      Array(5, 0, 2, 0)
-    )))
-  }
+    runtimeResult should beColumns("x", "y", "z", "a").withRows(inOrder(input.flatten.sortBy(row =>
+      (row(0).asInstanceOf[Int], -row(1).asInstanceOf[Int], row(2).asInstanceOf[Int], -row(3).asInstanceOf[Int]))))  }
 
   test("should handle null values") {
     // when
-    val input = inputValues(
-      Array(3, 1),
-      Array(3, null),
-      Array(3, 2),
-      Array(5, null),
-      Array(5, 9),
-      Array(null, 0),
-      Array(null, null)
-    )
+    val batchSize = 10
+    val input = inputColumns(nBatches = sizeHint / batchSize, batchSize = batchSize,
+      row => if (row < sizeHint - batchSize) row / batchSize else null,
+      row => if (row % 3 != 0) row % 10 else null)
 
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x", "y")
@@ -186,14 +136,63 @@ abstract class PartialSortTestBase[CONTEXT <: RuntimeContext](
     val runtimeResult = execute(logicalQuery, runtime, input)
 
     // then
-    runtimeResult should beColumns("x", "y").withRows(inOrder(Seq(
-      Array(3, 1),
-      Array(3, 2),
-      Array(3, null),
-      Array(5, 9),
-      Array(5, null),
-      Array(null, 0),
-      Array(null, null)
-    )))
+    def sortKey(col: Any): Int = col match {
+      case i: Int => i
+      case null => Integer.MAX_VALUE
+    }
+
+    runtimeResult should beColumns("x", "y").withRows(inOrder(input.flatten.sortBy(row => (sortKey(row(0)), sortKey(row(1))))))
+  }
+
+  test("should work on RHS of apply") {
+    val propValue = 10
+    index("B", "prop")
+    val (aNodes, bNodes) = given {
+      val aNodes = nodeGraph(5, "A")
+      val bNodes = nodePropertyGraph(100, {
+        case i: Int => Map("prop" -> (if (i % 2 == 0) propValue else 0))
+      }, "B")
+      (aNodes, bNodes)
+    }
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("a", "b", "c")
+      .apply()
+      .|.partialSort(Seq(Ascending("b")), Seq(Ascending("c")))
+      .|.unwind("range(b.prop, 1, -1) AS c")
+      .|.nodeIndexOperator("b:B(prop >= 0)", indexOrder = IndexOrderAscending, argumentIds = Set("a"))
+      .nodeByLabelScan("a", "A", IndexOrderNone)
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime)
+
+    val expected = for {
+      a <- aNodes
+      b <- bNodes if b.getProperty("prop").asInstanceOf[Int] == propValue
+      c <- Range.inclusive(1, propValue)
+    }  yield Array[Any](a, b, c)
+
+    runtimeResult should beColumns("a", "b", "c").withRows(inOrder(expected))
+  }
+
+  test("partial sort should not exhaust input when there is no demand") {
+    val input = inputColumns(nBatches = sizeHint / 10, batchSize = 10, row => row / 10, row => row % 10)
+
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y")
+      .partialSort(Seq(Ascending("x")), Seq(Ascending("y")))
+      .input(variables = Seq("x", "y"))
+      .build()
+
+    val stream = input.stream()
+    // When
+    val result = execute(logicalQuery, runtime, stream, TestSubscriber.concurrent)
+
+    // Then
+    result.request(1)
+    result.await() shouldBe true
+    //we shouldn't have exhausted the entire input
+    stream.hasMore shouldBe true
   }
 }

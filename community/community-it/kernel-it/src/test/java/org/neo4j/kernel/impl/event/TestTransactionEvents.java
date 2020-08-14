@@ -58,10 +58,7 @@ import org.neo4j.test.extension.ImpermanentDbmsExtension;
 import org.neo4j.test.extension.Inject;
 
 import static java.lang.String.format;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -74,8 +71,6 @@ import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.helpers.collection.Iterables.count;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasProperty;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.inTx;
 
 @ImpermanentDbmsExtension
 class TestTransactionEvents
@@ -482,7 +477,11 @@ class TestTransactionEvents
             tx.commit();
         }
         // Then
-        assertThat(node, inTx(db, hasProperty(key).withValue(value2)));
+        try ( Transaction transaction = db.beginTx() )
+        {
+            var n = transaction.getNodeById( node.getId() );
+            assertEquals( value2, n.getProperty( key ) );
+        }
         dbms.unregisterTransactionEventListener( DEFAULT_DATABASE_NAME, listener );
     }
 
@@ -526,7 +525,7 @@ class TestTransactionEvents
         try ( Transaction tx = db.beginTx() )
         {
             Node node = tx.findNode( label, "indexed", "value" );
-            assertThat( node.getProperty( "random" ), is( 42 ) );
+            assertThat( node.getProperty( "random" ) ).isEqualTo( 42 );
         }
     }
 
@@ -571,7 +570,7 @@ class TestTransactionEvents
         try ( Transaction tx = db.beginTx() )
         {
             Node node = tx.findNode( label, "indexed", "value" );
-            assertThat( node.getProperty( "random" ), is( 42 ) );
+            assertThat( node.getProperty( "random" ) ).isEqualTo( 42 );
         }
     }
 
@@ -785,7 +784,7 @@ class TestTransactionEvents
         }
 
         assertEquals( 1, changedRelationships.size() );
-        assertTrue( changedRelationships.contains( livesIn.name() ), livesIn + " not in " + changedRelationships.toString() );
+        assertTrue( changedRelationships.contains( livesIn.name() ), livesIn + " not in " + changedRelationships );
     }
 
     @Test
@@ -930,9 +929,9 @@ class TestTransactionEvents
 
         // THEN
         assertNotNull( deletedToString.get() );
-        assertThat( deletedToString.get(), containsString( type.name() ) );
-        assertThat( deletedToString.get(), containsString( format( "(%d)", startNode.getId() ) ) );
-        assertThat( deletedToString.get(), containsString( format( "(%d)", endNode.getId() ) ) );
+        assertThat( deletedToString.get() ).contains( type.name() );
+        assertThat( deletedToString.get() ).contains( format( "(%d)", startNode.getId() ) );
+        assertThat( deletedToString.get() ).contains( format( "(%d)", endNode.getId() ) );
     }
 
     @Test
@@ -1039,7 +1038,7 @@ class TestTransactionEvents
         var lastClosedTxIdAfter = lastClosedTxId( databaseName, dbms );
 
         // more than one transaction should be committed
-        assertThat( lastClosedTxIdAfter, greaterThan( lastClosedTxIdBefore + 1 ) );
+        assertThat( lastClosedTxIdAfter ).isGreaterThan( lastClosedTxIdBefore + 1 );
 
         // but listener should be only invoked once
         assertEquals( 1, listener.beforeCommitInvocations.get() );
@@ -1063,7 +1062,7 @@ class TestTransactionEvents
         var committedTransactions = lastClosedTxIdAfter - lastClosedTxIdBefore;
 
         // more than one transaction should be committed
-        assertThat( committedTransactions, greaterThan( 1L ) );
+        assertThat( committedTransactions ).isGreaterThan( 1L );
 
         // listener should be invoked the same number of times as the number of committed transactions
         assertEquals( committedTransactions, listener.beforeCommitInvocations.get() );

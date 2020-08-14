@@ -19,34 +19,71 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.logical.plans._
 import org.neo4j.cypher.internal.runtime.CompositeValueIndexCursor
+=======
+import org.neo4j.cypher.internal.frontend.helpers.SeqCombiner.combine
+import org.neo4j.cypher.internal.logical.plans.CompositeQueryExpression
+import org.neo4j.cypher.internal.logical.plans.ExistenceQueryExpression
+import org.neo4j.cypher.internal.logical.plans.IndexOrder
+import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderDescending
+import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
+import org.neo4j.cypher.internal.logical.plans.InequalitySeekRange
+import org.neo4j.cypher.internal.logical.plans.ManyQueryExpression
+import org.neo4j.cypher.internal.logical.plans.MinMaxOrdering
+import org.neo4j.cypher.internal.logical.plans.QueryExpression
+import org.neo4j.cypher.internal.logical.plans.RangeBetween
+import org.neo4j.cypher.internal.logical.plans.RangeGreaterThan
+import org.neo4j.cypher.internal.logical.plans.RangeLessThan
+import org.neo4j.cypher.internal.logical.plans.RangeQueryExpression
+import org.neo4j.cypher.internal.logical.plans.SingleQueryExpression
+import org.neo4j.cypher.internal.macros.AssertMacros.checkOnlyWhenAssertionsAreEnabled
+import org.neo4j.cypher.internal.runtime.CompositeValueIndexCursor
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsList
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.runtime.ReadableRow
+>>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.InequalitySeekRangeExpression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.PointDistanceSeekRangeExpression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.PrefixSeekRangeExpression
+<<<<<<< HEAD
 import org.neo4j.cypher.internal.runtime.ExecutionContext
 import org.neo4j.cypher.internal.runtime.IsList
 import org.neo4j.cypher.internal.runtime.IsNoValue
 import org.neo4j.cypher.internal.runtime.makeValueNeoSafe
 import org.neo4j.cypher.internal.v4_0.frontend.helpers.SeqCombiner.combine
+=======
+import org.neo4j.cypher.internal.runtime.makeValueNeoSafe
+>>>>>>> neo4j/4.1
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.exceptions.InternalException
 import org.neo4j.internal.kernel.api.IndexQuery
 import org.neo4j.internal.kernel.api.IndexReadSession
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor
 import org.neo4j.values.AnyValue
+<<<<<<< HEAD
 import org.neo4j.values.storable.Values.COMPARATOR
 import org.neo4j.values.storable._
+=======
+import org.neo4j.values.storable.NumberValue
+import org.neo4j.values.storable.PointValue
+import org.neo4j.values.storable.TextValue
+import org.neo4j.values.storable.Value
+import org.neo4j.values.storable.Values
+>>>>>>> neo4j/4.1
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.asScalaBufferConverter
 
 /**
-  * Mixin trait with functionality for executing logical index queries.
-  *
-  * This trait maps the logical IndexSeekMode and QueryExpression into the kernel IndexQuery classes, which
-  * are passed to the QueryContext for executing the index seek.
-  */
+ * Mixin trait with functionality for executing logical index queries.
+ *
+ * This trait maps the logical IndexSeekMode and QueryExpression into the kernel IndexQuery classes, which
+ * are passed to the QueryContext for executing the index seek.
+ */
 trait NodeIndexSeeker {
 
   // dependencies
@@ -60,7 +97,11 @@ trait NodeIndexSeeker {
                                             index: IndexReadSession,
                                             needsValues: Boolean,
                                             indexOrder: IndexOrder,
+<<<<<<< HEAD
                                             baseContext: ExecutionContext): NodeValueIndexCursor =
+=======
+                                            baseContext: CypherRow): NodeValueIndexCursor =
+>>>>>>> neo4j/4.1
     indexMode match {
       case _: ExactSeek |
            _: SeekByRange =>
@@ -88,20 +129,24 @@ trait NodeIndexSeeker {
     case IndexOrderDescending => CompositeValueIndexCursor.descending(cursors)
   }
 
+<<<<<<< HEAD
   private val BY_VALUE: MinMaxOrdering[Value] = MinMaxOrdering(Ordering.comparatorToOrdering(COMPARATOR))
+=======
+  private val BY_VALUE: MinMaxOrdering[Value] = MinMaxOrdering(Ordering.comparatorToOrdering(Values.COMPARATOR))
+>>>>>>> neo4j/4.1
 
-  protected def computeIndexQueries(state: QueryState, row: ExecutionContext): Seq[Seq[IndexQuery]] =
+  def computeIndexQueries(state: QueryState, row: ReadableRow): Seq[Seq[IndexQuery]] =
     valueExpr match {
 
       // Index range seek over range of values
       case RangeQueryExpression(rangeWrapper) =>
-        assert(propertyIds.length == 1)
+        checkOnlyWhenAssertionsAreEnabled(propertyIds.length == 1)
         computeRangeQueries(state, row, rangeWrapper, propertyIds.head).map(Seq(_))
 
       // Index composite seek over all values
       case CompositeQueryExpression(exprs) =>
         // ex:   x in [1] AND y in ["a", "b"] AND z > 3.0 AND exists(p)
-        assert(exprs.lengthCompare(propertyIds.length) == 0)
+        checkOnlyWhenAssertionsAreEnabled(exprs.lengthCompare(propertyIds.length) == 0)
 
         // indexQueries = [
         //                  [exact(1)],
@@ -127,7 +172,7 @@ trait NodeIndexSeeker {
         computeExactQueries(state, row)
     }
 
-  private def computeRangeQueries(state: QueryState, row: ExecutionContext, rangeWrapper: Expression, propertyId: Int): Seq[IndexQuery] = {
+  private def computeRangeQueries(state: QueryState, row: ReadableRow, rangeWrapper: Expression, propertyId: Int): Seq[IndexQuery] = {
     rangeWrapper match {
       case PrefixSeekRangeExpression(range) =>
         val expr = range.prefix
@@ -157,7 +202,11 @@ trait NodeIndexSeeker {
             case RangeBetween(rangeGreaterThan, rangeLessThan) =>
               val greaterThanLimit = rangeGreaterThan.limit(BY_VALUE).get
               val lessThanLimit = rangeLessThan.limit(BY_VALUE).get
+<<<<<<< HEAD
               val compare = COMPARATOR.compare(greaterThanLimit.endPoint, lessThanLimit.endPoint)
+=======
+              val compare = Values.COMPARATOR.compare(greaterThanLimit.endPoint, lessThanLimit.endPoint)
+>>>>>>> neo4j/4.1
               if (compare < 0) {
                     List(IndexQuery.range(propertyId,
                       greaterThanLimit.endPoint,
@@ -192,7 +241,7 @@ trait NodeIndexSeeker {
     }
   }
 
-  protected def computeExactQueries(state: QueryState, row: ExecutionContext): Seq[Seq[IndexQuery.ExactPredicate]] =
+  protected def computeExactQueries(state: QueryState, row: ReadableRow): Seq[Seq[IndexQuery.ExactPredicate]] =
     valueExpr match {
       // Index exact value seek on single value
       case SingleQueryExpression(expr) =>
@@ -219,7 +268,7 @@ trait NodeIndexSeeker {
       //    eg:   x in [1] AND y in ["a", "b"] AND z in [3.0]
       // Should only get here from LockingUniqueIndexSeek
       case CompositeQueryExpression(exprs) =>
-        assert(exprs.lengthCompare(propertyIds.length) == 0)
+        checkOnlyWhenAssertionsAreEnabled(exprs.lengthCompare(propertyIds.length) == 0)
 
         // indexQueries = [[1], ["a", "b"], [3.0]]
         val indexQueries: Seq[Seq[IndexQuery.ExactPredicate]] = exprs.zip(propertyIds).map {
@@ -234,7 +283,7 @@ trait NodeIndexSeeker {
         combine(indexQueries)
     }
 
-  private def computeCompositeQueries(state: QueryState, row: ExecutionContext)(queryExpression: QueryExpression[Expression], propertyId: Int): Seq[IndexQuery] =
+  private def computeCompositeQueries(state: QueryState, row: ReadableRow)(queryExpression: QueryExpression[Expression], propertyId: Int): Seq[IndexQuery] =
     queryExpression match {
       case SingleQueryExpression(inner) =>
         Seq(IndexQuery.exact(propertyId, makeValueNeoSafe(inner(row, state))))

@@ -25,22 +25,25 @@ import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.internal.helpers.collection.PrefetchingIterator;
 import org.neo4j.internal.recordstorage.RecordNodeCursor;
 import org.neo4j.internal.recordstorage.RecordStorageReader;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.storageengine.api.StorageRelationshipTraversalCursor;
+
+import static org.neo4j.storageengine.api.RelationshipSelection.ALL_RELATIONSHIPS;
 
 abstract class BatchRelationshipIterable<T> implements Iterable<T>
 {
     private final StorageRelationshipTraversalCursor relationshipCursor;
 
-    BatchRelationshipIterable( RecordStorageReader storageReader, long nodeId )
+    BatchRelationshipIterable( RecordStorageReader storageReader, long nodeId, PageCursorTracer cursorTracer )
     {
-        relationshipCursor = storageReader.allocateRelationshipTraversalCursor();
-        RecordNodeCursor nodeCursor = storageReader.allocateNodeCursor();
+        relationshipCursor = storageReader.allocateRelationshipTraversalCursor( cursorTracer );
+        RecordNodeCursor nodeCursor = storageReader.allocateNodeCursor( cursorTracer );
         nodeCursor.single( nodeId );
         if ( !nodeCursor.next() )
         {
             throw new NotFoundException( "Node " + nodeId + " not found" );
         }
-        relationshipCursor.init( nodeId, nodeCursor.allRelationshipsReference(), nodeCursor.isDense() );
+        relationshipCursor.init( nodeId, nodeCursor.relationshipsReference(), ALL_RELATIONSHIPS );
     }
 
     @Override

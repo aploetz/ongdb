@@ -29,13 +29,11 @@ import org.neo4j.index.internal.gbptree.GBPTree;
 import org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector;
 import org.neo4j.index.internal.gbptree.Writer;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.IOLimiter;
-import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexPopulator;
-import org.neo4j.kernel.api.index.IndexProvider;
 import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.UniqueIndexSampler;
@@ -49,7 +47,7 @@ import static org.neo4j.index.internal.gbptree.GBPTree.NO_HEADER_WRITER;
 /**
  * {@link IndexPopulator} backed by a {@link GBPTree}.
  *
- * @param <KEY> type of {@link NativeIndexSingleValueKey}.
+ * @param <KEY> type of {@link NativeIndexKey}.
  * @param <VALUE> type of {@link NativeIndexValue}.
  */
 public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALUE extends NativeIndexValue>
@@ -71,46 +69,34 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
     private boolean dropped;
     private boolean closed;
 
-    NativeIndexPopulator( PageCache pageCache, FileSystemAbstraction fs, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout, IndexProvider.Monitor monitor,
-            IndexDescriptor descriptor, Consumer<PageCursor> additionalHeaderWriter )
+    NativeIndexPopulator( DatabaseIndexContext databaseIndexContext, IndexFiles indexFiles, IndexLayout<KEY,VALUE> layout,
+            IndexDescriptor descriptor, Consumer<PageCursor> additionalHeaderWriter, GBPTree.Monitor treeMonitor )
     {
-        super( pageCache, fs, indexFiles, layout, monitor, descriptor, false );
+        super( databaseIndexContext, layout, indexFiles, descriptor, treeMonitor );
         this.treeKey = layout.newKey();
         this.treeValue = layout.newValue();
         this.additionalHeaderWriter = additionalHeaderWriter;
         this.uniqueSampler = descriptor.isUnique() ? new UniqueIndexSampler() : null;
     }
 
-    public void clear()
-    {
-        indexFiles.clear();
-    }
+    abstract NativeIndexReader<KEY,VALUE> newReader();
 
     @Override
     public synchronized void create()
     {
-        create( new NativeIndexHeaderWriter( BYTE_POPULATING, additionalHeaderWriter ) );
-    }
-
-    protected synchronized void create( Consumer<PageCursor> headerWriter )
-    {
         assertNotDropped();
         assertNotClosed();
 
-        clear();
+        indexFiles.clear();
+        NativeIndexHeaderWriter headerWriter = new NativeIndexHeaderWriter( BYTE_POPULATING, additionalHeaderWriter );
         instantiateTree( RecoveryCleanupWorkCollector.immediate(), headerWriter );
 
         // true:  tree uniqueness is (value,entityId)
         // false: tree uniqueness is (value) <-- i.e. more strict
-        mainConflictDetector = getMainConflictDetector();
+        mainConflictDetector = new ThrowingConflictDetector<>( !descriptor.isUnique() );
         // for updates we have to have uniqueness on (value,entityId) to allow for intermediary violating updates.
         // there are added conflict checks after updates have been applied.
         updatesConflictDetector = new ThrowingConflictDetector<>( true );
-    }
-
-    ConflictDetectingValueMerger<KEY,VALUE,Value[]> getMainConflictDetector()
-    {
-        return new ThrowingConflictDetector<>( !descriptor.isUnique() );
     }
 
     @Override
@@ -118,8 +104,12 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
     {
         try
         {
+            if ( tree != null )
+            {
+                tree.setDeleteOnClose( true );
+            }
             closeTree();
-            clear();
+            indexFiles.clear();
         }
         finally
         {
@@ -129,44 +119,37 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
     }
 
     @Override
-    public void add( Collection<? extends IndexEntryUpdate<?>> updates ) throws IndexEntryConflictException
+    public void add( Collection<? extends IndexEntryUpdate<?>> updates, PageCursorTracer cursorTracer ) throws IndexEntryConflictException
     {
-        processUpdates( updates, mainConflictDetector );
+        processUpdates( updates, mainConflictDetector, cursorTracer );
     }
 
     @Override
-    public void verifyDeferredConstraints( NodePropertyAccessor nodePropertyAccessor ) throws IndexEntryConflictException
+    public void verifyDeferredConstraints( NodePropertyAccessor nodePropertyAccessor )
     {
         // No-op, uniqueness is checked for each update in add(IndexEntryUpdate)
     }
 
     @Override
-    public IndexUpdater newPopulatingUpdater( NodePropertyAccessor accessor )
+    public IndexUpdater newPopulatingUpdater( NodePropertyAccessor accessor, PageCursorTracer cursorTracer )
     {
-        return newPopulatingUpdater();
+        return newPopulatingUpdater( cursorTracer );
     }
 
-    IndexUpdater newPopulatingUpdater()
+    IndexUpdater newPopulatingUpdater( PageCursorTracer cursorTracer )
     {
-        IndexUpdater updater = new CollectingIndexUpdater( updates -> processUpdates( updates, updatesConflictDetector ) );
-        if ( descriptor.isUnique() && canCheckConflictsWithoutStoreAccess() )
+        IndexUpdater updater = new CollectingIndexUpdater( updates -> processUpdates( updates, updatesConflictDetector, cursorTracer ) );
+        if ( descriptor.isUnique() )
         {
             // The index population detects conflicts on the fly, however for updates coming in we're in a position
             // where we cannot detect conflicts while applying, but instead afterwards.
-            updater = new DeferredConflictCheckingIndexUpdater( updater, this::newReader, descriptor );
+            updater = new DeferredConflictCheckingIndexUpdater( updater, this::newReader, descriptor, cursorTracer );
         }
         return updater;
     }
 
-    boolean canCheckConflictsWithoutStoreAccess()
-    {
-        return true;
-    }
-
-    abstract NativeIndexReader<KEY,VALUE> newReader();
-
     @Override
-    public synchronized void close( boolean populationCompletedSuccessfully )
+    public synchronized void close( boolean populationCompletedSuccessfully, PageCursorTracer cursorTracer )
     {
         if ( populationCompletedSuccessfully && failureBytes != null )
         {
@@ -180,13 +163,13 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
             {
                 // Successful and completed population
                 assertPopulatorOpen();
-                markTreeAsOnline();
+                flushTreeAndMarkAs( BYTE_ONLINE, cursorTracer );
             }
             else if ( failureBytes != null )
             {
                 // Failed population
                 ensureTreeInstantiated();
-                markTreeAsFailed();
+                markTreeAsFailed( cursorTracer );
             }
             // else cancelled population. Here we simply close the tree w/o checkpointing it and it will look like POPULATING state on next open
         }
@@ -197,69 +180,10 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
         }
     }
 
-    private void assertNotDropped()
-    {
-        if ( dropped )
-        {
-            throw new IllegalStateException( "Populator has already been dropped." );
-        }
-    }
-
-    private void assertNotClosed()
-    {
-        if ( closed )
-        {
-            throw new IllegalStateException( "Populator has already been closed." );
-        }
-    }
-
     @Override
     public void markAsFailed( String failure )
     {
         failureBytes = failure.getBytes( StandardCharsets.UTF_8 );
-    }
-
-    private void ensureTreeInstantiated()
-    {
-        if ( tree == null )
-        {
-            instantiateTree( RecoveryCleanupWorkCollector.ignore(), NO_HEADER_WRITER );
-        }
-    }
-
-    private void assertPopulatorOpen()
-    {
-        if ( tree == null )
-        {
-            throw new IllegalStateException( "Populator has already been closed." );
-        }
-    }
-
-    private void markTreeAsFailed()
-    {
-        Preconditions.checkState( failureBytes != null, "markAsFailed hasn't been called, populator not actually failed?" );
-        tree.checkpoint( IOLimiter.UNLIMITED, new FailureHeaderWriter( failureBytes ) );
-    }
-
-    void markTreeAsOnline()
-    {
-        tree.checkpoint( IOLimiter.UNLIMITED, new NativeIndexHeaderWriter( BYTE_ONLINE, additionalHeaderWriter ) );
-    }
-
-    private void processUpdates( Iterable<? extends IndexEntryUpdate<?>> indexEntryUpdates, ConflictDetectingValueMerger<KEY,VALUE,Value[]> conflictDetector )
-            throws IndexEntryConflictException
-    {
-        try ( Writer<KEY,VALUE> writer = tree.writer() )
-        {
-            for ( IndexEntryUpdate<?> indexEntryUpdate : indexEntryUpdates )
-            {
-                NativeIndexUpdater.processUpdate( treeKey, treeValue, indexEntryUpdate, writer, conflictDetector );
-            }
-        }
-        catch ( IOException e )
-        {
-            throw new UncheckedIOException( e );
-        }
     }
 
     @Override
@@ -270,6 +194,49 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
             updateUniqueSample( update );
         }
         // else don't do anything here, we'll do a scan in the end instead
+    }
+
+    @Override
+    public IndexSample sample( PageCursorTracer cursorTracer )
+    {
+        if ( descriptor.isUnique() )
+        {
+            return uniqueSampler.result();
+        }
+        return buildNonUniqueIndexSample( cursorTracer );
+    }
+
+    void flushTreeAndMarkAs( byte state, PageCursorTracer cursorTracer )
+    {
+        tree.checkpoint( IOLimiter.UNLIMITED,
+                new NativeIndexHeaderWriter( state, additionalHeaderWriter ), cursorTracer );
+    }
+
+    IndexSample buildNonUniqueIndexSample( PageCursorTracer cursorTracer )
+    {
+        return new FullScanNonUniqueIndexSampler<>( tree, layout ).sample( cursorTracer );
+    }
+
+    private void markTreeAsFailed( PageCursorTracer cursorTracer )
+    {
+        Preconditions.checkState( failureBytes != null, "markAsFailed hasn't been called, populator not actually failed?" );
+        tree.checkpoint( IOLimiter.UNLIMITED, new FailureHeaderWriter( failureBytes ), cursorTracer );
+    }
+
+    private void processUpdates( Iterable<? extends IndexEntryUpdate<?>> indexEntryUpdates, ConflictDetectingValueMerger<KEY,VALUE,Value[]> conflictDetector,
+            PageCursorTracer cursorTracer ) throws IndexEntryConflictException
+    {
+        try ( Writer<KEY,VALUE> writer = tree.writer( cursorTracer ) )
+        {
+            for ( IndexEntryUpdate<?> indexEntryUpdate : indexEntryUpdates )
+            {
+                NativeIndexUpdater.processUpdate( treeKey, treeValue, indexEntryUpdate, writer, conflictDetector );
+            }
+        }
+        catch ( IOException e )
+        {
+            throw new UncheckedIOException( e );
+        }
     }
 
     private void updateUniqueSample( IndexEntryUpdate<?> update )
@@ -289,13 +256,35 @@ public abstract class NativeIndexPopulator<KEY extends NativeIndexKey<KEY>, VALU
         }
     }
 
-    @Override
-    public IndexSample sampleResult()
+    private void assertNotDropped()
     {
-        if ( descriptor.isUnique() )
+        if ( dropped )
         {
-            return uniqueSampler.result();
+            throw new IllegalStateException( "Populator has already been dropped." );
         }
-        return new FullScanNonUniqueIndexSampler<>( tree, layout ).result();
+    }
+
+    private void assertNotClosed()
+    {
+        if ( closed )
+        {
+            throw new IllegalStateException( "Populator has already been closed." );
+        }
+    }
+
+    private void ensureTreeInstantiated()
+    {
+        if ( tree == null )
+        {
+            instantiateTree( RecoveryCleanupWorkCollector.ignore(), NO_HEADER_WRITER );
+        }
+    }
+
+    private void assertPopulatorOpen()
+    {
+        if ( tree == null )
+        {
+            throw new IllegalStateException( "Populator has already been closed." );
+        }
     }
 }

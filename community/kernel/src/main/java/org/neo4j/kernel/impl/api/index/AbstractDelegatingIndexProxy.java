@@ -30,6 +30,7 @@ import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.io.pagecache.IOLimiter;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexActivationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
@@ -50,9 +51,9 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     }
 
     @Override
-    public IndexUpdater newUpdater( IndexUpdateMode mode )
+    public IndexUpdater newUpdater( IndexUpdateMode mode, PageCursorTracer cursorTracer )
     {
-        return getDelegate().newUpdater( mode );
+        return getDelegate().newUpdater( mode, cursorTracer );
     }
 
     @Override
@@ -74,9 +75,9 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     }
 
     @Override
-    public void force( IOLimiter ioLimiter ) throws IOException
+    public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer ) throws IOException
     {
-        getDelegate().force( ioLimiter );
+        getDelegate().force( ioLimiter, cursorTracer );
     }
 
     @Override
@@ -86,9 +87,9 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     }
 
     @Override
-    public void close() throws IOException
+    public void close( PageCursorTracer cursorTracer ) throws IOException
     {
-        getDelegate().close();
+        getDelegate().close( cursorTracer );
     }
 
     @Override
@@ -136,7 +137,7 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     @Override
     public String toString()
     {
-        return String.format( "%s -> %s", getClass().getSimpleName(), getDelegate().toString() );
+        return String.format( "%s -> %s", getClass().getSimpleName(), getDelegate() );
     }
 
     @Override

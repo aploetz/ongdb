@@ -20,14 +20,10 @@
 package org.neo4j.kernel.api.index;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -35,9 +31,12 @@ import java.util.function.Function;
 
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.schema.IndexCreator;
+import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.internal.helpers.ArrayUtil;
 import org.neo4j.internal.helpers.Strings;
 import org.neo4j.internal.helpers.collection.Iterables;
@@ -47,11 +46,11 @@ import org.neo4j.values.storable.CoordinateReferenceSystem;
 import org.neo4j.values.storable.PointValue;
 import org.neo4j.values.storable.Values;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.createIndex;
 
 /*
  * The purpose of this test class is to make sure all index providers produce the same results.
@@ -59,7 +58,6 @@ import static org.neo4j.test.mockito.matcher.Neo4jMatchers.createIndex;
  * Indexes should always produce the same result as scanning all nodes and checking properties. By extending this
  * class in the index provider module, all value types will be checked against the index provider.
  */
-@RunWith( value = Parameterized.class )
 public abstract class IndexProviderApprovalTest
 {
     // These are the values that will be checked.
@@ -122,20 +120,7 @@ public abstract class IndexProviderApprovalTest
     private static Map<TestValue, Set<Object>> noIndexRun;
     private static Map<TestValue, Set<Object>> indexRun;
 
-    private final TestValue currentValue;
-
-    public IndexProviderApprovalTest( TestValue value )
-    {
-        currentValue = value;
-    }
-
-    @Parameters( name = "{0}" )
-    public static Collection<TestValue> data()
-    {
-        return Arrays.asList( TestValue.values() );
-    }
-
-    @BeforeClass
+    @BeforeAll
     public static void init()
     {
         DatabaseManagementService managementService = new TestDatabaseManagementServiceBuilder().impermanent().build();
@@ -163,8 +148,9 @@ public abstract class IndexProviderApprovalTest
         return value;
     };
 
-    @Test
-    public void test()
+    @ParameterizedTest
+    @EnumSource( TestValue.class )
+    public void test( TestValue currentValue )
     {
         Set<Object> noIndexResult = Iterables.asSet( noIndexRun.get( currentValue ) );
         Set<Object> indexResult = Iterables.asSet( indexRun.get( currentValue ) );
@@ -176,7 +162,7 @@ public abstract class IndexProviderApprovalTest
 
     private static Map<TestValue, Set<Object>> runFindByLabelAndProperty( GraphDatabaseService db )
     {
-        HashMap<TestValue, Set<Object>> results = new HashMap<>();
+        Map<TestValue, Set<Object>> results = new HashMap<>();
         try ( Transaction tx = db.beginTx() )
         {
             for ( TestValue value : TestValue.values() )
@@ -188,18 +174,17 @@ public abstract class IndexProviderApprovalTest
         return results;
     }
 
-    private static Node createNode( GraphDatabaseService db, String propertyKey, Object value )
+    private static void createNode( GraphDatabaseService db, String propertyKey, Object value )
     {
         try ( Transaction tx = db.beginTx() )
         {
             Node node = tx.createNode( label( LABEL ) );
             node.setProperty( propertyKey, value );
             tx.commit();
-            return node;
         }
     }
 
-    private static void addToResults( Transaction tx, HashMap<TestValue,Set<Object>> results, TestValue value )
+    private static void addToResults( Transaction tx, Map<TestValue,Set<Object>> results, TestValue value )
     {
         ResourceIterator<Node> foundNodes = tx.findNodes( label( LABEL ), PROPERTY_KEY, value.value );
         Set<Object> propertyValues = asSet( Iterators.map( PROPERTY_EXTRACTOR, foundNodes ) );
@@ -231,6 +216,26 @@ public abstract class IndexProviderApprovalTest
         public String toString()
         {
             return Strings.prettyPrint( array );
+        }
+    }
+
+    private static void createIndex( GraphDatabaseService db, Label label, String... properties )
+    {
+        IndexDefinition indexDef;
+        try ( Transaction tx = db.beginTx() )
+        {
+            IndexCreator indexCreator = tx.schema().indexFor( label );
+            for ( String property : properties )
+            {
+                indexCreator = indexCreator.on( property );
+            }
+            indexDef = indexCreator.create();
+            tx.commit();
+        }
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            tx.schema().awaitIndexOnline( indexDef, 30, SECONDS );
         }
     }
 }

@@ -19,27 +19,16 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.commands.expressions
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.ReadableRow
 import org.neo4j.cypher.internal.runtime.interpreted.commands.AstNode
-import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.{CoercedPredicate, Predicate}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{Pipe, QueryState}
-import org.neo4j.cypher.internal.v4_0.util.symbols.CypherType
-import org.neo4j.exceptions.InternalException
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.CoercedPredicate
+import org.neo4j.cypher.internal.runtime.interpreted.commands.predicates.Predicate
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.util.symbols.CypherType
 import org.neo4j.values.AnyValue
 import org.neo4j.values.storable.Values
 
 abstract class Expression extends AstNode[Expression] {
-
-  // WARNING: MUTABILITY IN IMMUTABLE CLASSES ...
-  private var _owningPipe: Option[Pipe] = None
-
-  def owningPipe: Pipe = _owningPipe.getOrElse(
-    throw new InternalException("Expressions need to be registered with it's owning Pipe, so the profiling knows where to report db-hits"))
-
-  def registerOwningPipe(pipe: Pipe): Unit = visit {
-    case x:Expression => x._owningPipe = Some(pipe)
-  }
-  // ... TREAD WITH CAUTION
 
   def rewrite(f: Expression => Expression): Expression
 
@@ -57,7 +46,7 @@ abstract class Expression extends AstNode[Expression] {
 
   def containsAggregate: Boolean = exists(_.isInstanceOf[AggregationExpression])
 
-  def apply(ctx: ExecutionContext, state: QueryState): AnyValue
+  def apply(row: ReadableRow, state: QueryState): AnyValue
 
   override def toString: String = this match {
     case p: Product => scala.runtime.ScalaRunTime._toString(p)
@@ -71,7 +60,7 @@ abstract class Expression extends AstNode[Expression] {
 }
 
 case class CachedExpression(key:String, typ:CypherType) extends Expression {
-  def apply(ctx: ExecutionContext, state: QueryState): AnyValue = ctx.getByName(key)
+  def apply(row: ReadableRow, state: QueryState): AnyValue = row.getByName(key)
 
   override def rewrite(f: Expression => Expression): Expression = f(this)
 
@@ -83,9 +72,9 @@ case class CachedExpression(key:String, typ:CypherType) extends Expression {
 }
 
 abstract class Arithmetics(left: Expression, right: Expression) extends Expression {
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val aVal = left(ctx, state)
-    val bVal = right(ctx, state)
+  override def apply(row: ReadableRow, state: QueryState): AnyValue = {
+    val aVal = left(row, state)
+    val bVal = right(row, state)
 
     applyWithValues(aVal, bVal)
   }

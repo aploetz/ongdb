@@ -22,8 +22,11 @@ package org.neo4j.internal.recordstorage;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.junit.jupiter.api.Test;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 class RecordChangesTest
 {
@@ -36,19 +39,19 @@ class RecordChangesTest
         }
 
         @Override
-        public Object load( long o, Object additionalData )
+        public Object load( long o, Object additionalData, PageCursorTracer cursorTracer )
         {
             return o;
         }
 
         @Override
-        public void ensureHeavy( Object o )
+        public void ensureHeavy( Object o, PageCursorTracer cursorTracer )
         {
 
         }
 
         @Override
-        public Object clone( Object o )
+        public Object copy( Object o )
         {
             return o.toString();
         }
@@ -58,15 +61,15 @@ class RecordChangesTest
     void shouldCountChanges()
     {
         // Given
-        RecordChanges<Object, Object> change = new RecordChanges<>( loader, new MutableInt() );
+        RecordChanges<Object, Object> change = new RecordChanges<>( loader, new MutableInt(), INSTANCE );
 
         // When
-        change.getOrLoad( 1, null ).forChangingData();
-        change.getOrLoad( 1, null ).forChangingData();
-        change.getOrLoad( 2, null ).forChangingData();
-        change.getOrLoad( 3, null ).forReadingData();
+        change.getOrLoad( 1, null, NULL ).forChangingData();
+        change.getOrLoad( 1, null, NULL ).forChangingData();
+        change.getOrLoad( 2, null, NULL ).forChangingData();
+        change.getOrLoad( 3, null, NULL ).forReadingData();
 
         // Then
-        assertThat( change.changeSize(), equalTo( 2 ) );
+        assertThat( change.changeSize() ).isEqualTo( 2 );
     }
 }

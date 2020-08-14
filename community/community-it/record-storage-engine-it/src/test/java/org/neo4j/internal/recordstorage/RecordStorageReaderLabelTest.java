@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 /**
  * Test read access to committed label data.
@@ -45,7 +47,7 @@ class RecordStorageReaderLabelTest extends RecordStorageReaderTestBase
         int labelId2 = labelId( label2 );
 
         // THEN
-        StorageNodeCursor nodeCursor = storageReader.allocateNodeCursor();
+        StorageNodeCursor nodeCursor = storageReader.allocateNodeCursor( NULL );
         nodeCursor.single( nodeId );
         assertTrue( nodeCursor.next() );
         assertEquals( newSetWith( labelId1, labelId2 ), newSetWith( nodeCursor.labels() ) );
@@ -59,8 +61,8 @@ class RecordStorageReaderLabelTest extends RecordStorageReaderTestBase
         int namePropertyKeyId = propertyKeyId( "name" );
 
         // WHEN THEN
-        StorageNodeCursor nodeCursor = storageReader.allocateNodeCursor();
-        StoragePropertyCursor propertyCursor = storageReader.allocatePropertyCursor();
+        StorageNodeCursor nodeCursor = storageReader.allocateNodeCursor( NULL );
+        StoragePropertyCursor propertyCursor = storageReader.allocatePropertyCursor( NULL, INSTANCE );
         nodeCursor.single( nodeId );
         assertTrue( nodeCursor.next() );
         nodeCursor.properties( propertyCursor );
@@ -86,7 +88,7 @@ class RecordStorageReaderLabelTest extends RecordStorageReaderTestBase
         }
 
         // when
-        long count = storageReader.nodesGetCount();
+        long count = storageReader.nodesGetCount( NULL );
 
         // then
         assertEquals( nodeCountPerLabel, count );

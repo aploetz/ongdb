@@ -24,11 +24,14 @@ import java.util.Iterator;
 import java.util.function.Function;
 
 import org.neo4j.common.EntityType;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.constraints.IndexBackedConstraintDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.memory.MemoryTracker;
 
 /**
  * Abstraction for accessing data from a {@link StorageEngine}.
@@ -83,9 +86,10 @@ public interface StorageReader extends AutoCloseable, StorageSchemaReader
      * Returns number of stored nodes labeled with the label represented by {@code labelId}.
      *
      * @param labelId label id to match.
+     * @param cursorTracer underlying page cursor tracer
      * @return number of stored nodes with this label.
      */
-    long countsForNode( int labelId );
+    long countsForNode( int labelId, PageCursorTracer cursorTracer );
 
     /**
      * Returns number of stored relationships of a certain {@code typeId} whose start/end nodes are labeled
@@ -94,11 +98,12 @@ public interface StorageReader extends AutoCloseable, StorageSchemaReader
      * @param startLabelId label id of start nodes to match.
      * @param typeId relationship type id to match.
      * @param endLabelId label id of end nodes to match.
+     * @param cursorTracer underlying page cursor tracer
      * @return number of stored relationships matching these criteria.
      */
-    long countsForRelationship( int startLabelId, int typeId, int endLabelId );
+    long countsForRelationship( int startLabelId, int typeId, int endLabelId, PageCursorTracer cursorTracer );
 
-    long nodesGetCount();
+    long nodesGetCount( PageCursorTracer cursorTracer );
 
     long relationshipsGetCount();
 
@@ -108,9 +113,9 @@ public interface StorageReader extends AutoCloseable, StorageSchemaReader
 
     int relationshipTypeCount();
 
-    boolean nodeExists( long id );
+    boolean nodeExists( long id, PageCursorTracer cursorTracer );
 
-    boolean relationshipExists( long id );
+    boolean relationshipExists( long id, PageCursorTracer cursorTracer );
 
     <T> T getOrCreateSchemaDependantState( Class<T> type, Function<StorageReader, T> factory );
 
@@ -129,27 +134,22 @@ public interface StorageReader extends AutoCloseable, StorageSchemaReader
     /**
      * @return a new {@link StorageNodeCursor} capable of reading node data from the underlying storage.
      */
-    StorageNodeCursor allocateNodeCursor();
+    StorageNodeCursor allocateNodeCursor( PageCursorTracer cursorTracer );
 
     /**
      * @return a new {@link StoragePropertyCursor} capable of reading property data from the underlying storage.
      */
-    StoragePropertyCursor allocatePropertyCursor();
-
-    /**
-     * @return a new {@link StorageRelationshipGroupCursor} capable of reading relationship group data from the underlying storage.
-     */
-    StorageRelationshipGroupCursor allocateRelationshipGroupCursor();
+    StoragePropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker );
 
     /**
      * @return a new {@link StorageRelationshipTraversalCursor} capable of traversing relationships from the underlying storage.
      */
-    StorageRelationshipTraversalCursor allocateRelationshipTraversalCursor();
+    StorageRelationshipTraversalCursor allocateRelationshipTraversalCursor( PageCursorTracer cursorTracer );
 
     /**
      * @return a new {@link StorageRelationshipScanCursor} capable of reading relationship data from the underlying storage.
      */
-    StorageRelationshipScanCursor allocateRelationshipScanCursor();
+    StorageRelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer );
 
     /**
      * Get a lock-free snapshot of the current schema, for inspecting the current schema when no mutations are intended.
@@ -161,4 +161,10 @@ public interface StorageReader extends AutoCloseable, StorageSchemaReader
      * @return a snapshot of the current schema.
      */
     StorageSchemaReader schemaSnapshot();
+
+    /**
+     * Get a non-transactional {@link TokenNameLookup} instance.
+     * @return a token name lookup instance.
+     */
+    TokenNameLookup tokenNameLookup();
 }

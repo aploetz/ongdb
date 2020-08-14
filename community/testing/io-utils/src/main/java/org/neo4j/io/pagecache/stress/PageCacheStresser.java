@@ -19,9 +19,12 @@
  */
 package org.neo4j.io.pagecache.stress;
 
+import org.eclipse.collections.api.factory.Sets;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -34,6 +37,9 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.TinyLockManager;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
+import org.neo4j.util.concurrent.Futures;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class PageCacheStresser
 {
+    private static final String PAGE_CACHE_STRESSER = "pageCacheStresser";
     private final int maxPages;
     private final int numberOfThreads;
 
@@ -60,25 +67,24 @@ public class PageCacheStresser
         this.workingDirectory = workingDirectory;
     }
 
-    public void stress( PageCache pageCache, Condition condition ) throws Exception
+    public void stress( PageCache pageCache, PageCacheTracer cacheTracer, Condition condition ) throws Exception
     {
         File file = Files.createTempFile( workingDirectory.toPath(), "pagecacheundertest", ".bin" ).toFile();
-        file.deleteOnExit();
 
         int cachePageSize = pageCache.pageSize();
         RecordFormat format = new RecordFormat( numberOfThreads, cachePageSize );
         int filePageSize = format.getFilePageSize();
 
-        try ( PagedFile pagedFile = pageCache.map( file, filePageSize ) )
+        try ( PagedFile pagedFile = pageCache.map( file, filePageSize, Sets.immutable.of( StandardOpenOption.DELETE_ON_CLOSE ) ) )
         {
-            List<RecordStresser> recordStressers = prepare( condition, pagedFile, format );
-            verifyResults( format, pagedFile, recordStressers );
+            List<RecordStresser> recordStressers = prepare( condition, pagedFile, format, cacheTracer );
+            verifyResults( format, pagedFile, recordStressers, cacheTracer );
             execute( recordStressers );
-            verifyResults( format, pagedFile, recordStressers );
+            verifyResults( format, pagedFile, recordStressers, cacheTracer );
         }
     }
 
-    private List<RecordStresser> prepare( Condition condition, PagedFile pagedFile, RecordFormat format )
+    private List<RecordStresser> prepare( Condition condition, PagedFile pagedFile, RecordFormat format, PageCacheTracer cacheTracer )
     {
         int maxRecords = Math.multiplyExact( maxPages, format.getRecordsPerPage() );
         TinyLockManager locks = new TinyLockManager();
@@ -86,7 +92,7 @@ public class PageCacheStresser
         List<RecordStresser> recordStressers = new LinkedList<>();
         for ( int threadId = 0; threadId < numberOfThreads; threadId++ )
         {
-            recordStressers.add( new RecordStresser( pagedFile, condition, maxRecords, format, threadId, locks ) );
+            recordStressers.add( new RecordStresser( pagedFile, condition, maxRecords, format, threadId, locks, cacheTracer ) );
         }
         return recordStressers;
     }
@@ -100,22 +106,20 @@ public class PageCacheStresser
             return thread;
         } );
         List<Future<Void>> futures = executorService.invokeAll( recordStressers );
-        for ( Future<Void> future : futures )
-        {
-            future.get();
-        }
+        Futures.getAllResults( futures );
         executorService.shutdown();
         assertTrue( executorService.awaitTermination( 10, TimeUnit.SECONDS ) );
     }
 
-    private void verifyResults( RecordFormat format, PagedFile pagedFile, List<RecordStresser> recordStressers )
+    private void verifyResults( RecordFormat format, PagedFile pagedFile, List<RecordStresser> recordStressers, PageCacheTracer cacheTracer )
             throws IOException
     {
         for ( RecordStresser stresser : recordStressers )
         {
             stresser.verifyCounts();
         }
-        try ( PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_READ_LOCK ) )
+        try ( PageCursorTracer cursorTracer = cacheTracer.createPageCursorTracer( PAGE_CACHE_STRESSER );
+              PageCursor cursor = pagedFile.io( 0, PagedFile.PF_SHARED_READ_LOCK, cursorTracer ) )
         {
             while ( cursor.next() )
             {

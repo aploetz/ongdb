@@ -37,15 +37,14 @@ import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unordered;
 import static org.neo4j.values.storable.Values.stringValue;
 
 
@@ -372,10 +371,10 @@ public abstract class NodeIndexTransactionStateTestBase<G extends KernelAPIWrite
     private void assertNodeAndValueForSeek( Set<Pair<Long,Value>> expected, KernelTransaction tx, IndexDescriptor index, boolean needsValues,
             Object anotherValueFoundByQuery, IndexQuery... queries ) throws Exception
     {
-        try ( NodeValueIndexCursor nodes = tx.cursors().allocateNodeValueIndexCursor() )
+        try ( NodeValueIndexCursor nodes = tx.cursors().allocateNodeValueIndexCursor( tx.pageCursorTracer() ) )
         {
             IndexReadSession indexSession = tx.dataRead().indexReadSession( index );
-            tx.dataRead().nodeIndexSeek( indexSession, nodes, IndexOrder.NONE, needsValues, queries );
+            tx.dataRead().nodeIndexSeek( indexSession, nodes, unordered( needsValues ), queries );
             assertNodeAndValue( expected, tx, needsValues, anotherValueFoundByQuery, nodes );
         }
     }
@@ -396,9 +395,9 @@ public abstract class NodeIndexTransactionStateTestBase<G extends KernelAPIWrite
             Object anotherValueFoundByQuery ) throws Exception
     {
         IndexReadSession indexSession = tx.dataRead().indexReadSession( index );
-        try ( NodeValueIndexCursor nodes = tx.cursors().allocateNodeValueIndexCursor() )
+        try ( NodeValueIndexCursor nodes = tx.cursors().allocateNodeValueIndexCursor( tx.pageCursorTracer() ) )
         {
-            tx.dataRead().nodeIndexScan( indexSession, nodes, IndexOrder.NONE, needsValues );
+            tx.dataRead().nodeIndexScan( indexSession, nodes, unordered( needsValues ) );
             assertNodeAndValue( expected, tx, needsValues, anotherValueFoundByQuery, nodes );
         }
     }
@@ -421,7 +420,7 @@ public abstract class NodeIndexTransactionStateTestBase<G extends KernelAPIWrite
                 found.add( Pair.of( nodes.nodeReference(), nodes.propertyValue( 0 ) ) );
             }
 
-            assertThat( found, equalTo( expected ) );
+            assertThat( found ).isEqualTo( expected );
         }
         else
         {
@@ -432,7 +431,7 @@ public abstract class NodeIndexTransactionStateTestBase<G extends KernelAPIWrite
             }
             ImmutableSet<Long> expectedIds = expected.stream().map( Pair::first ).collect( Collectors2.toImmutableSet() );
 
-            assertThat( foundIds, equalTo( expectedIds ) );
+            assertThat( foundIds ).isEqualTo( expectedIds );
         }
     }
 }

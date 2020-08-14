@@ -42,7 +42,12 @@ public class SchemaRecordFormat extends BaseOneByteHeaderRecordFormat<SchemaReco
 
     public SchemaRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, StandardFormatSettings.SCHEMA_RECORD_ID_BITS );
+        this( false );
+    }
+
+    public SchemaRecordFormat( boolean pageAligned )
+    {
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, StandardFormatSettings.SCHEMA_RECORD_ID_BITS, pageAligned );
     }
 
     @Override
@@ -52,7 +57,7 @@ public class SchemaRecordFormat extends BaseOneByteHeaderRecordFormat<SchemaReco
     }
 
     @Override
-    public void read( SchemaRecord record, PageCursor cursor, RecordLoad mode, int recordSize ) throws IOException
+    public void read( SchemaRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage ) throws IOException
     {
         long data = cursor.getLong();
         boolean inUse = (data & RECORD_IN_USE_BIT) != 0;
@@ -62,7 +67,7 @@ public class SchemaRecordFormat extends BaseOneByteHeaderRecordFormat<SchemaReco
     }
 
     @Override
-    public void write( SchemaRecord record, PageCursor cursor, int recordSize ) throws IOException
+    public void write( SchemaRecord record, PageCursor cursor, int recordSize, int recordsPerPage ) throws IOException
     {
         long data = 0;
         if ( record.inUse() )

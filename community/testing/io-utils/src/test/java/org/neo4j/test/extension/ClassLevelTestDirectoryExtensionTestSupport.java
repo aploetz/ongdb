@@ -33,6 +33,8 @@ import org.neo4j.io.memory.ByteBuffers;
 import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
+
 @TestInstance( TestInstance.Lifecycle.PER_CLASS )
 @EphemeralTestDirectoryExtension
 class ClassLevelTestDirectoryExtensionTestSupport
@@ -62,6 +64,6 @@ class ClassLevelTestDirectoryExtensionTestSupport
         // This will fail if the test directory is not initialised,
         // or if the file is deleted by the clearing of the test directory,
         // in between the runs.
-        channel.write( ByteBuffers.allocate( 1 ) );
+        channel.writeAll( ByteBuffers.allocate( 1, INSTANCE ) );
     }
 }

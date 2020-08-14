@@ -9,7 +9,11 @@
         <relativePath>../..</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
+<<<<<<< HEAD
     <artifactId>ongdb-layout</artifactId>
+=======
+    <artifactId>neo4j-layout</artifactId>
+>>>>>>> neo4j/4.1
 
     <properties>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>

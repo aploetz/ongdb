@@ -22,7 +22,7 @@ package org.neo4j.internal.collector;
 import java.util.Collections;
 
 import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
 import org.neo4j.kernel.database.Database;
@@ -35,12 +35,13 @@ public class DataCollector extends LifecycleAdapter
     private final Database database;
     private final QueryCollector queryCollector;
 
-    public DataCollector( Database database, JobScheduler jobScheduler, Monitors monitors, Config config )
+    public DataCollector( Database database, JobScheduler jobScheduler, Monitors monitors, Config config, RecentQueryBuffer recentQueryBuffer )
     {
         this.database = database;
-        this.queryCollector = new QueryCollector( jobScheduler,
-                                                  config.get( GraphDatabaseSettings.data_collector_max_recent_query_count ),
-                                                  config.get( GraphDatabaseSettings.data_collector_max_query_text_size ) );
+        this.queryCollector = new QueryCollector( database.getNamedDatabaseId(),
+                                                  jobScheduler,
+                                                  recentQueryBuffer,
+                                                  config.get( GraphDatabaseInternalSettings.data_collector_max_query_text_size ) );
         try
         {
             this.queryCollector.collect( Collections.emptyMap() );

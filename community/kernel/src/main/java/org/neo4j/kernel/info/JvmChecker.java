@@ -19,17 +19,18 @@
  */
 package org.neo4j.kernel.info;
 
-import java.util.stream.Stream;
 import java.lang.management.MemoryUsage;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.logging.Log;
 
 import static java.util.regex.Pattern.compile;
-import static org.neo4j.configuration.ExternalSettings.initialHeapSize;
-import static org.neo4j.configuration.ExternalSettings.maxHeapSize;
+import static org.neo4j.configuration.ExternalSettings.initial_heap_size;
+import static org.neo4j.configuration.ExternalSettings.max_heap_size;
 
 public class JvmChecker
 {
@@ -68,11 +69,11 @@ public class JvmChecker
         MemoryUsage heapMemoryUsage = jvmMetadataRepository.getHeapMemoryUsage();
         if ( missingOption( jvmArguments, "-Xmx" ) )
         {
-            log.warn( memorySettingWarning( maxHeapSize, heapMemoryUsage.getMax() ) );
+            log.warn( memorySettingWarning( max_heap_size, heapMemoryUsage.getMax() ) );
         }
         if ( missingOption( jvmArguments, "-Xms" ) )
         {
-            log.warn( memorySettingWarning( initialHeapSize, heapMemoryUsage.getInit() ) );
+            log.warn( memorySettingWarning( initial_heap_size, heapMemoryUsage.getInit() ) );
         }
         if ( !serializationFilterIsAvailable() )
         {
@@ -90,8 +91,8 @@ public class JvmChecker
 
     private static boolean missingOption( List<String> jvmArguments, String option )
     {
-        String normalizedOption = option.toUpperCase();
-        return jvmArguments.stream().noneMatch( o -> o.toUpperCase().startsWith( normalizedOption ) );
+        String normalizedOption = option.toUpperCase( Locale.ROOT );
+        return jvmArguments.stream().noneMatch( o -> o.toUpperCase( Locale.ROOT ).startsWith( normalizedOption ) );
     }
 
     boolean serializationFilterIsAvailable()

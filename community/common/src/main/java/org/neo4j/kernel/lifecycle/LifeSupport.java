@@ -54,7 +54,6 @@ public class LifeSupport implements Lifecycle
      */
     @Override
     public synchronized void init()
-            throws LifecycleException
     {
         if ( status == LifecycleStatus.NONE )
         {
@@ -350,7 +349,7 @@ public class LifeSupport implements Lifecycle
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder(  );
+        StringBuilder sb = new StringBuilder();
         toString( 0, sb );
         return sb.toString();
     }
@@ -368,7 +367,7 @@ public class LifeSupport implements Lifecycle
             else
             {
                 sb.append( " ".repeat( Math.max( 0, indent + 3 ) ) );
-                sb.append( instance.toString() ).append( '\n' );
+                sb.append( instance ).append( '\n' );
 
             }
         }
@@ -395,7 +394,6 @@ public class LifeSupport implements Lifecycle
 
         @Override
         public void init()
-                throws LifecycleException
         {
             if ( currentStatus == LifecycleStatus.NONE )
             {
@@ -527,7 +525,7 @@ public class LifeSupport implements Lifecycle
         @Override
         public String toString()
         {
-            return instance.toString() + ": " + currentStatus.name();
+            return instance + ": " + currentStatus.name();
         }
 
         public boolean isInstance( Lifecycle instance )

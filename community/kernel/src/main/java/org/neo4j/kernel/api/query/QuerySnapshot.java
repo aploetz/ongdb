@@ -44,12 +44,15 @@ public class QuerySnapshot
     private final Map<String,Object> resourceInfo;
     private final List<ActiveLock> waitingLocks;
     private final long activeLockCount;
-    private final Optional<Long> allocatedBytes;
+    private final long allocatedBytes;
     private final PageCounterValues page;
+    private final Optional<String> obfuscatedQueryText;
+    private final Optional<MapValue> obfuscatedQueryParameters;
 
     QuerySnapshot( ExecutingQuery query, CompilerInfo compilerInfo, PageCounterValues page, long compilationTimeMicros,
                    long elapsedTimeMicros, long cpuTimeMicros, long waitTimeMicros, String status,
-                   Map<String,Object> resourceInfo, List<ActiveLock> waitingLocks, long activeLockCount, Optional<Long> allocatedBytes )
+                   Map<String,Object> resourceInfo, List<ActiveLock> waitingLocks, long activeLockCount, long allocatedBytes,
+                   Optional<String> obfuscatedQueryText, Optional<MapValue> obfuscatedQueryParameters )
     {
         this.query = query;
         this.compilerInfo = compilerInfo;
@@ -63,6 +66,8 @@ public class QuerySnapshot
         this.waitingLocks = waitingLocks;
         this.activeLockCount = activeLockCount;
         this.allocatedBytes = allocatedBytes;
+        this.obfuscatedQueryText = obfuscatedQueryText;
+        this.obfuscatedQueryParameters = obfuscatedQueryParameters;
     }
 
     public long internalQueryId()
@@ -71,13 +76,36 @@ public class QuerySnapshot
     }
 
     public String id()
+<<<<<<< HEAD
     {
         return query.id();
     }
 
     public String queryText()
+=======
+>>>>>>> neo4j/4.1
     {
-        return query.queryText();
+        return query.id();
+    }
+
+    public String rawQueryText()
+    {
+        return query.rawQueryText();
+    }
+
+    public Optional<String> obfuscatedQueryText()
+    {
+        return obfuscatedQueryText;
+    }
+
+    public MapValue rawQueryParameters()
+    {
+        return query.rawQueryParameters();
+    }
+
+    public Optional<MapValue> obfuscatedQueryParameters()
+    {
+        return obfuscatedQueryParameters;
     }
 
     public Supplier<ExecutionPlanDescription> queryPlanSupplier()
@@ -85,17 +113,12 @@ public class QuerySnapshot
         return query.planDescriptionSupplier();
     }
 
-    public MapValue queryParameters()
-    {
-        return query.queryParameters();
-    }
-
     public String username()
     {
         return query.username();
     }
 
-    public NamedDatabaseId databaseId()
+    public Optional<NamedDatabaseId> databaseId()
     {
         return query.databaseId();
     }
@@ -215,7 +238,7 @@ public class QuerySnapshot
      *
      * @return the number of bytes allocated by the execution of the query, or Optional.empty() if measurement was not possible or not enabled.
      */
-    public Optional<Long> allocatedBytes()
+    public long allocatedBytes()
     {
         return allocatedBytes;
     }

@@ -43,11 +43,12 @@ import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.kernel.impl.util.Validators;
 import org.neo4j.kernel.internal.locker.FileLockException;
+import org.neo4j.memory.EmptyMemoryTracker;
+import org.neo4j.memory.MemoryTracker;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
-import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
 import static org.neo4j.dbms.archive.CompressionFormat.selectCompressionFormat;
 import static org.neo4j.internal.helpers.Strings.joinAsLines;
 import static org.neo4j.kernel.recovery.Recovery.isRecoveryRequired;
@@ -82,6 +83,10 @@ public class DumpCommand extends AbstractCommand
     {
         var databaseName = database.name();
         Path archive = calculateArchive( databaseName, to.toAbsolutePath() );
+<<<<<<< HEAD
+=======
+        var memoryTracker =  EmptyMemoryTracker.INSTANCE;
+>>>>>>> neo4j/4.1
 
         Config config = buildConfig();
         DatabaseLayout databaseLayout = Neo4jLayout.of( config ).databaseLayout( databaseName );
@@ -97,7 +102,11 @@ public class DumpCommand extends AbstractCommand
 
         try ( Closeable ignored = LockChecker.checkDatabaseLock( databaseLayout ) )
         {
+<<<<<<< HEAD
             checkDbState( databaseLayout, config );
+=======
+            checkDbState( databaseLayout, config, memoryTracker );
+>>>>>>> neo4j/4.1
             dump( databaseLayout, archive );
         }
         catch ( FileLockException e )
@@ -156,9 +165,9 @@ public class DumpCommand extends AbstractCommand
         }
     }
 
-    private static void checkDbState( DatabaseLayout databaseLayout, Config additionalConfiguration )
+    private static void checkDbState( DatabaseLayout databaseLayout, Config additionalConfiguration, MemoryTracker memoryTracker )
     {
-        if ( checkRecoveryState( databaseLayout, additionalConfiguration ) )
+        if ( checkRecoveryState( databaseLayout, additionalConfiguration, memoryTracker ) )
         {
             throw new CommandFailedException( joinAsLines( "Active logical log detected, this might be a source of inconsistencies.",
                     "Please recover database before running the dump.",
@@ -166,11 +175,11 @@ public class DumpCommand extends AbstractCommand
         }
     }
 
-    private static boolean checkRecoveryState( DatabaseLayout databaseLayout, Config additionalConfiguration )
+    private static boolean checkRecoveryState( DatabaseLayout databaseLayout, Config additionalConfiguration, MemoryTracker memoryTracker )
     {
         try
         {
-            return isRecoveryRequired( databaseLayout, additionalConfiguration );
+            return isRecoveryRequired( databaseLayout, additionalConfiguration, memoryTracker );
         }
         catch ( Exception e )
         {

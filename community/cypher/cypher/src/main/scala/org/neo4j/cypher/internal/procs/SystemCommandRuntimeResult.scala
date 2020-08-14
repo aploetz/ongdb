@@ -19,19 +19,23 @@
  */
 package org.neo4j.cypher.internal.procs
 
-import java.{lang, util}
-import java.util.Optional
+import java.util
 
-import org.neo4j.cypher.internal.result.{Error, InternalExecutionResult}
-import org.neo4j.cypher.internal.runtime.{QueryContext, QueryStatistics}
+import org.neo4j.cypher.internal.result.Error
+import org.neo4j.cypher.internal.result.InternalExecutionResult
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryStatistics
+import org.neo4j.cypher.result.OperatorProfile
+import org.neo4j.cypher.result.QueryProfile
+import org.neo4j.cypher.result.RuntimeResult
 import org.neo4j.cypher.result.RuntimeResult.ConsumptionState
-import org.neo4j.cypher.result.{OperatorProfile, QueryProfile, RuntimeResult}
 import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.kernel.api.KernelTransaction
+import org.neo4j.memory.OptionalMemoryTracker
 
 /**
-  * Results, as produced by a system command.
-  */
+ * Results, as produced by a system command.
+ */
 case class SystemCommandRuntimeResult(ctx: SystemUpdateCountingQueryContext,
                                       execution: SystemCommandExecutionResult,
                                       subscriber: SystemCommandQuerySubscriber,
@@ -43,7 +47,7 @@ case class SystemCommandRuntimeResult(ctx: SystemUpdateCountingQueryContext,
 
   override def queryStatistics(): QueryStatistics = QueryStatistics()
 
-  override def totalAllocatedMemory(): Optional[lang.Long] = Optional.empty()
+  override def totalAllocatedMemory(): Long = OptionalMemoryTracker.ALLOCATIONS_NOT_TRACKED
 
   override def consumptionState: RuntimeResult.ConsumptionState = state
 
@@ -105,8 +109,10 @@ case class SystemCommandProfile(rows: Long, dbHits: Long) extends QueryProfile w
 
   override def pageCacheMisses(): Long = OperatorProfile.NO_DATA
 
+  override def maxAllocatedMemory(): Long = OperatorProfile.NO_DATA
+
   override def hashCode: Int = util.Arrays.hashCode(
-    Array(this.time(), this.dbHits, this.rows, this.pageCacheHits(), this.pageCacheMisses()))
+    Array(this.time(), this.dbHits, this.rows, this.pageCacheHits(), this.pageCacheMisses(), this.maxAllocatedMemory()))
 
   override def equals(o: Any): Boolean = o match {
     case that: OperatorProfile =>
@@ -114,9 +120,10 @@ case class SystemCommandProfile(rows: Long, dbHits: Long) extends QueryProfile w
         this.dbHits == that.dbHits &&
         this.rows == that.rows &&
         this.pageCacheHits == that.pageCacheHits &&
-        this.pageCacheMisses == that.pageCacheMisses
+        this.pageCacheMisses == that.pageCacheMisses &&
+        this.maxAllocatedMemory == that.maxAllocatedMemory()
     case _ => false
   }
 
-  override def toString: String = s"Operator Profile { time: ${this.time()}, dbHits: ${this.dbHits}, rows: ${this.rows}, page cache hits: ${this.pageCacheHits()}, page cache misses: ${this.pageCacheMisses()} }"
+  override def toString: String = s"Operator Profile { time: ${this.time()}, dbHits: ${this.dbHits}, rows: ${this.rows}, page cache hits: ${this.pageCacheHits()}, page cache misses: ${this.pageCacheMisses()}, max allocated: ${this.maxAllocatedMemory()} }"
 }

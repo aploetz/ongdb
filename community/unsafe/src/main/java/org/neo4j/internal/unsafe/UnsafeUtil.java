@@ -19,9 +19,9 @@
  */
 package org.neo4j.internal.unsafe;
 
+import com.sun.jna.Native;
 import sun.misc.Unsafe;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -38,7 +38,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import org.neo4j.memory.MemoryAllocationTracker;
+import org.neo4j.memory.MemoryTracker;
 
 import static java.lang.Long.compareUnsigned;
 import static java.lang.String.format;
@@ -56,7 +56,7 @@ public final class UnsafeUtil
     private static final boolean PRINT_REFLECTION_EXCEPTIONS = flag( UnsafeUtil.class, "printReflectionExceptions", false );
     /**
      * Whether or not to explicitly dirty the allocated memory. This is off by default.
-     * The {@link UnsafeUtil#allocateMemory(long, MemoryAllocationTracker)} method is not guaranteed to allocate
+     * The {@link UnsafeUtil#allocateMemory(long, MemoryTracker)} method is not guaranteed to allocate
      * zeroed out memory, but might often do so by pure chance.
      * <p>
      * Enabling this feature will make sure that the allocated memory is full of random data, such that we can test
@@ -68,7 +68,6 @@ public final class UnsafeUtil
     private static boolean nativeAccessCheckEnabled = true;
 
     private static final Unsafe unsafe;
-    private static final MethodHandle sharedStringConstructor;
     private static final String allowUnalignedMemoryAccessProperty = "org.neo4j.internal.unsafe.UnsafeUtil.allowUnalignedMemoryAccess";
 
     private static final ConcurrentSkipListMap<Long, Allocation> allocations = new ConcurrentSkipListMap<>( Long::compareUnsigned );
@@ -94,7 +93,6 @@ public final class UnsafeUtil
         unsafe = getUnsafe();
 
         MethodHandles.Lookup lookup = MethodHandles.lookup();
-        sharedStringConstructor = getSharedStringConstructorMethodHandle( lookup );
 
         Class<?> dbbClass = null;
         Constructor<?> ctor = null;
@@ -241,21 +239,6 @@ public final class UnsafeUtil
         }
     }
 
-    private static MethodHandle getSharedStringConstructorMethodHandle(
-            MethodHandles.Lookup lookup )
-    {
-        try
-        {
-            Constructor<String> constructor = String.class.getDeclaredConstructor( char[].class, Boolean.TYPE );
-            constructor.setAccessible( true );
-            return lookup.unreflectConstructor( constructor );
-        }
-        catch ( Exception e )
-        {
-            return null;
-        }
-    }
-
     /**
      * Get the object-relative field offset.
      */
@@ -270,6 +253,14 @@ public final class UnsafeUtil
             String message = "Could not get offset of '" + field + "' field on type " + type;
             throw new LinkageError( message, e );
         }
+    }
+
+    /**
+     * Get the object-relative field offset.
+     */
+    public static long getFieldOffset( Field field )
+    {
+        return unsafe.objectFieldOffset( field );
     }
 
     /**
@@ -386,36 +377,30 @@ public final class UnsafeUtil
     }
 
     /**
-     * Create a string with a char[] that you know is not going to be modified, so avoid the copy constructor.
-     *
-     * @param chars array that will back the new string
-     * @return the created string
+     * Allocates a {@link ByteBuffer}
+     * @param size The size of the buffer to allocate
      */
-    public static String newSharedArrayString( char[] chars )
+    public static ByteBuffer allocateByteBuffer( int size, MemoryTracker memoryTracker )
     {
-        if ( sharedStringConstructor != null )
+        try
         {
-            try
-            {
-                return (String) sharedStringConstructor.invokeExact( chars, true );
-            }
-            catch ( Throwable throwable )
-            {
-                throw new LinkageError( "Unexpected 'String constructor' intrinsic failure", throwable );
-            }
+            long addr = allocateMemory( size, memoryTracker );
+            setMemory( addr, size, (byte) 0 );
+            return newDirectByteBuffer( addr, size );
         }
-        else
+        catch ( Exception e )
         {
-            return new String( chars );
+            throw new RuntimeException( e );
         }
     }
 
     /**
      * Allocates a {@link ByteBuffer}
-     * @param size The size of the buffer to allocate
+     * @param byteBuffer The ByteBuffer to free, allocated by {@link #allocateByteBuffer(int, MemoryTracker)}
      */
-    public static ByteBuffer allocateByteBuffer( int size )
+    public static void freeByteBuffer( ByteBuffer byteBuffer, MemoryTracker memoryTracker )
     {
+<<<<<<< HEAD
         try
         {
             long addr = allocateMemory( size );
@@ -441,6 +426,15 @@ public final class UnsafeUtil
             return; // This buffer has already been freed.
         }
 
+=======
+        int bytes = byteBuffer.capacity();
+        long addr = getDirectByteBufferAddress( byteBuffer );
+        if ( addr == 0 )
+        {
+            return; // This buffer has already been freed.
+        }
+
+>>>>>>> neo4j/4.1
         // Nerf the byte buffer, causing all future accesses to get out-of-bounds.
         unsafe.putInt( byteBuffer, directByteBufferMarkOffset, -1 );
         unsafe.putInt( byteBuffer, directByteBufferPositionOffset, 0 );
@@ -449,7 +443,11 @@ public final class UnsafeUtil
         unsafe.putLong( byteBuffer, directByteBufferAddressOffset, 0 );
 
         // Free the buffer.
+<<<<<<< HEAD
         free( addr, bytes );
+=======
+        free( addr, bytes, memoryTracker );
+>>>>>>> neo4j/4.1
     }
 
     /**
@@ -470,24 +468,25 @@ public final class UnsafeUtil
      *
      * @return a pointer to the allocated memory
      */
-    public static long allocateMemory( long bytes ) throws NativeMemoryAllocationRefusedError
+    public static long allocateMemory( long bytes, MemoryTracker memoryTracker ) throws NativeMemoryAllocationRefusedError
     {
-        final long pointer;
-        try
+        final long pointer = Native.malloc( bytes );
+        if ( pointer == 0 )
         {
-            pointer = unsafe.allocateMemory( bytes );
-        }
-        catch ( Throwable e )
-        {
-            throw new NativeMemoryAllocationRefusedError( bytes, GlobalMemoryTracker.INSTANCE.usedDirectMemory(), e );
+            throw new NativeMemoryAllocationRefusedError( bytes, memoryTracker.usedNativeMemory() );
         }
 
         addAllocatedPointer( pointer, bytes );
+<<<<<<< HEAD
         GlobalMemoryTracker.INSTANCE.allocated( bytes );
+=======
+        memoryTracker.allocateNative( bytes );
+>>>>>>> neo4j/4.1
         if ( DIRTY_MEMORY )
         {
             setMemory( pointer, bytes, (byte) 0xA5 );
         }
+<<<<<<< HEAD
         return pointer;
     }
 
@@ -503,54 +502,19 @@ public final class UnsafeUtil
         assert allocationTracker != GlobalMemoryTracker.INSTANCE;
         final long pointer = allocateMemory( bytes );
         allocationTracker.allocated( bytes );
+=======
+>>>>>>> neo4j/4.1
         return pointer;
-    }
-
-    /**
-     * Returns address pointer equal to or slightly after the given {@code pointer}.
-     * The returned pointer as aligned with {@code alignBy} such that {@code pointer % alignBy == 0}.
-     * The given pointer should be allocated with at least the requested size + {@code alignBy - 1},
-     * where the additional bytes will serve as padding for the worst case where the start of the usable
-     * area of the allocated memory will need to be shifted at most {@code alignBy - 1} bytes to the right.
-     * <p>
-     * <pre><code>
-     * 0   4   8   12  16  20        ; 4-byte alignments
-     * |---|---|---|---|---|         ; memory
-     *        --------===            ; allocated memory (-required, =padding)
-     *         ^------^              ; used memory
-     * </code></pre>
-     *
-     * @param pointer pointer to allocated memory from {@link #allocateMemory(long, MemoryAllocationTracker)} )}.
-     * @param alignBy power-of-two size to align to, e.g. 4 or 8.
-     * @return pointer to place inside the allocated memory to consider the effective start of the
-     * memory, which from that point is aligned by {@code alignBy}.
-     */
-    public static long alignedMemory( long pointer, int alignBy )
-    {
-        assert Integer.bitCount( alignBy ) == 1 : "Requires alignment to be power of 2, but was " + alignBy;
-
-        long misalignment = pointer % alignBy;
-        return misalignment == 0 ? pointer : pointer + (alignBy - misalignment);
     }
 
     /**
      * Free the memory that was allocated with {@link #allocateMemory} and update memory allocation tracker accordingly.
      */
-    public static void free( long pointer, long bytes, MemoryAllocationTracker allocationTracker )
-    {
-        assert allocationTracker != GlobalMemoryTracker.INSTANCE;
-        free( pointer, bytes );
-        allocationTracker.deallocated( bytes );
-    }
-
-    /**
-     * Free the memory that was allocated with {@link #allocateMemory}.
-     */
-    public static void free( long pointer, long bytes )
+    public static void free( long pointer, long bytes, MemoryTracker memoryTracker )
     {
         checkFree( pointer );
-        unsafe.freeMemory( pointer );
-        GlobalMemoryTracker.INSTANCE.deallocated( bytes );
+        Native.free( pointer );
+        memoryTracker.releaseNative( bytes );
     }
 
     private static void addAllocatedPointer( long pointer, long sizeInBytes )
@@ -935,6 +899,11 @@ public final class UnsafeUtil
         unsafe.putLongVolatile( obj, offset, value );
     }
 
+    public static void putOrderedLong( Object obj, long offset, long value )
+    {
+        unsafe.putOrderedLong( obj, offset, value );
+    }
+
     public static long getLongVolatile( Object obj, long offset )
     {
         return unsafe.getLongVolatile( obj, offset );
@@ -1115,7 +1084,7 @@ public final class UnsafeUtil
      * <p>
      * Remember to restore the old value so other tests in the same JVM get the benefit of native access checks.
      * <p>
-     * The changing of this setting is completely unsynchronised, so you have to order this modification before and
+     * The changing of this setting is completely unsynchronized, so you have to order this modification before and
      * after the tests that you want to run without native access checks.
      *
      * @param newSetting The new setting.

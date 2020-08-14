@@ -26,20 +26,20 @@ Third-party licenses
 --------------------
 
 Apache Software License, Version 2.0
-  Apache Commons Configuration
   Apache Commons Lang
+<<<<<<< HEAD
   Apache Commons Text
   Commons Lang
   Java Concurrency Tools Core Library
   Lucene codecs
+=======
+  Java Concurrency Tools Core Library
+  Jettison
+>>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
+  Lucene Memory
   Lucene QueryParsers
-  Netty/All-in-One
-
-Bouncy Castle License
-  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
-  Bouncy Castle Provider
 
 Eclipse Distribution License - v 1.0
   Eclipse Collections API

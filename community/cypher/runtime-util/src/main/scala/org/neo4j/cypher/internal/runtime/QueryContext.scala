@@ -23,23 +23,40 @@ import java.net.URL
 import java.util.Optional
 
 import org.eclipse.collections.api.iterator.LongIterator
+import org.neo4j.cypher.internal.expressions.SemanticDirection
 import org.neo4j.cypher.internal.logical.plans.IndexOrder
 import org.neo4j.cypher.internal.planner.spi.TokenContext
 import org.neo4j.cypher.internal.profiling.KernelStatisticProvider
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.exceptions.EntityNotFoundException
-import org.neo4j.graphdb.{Entity, Path}
-import org.neo4j.internal.kernel.api._
+import org.neo4j.graphdb.Entity
+import org.neo4j.graphdb.Path
+import org.neo4j.internal.kernel.api.CursorFactory
+import org.neo4j.internal.kernel.api.DefaultCloseListenable
+import org.neo4j.internal.kernel.api.IndexQuery
+import org.neo4j.internal.kernel.api.IndexReadSession
+import org.neo4j.internal.kernel.api.KernelReadTracer
+import org.neo4j.internal.kernel.api.NodeCursor
+import org.neo4j.internal.kernel.api.NodeValueIndexCursor
+import org.neo4j.internal.kernel.api.PropertyCursor
+import org.neo4j.internal.kernel.api.Read
+import org.neo4j.internal.kernel.api.RelationshipScanCursor
+import org.neo4j.internal.kernel.api.RelationshipTraversalCursor
+import org.neo4j.internal.kernel.api.SchemaRead
+import org.neo4j.internal.kernel.api.TokenRead
+import org.neo4j.internal.kernel.api.Write
 import org.neo4j.internal.kernel.api.procs.ProcedureCallContext
 import org.neo4j.internal.schema.IndexDescriptor
 import org.neo4j.kernel.api.KernelTransaction
 import org.neo4j.kernel.api.dbms.DbmsOperations
 import org.neo4j.kernel.database.NamedDatabaseId
 import org.neo4j.kernel.impl.core.TransactionalEntityFactory
-import org.neo4j.kernel.impl.factory.DatabaseInfo
+import org.neo4j.kernel.impl.factory.DbmsInfo
+import org.neo4j.memory.EmptyMemoryTracker
+import org.neo4j.memory.MemoryTracker
 import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.{TextValue, Value}
-import org.neo4j.values.virtual.{NodeValue, RelationshipValue}
+import org.neo4j.values.storable.TextValue
+import org.neo4j.values.storable.Value
+import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
 
 import scala.collection.Iterator
 
@@ -81,6 +98,10 @@ trait QueryContext extends TokenContext with DbAccess {
 
   def getRelationshipsForIdsPrimitive(node: Long, dir: SemanticDirection, types: Array[Int]): RelationshipIterator
 
+  def nodeCursor(): NodeCursor
+
+  def traversalCursor(): RelationshipTraversalCursor
+
   def getOrCreateLabelId(labelName: String): Int
 
   def setLabelsOnNode(node: Long, labelIds: Iterator[Int]): Int
@@ -120,9 +141,9 @@ trait QueryContext extends TokenContext with DbAccess {
 
   def lockingUniqueIndexSeek[RESULT](index: IndexDescriptor, queries: Seq[IndexQuery.ExactPredicate]): NodeValueIndexCursor
 
-  def getNodesByLabel(id: Int): Iterator[NodeValue]
+  def getNodesByLabel(id: Int, indexOrder: IndexOrder): Iterator[NodeValue]
 
-  def getNodesByLabelPrimitive(id: Int): LongIterator
+  def getNodesByLabelPrimitive(id: Int, indexOrder: IndexOrder): LongIterator
 
   /* return true if the constraint was created, false if preexisting, throws if failed */
   def createNodeKeyConstraint(labelId: Int, propertyKeyIds: Seq[Int], name: Option[String]): Unit
@@ -162,7 +183,7 @@ trait QueryContext extends TokenContext with DbAccess {
     case SemanticDirection.BOTH => nodeGetTotalDegree(node, relTypeId, nodeCursor)
   }
 
-  def nodeIsDense(node: Long, nodeCursor: NodeCursor): Boolean
+  def nodeHasCheapDegrees(node: Long, nodeCursor: NodeCursor): Boolean
 
   def asObject(value: AnyValue): AnyRef
 
@@ -170,10 +191,10 @@ trait QueryContext extends TokenContext with DbAccess {
   def variableLengthPathExpand(realNode: Long, minHops: Option[Int], maxHops: Option[Int], direction: SemanticDirection, relTypes: Seq[String]): Iterator[Path]
 
   def singleShortestPath(left: Long, right: Long, depth: Int, expander: Expander, pathPredicate: KernelPredicate[Path],
-                         filters: Seq[KernelPredicate[Entity]]): Option[Path]
+                         filters: Seq[KernelPredicate[Entity]], memoryTracker: MemoryTracker = EmptyMemoryTracker.INSTANCE): Option[Path]
 
   def allShortestPath(left: Long, right: Long, depth: Int, expander: Expander, pathPredicate: KernelPredicate[Path],
-                      filters: Seq[KernelPredicate[Entity]]): Iterator[Path]
+                      filters: Seq[KernelPredicate[Entity]], memoryTracker: MemoryTracker = EmptyMemoryTracker.INSTANCE): Iterator[Path]
 
   def lockNodes(nodeIds: Long*)
 
@@ -202,6 +223,8 @@ trait QueryContext extends TokenContext with DbAccess {
   override def nodeLabel(name: String): Int = transactionalContext.tokenRead.nodeLabel(name)
 
   override def relationshipType(name: String): Int = transactionalContext.tokenRead.relationshipType(name)
+
+  override def relationshipTypeName(token: Int): String = transactionalContext.tokenRead.relationshipTypeName(token)
 
   override def nodeProperty(node: Long,
                             property: Int,
@@ -259,29 +282,29 @@ trait Operations[T, CURSOR] {
 
   def setProperty(obj: Long, propertyKeyId: Int, value: Value)
 
-  def removeProperty(obj: Long, propertyKeyId: Int)
+  def removeProperty(obj: Long, propertyKeyId: Int): Boolean
 
   /**
-    * @param throwOnDeleted if this is `true` an Exception will be thrown when the entity with id `obj` has been deleted in this transaction.
-    *                       If this is `false`, it will return `Values.NO_VALUE` in that case.
-    */
+   * @param throwOnDeleted if this is `true` an Exception will be thrown when the entity with id `obj` has been deleted in this transaction.
+   *                       If this is `false`, it will return `Values.NO_VALUE` in that case.
+   */
   def getProperty(obj: Long, propertyKeyId: Int, cursor: CURSOR, propertyCursor: PropertyCursor, throwOnDeleted: Boolean): Value
 
   def hasProperty(obj: Long, propertyKeyId: Int, cursor: CURSOR, propertyCursor: PropertyCursor): Boolean
 
   /**
-    * @return `null` if there are no changes.
-    *         `NO_VALUE` if the property was deleted.
-    *         `v` if the property was set to v
-    * @throws EntityNotFoundException if the node was deleted
-    */
+   * @return `null` if there are no changes.
+   *         `NO_VALUE` if the property was deleted.
+   *         `v` if the property was set to v
+   * @throws org.neo4j.exceptions.EntityNotFoundException if the node was deleted
+   */
   def getTxStateProperty(obj: Long, propertyKeyId: Int): Value
 
   /**
-    * @return `None` if TxState has no changes.
-    *         `Some(true)` if the property was changed.
-    *         `Some(false)` if the property or the entity were deleted in TxState.
-    */
+   * @return `None` if TxState has no changes.
+   *         `Some(true)` if the property was changed.
+   *         `Some(false)` if the property or the entity were deleted in TxState.
+   */
   def hasTxStatePropertyForCachedProperty(entityId: Long, propertyKeyId: Int): Option[Boolean]
 
   def propertyKeyIds(obj: Long, cursor: CURSOR, propertyCursor: PropertyCursor): Array[Int]
@@ -331,7 +354,7 @@ trait QueryTransactionalContext extends CloseableResource {
 
   def kernelStatisticProvider: KernelStatisticProvider
 
-  def databaseInfo: DatabaseInfo
+  def dbmsInfo: DbmsInfo
 
   def databaseId: NamedDatabaseId
 }

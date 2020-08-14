@@ -22,7 +22,6 @@ package org.neo4j.io.fs;
 import java.io.Flushable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.InterruptibleChannel;
@@ -77,8 +76,29 @@ public interface StoreChannel extends Flushable, SeekableByteChannel, GatheringB
     StoreChannel truncate( long size ) throws IOException;
 
     /**
-     * Provide underlying file channel
-     * @return underlying file channel
+     * Get the OS file descriptor for this channel.
+     * @return the file descriptor.
      */
-    FileChannel fileChannel();
+    int getFileDescriptor();
+
+    /**
+     * Returns {@code true} if {@link #getPositionLock} returns a valid position lock object.
+     * @return {@code true} if this channel has a valid position lock.
+     */
+    boolean hasPositionLock();
+
+    /**
+     * Return the position lock object for this channel, if any.
+     * This method only returns something meaningful if {@link #hasPositionLock()} returns {@code true}.
+     * The position lock object works by synchronizing on the object.
+     * The file position is guaranteed to not be concurrently modified by other threads in the critical section.
+     * @return The position lock object, if any.
+     */
+    Object getPositionLock();
+
+    /**
+     * Make this channel uninterruptible, if possible.
+     * An uninterruptible channel will not automatically close itself if a calling thread is interrupted before or during an IO operation.
+     */
+    void tryMakeUninterruptible();
 }

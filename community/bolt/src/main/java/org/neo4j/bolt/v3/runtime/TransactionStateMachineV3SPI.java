@@ -35,6 +35,7 @@ import org.neo4j.bolt.runtime.Bookmark;
 import org.neo4j.bolt.runtime.statemachine.StatementProcessorReleaseManager;
 import org.neo4j.bolt.runtime.statemachine.impl.AbstractTransactionStateMachineSPI;
 import org.neo4j.bolt.runtime.statemachine.impl.BoltAdapterSubscriber;
+import org.neo4j.bolt.v41.messaging.RoutingContext;
 import org.neo4j.internal.kernel.api.security.LoginContext;
 import org.neo4j.kernel.impl.query.QueryExecution;
 import org.neo4j.time.SystemNanoClock;
@@ -50,18 +51,18 @@ public class TransactionStateMachineV3SPI extends AbstractTransactionStateMachin
 
     @Override
     public BoltTransaction beginTransaction( LoginContext loginContext, List<Bookmark> bookmarks, Duration txTimeout, AccessMode accessMode,
-            Map<String,Object> txMetadata )
+            Map<String,Object> txMetadata, RoutingContext routingContext )
     {
         checkBookmarks( bookmarks );
-        return super.beginTransaction( loginContext, bookmarks, txTimeout, accessMode, txMetadata );
+        return super.beginTransaction( loginContext, bookmarks, txTimeout, accessMode, txMetadata, routingContext );
     }
 
     @Override
     public BoltTransaction beginPeriodicCommitTransaction( LoginContext loginContext, List<Bookmark> bookmarks, Duration txTimeout, AccessMode accessMode,
-            Map<String,Object> txMetadata )
+            Map<String,Object> txMetadata, RoutingContext routingContext )
     {
         checkBookmarks( bookmarks );
-        return super.beginPeriodicCommitTransaction( loginContext, bookmarks, txTimeout, accessMode, txMetadata );
+        return super.beginPeriodicCommitTransaction( loginContext, bookmarks, txTimeout, accessMode, txMetadata, routingContext );
     }
 
     @Override
@@ -70,7 +71,7 @@ public class TransactionStateMachineV3SPI extends AbstractTransactionStateMachin
         return new BoltResultHandleV3( statement, params, boltQueryExecutor );
     }
 
-    private void checkBookmarks( List<Bookmark> bookmarks )
+    private static void checkBookmarks( List<Bookmark> bookmarks )
     {
         if ( !bookmarks.isEmpty() && bookmarks.size() != 1 )
         {

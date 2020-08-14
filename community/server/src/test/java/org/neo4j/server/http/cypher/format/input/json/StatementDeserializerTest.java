@@ -19,9 +19,13 @@
  */
 package org.neo4j.server.http.cypher.format.input.json;
 
+<<<<<<< HEAD
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
+=======
+import org.junit.jupiter.api.Test;
+>>>>>>> neo4j/4.1
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
@@ -33,20 +37,26 @@ import org.neo4j.string.UTF8;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
 import static org.neo4j.server.rest.domain.JsonHelper.createJsonFrom;
 
-public class StatementDeserializerTest
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+class StatementDeserializerTest
 {
+<<<<<<< HEAD
     private final JsonFactory jsonFactory = new JsonFactory().setCodec( new ObjectMapper() );
+=======
+    private final JsonFactory jsonFactory = new JsonFactory().setCodec(new ObjectMapper());
+>>>>>>> neo4j/4.1
 
     @Test
-    public void shouldDeserializeSingleStatement()
+    void shouldDeserializeSingleStatement()
     {
         // Given
         String json = createJsonFrom( map( "statements", singletonList( map( "statement", "Blah blah", "parameters", map( "one", 12 ) ) ) ) );
@@ -58,14 +68,14 @@ public class StatementDeserializerTest
         InputStatement stmt = de.read();
         assertNotNull( stmt );
 
-        assertThat( stmt.statement(), equalTo( "Blah blah" ) );
-        assertThat( stmt.parameters(), equalTo( map( "one", 12 ) ) );
+        assertThat( stmt.statement() ).isEqualTo( "Blah blah" );
+        assertThat( stmt.parameters() ).isEqualTo( map( "one", 12 ) );
 
         assertNull( de.read() );
     }
 
     @Test
-    public void shouldRejectMapWithADifferentFieldBeforeStatement()
+    void shouldRejectMapWithADifferentFieldBeforeStatement()
     {
         // NOTE: We don't really want this behaviour, but it's a symptom of keeping
         // streaming behaviour while moving the statement list into a map.
@@ -76,7 +86,7 @@ public class StatementDeserializerTest
     }
 
     @Test
-    public void shouldTotallyIgnoreInvalidJsonAfterStatementArrayHasFinished()
+    void shouldTotallyIgnoreInvalidJsonAfterStatementArrayHasFinished()
     {
         // NOTE: We don't really want this behaviour, but it's a symptom of keeping
         // streaming behaviour while moving the statement list into a map.
@@ -92,13 +102,13 @@ public class StatementDeserializerTest
         InputStatement stmt = de.read();
         assertNotNull( stmt );
 
-        assertThat( stmt.statement(), equalTo( "Blah blah" ) );
+        assertThat( stmt.statement() ).isEqualTo( "Blah blah" );
 
         assertNull( de.read() );
     }
 
     @Test
-    public void shouldIgnoreUnknownFields()
+    void shouldIgnoreUnknownFields()
     {
         // Given
         String json =  "{ \"statements\" : [ { \"a\" : \"\", \"b\" : { \"k\":1 }, \"statement\" : \"blah\" } ] }";
@@ -110,13 +120,13 @@ public class StatementDeserializerTest
         InputStatement stmt = de.read();
         assertNotNull( stmt );
 
-        assertThat( stmt.statement(), equalTo( "blah" ) );
+        assertThat( stmt.statement() ).isEqualTo( "blah" );
 
         assertNull( de.read() );
     }
 
     @Test
-    public void shouldTakeParametersBeforeStatement()
+    void shouldTakeParametersBeforeStatement()
     {
         // Given
         String json =  "{ \"statements\" : [ { \"a\" : \"\", \"parameters\" : { \"k\":1 }, \"statement\" : \"blah\"}]}";
@@ -127,14 +137,14 @@ public class StatementDeserializerTest
         // Then
         InputStatement stmt = de.read();
         assertNotNull( stmt );
-        assertThat( stmt.statement(), equalTo( "blah" ) );
-        assertThat( stmt.parameters(), equalTo( map("k", 1) ) );
+        assertThat( stmt.statement() ).isEqualTo( "blah" );
+        assertThat( stmt.parameters() ).isEqualTo( map( "k", 1 ) );
 
         assertNull( de.read() );
     }
 
     @Test
-    public void shouldTreatEmptyInputStreamAsEmptyStatementList()
+    void shouldTreatEmptyInputStreamAsEmptyStatementList()
     {
         // Given
         byte[] json = new byte[0];
@@ -147,7 +157,7 @@ public class StatementDeserializerTest
     }
 
     @Test
-    public void shouldDeserializeMultipleStatements()
+    void shouldDeserializeMultipleStatements()
     {
         // Given
         String json = createJsonFrom( map( "statements", asList(
@@ -161,20 +171,20 @@ public class StatementDeserializerTest
         InputStatement stmt = de.read();
         assertNotNull( stmt );
 
-        assertThat( stmt.statement(), equalTo( "Blah blah" ) );
-        assertThat( stmt.parameters(), equalTo( map( "one", 12 ) ) );
+        assertThat( stmt.statement() ).isEqualTo( "Blah blah" );
+        assertThat( stmt.parameters() ).isEqualTo( map( "one", 12 ) );
 
         InputStatement stmt2 = de.read();
         assertNotNull( stmt2 );
 
-        assertThat( stmt2.statement(), equalTo( "Blah bluh" ) );
-        assertThat( stmt2.parameters(), equalTo( map( "asd", singletonList( "one, two" ) ) ) );
+        assertThat( stmt2.statement() ).isEqualTo( "Blah bluh" );
+        assertThat( stmt2.parameters() ).isEqualTo( map( "asd", singletonList( "one, two" ) ) );
 
         assertNull( de.read() );
     }
 
     @Test
-    public void shouldNotThrowButReportErrorOnInvalidInput()
+    void shouldNotThrowButReportErrorOnInvalidInput()
     {
         assertYieldsErrors( "{}", "Unable to " +
                         "deserialize request. " +
@@ -236,7 +246,7 @@ public class StatementDeserializerTest
                 errorMessages.add( t.getMessage() );
             }
 
-            assertThat( errorMessages, equalTo( Arrays.asList( expectedErrorMessages ) ) );
+            assertThat( errorMessages ).isEqualTo( Arrays.asList( expectedErrorMessages ) );
         }
     }
 }

@@ -19,20 +19,25 @@
  */
 package org.neo4j.bolt.transport;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
 import org.neo4j.logging.AssertableLogProvider;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.sameInstance;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.neo4j.logging.AssertableLogProvider.inLog;
+import static org.neo4j.logging.AssertableLogProvider.Level.ERROR;
+import static org.neo4j.logging.AssertableLogProvider.Level.WARN;
+import static org.neo4j.logging.LogAssertions.assertThat;
 
 class TransportSelectionHandlerTest
 {
@@ -50,8 +55,8 @@ class TransportSelectionHandlerTest
 
         // Then
         verify( context ).close();
-        logging.assertExactly( inLog( TransportSelectionHandler.class )
-                .error( equalTo( "Fatal error occurred when initialising pipeline: " + context.channel() ), sameInstance( cause ) ) );
+        assertThat( logging ).forClass( TransportSelectionHandler.class ).forLevel( ERROR )
+                .containsMessageWithException( "Fatal error occurred when initialising pipeline: " + context.channel(), cause );
     }
 
     @Test
@@ -69,9 +74,30 @@ class TransportSelectionHandlerTest
 
         // Then
         verify( context ).close();
-        logging.assertExactly( inLog( TransportSelectionHandler.class )
-                .warn( "Fatal error occurred when initialising pipeline, " +
-                        "remote peer unexpectedly closed connection: %s", context.channel() ) );
+        assertThat( logging ).forClass( TransportSelectionHandler.class ).forLevel( WARN )
+                .containsMessageWithArguments( "Fatal error occurred when initialising pipeline, " +
+                        "remote peer unexpectedly closed connection: %s", context.channel() );
+    }
+
+    @Test
+    void shouldPreventMultipleLevelsOfSslEncryption() throws Exception
+    {
+        // Given
+        ChannelHandlerContext context = channelHandlerContextMockSslAlreadyConfigured();
+        AssertableLogProvider logging = new AssertableLogProvider();
+        SslContext sslCtx = mock( SslContext.class );
+        TransportSelectionHandler handler = new TransportSelectionHandler( null, sslCtx, false, false, logging, null );
+
+        final ByteBuf payload = Unpooled.wrappedBuffer(new byte[] { 22, 3, 1, 0, 5 }); //encrypted
+
+        // When
+        handler.decode( context, payload, null );
+
+        // Then
+        verify( context ).close();
+        assertThat( logging ).forClass( TransportSelectionHandler.class ).forLevel( ERROR )
+                             .containsMessageWithArguments( "Fatal error: multiple levels of SSL encryption detected." +
+                                                            " Terminating connection: %s", context.channel()  );
     }
 
     private static ChannelHandlerContext channelHandlerContextMock()
@@ -79,6 +105,18 @@ class TransportSelectionHandlerTest
         Channel channel = mock( Channel.class );
         ChannelHandlerContext context = mock( ChannelHandlerContext.class );
         when( context.channel() ).thenReturn( channel );
+        return context;
+    }
+
+    private static ChannelHandlerContext channelHandlerContextMockSslAlreadyConfigured()
+    {
+        Channel channel = mock( Channel.class );
+        ChannelHandlerContext context = mock( ChannelHandlerContext.class );
+        ChannelPipeline pipeline = mock( ChannelPipeline.class );
+        SslHandler sslHandler = mock( SslHandler.class );
+        when( context.channel() ).thenReturn( channel );
+        when( context.pipeline() ).thenReturn( pipeline );
+        when( context.pipeline().get( SslHandler.class )).thenReturn( sslHandler );
         return context;
     }
 }

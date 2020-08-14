@@ -19,10 +19,9 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import org.neo4j.function.ThrowingFunction;
-import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.values.storable.Value;
@@ -34,7 +33,7 @@ public class IndexMapReference implements IndexMapSnapshotProvider
     @Override
     public IndexMap indexMapSnapshot()
     {
-        return indexMap.clone();
+        return new IndexMap( indexMap );
     }
 
     /**
@@ -47,7 +46,7 @@ public class IndexMapReference implements IndexMapSnapshotProvider
      *
      * @param modifier the function modifying the snapshot.
      */
-    public synchronized void modify( Function<IndexMap,IndexMap> modifier )
+    public synchronized void modify( UnaryOperator<IndexMap> modifier )
     {
         IndexMap snapshot = indexMapSnapshot();
         indexMap = modifier.apply( snapshot );
@@ -71,16 +70,6 @@ public class IndexMapReference implements IndexMapSnapshotProvider
             throw new IndexNotFoundKernelException( "No index for index id " + indexId + " exists." );
         }
         return proxy;
-    }
-
-    long getOnlineIndexId( IndexDescriptor index ) throws IndexNotFoundKernelException
-    {
-        IndexProxy proxy = getIndexProxy( index );
-        if ( proxy.getState() == InternalIndexState.ONLINE )
-        {
-            return index.getId();
-        }
-        throw new IndexNotFoundKernelException( "Expected index to be online: ", index );
     }
 
     Iterable<IndexProxy> getAllIndexProxies()

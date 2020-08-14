@@ -21,6 +21,8 @@ package org.neo4j.kernel.impl.transaction.log.stresstest.workload;
 
 import java.io.IOException;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -44,14 +46,12 @@ import org.neo4j.kernel.impl.transaction.log.rotation.monitor.LogRotationMonitor
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.NullLog;
-import org.neo4j.monitoring.DatabaseEventListeners;
 import org.neo4j.monitoring.DatabaseHealth;
-import org.neo4j.monitoring.DatabasePanicEventGenerator;
 import org.neo4j.monitoring.Health;
+import org.neo4j.monitoring.PanicEventGenerator;
 import org.neo4j.storageengine.api.StoreId;
 import org.neo4j.storageengine.api.TransactionIdStore;
-
-import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+import org.neo4j.util.concurrent.Futures;
 
 public class Runner implements Callable<Long>
 {
@@ -84,19 +84,16 @@ public class Runner implements Callable<Long>
             ExecutorService executorService = Executors.newFixedThreadPool( threads );
             try
             {
-                Future<?>[] handlers = new Future[threads];
+                List<Future<?>> handlers = new ArrayList<>( threads );
                 for ( int i = 0; i < threads; i++ )
                 {
                     TransactionRepresentationFactory factory = new TransactionRepresentationFactory();
                     Worker task = new Worker( transactionAppender, factory, condition );
-                    handlers[i] = executorService.submit( task );
+                    handlers.add( executorService.submit( task ) );
                 }
 
                 // wait for all the workers to complete
-                for ( Future<?> handle : handlers )
-                {
-                    handle.get();
-                }
+                Futures.getAll( handlers );
             }
             finally
             {
@@ -113,9 +110,7 @@ public class Runner implements Callable<Long>
             TransactionMetadataCache transactionMetadataCache, LogFiles logFiles )
     {
         Log log = NullLog.getInstance();
-        DatabaseEventListeners databaseEventListeners = new DatabaseEventListeners( log );
-        DatabasePanicEventGenerator panicEventGenerator = new DatabasePanicEventGenerator( databaseEventListeners, DEFAULT_DATABASE_NAME );
-        Health databaseHealth = new DatabaseHealth( panicEventGenerator, log );
+        Health databaseHealth = new DatabaseHealth( PanicEventGenerator.NO_OP, log );
         LogRotationImpl logRotation = new LogRotationImpl( logFiles, Clock.systemUTC(), databaseHealth, LogRotationMonitorAdapter.EMPTY );
         return new BatchingTransactionAppender( logFiles, logRotation,
                 transactionMetadataCache, transactionIdStore, databaseHealth );

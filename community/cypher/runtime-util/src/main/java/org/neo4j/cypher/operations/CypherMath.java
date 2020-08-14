@@ -19,8 +19,8 @@
  */
 package org.neo4j.cypher.operations;
 
-import org.neo4j.exceptions.CypherTypeException;
 import org.neo4j.exceptions.ArithmeticException;
+import org.neo4j.exceptions.CypherTypeException;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.storable.ArrayValue;
 import org.neo4j.values.storable.DurationValue;
@@ -43,7 +43,7 @@ import static org.neo4j.values.storable.Values.stringValue;
 /**
  * This class contains static helper math methods used by the compiled expressions
  */
-@SuppressWarnings( {"unused", "ReferenceEquality"} )
+@SuppressWarnings( {"ReferenceEquality"} )
 public final class CypherMath
 {
     private CypherMath()
@@ -109,7 +109,7 @@ public final class CypherMath
                 }
                 else
                 {
-                    return stringValue( ((TextValue) lhs).stringValue() + String.valueOf( rhs ) );
+                    return stringValue( ((TextValue) lhs).stringValue() + rhs );
                 }
             }
         }
@@ -125,7 +125,7 @@ public final class CypherMath
                 }
                 else
                 {
-                    return stringValue( String.valueOf( lhs ) + ((TextValue) rhs).stringValue() );
+                    return stringValue( lhs + ((TextValue) rhs).stringValue() );
                 }
             }
         }

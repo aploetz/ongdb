@@ -19,16 +19,21 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.plans.rewriter
 
-import org.neo4j.cypher.internal.compiler.phases.{LogicalPlanState, PlannerContext}
+import org.neo4j.cypher.internal.compiler.phases.LogicalPlanState
+import org.neo4j.cypher.internal.compiler.phases.PlannerContext
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer.CompilationPhase
+import org.neo4j.cypher.internal.frontend.phases.CompilationPhaseTracer.CompilationPhase.LOGICAL_PLANNING
+import org.neo4j.cypher.internal.frontend.phases.Condition
+import org.neo4j.cypher.internal.frontend.phases.Phase
 import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.{Cardinalities, Solveds}
-import org.neo4j.cypher.internal.v4_0.frontend.phases.CompilationPhaseTracer.CompilationPhase
-import org.neo4j.cypher.internal.v4_0.frontend.phases.CompilationPhaseTracer.CompilationPhase.LOGICAL_PLANNING
-import org.neo4j.cypher.internal.v4_0.frontend.phases.{Condition, Phase}
-import org.neo4j.cypher.internal.v4_0.rewriting.RewriterStepSequencer
-import org.neo4j.cypher.internal.v4_0.util.Rewriter
-import org.neo4j.cypher.internal.v4_0.util.attribution.Attributes
-import org.neo4j.cypher.internal.v4_0.util.helpers.fixedPoint
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.ProvidedOrders
+import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Solveds
+import org.neo4j.cypher.internal.rewriting.RewriterStepSequencer
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.attribution.Attributes
+import org.neo4j.cypher.internal.util.helpers.fixedPoint
+
 /*
  * Rewriters that live here are required to adhere to the contract of
  * receiving a valid plan and producing a valid plan. It should be possible
@@ -39,14 +44,19 @@ case class PlanRewriter(rewriterSequencer: String => RewriterStepSequencer) exte
 
   override def postConditions: Set[Condition] = Set.empty
 
-  override def instance(context: PlannerContext, solveds: Solveds, cardinalities: Cardinalities, otherAttributes: Attributes[LogicalPlan]) = fixedPoint(rewriterSequencer("LogicalPlanRewriter")(
+  override def instance(context: PlannerContext,
+                        solveds: Solveds,
+                        cardinalities: Cardinalities,
+                        providedOrders: ProvidedOrders,
+                        otherAttributes: Attributes[LogicalPlan]) = fixedPoint(rewriterSequencer("LogicalPlanRewriter")(
     fuseSelections,
-    unnestApply(solveds, otherAttributes.withAlso(cardinalities)),
-    cleanUpEager(solveds, otherAttributes.withAlso(cardinalities)),
+    unnestApply(solveds, otherAttributes.withAlso(cardinalities, providedOrders)),
+    unnestCartesianProduct,
+    cleanUpEager(solveds, otherAttributes.withAlso(cardinalities, providedOrders)),
     simplifyPredicates,
     unnestOptional,
-    predicateRemovalThroughJoins(solveds, cardinalities, otherAttributes),
-    removeIdenticalPlans(otherAttributes.withAlso(cardinalities, solveds)),
+    predicateRemovalThroughJoins(solveds, cardinalities, otherAttributes.withAlso(providedOrders)),
+    removeIdenticalPlans(otherAttributes.withAlso(cardinalities, solveds, providedOrders)),
     pruningVarExpander,
     useTop,
     simplifySelections,
@@ -57,12 +67,17 @@ case class PlanRewriter(rewriterSequencer: String => RewriterStepSequencer) exte
 trait LogicalPlanRewriter extends Phase[PlannerContext, LogicalPlanState, LogicalPlanState] {
   override def phase: CompilationPhase = LOGICAL_PLANNING
 
-  def instance(context: PlannerContext, solveds: Solveds, cardinalities: Cardinalities, otherAttributes: Attributes[LogicalPlan]): Rewriter
+  def instance(context: PlannerContext,
+               solveds: Solveds,
+               cardinalities: Cardinalities,
+               providedOrders: ProvidedOrders,
+               otherAttributes: Attributes[LogicalPlan]): Rewriter
 
   override def process(from: LogicalPlanState, context: PlannerContext): LogicalPlanState = {
     val idGen = context.logicalPlanIdGen
-    val otherAttributes = Attributes[LogicalPlan](idGen)
-    val rewritten = from.logicalPlan.endoRewrite(instance(context, from.planningAttributes.solveds, from.planningAttributes.cardinalities, otherAttributes))
+    val otherAttributes = Attributes[LogicalPlan](idGen, from.planningAttributes.leveragedOrders)
+    val rewritten = from.logicalPlan.endoRewrite(
+      instance(context, from.planningAttributes.solveds, from.planningAttributes.cardinalities, from.planningAttributes.providedOrders, otherAttributes))
     from.copy(maybeLogicalPlan = Some(rewritten))
   }
 }

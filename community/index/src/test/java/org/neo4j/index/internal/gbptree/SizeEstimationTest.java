@@ -24,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.IOException;
 
-import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.RandomExtension;
@@ -34,17 +33,15 @@ import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.toIntExact;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.lessThan;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.index.internal.gbptree.TreeNodeDynamicSize.keyValueSizeCapFromPageSize;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 
 @ExtendWith( RandomExtension.class )
 @PageCacheExtension
 class SizeEstimationTest
 {
     private static final double EXPECTED_MARGIN_OF_ERROR = 0.1;
-    @Inject
-    private FileSystemAbstraction fileSystem;
     @Inject
     private TestDirectory testDirectory;
     @Inject
@@ -74,8 +71,8 @@ class SizeEstimationTest
                 new GBPTreeBuilder<>( pageCache, testDirectory.file( "tree" ), layout ).build() )
         {
             // given
-            int count = random.nextInt( 100_000, 1_000_000 );
-            try ( Writer<KEY,VALUE> writer = tree.writer() )
+            int count = random.nextInt( 500, 2_500 );
+            try ( Writer<KEY,VALUE> writer = tree.writer( NULL ) )
             {
                 for ( int i = 0; i < count; i++ )
                 {
@@ -91,11 +88,11 @@ class SizeEstimationTest
     private void assertEstimateWithinMargin( GBPTree<?,?> tree, int actualCount ) throws IOException
     {
         // when
-        int estimate = toIntExact( tree.estimateNumberOfEntriesInTree() );
+        int estimate = toIntExact( tree.estimateNumberOfEntriesInTree( NULL ) );
 
         // then
         int diff = abs( actualCount - estimate );
         double diffRatio = (double) diff / actualCount;
-        assertThat( diffRatio, lessThan( EXPECTED_MARGIN_OF_ERROR ) );
+        assertThat( diffRatio ).isLessThan( EXPECTED_MARGIN_OF_ERROR );
     }
 }

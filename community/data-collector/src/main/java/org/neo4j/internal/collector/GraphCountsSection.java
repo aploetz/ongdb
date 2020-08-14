@@ -41,9 +41,6 @@ import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.SilentTokenNameLookup;
-import org.neo4j.register.Register;
-import org.neo4j.register.Registers;
 import org.neo4j.token.api.NamedToken;
 
 /**
@@ -61,7 +58,7 @@ final class GraphCountsSection
     static Stream<RetrieveResult> retrieve( Kernel kernel, Anonymizer anonymizer )
             throws TransactionFailureException, IndexNotFoundKernelException
     {
-        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.explicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.EXPLICIT, LoginContext.AUTH_DISABLED ) )
         {
             TokenRead tokens = tx.tokenRead();
             Read read = tx.dataRead();
@@ -142,8 +139,6 @@ final class GraphCountsSection
     {
         List<Map<String,Object>> indexes = new ArrayList<>();
 
-        SilentTokenNameLookup tokenLookup = new SilentTokenNameLookup( tokens );
-
         Iterator<IndexDescriptor> iterator = schemaRead.indexesGetAll();
         while ( iterator.hasNext() )
         {
@@ -151,17 +146,15 @@ final class GraphCountsSection
 
             Map<String,Object> data = new HashMap<>();
             data.put( "labels", map( index.schema().getEntityTokenIds(),
-                                     id -> anonymizer.label( tokenLookup.labelGetName( id ), id ) ) );
+                                     id -> anonymizer.label( tokens.labelGetName( id ), id ) ) );
 
             data.put( "properties", map( index.schema().getPropertyIds(),
-                                         id -> anonymizer.propertyKey( tokenLookup.propertyKeyGetName( id ), id ) ) );
+                                         id -> anonymizer.propertyKey( tokens.propertyKeyGetName( id ), id ) ) );
 
-            Register.DoubleLongRegister register = Registers.newDoubleLongRegister();
-            schemaRead.indexUpdatesAndSize( index, register );
-            data.put( "totalSize", register.readSecond() );
-            data.put( "updatesSinceEstimation", register.readFirst() );
-            schemaRead.indexSample( index, register );
-            data.put( "estimatedUniqueSize", register.readFirst() );
+            var indexSample = schemaRead.indexSample( index );
+            data.put( "totalSize", indexSample.indexSize() );
+            data.put( "updatesSinceEstimation", indexSample.updates() );
+            data.put( "estimatedUniqueSize", indexSample.uniqueValues() );
 
             indexes.add( data );
         }
@@ -173,8 +166,6 @@ final class GraphCountsSection
     {
         List<Map<String,Object>> constraints = new ArrayList<>();
 
-        SilentTokenNameLookup tokenLookup = new SilentTokenNameLookup( tokens );
-
         Iterator<ConstraintDescriptor> iterator = schemaRead.constraintsGetAll();
         while ( iterator.hasNext() )
         {
@@ -183,18 +174,18 @@ final class GraphCountsSection
             Map<String,Object> data = new HashMap<>();
 
             data.put( "properties", map( constraint.schema().getPropertyIds(),
-                    id -> anonymizer.propertyKey( tokenLookup.propertyKeyGetName( id ), id ) ) );
+                    id -> anonymizer.propertyKey( tokens.propertyKeyGetName( id ), id ) ) );
             data.put( "type", constraintType( constraint ) );
             int entityTokenId = constraint.schema().getEntityTokenIds()[0];
 
             switch ( entityType )
             {
             case NODE:
-                data.put( "label", anonymizer.label( tokenLookup.labelGetName( entityTokenId ), entityTokenId ) );
+                data.put( "label", anonymizer.label( tokens.labelGetName( entityTokenId ), entityTokenId ) );
                 constraints.add( data );
                 break;
             case RELATIONSHIP:
-                data.put( "relationshipType", anonymizer.relationshipType( tokenLookup.relationshipTypeGetName( entityTokenId ), entityTokenId ) );
+                data.put( "relationshipType", anonymizer.relationshipType( tokens.relationshipTypeGetName( entityTokenId ), entityTokenId ) );
                 constraints.add( data );
                 break;
             default:

@@ -19,15 +19,17 @@
  */
 package org.neo4j.cypher.internal.logical.plans
 
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, LabelToken}
-import org.neo4j.cypher.internal.v4_0.util.attribution.{IdGen, SameId}
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.LabelToken
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SameId
 
 /**
-  * Produces one or zero rows containing the node with the given label and property values.
-  *
-  * This operator is used on label/property combinations under uniqueness constraint, meaning that a single matching
-  * node is guaranteed.
-  */
+ * Produces one or zero rows containing the node with the given label and property values.
+ *
+ * This operator is used on label/property combinations under uniqueness constraint, meaning that a single matching
+ * node is guaranteed.
+ */
 case class NodeUniqueIndexSeek(idName: String,
                                label: LabelToken,
                                properties: Seq[IndexedProperty],
@@ -38,9 +40,13 @@ case class NodeUniqueIndexSeek(idName: String,
 
   override val availableSymbols: Set[String] = argumentIds + idName
 
+  override def usedVariables: Set[String] = valueExpr.expressions.flatMap(_.dependencies).map(_.name).toSet
+
+  override def withoutArgumentIds(argsToExclude: Set[String]): NodeUniqueIndexSeek = copy(argumentIds = argumentIds -- argsToExclude)(SameId(this.id))
+
   override def copyWithoutGettingValues: NodeUniqueIndexSeek =
     NodeUniqueIndexSeek(idName, label, properties.map{ p => IndexedProperty(p.propertyKeyToken, DoNotGetValue) }, valueExpr, argumentIds, indexOrder)(SameId(this.id))
 
-  override def withProperties(properties: Seq[IndexedProperty]): IndexLeafPlan =
-    NodeUniqueIndexSeek(idName, label, properties, valueExpr, argumentIds, indexOrder)(SameId(this.id))
+  override def withMappedProperties(f: IndexedProperty => IndexedProperty): NodeUniqueIndexSeek =
+    NodeUniqueIndexSeek(idName, label, properties.map(f), valueExpr, argumentIds, indexOrder)(SameId(this.id))
 }

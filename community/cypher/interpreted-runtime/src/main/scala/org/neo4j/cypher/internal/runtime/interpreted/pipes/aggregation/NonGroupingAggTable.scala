@@ -19,28 +19,37 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes.aggregation
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.{AggregatingCol, AggregationTable, AggregationTableFactory}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{ExecutionContextFactory, Pipe, QueryState}
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregatingCol
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTable
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.AggregationPipe.AggregationTableFactory
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExecutionContextFactory
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.memory.MemoryTracker
 
 /**
-  * This table can be used when we have no grouping columns, or there is a provided order for all grouping columns.
-  * @param aggregations all aggregation columns
-  */
+ * This table can be used when we have no grouping columns, or there is a provided order for all grouping columns.
+ *
+ * @param aggregations all aggregation columns
+ */
 class NonGroupingAggTable(aggregations: Array[AggregatingCol],
                           state: QueryState,
-                          executionContextFactory: ExecutionContextFactory) extends AggregationTable {
-  private val aggregationFunctions = new Array[AggregationFunction](aggregations.length)
+                          executionContextFactory: ExecutionContextFactory,
+                          operatorId: Id) extends AggregationTable {
+  private val aggregationFunctions = new Array[AggregationFunction](aggregations.length) // We do not track this allocation, but it should be negligable
+  private val scopedMemoryTracker: MemoryTracker = state.memoryTracker.memoryTrackerForOperator(operatorId.x).getScopedMemoryTracker
 
   override def clear(): Unit = {
+    scopedMemoryTracker.reset()
     var i = 0
     while (i < aggregationFunctions.length) {
-      aggregationFunctions(i) = aggregations(i).expression.createAggregationFunction
+      aggregationFunctions(i) = aggregations(i).expression.createAggregationFunction(scopedMemoryTracker)
       i += 1
     }
   }
 
-  override def processRow(row: ExecutionContext): Unit = {
+  override def processRow(row: CypherRow): Unit = {
     var i = 0
     while (i < aggregationFunctions.length) {
       aggregationFunctions(i)(row, state)
@@ -48,12 +57,14 @@ class NonGroupingAggTable(aggregations: Array[AggregatingCol],
     }
   }
 
-  override def result(): Iterator[ExecutionContext] = {
-    Iterator.single(resultRow())
+  override def result(): Iterator[CypherRow] = {
+    val row = resultRow()
+    scopedMemoryTracker.close()
+    Iterator.single(row)
   }
 
-  protected def resultRow(): ExecutionContext = {
-    val row = executionContextFactory.newExecutionContext()
+  protected def resultRow(): CypherRow = {
+    val row = state.newExecutionContext(executionContextFactory)
     var i = 0
     while (i < aggregationFunctions.length) {
       row.set(aggregations(i).key, aggregationFunctions(i).result(state))
@@ -65,11 +76,7 @@ class NonGroupingAggTable(aggregations: Array[AggregatingCol],
 
 object NonGroupingAggTable {
   case class Factory(aggregations: Array[AggregatingCol]) extends AggregationTableFactory {
-    override def table(state: QueryState, executionContextFactory: ExecutionContextFactory): AggregationTable =
-      new NonGroupingAggTable(aggregations, state, executionContextFactory)
-
-    override def registerOwningPipe(pipe: Pipe): Unit = {
-      aggregations.foreach(_.expression.registerOwningPipe(pipe))
-    }
+    override def table(state: QueryState, executionContextFactory: ExecutionContextFactory, operatorId: Id): AggregationTable =
+      new NonGroupingAggTable(aggregations, state, executionContextFactory, operatorId)
   }
 }

@@ -31,7 +31,9 @@ import org.neo4j.internal.schema.SchemaRule;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 import org.neo4j.storageengine.api.StoreVersion;
 import org.neo4j.storageengine.api.format.CapabilityType;
@@ -40,13 +42,17 @@ import org.neo4j.storageengine.migration.SchemaRuleMigrationAccess;
 
 public class IndexProviderMigrator extends AbstractStoreMigrationParticipant
 {
+    private static final String INDEX_PROVIDER_MIGRATION_TAG = "indexProviderMigration";
     private final FileSystemAbstraction fs;
     private final Config config;
     private final PageCache pageCache;
     private final LogService logService;
     private final StorageEngineFactory storageEngineFactory;
+    private final PageCacheTracer cacheTracer;
+    private final MemoryTracker memoryTracker;
 
-    IndexProviderMigrator( FileSystemAbstraction fs, Config config, PageCache pageCache, LogService logService, StorageEngineFactory storageEngineFactory )
+    IndexProviderMigrator( FileSystemAbstraction fs, Config config, PageCache pageCache, LogService logService, StorageEngineFactory storageEngineFactory,
+            PageCacheTracer cacheTracer, MemoryTracker memoryTracker )
     {
         super( "Index providers" );
         this.fs = fs;
@@ -54,6 +60,8 @@ public class IndexProviderMigrator extends AbstractStoreMigrationParticipant
         this.pageCache = pageCache;
         this.logService = logService;
         this.storageEngineFactory = storageEngineFactory;
+        this.cacheTracer = cacheTracer;
+        this.memoryTracker = memoryTracker;
     }
 
     @Override
@@ -68,8 +76,9 @@ public class IndexProviderMigrator extends AbstractStoreMigrationParticipant
 
     private void migrateIndexProviders( DatabaseLayout migrationLayout, String versionToMigrateTo ) throws IOException, KernelException
     {
-        try ( SchemaRuleMigrationAccess ruleAccess = storageEngineFactory
-                .schemaRuleMigrationAccess( fs, pageCache, config, migrationLayout, logService, versionToMigrateTo ) )
+        try ( var cursorTracer = cacheTracer.createPageCursorTracer( INDEX_PROVIDER_MIGRATION_TAG );
+                SchemaRuleMigrationAccess ruleAccess = storageEngineFactory
+                .schemaRuleMigrationAccess( fs, pageCache, config, migrationLayout, logService, versionToMigrateTo, cacheTracer, cursorTracer, memoryTracker ) )
         {
             for ( SchemaRule rule : ruleAccess.getAll() )
             {

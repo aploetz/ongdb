@@ -22,11 +22,13 @@ package org.neo4j.kernel.impl.transaction;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.storageengine.api.TransactionId;
 import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.util.concurrent.ArrayQueueOutOfOrderSequence;
 import org.neo4j.util.concurrent.OutOfOrderSequence;
 
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.storageengine.api.LogVersionRepository.BASE_TX_LOG_BYTE_OFFSET;
 import static org.neo4j.storageengine.api.LogVersionRepository.BASE_TX_LOG_VERSION;
 
@@ -54,7 +56,7 @@ public class SimpleTransactionIdStore implements TransactionIdStore
     {
         assert previouslyCommittedTxId >= BASE_TX_ID : "cannot start from a tx id less than BASE_TX_ID";
         setLastCommittedAndClosedTransactionId( previouslyCommittedTxId, checksum, previouslyCommittedTxCommitTimestamp,
-                previouslyCommittedTxLogByteOffset, previouslyCommittedTxLogVersion );
+                previouslyCommittedTxLogByteOffset, previouslyCommittedTxLogVersion, NULL );
         this.previouslyCommittedTxId = previouslyCommittedTxId;
         this.initialTransactionChecksum = checksum;
         this.previouslyCommittedTxCommitTimestamp = previouslyCommittedTxCommitTimestamp;
@@ -73,7 +75,7 @@ public class SimpleTransactionIdStore implements TransactionIdStore
     }
 
     @Override
-    public synchronized void transactionCommitted( long transactionId, int checksum, long commitTimestamp )
+    public synchronized void transactionCommitted( long transactionId, int checksum, long commitTimestamp, PageCursorTracer cursorTracer )
     {
         TransactionId current = committedTransactionId.get();
         if ( current == null || transactionId > current.transactionId() )
@@ -114,7 +116,7 @@ public class SimpleTransactionIdStore implements TransactionIdStore
 
     @Override
     public void setLastCommittedAndClosedTransactionId( long transactionId, int checksum, long commitTimestamp,
-            long byteOffset, long logVersion )
+            long byteOffset, long logVersion, PageCursorTracer cursorTracer )
     {
         committingTransactionId.set( transactionId );
         committedTransactionId.set( new TransactionId( transactionId, checksum, commitTimestamp ) );
@@ -122,19 +124,19 @@ public class SimpleTransactionIdStore implements TransactionIdStore
     }
 
     @Override
-    public void transactionClosed( long transactionId, long logVersion, long byteOffset )
+    public void transactionClosed( long transactionId, long logVersion, long byteOffset, PageCursorTracer cursorTracer )
     {
         closedTransactionId.offer( transactionId, new long[]{logVersion, byteOffset} );
     }
 
     @Override
-    public void resetLastClosedTransaction( long transactionId, long byteOffset, long logVersion, boolean missingLogs )
+    public void resetLastClosedTransaction( long transactionId, long byteOffset, long logVersion, boolean missingLogs, PageCursorTracer cursorTracer )
     {
         closedTransactionId.set( transactionId, new long[]{logVersion, byteOffset} );
     }
 
     @Override
-    public void flush()
+    public void flush( PageCursorTracer cursorTracer )
     {
     }
 }

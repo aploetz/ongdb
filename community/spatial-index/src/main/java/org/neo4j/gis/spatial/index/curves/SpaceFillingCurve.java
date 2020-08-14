@@ -20,6 +20,7 @@
 package org.neo4j.gis.spatial.index.curves;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.neo4j.gis.spatial.index.Envelope;
@@ -260,8 +261,8 @@ public abstract class SpaceFillingCurve
 
     public List<LongRange> getTilesIntersectingEnvelope( double[] fromOrNull, double[] toOrNull, SpaceFillingCurveConfiguration config )
     {
-        double[] from = fromOrNull == null ? range.getMin() : fromOrNull.clone();
-        double[] to = toOrNull == null ? range.getMax() : toOrNull.clone();
+        double[] from = fromOrNull == null ? range.getMin() : Arrays.copyOf( fromOrNull, fromOrNull.length );
+        double[] to = toOrNull == null ? range.getMax() : Arrays.copyOf( toOrNull, toOrNull.length );
 
         for ( int i = 0; i < from.length; i++ )
         {
@@ -289,7 +290,7 @@ public abstract class SpaceFillingCurve
     {
         SearchEnvelope search = new SearchEnvelope( this, referenceEnvelope );
         SearchEnvelope wholeExtent = new SearchEnvelope( 0, this.getWidth(), nbrDim );
-        ArrayList<LongRange> results = new ArrayList<>( config.initialRangesListCapacity() );
+        List<LongRange> results = new ArrayList<>( config.initialRangesListCapacity() );
 
         if ( monitor != null )
         {
@@ -303,7 +304,7 @@ public abstract class SpaceFillingCurve
     }
 
     private void addTilesIntersectingEnvelopeAt( SpaceFillingCurveConfiguration config, SpaceFillingCurveMonitor monitor, int depth, int maxDepth,
-            SearchEnvelope search, SearchEnvelope currentExtent, CurveRule curve, long left, long right, ArrayList<LongRange> results )
+            SearchEnvelope search, SearchEnvelope currentExtent, CurveRule curve, long left, long right, List<LongRange> results )
     {
         assert search.intersects( currentExtent );
 
@@ -336,7 +337,7 @@ public abstract class SpaceFillingCurve
     }
 
     private void computeTilesIntersectionEnvelopeAt( SpaceFillingCurveMonitor monitor, int depth,
-            SearchEnvelope currentExtent, long left, long newMax, ArrayList<LongRange> results )
+            SearchEnvelope currentExtent, long left, long newMax, List<LongRange> results )
     {
         // Note that LongRange upper bound is inclusive, hence the '-1' in several places
         LongRange current = results.isEmpty() ? null : results.get( results.size() - 1 );

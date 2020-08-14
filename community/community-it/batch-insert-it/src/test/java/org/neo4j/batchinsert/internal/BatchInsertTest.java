@@ -56,13 +56,11 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.schema.ConstraintDefinition;
 import org.neo4j.graphdb.schema.ConstraintType;
 import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.collection.Pair;
-import org.neo4j.internal.index.label.FullStoreChangeStream;
-import org.neo4j.internal.index.label.LabelScanReader;
 import org.neo4j.internal.index.label.LabelScanStore;
-import org.neo4j.internal.index.label.NativeLabelScanStore;
+import org.neo4j.internal.index.label.TokenScanReader;
+import org.neo4j.internal.index.label.TokenScanStore;
 import org.neo4j.internal.recordstorage.RecordStorageEngine;
 import org.neo4j.internal.recordstorage.SchemaRuleAccess;
 import org.neo4j.internal.schema.ConstraintDescriptor;
@@ -72,6 +70,8 @@ import org.neo4j.internal.schema.SchemaRule;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.IndexProvider;
@@ -79,8 +79,8 @@ import org.neo4j.kernel.api.index.IndexSample;
 import org.neo4j.kernel.api.schema.index.TestIndexDescriptorFactory;
 import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.impl.MyRelTypes;
-import org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor;
 import org.neo4j.kernel.impl.api.index.IndexSamplingConfig;
+import org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabels;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
@@ -102,12 +102,7 @@ import org.neo4j.values.storable.Values;
 
 import static java.lang.String.format;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.arrayContaining;
-import static org.hamcrest.Matchers.emptyArray;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,25 +111,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
+import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 import static org.neo4j.graphdb.Label.label;
+import static org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector.immediate;
 import static org.neo4j.internal.helpers.collection.Iterables.map;
 import static org.neo4j.internal.helpers.collection.Iterables.single;
 import static org.neo4j.internal.helpers.collection.Iterators.asCollection;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.internal.helpers.collection.Iterators.iterator;
 import static org.neo4j.internal.helpers.collection.MapUtil.map;
+import static org.neo4j.internal.index.label.FullStoreChangeStream.EMPTY;
+import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceIndexProviderFactory;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.IndexEntryUpdate.add;
-import static org.neo4j.test.mockito.matcher.CollectionMatcher.matchesCollection;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasProperty;
-import static org.neo4j.test.mockito.matcher.Neo4jMatchers.inTx;
 
 @PageCacheExtension
 @Neo4jLayoutExtension
@@ -225,7 +222,7 @@ class BatchInsertTest
         inserter.setNodeProperty( id2, "array", array2 );
 
         // Then
-        assertThat( inserter.getNodeProperties( id1 ).get( "array" ), equalTo( array1 ) );
+        assertThat( inserter.getNodeProperties( id1 ).get( "array" ) ).isEqualTo( array1 );
         inserter.shutdown();
     }
 
@@ -265,14 +262,18 @@ class BatchInsertTest
     void setSingleProperty( int denseNodeThreshold ) throws Exception
     {
         BatchInserter inserter = newBatchInserter( denseNodeThreshold );
-        long node = inserter.createNode( null );
+        long nodeById = inserter.createNode( null );
 
         String value = "Something";
         String key = "name";
-        inserter.setNodeProperty( node, key, value );
+        inserter.setNodeProperty( nodeById, key, value );
 
         GraphDatabaseService db = switchToEmbeddedGraphDatabaseService( inserter, denseNodeThreshold );
-        assertThat( getNodeInTx( node, db ), inTx( db, hasProperty( key ).withValue( value ) ) );
+        try ( var tx = db.beginTx() )
+        {
+            var node = tx.getNodeById( nodeById );
+            assertThat( node.getProperty( key ) ).isEqualTo( value );
+        }
         managementService.shutdown();
     }
 
@@ -585,8 +586,11 @@ class BatchInsertTest
     void messagesLogGetsClosed() throws IOException
     {
 
-        BatchInserter inserter = BatchInserters.inserter( databaseLayout, fs,
-                Config.defaults( neo4j_home, testDirectory.homeDir().toPath() ) );
+        Config config = Config.newBuilder()
+                .set( preallocate_logical_logs, false )
+                .set( neo4j_home, testDirectory.homeDir().toPath() )
+                .build();
+        BatchInserter inserter = BatchInserters.inserter( databaseLayout, fs, config );
         inserter.shutdown();
         assertTrue( new File( databaseLayout.getNeo4jLayout().homeDirectory(), INTERNAL_LOG_FILE ).delete() );
     }
@@ -761,17 +765,17 @@ class BatchInsertTest
             SchemaRuleAccess schemaRuleAccess = SchemaRuleAccess.getSchemaRuleAccess( store, tokenHolders );
             List<Long> inUse = new ArrayList<>();
             SchemaRecord record = store.newRecord();
-            for ( long i = 1, high = store.getHighestPossibleIdInUse(); i <= high; i++ )
+            for ( long i = 1, high = store.getHighestPossibleIdInUse( NULL ); i <= high; i++ )
             {
-                store.getRecord( i, record, RecordLoad.FORCE );
+                store.getRecord( i, record, RecordLoad.FORCE, NULL );
                 if ( record.inUse() )
                 {
                     inUse.add( i );
                 }
             }
             assertEquals( 2, inUse.size(), "records in use" );
-            SchemaRule rule0 = schemaRuleAccess.loadSingleSchemaRule( inUse.get( 0 ) );
-            SchemaRule rule1 = schemaRuleAccess.loadSingleSchemaRule( inUse.get( 1 ) );
+            SchemaRule rule0 = schemaRuleAccess.loadSingleSchemaRule( inUse.get( 0 ), NULL );
+            SchemaRule rule1 = schemaRuleAccess.loadSingleSchemaRule( inUse.get( 1 ), NULL );
             IndexDescriptor indexRule;
             ConstraintDescriptor constraint;
             if ( rule0 instanceof IndexDescriptor )
@@ -870,8 +874,8 @@ class BatchInsertTest
         IndexAccessor accessor = mock( IndexAccessor.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() ) ).thenReturn( populator );
-        when( populator.sampleResult() ).thenReturn( new IndexSample() );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
         when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 
@@ -888,11 +892,11 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
         verify( populator ).create();
-        verify( populator ).add( argThat( matchesCollection( add( nodeId, internalIndex.schema(), Values.of( "Jakewins" ) ) ) ) );
+        verify( populator ).add( argThat( c -> c.contains( add( nodeId, internalIndex.schema(), Values.of( "Jakewins" ) ) ) ), any( PageCursorTracer.class ) );
         verify( populator ).verifyDeferredConstraints( any( NodePropertyAccessor.class ) );
-        verify( populator ).close( true );
+        verify( populator ).close( true, NULL );
         verify( provider ).stop();
         verify( provider ).shutdown();
     }
@@ -907,8 +911,8 @@ class BatchInsertTest
         IndexAccessor accessor = mock( IndexAccessor.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() ) ).thenReturn( populator );
-        when( populator.sampleResult() ).thenReturn( new IndexSample() );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
         when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 
@@ -925,11 +929,12 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
         verify( populator ).create();
-        verify( populator ).add( argThat( matchesCollection( add( nodeId, internalUniqueIndex.schema(), Values.of( "Jakewins" ) ) ) ) );
+        verify( populator ).add( argThat( c -> c.contains( add( nodeId, internalUniqueIndex.schema(), Values.of( "Jakewins" ) ) ) ),
+                any( PageCursorTracer.class ) );
         verify( populator ).verifyDeferredConstraints( any( NodePropertyAccessor.class ) );
-        verify( populator ).close( true );
+        verify( populator ).close( true, NULL );
         verify( provider ).stop();
         verify( provider ).shutdown();
     }
@@ -947,8 +952,8 @@ class BatchInsertTest
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() ) ).thenReturn( populator );
-        when( populator.sampleResult() ).thenReturn( new IndexSample() );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
         when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
 
         BatchInserter inserter = newBatchInserterWithIndexProvider(
@@ -962,13 +967,12 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
         verify( populator ).create();
-        verify( populator ).add( argThat( matchesCollection(
-                add( jakewins, internalIndex.schema(), Values.of( "Jakewins" ) ),
-                add( boggle, internalIndex.schema(), Values.of( "b0ggl3" ) ) ) ) );
+        verify( populator ).add( argThat( c -> c.contains( add( jakewins, internalIndex.schema(), Values.of( "Jakewins" ) ) ) &&
+                                               c.contains( add( boggle, internalIndex.schema(), Values.of( "b0ggl3" ) ) ) ), any( PageCursorTracer.class ) );
         verify( populator ).verifyDeferredConstraints( any( NodePropertyAccessor.class ) );
-        verify( populator ).close( true );
+        verify( populator ).close( true, NULL );
         verify( provider ).stop();
         verify( provider ).shutdown();
     }
@@ -1064,17 +1068,15 @@ class BatchInsertTest
         long personNodeId = inserter.createNode(properties);
 
         assertEquals( "Shevchenko", getNodeProperties( inserter, personNodeId ).get( "lastName" ) );
-        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ), is( emptyArray() ) );
+        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ) ).isEmpty();
 
         inserter.setNodeProperty( personNodeId, "email", new String[]{"Edward1099511659993@gmail.com"} );
-        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ),
-                arrayContaining( "Edward1099511659993@gmail.com" ) );
+        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ) ).contains( "Edward1099511659993@gmail.com" );
 
         inserter.setNodeProperty( personNodeId, "email",
                 new String[]{"Edward1099511659993@gmail.com", "backup@gmail.com"} );
 
-        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ),
-                arrayContaining( "Edward1099511659993@gmail.com", "backup@gmail.com" ) );
+        assertThat( (String[]) getNodeProperties( inserter, personNodeId ).get( "email" ) ).contains( "Edward1099511659993@gmail.com", "backup@gmail.com" );
         inserter.shutdown();
     }
 
@@ -1135,7 +1137,7 @@ class BatchInsertTest
 
         NeoStores neoStores = getFlushedNeoStores( inserter );
         NodeStore nodeStore = neoStores.getNodeStore();
-        NodeRecord record = nodeStore.getRecord( node1, nodeStore.newRecord(), NORMAL );
+        NodeRecord record = nodeStore.getRecord( node1, nodeStore.newRecord(), NORMAL, NULL );
         assertTrue( record.isDense(), "Node " + record + " should have been dense" );
         inserter.shutdown();
     }
@@ -1170,9 +1172,9 @@ class BatchInsertTest
 
         // THEN
         NodeStore nodeStore = getFlushedNeoStores( inserter ).getNodeStore();
-        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL );
+        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL, NULL );
         NodeLabels labels = NodeLabelsField.parseLabelsField( node );
-        long[] labelIds = labels.get( nodeStore );
+        long[] labelIds = labels.get( nodeStore, NULL );
         assertEquals( 1, labelIds.length );
         inserter.shutdown();
     }
@@ -1192,11 +1194,11 @@ class BatchInsertTest
 
         // THEN
         NodeStore nodeStore = getFlushedNeoStores( inserter ).getNodeStore();
-        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL );
+        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), NORMAL, NULL );
         NodeLabels labels = NodeLabelsField.parseLabelsField( node );
 
-        long[] labelIds = labels.get( nodeStore );
-        long[] sortedLabelIds = labelIds.clone();
+        long[] labelIds = labels.get( nodeStore, NULL );
+        long[] sortedLabelIds = Arrays.copyOf( labelIds, labelIds.length );
         Arrays.sort( sortedLabelIds );
         assertArrayEquals( sortedLabelIds, labelIds );
         inserter.shutdown();
@@ -1328,8 +1330,8 @@ class BatchInsertTest
             var schema = tx.schema();
             IndexDefinition index = schema.getIndexes( label ).iterator().next();
             String indexFailure = schema.getIndexFailure( index );
-            assertThat( indexFailure, containsString( "IndexEntryConflictException" ) );
-            assertThat( indexFailure, containsString( value ) );
+            assertThat( indexFailure ).contains( "IndexEntryConflictException" );
+            assertThat( indexFailure ).contains( value );
             tx.commit();
         }
         finally
@@ -1394,6 +1396,7 @@ class BatchInsertTest
 
         return Config.newBuilder()
                 .set( neo4j_home, testDirectory.absolutePath().toPath() )
+                .set( preallocate_logical_logs, false )
                 .set( GraphDatabaseSettings.dense_node_threshold, denseNodeThreshold )
                 .build();
     }
@@ -1424,16 +1427,15 @@ class BatchInsertTest
 
     private LabelScanStore getLabelScanStore()
     {
-        return new NativeLabelScanStore( pageCache, databaseLayout, fs,
-                FullStoreChangeStream.EMPTY, true, new Monitors(), RecoveryCleanupWorkCollector.immediate() );
+        return TokenScanStore.labelScanStore( pageCache, databaseLayout, fs, EMPTY, true, new Monitors(), immediate(), PageCacheTracer.NULL, INSTANCE );
     }
 
     private static void assertLabelScanStoreContains( LabelScanStore labelScanStore, int labelId, long... nodes )
     {
-        LabelScanReader labelScanReader = labelScanStore.newReader();
+        TokenScanReader labelScanReader = labelScanStore.newReader();
         List<Long> expectedNodeIds = Arrays.stream( nodes ).boxed().collect( Collectors.toList() );
         List<Long> actualNodeIds;
-        try ( PrimitiveLongResourceIterator itr = labelScanReader.nodesWithLabel( labelId ) )
+        try ( PrimitiveLongResourceIterator itr = labelScanReader.entitiesWithToken( labelId, NULL ) )
         {
             actualNodeIds = extractPrimitiveLongIteratorAsList( itr );
         }
@@ -1472,7 +1474,7 @@ class BatchInsertTest
         IndexProvider provider = mock( IndexProvider.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any() ) )
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) )
                 .thenReturn( populator );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 
@@ -1508,14 +1510,6 @@ class BatchInsertTest
             array[i] = startValue + i;
         }
         return array;
-    }
-
-    private static Node getNodeInTx( long nodeId, GraphDatabaseService db )
-    {
-        try ( var tx = db.beginTx() )
-        {
-            return tx.getNodeById( nodeId );
-        }
     }
 
     private static void forceFlush( BatchInserter inserter )

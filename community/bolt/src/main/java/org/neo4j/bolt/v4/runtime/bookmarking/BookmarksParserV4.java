@@ -123,16 +123,24 @@ public final class BookmarksParserV4 implements BookmarksParser
             return buildBookmarks( NAMED_SYSTEM_DATABASE_ID, maxSystemDbTxId, userDbId, maxUserDbTxId );
         }
 
-        if ( maxUserDbTxId != ABSENT_BOOKMARK_ID )
+        List<Bookmark> customBookmarks;
+        try
         {
-            throw newInvalidBookmarkMixtureError( bookmarks );
+            customBookmarks = customBookmarkFormatParser.parse( customBookmarkStrings );
         }
-
-        var customBookmarks =  customBookmarkFormatParser.parse( customBookmarkStrings );
+        catch ( Exception e )
+        {
+            throw BookmarkParsingException.newInvalidBookmarkError( "Parsing of supplied bookmarks failed with message: " + e.getMessage(), e );
+        }
 
         if ( maxSystemDbTxId != ABSENT_BOOKMARK_ID )
         {
             customBookmarks.add( new BookmarkWithDatabaseId( maxSystemDbTxId, NAMED_SYSTEM_DATABASE_ID ) );
+        }
+
+        if ( maxUserDbTxId != ABSENT_BOOKMARK_ID )
+        {
+            customBookmarks.add( new BookmarkWithDatabaseId( maxUserDbTxId, userDbId ) );
         }
 
         return customBookmarks;
@@ -160,7 +168,7 @@ public final class BookmarksParserV4 implements BookmarksParser
         {
             throw newInvalidSingleBookmarkError( bookmark );
         }
-        return  ((TextValue) bookmark).stringValue();
+        return ((TextValue) bookmark).stringValue();
     }
 
     private static UUID parseDatabaseId( String uuid, String bookmark ) throws BookmarkParsingException

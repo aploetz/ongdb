@@ -19,7 +19,6 @@
  */
 package org.neo4j.procedure.builtin;
 
-import org.hamcrest.Matcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
@@ -28,16 +27,25 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
 
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.common.Edition;
+<<<<<<< HEAD
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.SettingImpl;
 import org.neo4j.configuration.SettingValueParsers;
+=======
+import org.neo4j.common.EntityType;
+import org.neo4j.configuration.Config;
+import org.neo4j.configuration.SettingImpl;
+import org.neo4j.configuration.SettingValueParsers;
+import org.neo4j.dbms.database.SystemGraphComponent;
+import org.neo4j.dbms.database.SystemGraphComponents;
+import org.neo4j.dbms.database.TestSystemGraphComponent;
+>>>>>>> neo4j/4.1
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Relationship;
@@ -68,7 +76,9 @@ import org.neo4j.internal.schema.constraints.NodeKeyConstraintDescriptor;
 import org.neo4j.internal.schema.constraints.UniquenessConstraintDescriptor;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
 import org.neo4j.kernel.api.procedure.Context;
+import org.neo4j.kernel.api.procedure.GlobalProcedures;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.util.DefaultValueMapper;
@@ -78,15 +88,14 @@ import org.neo4j.logging.Log;
 import org.neo4j.procedure.impl.GlobalProceduresRegistry;
 import org.neo4j.token.api.NamedToken;
 import org.neo4j.values.AnyValue;
+import org.neo4j.values.storable.TextValue;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
 import static java.util.Collections.emptyIterator;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -104,9 +113,9 @@ import static org.neo4j.kernel.api.procedure.BasicContext.buildContext;
 
 class BuiltInProceduresTest
 {
-    private final List<IndexDescriptor> indexes = new LinkedList<>();
-    private final List<IndexDescriptor> uniqueIndexes = new LinkedList<>();
-    private final List<ConstraintDescriptor> constraints = new LinkedList<>();
+    private final List<IndexDescriptor> indexes = new ArrayList<>();
+    private final List<IndexDescriptor> uniqueIndexes = new ArrayList<>();
+    private final List<ConstraintDescriptor> constraints = new ArrayList<>();
     private final Map<Integer,String> labels = new HashMap<>();
     private final Map<Integer,String> propKeys = new HashMap<>();
     private final Map<Integer,String> relTypes = new HashMap<>();
@@ -121,6 +130,7 @@ class BuiltInProceduresTest
     private final DependencyResolver resolver = mock( DependencyResolver.class );
     private final GraphDatabaseAPI graphDatabaseAPI = mock( GraphDatabaseAPI.class );
     private final IndexingService indexingService = mock( IndexingService.class );
+    private final SystemGraphComponents systemGraphComponents = new SystemGraphComponents();
     private final Log log = mock( Log.class );
 
     private final GlobalProceduresRegistry procs = new GlobalProceduresRegistry();
@@ -134,6 +144,7 @@ class BuiltInProceduresTest
         procs.registerComponent( Transaction.class, Context::internalTransaction, true );
         procs.registerComponent( SecurityContext.class, Context::securityContext, true );
         procs.registerComponent( ProcedureCallContext.class, Context::procedureCallContext, true );
+        procs.registerComponent( SystemGraphComponents.class, ctx -> systemGraphComponents, false );
 
         procs.registerComponent( Log.class, ctx -> log, false );
         procs.registerType( Node.class, NTNode );
@@ -166,6 +177,16 @@ class BuiltInProceduresTest
         when( tokens.propertyKeyName( anyInt() ) ).thenAnswer( invocation -> propKeys.get( invocation.getArgument( 0 ) ) );
         when( tokens.nodeLabelName( anyInt() ) ).thenAnswer( invocation -> labels.get( invocation.getArgument( 0 ) ) );
         when( tokens.relationshipTypeName( anyInt() ) ).thenAnswer( invocation -> relTypes.get( invocation.getArgument( 0 ) ) );
+        when( tokens.propertyKeyGetName( anyInt() ) ).thenAnswer( invocation -> propKeys.get( invocation.getArgument( 0 ) ) );
+        when( tokens.labelGetName( anyInt() ) ).thenAnswer( invocation -> labels.get( invocation.getArgument( 0 ) ) );
+        when( tokens.relationshipTypeGetName( anyInt() ) ).thenAnswer( invocation -> relTypes.get( invocation.getArgument( 0 ) ) );
+        when( tokens.entityTokensGetNames( any(), any() ) ).then( invocation ->
+        {
+            EntityType type = invocation.getArgument( 0 );
+            int[] ids = invocation.getArgument( 1 );
+            Map<Integer,String> mapping = type == EntityType.NODE ? labels : relTypes;
+            return Arrays.stream( ids ).mapToObj( mapping::get ).toArray( String[]::new );
+        } );
 
         when( schemaReadCore.constraintsGetForRelationshipType( anyInt() ) ).thenReturn( emptyIterator() );
         when( schemaReadCore.indexesGetForLabel( anyInt() ) ).thenReturn( emptyIterator() );
@@ -183,7 +204,7 @@ class BuiltInProceduresTest
         givenIndex( "User", "name" );
 
         // When/Then
-        assertThat( call( "db.indexes" ), contains( record(
+        assertThat( call( "db.indexes" ) ).contains( record(
                 1000L,
                 "index_1000",
                 "ONLINE",
@@ -194,7 +215,7 @@ class BuiltInProceduresTest
                 singletonList( "User" ),
                 singletonList( "name" ),
                 "no-index-provider-1.0" )
-        ) );
+        );
     }
 
     @Test
@@ -217,7 +238,7 @@ class BuiltInProceduresTest
         givenUniqueConstraint( "User", "name" );
 
         // When/Then
-        assertThat( call( "db.indexes" ), contains( record(
+        assertThat( call( "db.indexes" ) ).contains( record(
                 1000L,
                 "constraint_1000",
                 "ONLINE",
@@ -228,7 +249,7 @@ class BuiltInProceduresTest
                 singletonList( "User" ),
                 singletonList( "name" ),
                 "no-index-provider-1.0" )
-        ) );
+        );
     }
 
     @Test
@@ -239,9 +260,9 @@ class BuiltInProceduresTest
 
         // When/Then
         final Map<String,Object> configMap = MapUtil.genericMap( new HashMap<>(), "config1", "value1", "config2", 2, "config3", true );
-        assertThat( call( "db.indexDetails", "index_" + 1000 ), contains( record(
+        assertThat( call( "db.indexDetails", "index_" + 1000 ) ).contains( record(
                 1000L, "index_1000", "ONLINE", 100D, "NONUNIQUE", "BTREE", "NODE", singletonList( "User" ), singletonList( "name" ),
-                EMPTY.getProviderDescriptor().name(), configMap, "" ) ) );
+                EMPTY.getProviderDescriptor().name(), configMap, "" ) );
     }
 
     @Test
@@ -253,9 +274,9 @@ class BuiltInProceduresTest
 
         // When/Then
         final Map<String,Object> configMap = MapUtil.genericMap( new HashMap<>(), "config1", "value1", "config2", 2, "config3", true );
-        assertThat( call( "db.indexDetails", "index_" + 1000 ), contains( record(
+        assertThat( call( "db.indexDetails", "index_" + 1000 ) ).contains( record(
                 1000L, "index_1000", "NOT FOUND", 0D, "NONUNIQUE", "BTREE", "NODE", singletonList( "User" ), singletonList( "name" ),
-                EMPTY.getProviderDescriptor().name(), configMap, "Index not found. It might have been concurrently dropped." ) ) );
+                EMPTY.getProviderDescriptor().name(), configMap, "Index not found. It might have been concurrently dropped." ) );
     }
 
     @Test
@@ -265,10 +286,9 @@ class BuiltInProceduresTest
         givenPropertyKeys( "name", "age" );
 
         // When/Then
-        assertThat( call( "db.propertyKeys" ),
-                containsInAnyOrder(
+        assertThat( call( "db.propertyKeys" ) ).contains(
                         record( "age" ),
-                        record( "name" ) ) );
+                        record( "name" ) );
     }
 
     @Test
@@ -278,10 +298,9 @@ class BuiltInProceduresTest
         givenLabels( "Banana", "Fruit" );
 
         // When/Then
-        assertThat( call( "db.labels" ),
-                containsInAnyOrder(
+        assertThat( call( "db.labels" ) ).contains(
                         record( "Banana" ),
-                        record( "Fruit" ) ) );
+                        record( "Fruit" ) );
     }
 
     @Test
@@ -291,10 +310,9 @@ class BuiltInProceduresTest
         givenRelationshipTypes( "EATS", "SPROUTS" );
 
         // When/Then
-        assertThat( call( "db.relationshipTypes" ),
-                containsInAnyOrder(
+        assertThat( call( "db.relationshipTypes" ) ).contains(
                         record( "EATS" ),
-                        record( "SPROUTS" ) ) );
+                        record( "SPROUTS" ) );
     }
 
     @Test
@@ -305,12 +323,17 @@ class BuiltInProceduresTest
         givenNodePropExistenceConstraint( "User", "name" );
         givenNodeKeys( "User", "name" );
         // When/Then
-        assertThat( call( "db.constraints" ),
-                contains(
-                        record( "MyExistenceConstraint", "CONSTRAINT ON ( user:User ) ASSERT exists(user.name)" ),
-                        record( "MyNodeKeyConstraint", "CONSTRAINT ON ( user:User ) ASSERT (user.name) IS NODE KEY" ),
-                        record( "constraint_1000", "CONSTRAINT ON ( user:User ) ASSERT (user.name) IS UNIQUE" )
-                ) );
+        assertThat( call( "db.constraints" ) ).contains(
+                record( "MyExistenceConstraint",
+                        "CONSTRAINT ON ( user:User ) ASSERT exists(user.name)",
+                        "Constraint( name='MyExistenceConstraint', type='NODE PROPERTY EXISTENCE', schema=(:User {name}) )" ),
+                record( "MyNodeKeyConstraint",
+                        "CONSTRAINT ON ( user:User ) ASSERT (user.name) IS NODE KEY",
+                        "Constraint( name='MyNodeKeyConstraint', type='NODE KEY', schema=(:User {name}) )" ),
+                record( "constraint_1000",
+                        "CONSTRAINT ON ( user:User ) ASSERT (user.name) IS UNIQUE",
+                        "Constraint( name='constraint_1000', type='UNIQUENESS', schema=(:User {name}) )" )
+        );
     }
 
     @Test
@@ -322,19 +345,22 @@ class BuiltInProceduresTest
 
         // When/Then
         List<Object[]> call = call( "db.constraints" );
-        assertThat( call,
-                contains(
-                        record( "MyExistenceConstraint", "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT exists(`foo:bar`.x.y)" ),
-                        record( "constraint_1000", "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT (`foo:bar`.x.y) IS UNIQUE" ) ) );
+        assertThat( call ).contains(
+                record( "MyExistenceConstraint",
+                        "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT exists(`foo:bar`.x.y)",
+                        "Constraint( name='MyExistenceConstraint', type='NODE PROPERTY EXISTENCE', schema=(:`FOO:BAR` {x.y}) )" ),
+                record( "constraint_1000",
+                        "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT (`foo:bar`.x.y) IS UNIQUE",
+                        "Constraint( name='constraint_1000', type='UNIQUENESS', schema=(:`FOO:BAR` {x.y}) )" ) );
     }
 
     @Test
     void shouldListSystemComponents() throws Throwable
     {
         // When/Then
-        assertThat( call( "dbms.components" ), contains(
+        assertThat( call( "dbms.components" ) ).contains(
                 record( "Neo4j Kernel", singletonList( "1.3.37" ), "community" )
-        ) );
+        );
     }
 
     @Test
@@ -376,7 +402,12 @@ class BuiltInProceduresTest
     @Test
     void shouldPing() throws ProcedureException, IndexNotFoundKernelException
     {
+<<<<<<< HEAD
         assertThat( call( "db.ping" ), contains( record( Boolean.TRUE ) ) );
+=======
+        assertThat( call( "db.ping" ) ).containsExactly(
+                record( Boolean.TRUE ) );
+>>>>>>> neo4j/4.1
     }
 
     @Test
@@ -402,20 +433,86 @@ class BuiltInProceduresTest
         when( resolver.resolveDependency( Config.class ) ).thenReturn( mockConfig );
 
         // When / Then
+<<<<<<< HEAD
         assertThat( call( "dbms.clientConfig" ), containsInAnyOrder(
+=======
+        assertThat( call( "dbms.clientConfig" ) ).containsExactlyInAnyOrder(
+>>>>>>> neo4j/4.1
                 record( "browser.allow_outgoing_connections", "browser.allow_outgoing_connections, a string", "", false ),
                 record( "browser.credential_timeout", "browser.credential_timeout, a string", "", false ),
                 record( "browser.retain_connection_credentials", "browser.retain_connection_credentials, a string", "", false ),
                 record( "dbms.security.auth_enabled", "dbms.security.auth_enabled, a string", "", false ),
                 record( "browser.remote_content_hostname_whitelist", "browser.remote_content_hostname_whitelist, a string", "", false ),
                 record( "browser.post_connect_cmd", "browser.post_connect_cmd, a string", "", false ),
+<<<<<<< HEAD
                 record( "dbms.default_database", "dbms.default_database, a string", "", false ))
         );
     }
 
     private static Matcher<Object[]> record( Object... fields )
+=======
+                record( "dbms.default_database", "dbms.default_database, a string", "", false )
+        );
+    }
+
+    @Test
+    void shouldNotListSystemGraphComponentsIfNotSystemDb()
     {
-        return equalTo( fields );
+        when( callContext.isSystemDatabase() ).thenReturn( false );
+
+        assertThatThrownBy( () -> call( "dbms.upgradeStatus" ) )
+                .isInstanceOf( ProcedureException.class )
+                .hasMessage( "This is an administration command and it should be executed against the system database: dbms.upgradeStatus" );
+    }
+
+    @Test
+    void shouldListSystemGraphComponents() throws ProcedureException, IndexNotFoundKernelException
+    {
+        setupFakeSystemComponents();
+        when( callContext.isSystemDatabase() ).thenReturn( true );
+
+        var r = call( "dbms.upgradeStatus" ).iterator();
+        assertThat( r.hasNext() ).isEqualTo( true ).describedAs( "Expected one result" );
+        Object[] row = r.next();
+        String status = resultAsString( row, 0 );
+        String description = resultAsString( row, 1 );
+        String resolution = resultAsString( row, 2 );
+        assertThat( r.hasNext() ).isEqualTo( false ).describedAs( "Expected only one result" );
+        assertThat( status ).contains( SystemGraphComponent.Status.REQUIRES_UPGRADE.name() );
+        assertThat( description ).contains( SystemGraphComponent.Status.REQUIRES_UPGRADE.description() );
+        assertThat( resolution ).contains( SystemGraphComponent.Status.REQUIRES_UPGRADE.resolution() );
+    }
+
+    @Test
+    void shouldNotUpgradeSystemGraphIfNotSystemDb()
+    {
+        when( callContext.isSystemDatabase() ).thenReturn( false );
+
+        assertThatThrownBy( () -> call( "dbms.upgrade" ) )
+                .isInstanceOf( ProcedureException.class )
+                .hasMessage( "This is an administration command and it should be executed against the system database: dbms.upgrade" );
+    }
+
+    @Test
+    void shouldUpgradeSystemGraph() throws ProcedureException, IndexNotFoundKernelException
+    {
+        setupFakeSystemComponents();
+        when( callContext.isSystemDatabase() ).thenReturn( true );
+
+        var r = call( "dbms.upgrade" ).iterator();
+        assertThat( r.hasNext() ).isEqualTo( true ).describedAs( "Expected one result" );
+        Object[] row = r.next();
+        String status = resultAsString( row, 0 );
+        String result = resultAsString( row, 1 );
+        assertThat( r.hasNext() ).isEqualTo( false ).describedAs( "Expected only one result" );
+        assertThat( status ).contains( SystemGraphComponent.Status.REQUIRES_UPGRADE.name() );
+        assertThat( result ).contains( "Failed: [component_D] Upgrade failed because this is a test" );
+    }
+
+    private static Object[] record( Object... fields )
+>>>>>>> neo4j/4.1
+    {
+        return fields;
     }
 
     private void givenIndex( String label, String propKey )
@@ -550,14 +647,14 @@ class BuiltInProceduresTest
 
         when( graphDatabaseAPI.getDependencyResolver() ).thenReturn( resolver );
         when( resolver.resolveDependency( GraphDatabaseAPI.class ) ).thenReturn( graphDatabaseAPI );
-        when( resolver.resolveDependency( GlobalProceduresRegistry.class ) ).thenReturn( procs );
+        when( resolver.resolveDependency( GlobalProcedures.class ) ).thenReturn( procs );
         when( resolver.resolveDependency( IndexingService.class ) ).thenReturn( indexingService );
         when( schemaReadCore.indexGetPopulationProgress( any( IndexDescriptor.class) ) ).thenReturn( PopulationProgress.DONE );
         AnyValue[] input = Arrays.stream( args ).map( ValueUtils::of ).toArray( AnyValue[]::new );
         int procId = procs.procedure( ProcedureSignature.procedureName( name.split( "\\." ) ) ).id();
         List<AnyValue[]> anyValues =
                 Iterators.asList( procs.callProcedure( ctx, procId, input, EMPTY_RESOURCE_TRACKER ) );
-        ArrayList<Object[]> toReturn = new ArrayList<>( anyValues.size() );
+        List<Object[]> toReturn = new ArrayList<>( anyValues.size() );
         for ( AnyValue[] anyValue : anyValues )
         {
             Object[] values = new Object[anyValue.length];
@@ -569,5 +666,48 @@ class BuiltInProceduresTest
             toReturn.add( values );
         }
         return toReturn;
+    }
+
+    private String resultAsString( Object[] row, int index  )
+    {
+        Object result = row[index];
+        if ( result instanceof TextValue )
+        {
+            return ((TextValue) result).stringValue();
+        }
+        else if ( result instanceof Value )
+        {
+            return ((Value) result).asObjectCopy().toString();
+        }
+        else
+        {
+            return result.toString();
+        }
+    }
+
+    private SystemGraphComponent makeSystemComponentCurrent( String component )
+    {
+        return new TestSystemGraphComponent( component, SystemGraphComponent.Status.CURRENT, null, null );
+    }
+
+    @SuppressWarnings( "SameParameterValue" )
+    private SystemGraphComponent makeSystemComponentUpgradeSucceeds( String component )
+    {
+        return new TestSystemGraphComponent( component, SystemGraphComponent.Status.REQUIRES_UPGRADE, null, null );
+    }
+
+    @SuppressWarnings( "SameParameterValue" )
+    private SystemGraphComponent makeSystemComponentUpgradeFails( String component )
+    {
+        return new TestSystemGraphComponent( component, SystemGraphComponent.Status.REQUIRES_UPGRADE, null,
+                                             new RuntimeException( "Upgrade failed because this is a test" ) );
+    }
+
+    private void setupFakeSystemComponents()
+    {
+        systemGraphComponents.register( makeSystemComponentCurrent( "component_A" ) );
+        systemGraphComponents.register( makeSystemComponentCurrent( "component_B" ) );
+        systemGraphComponents.register( makeSystemComponentUpgradeSucceeds( "component_C" ) );
+        systemGraphComponents.register( makeSystemComponentUpgradeFails( "component_D" ) );
     }
 }

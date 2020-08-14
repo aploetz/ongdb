@@ -28,14 +28,11 @@ import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.impl.SingleFilePageSwapperFactory;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
-import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracerSupplier;
 import org.neo4j.io.pagecache.tracing.cursor.context.EmptyVersionContextSupplier;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.test.scheduler.ThreadPoolJobScheduler;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 
 /**
@@ -63,7 +60,6 @@ public class PageCacheStressTest
     private final int numberOfCachePages;
 
     private final PageCacheTracer tracer;
-    private final PageCursorTracerSupplier pageCursorTracerSupplier;
     private final Condition condition;
 
     private final File workingDirectory;
@@ -76,7 +72,6 @@ public class PageCacheStressTest
         this.numberOfCachePages = builder.numberOfCachePages;
 
         this.tracer = builder.tracer;
-        this.pageCursorTracerSupplier = builder.pageCursorTracerSupplier;
         this.condition = builder.condition;
 
         this.workingDirectory = builder.workingDirectory;
@@ -87,14 +82,12 @@ public class PageCacheStressTest
         try ( FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
               JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
-            PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory();
-            swapperFactory.open( fs );
+            PageSwapperFactory swapperFactory = new SingleFilePageSwapperFactory( fs );
             try ( PageCache pageCacheUnderTest = new MuninnPageCache(
-                    swapperFactory, numberOfCachePages, tracer, pageCursorTracerSupplier, EmptyVersionContextSupplier.EMPTY, jobScheduler ) )
+                    swapperFactory, numberOfCachePages, tracer, EmptyVersionContextSupplier.EMPTY, jobScheduler ) )
             {
-                PageCacheStresser pageCacheStresser =
-                        new PageCacheStresser( numberOfPages, numberOfThreads, workingDirectory );
-                pageCacheStresser.stress( pageCacheUnderTest, condition );
+                PageCacheStresser pageCacheStresser = new PageCacheStresser( numberOfPages, numberOfThreads, workingDirectory );
+                pageCacheStresser.stress( pageCacheUnderTest, tracer, condition );
             }
         }
     }
@@ -107,15 +100,15 @@ public class PageCacheStressTest
         int numberOfCachePages = 1000;
 
         PageCacheTracer tracer = NULL;
-        PageCursorTracerSupplier pageCursorTracerSupplier = PageCursorTracerSupplier.NULL;
         Condition condition;
 
         File workingDirectory;
 
         public PageCacheStressTest build()
         {
-            assertThat( "the cache should cover only a fraction of the mapped file",
-                    numberOfPages, is( greaterThanOrEqualTo( 10 * numberOfCachePages ) ) );
+            assertThat( numberOfPages )
+                    .describedAs( "the cache should cover only a fraction of the mapped file" )
+                    .isGreaterThanOrEqualTo( 10 * numberOfCachePages );
             return new PageCacheStressTest( this );
         }
 
@@ -152,12 +145,6 @@ public class PageCacheStressTest
         public Builder withWorkingDirectory( File workingDirectory )
         {
             this.workingDirectory = workingDirectory;
-            return this;
-        }
-
-        public Builder withPageCursorTracerSupplier( PageCursorTracerSupplier cursorTracerSupplier )
-        {
-            this.pageCursorTracerSupplier = cursorTracerSupplier;
             return this;
         }
     }

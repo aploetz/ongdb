@@ -19,16 +19,20 @@
  */
 package org.neo4j.cypher.internal.procs
 
+import org.neo4j.cypher.internal.ExecutionPlan
+import org.neo4j.cypher.internal.RuntimeName
+import org.neo4j.cypher.internal.SystemCommandRuntimeName
 import org.neo4j.cypher.internal.plandescription.Argument
-import org.neo4j.cypher.internal.runtime.{ExecutionMode, InputDataStream, QueryContext}
-import org.neo4j.cypher.internal.v4_0.util.InternalNotification
-import org.neo4j.cypher.internal.{ExecutionPlan, RuntimeName, SystemCommandRuntimeName}
+import org.neo4j.cypher.internal.runtime.ExecutionMode
+import org.neo4j.cypher.internal.runtime.InputDataStream
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.util.InternalNotification
 import org.neo4j.cypher.result.RuntimeResult
 import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.values.virtual.MapValue
 
-case class LoggingSystemCommandExecutionPlan(source: ExecutionPlan, commandString: String, securityContext: SecurityContext, logger: (String, SecurityContext) => Unit) extends ExecutionPlan {
+case class LoggingSystemCommandExecutionPlan(source: ExecutionPlan, commandString: String, logger: (String, SecurityContext) => Unit) extends ExecutionPlan {
   override def run(ctx: QueryContext,
                    executionMode: ExecutionMode,
                    params: MapValue,
@@ -36,6 +40,7 @@ case class LoggingSystemCommandExecutionPlan(source: ExecutionPlan, commandStrin
                    ignore: InputDataStream,
                    subscriber: QuerySubscriber): RuntimeResult = {
 
+    val securityContext = ctx.transactionalContext.transaction.securityContext()
     val sourceResult = source.run(ctx, executionMode, params, prePopulateResults, ignore, subscriber)
     sourceResult match {
       case IgnoredRuntimeResult =>

@@ -19,13 +19,6 @@
  */
 package org.neo4j.internal.batchimport;
 
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.Resources;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -38,6 +31,15 @@ import java.util.UUID;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+>>>>>>> neo4j/4.1
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
@@ -68,6 +70,7 @@ import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.pagecache.tracing.DefaultPageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.standard.Standard;
 import org.neo4j.kernel.impl.transaction.log.files.TransactionLogInitializer;
@@ -87,6 +90,7 @@ import org.neo4j.values.storable.Values;
 
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -99,6 +103,7 @@ import static org.neo4j.internal.helpers.collection.Iterables.count;
 import static org.neo4j.internal.helpers.collection.Iterables.stream;
 import static org.neo4j.internal.helpers.collection.Iterators.asSet;
 import static org.neo4j.io.ByteUnit.mebiBytes;
+import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 
 @Neo4jLayoutExtension
 @ExtendWith( {RandomExtension.class, SuppressOutputExtension.class} )
@@ -175,12 +180,18 @@ public class ParallelBatchImporterTest
         IdGroupDistribution groupDistribution = new IdGroupDistribution( NODE_COUNT, NUMBER_OF_ID_GROUPS, random.random(), groups );
         long nodeRandomSeed = random.nextLong();
         long relationshipRandomSeed = random.nextLong();
+        var pageCacheTracer = new DefaultPageCacheTracer();
         JobScheduler jobScheduler = new ThreadPoolJobScheduler();
         // This will have statistically half the nodes be considered dense
         Config dbConfig = Config.defaults( GraphDatabaseSettings.dense_node_threshold, RELATIONSHIPS_PER_NODE * 2 );
         final BatchImporter inserter = new ParallelBatchImporter(
+<<<<<<< HEAD
                 databaseLayout, fs, null, config, NullLogService.getInstance(), monitor, EMPTY, dbConfig, getFormat(), ImportLogic.NO_MONITOR, jobScheduler,
                 Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer() );
+=======
+                databaseLayout, fs, null, pageCacheTracer, config, NullLogService.getInstance(), monitor, EMPTY, dbConfig, getFormat(),
+                ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer(), INSTANCE );
+>>>>>>> neo4j/4.1
         LongAdder propertyCount = new LongAdder();
         LongAdder relationshipCount = new LongAdder();
         try
@@ -197,6 +208,10 @@ public class ParallelBatchImporterTest
                             NODE_COUNT * TOKENS.length / 2 * Long.BYTES,
                             RELATIONSHIP_COUNT * TOKENS.length / 2 * Long.BYTES,
                             NODE_COUNT * TOKENS.length / 2 ), groups ) );
+
+            assertThat( pageCacheTracer.pins() ).isGreaterThan( 0 );
+            assertThat( pageCacheTracer.pins() ).isEqualTo( pageCacheTracer.unpins() );
+            assertThat( pageCacheTracer.pins() ).isEqualTo( Math.addExact( pageCacheTracer.faults(), pageCacheTracer.hits() ) );
 
             // THEN
             DatabaseManagementService managementService = getDBMSBuilder( databaseLayout ).build();
@@ -371,7 +386,8 @@ public class ParallelBatchImporterTest
         try ( InputIterator nodes = nodes( nodeRandomSeed, nodeCount, config.batchSize(), inputIdGenerator, groups, propertyCount ).iterator();
             InputIterator relationships = relationships( relationshipRandomSeed, relationshipCount,
                 config.batchSize(), inputIdGenerator, groups ,
-            propertyCount, new LongAdder() ).iterator(); ResourceIterator<Node> dbNodes = tx.getAllNodes().iterator() )
+            propertyCount, new LongAdder() ).iterator();
+            ResourceIterator<Node> dbNodes = tx.getAllNodes().iterator() )
         {
             // Nodes
             Map<String, Node> nodeByInputId = new HashMap<>( nodeCount );

@@ -19,11 +19,24 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.exceptions.{InternalException, ParameterWrongTypeException}
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.IsNoValue
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.CursorIterator
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExpandIntoPipe.getRowNode
+import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExpandIntoPipe.relationshipIterator
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.exceptions.ParameterWrongTypeException
+import org.neo4j.graphdb.Direction
+import org.neo4j.internal.kernel.api.RelationshipTraversalCursor
+import org.neo4j.internal.kernel.api.helpers.CachingExpandInto
+import org.neo4j.values.AnyValue
+import org.neo4j.values.storable.Values.NO_VALUE
 import org.neo4j.values.virtual.NodeValue
+import org.neo4j.values.virtual.RelationshipValue
+
+import scala.collection.Iterator
 
 /**
  * Expand when both end-points are known, find all relationships of the given
@@ -41,14 +54,24 @@ case class ExpandIntoPipe(source: Pipe,
                           dir: SemanticDirection,
                           lazyTypes: RelationshipTypes)
                           (val id: Id = Id.INVALID_ID)
-  extends PipeWithSource(source) with CachingExpandInto {
+  extends PipeWithSource(source) {
   self =>
-  private final val CACHE_SIZE = 100000
+  private val kernelDirection = dir match {
+    case SemanticDirection.OUTGOING => Direction.OUTGOING
+    case SemanticDirection.INCOMING => Direction.INCOMING
+    case SemanticDirection.BOTH => Direction.BOTH
+  }
 
+<<<<<<< HEAD
   protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
     //cache of known connected nodes
     val relCache = new RelationshipsCache(CACHE_SIZE, state.memoryTracker)
+=======
+  protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
+    val query = state.query
+>>>>>>> neo4j/4.1
 
+    val expandInto = new CachingExpandInto(query.transactionalContext.dataRead, kernelDirection, state.memoryTracker.memoryTrackerForOperator(id.x))
     input.flatMap {
       row =>
         val fromNode = getRowNode(row, fromName)
@@ -58,17 +81,57 @@ case class ExpandIntoPipe(source: Pipe,
             toNode match {
               case IsNoValue() => Iterator.empty
               case n: NodeValue =>
-
-                val relationships = relCache.get(fromNode, n, dir)
-                  .getOrElse(findRelationships(state, fromNode, n, relCache, dir, lazyTypes.types(state.query)))
-
-                if (relationships.isEmpty) Iterator.empty
-                else relationships.map(r => executionContextFactory.copyWith(row, relName, r))
-              case value => throw new ParameterWrongTypeException(s"Expected to find a node at '$fromName' but found $value instead")
+                val traversalCursor = query.traversalCursor()
+                val nodeCursor = query.nodeCursor()
+                try {
+                  val selectionCursor = expandInto.connectingRelationships(nodeCursor,
+                                                                           traversalCursor,
+                                                                           fromNode.id(),
+                                                                           lazyTypes.types(query),
+                                                                           n.id())
+                  query.resources.trace(selectionCursor)
+                  val relationships = relationshipIterator(selectionCursor, query)
+                  if (relationships.isEmpty) Iterator.empty
+                  else relationships.map(r => executionContextFactory.copyWith(row, relName, r))
+                } finally {
+                  nodeCursor.close()
+                }
+              case value =>
+                throw new ParameterWrongTypeException(
+                  s"Expected to find a node at '$fromName' but found $value instead")
             }
 
           case IsNoValue() => Iterator.empty
         }
+    }
+  }
+}
+
+object ExpandIntoPipe {
+
+  def relationshipIterator(cursor: RelationshipTraversalCursor,
+                           query: QueryContext): Iterator[RelationshipValue] = {
+    new CursorIterator[RelationshipValue] {
+
+      override protected def fetchNext(): RelationshipValue = {
+        if (cursor.next()) {
+          query.relationshipById(cursor.relationshipReference(), cursor.sourceNodeReference(), cursor.targetNodeReference(),
+                           cursor.`type`())
+        } else {
+          null
+        }
+      }
+
+      override protected def close(): Unit = cursor.close()
+    }
+  }
+
+  @inline
+  def getRowNode(row: CypherRow, col: String): AnyValue = {
+    row.getByName(col) match {
+      case n: NodeValue => n
+      case IsNoValue() => NO_VALUE
+      case value => throw new ParameterWrongTypeException(s"Expected to find a node at '$col' but found $value instead")
     }
   }
 }

@@ -19,18 +19,39 @@
  */
 package org.neo4j.cypher.internal.runtime
 
+import org.neo4j.cypher.internal.ast.AstConstructionTestSupport
+import org.neo4j.cypher.internal.expressions.AllIterablePredicate
+import org.neo4j.cypher.internal.expressions.CachedProperty
+import org.neo4j.cypher.internal.expressions.ContainerIndex
+import org.neo4j.cypher.internal.expressions.Expression
+import org.neo4j.cypher.internal.expressions.FilterScope
+import org.neo4j.cypher.internal.expressions.In
+import org.neo4j.cypher.internal.expressions.LogicalVariable
+import org.neo4j.cypher.internal.expressions.NODE_TYPE
+import org.neo4j.cypher.internal.expressions.Property
+import org.neo4j.cypher.internal.expressions.PropertyKeyName
+import org.neo4j.cypher.internal.expressions.SemanticDirection
+import org.neo4j.cypher.internal.expressions.Variable
 import org.neo4j.cypher.internal.ir.VarPatternLength
+import org.neo4j.cypher.internal.logical.plans.Argument
+import org.neo4j.cypher.internal.logical.plans.ExpandAll
+import org.neo4j.cypher.internal.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.logical.plans.NestedPlanCollectExpression
+import org.neo4j.cypher.internal.logical.plans.Projection
+import org.neo4j.cypher.internal.logical.plans.PruningVarExpand
+import org.neo4j.cypher.internal.logical.plans.Selection
+import org.neo4j.cypher.internal.logical.plans.VarExpand
+import org.neo4j.cypher.internal.logical.plans.VariablePredicate
+import org.neo4j.cypher.internal.parser.Expressions
 import org.neo4j.cypher.internal.runtime.ast.ExpressionVariable
 import org.neo4j.cypher.internal.runtime.expressionVariableAllocation.Result
-import org.neo4j.cypher.internal.v4_0.ast.AstConstructionTestSupport
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.{Expression, _}
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.v4_0.parser.Expressions
-import org.neo4j.cypher.internal.v4_0.util.attribution.{IdGen, SequentialIdGen}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.{Rewriter, topDown}
-import org.parboiled.scala.{ReportingParseRunner, Rule1}
+import org.neo4j.cypher.internal.util.Rewriter
+import org.neo4j.cypher.internal.util.attribution.IdGen
+import org.neo4j.cypher.internal.util.attribution.SequentialIdGen
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.util.topDown
+import org.parboiled.scala.ReportingParseRunner
+import org.parboiled.scala.Rule1
 
 import scala.collection.mutable
 
@@ -197,7 +218,7 @@ class ExpressionVariableAllocationTest extends CypherFunSuite with AstConstructi
     // given
     val nestedExpression = exprParser.parse("reduce(acc = 0, x IN [1,2,3] | acc + x )")
     val nestedPlan = projectPlan(nestedExpression)
-    val nestedPlanExpression = NestedPlanExpression(nestedPlan, varFor("x1"))(pos)
+    val nestedPlanExpression = NestedPlanCollectExpression(nestedPlan, varFor("x1"))(pos)
 
     val outerExpression = allInList("y", nestedPlanExpression, exprParser.parse("[1,2,3]"))
     val outerPlan = projectPlan(outerExpression)
@@ -218,11 +239,11 @@ class ExpressionVariableAllocationTest extends CypherFunSuite with AstConstructi
     // given
     val nestedNestedExpression = exprParser.parse("reduce(acc = 0, x IN [1,2,3] | acc + x )")
     val nestedNestedPlan = projectPlan(nestedNestedExpression)
-    val nestedNestedPlanExpression = NestedPlanExpression(nestedNestedPlan, varFor("x1"))(pos)
+    val nestedNestedPlanExpression = NestedPlanCollectExpression(nestedNestedPlan, varFor("x1"))(pos)
 
     val nestedExpression = allInList("yNested", nestedNestedPlanExpression, exprParser.parse("[1,2,3]"))
     val nestedPlan = projectPlan(nestedExpression)
-    val nestedPlanExpression = NestedPlanExpression(nestedPlan, varFor("x1"))(pos)
+    val nestedPlanExpression = NestedPlanCollectExpression(nestedPlan, varFor("x1"))(pos)
 
     val outerExpression = allInList("y", nestedPlanExpression, exprParser.parse("[1,2,3]"))
     val outerPlan = projectPlan(outerExpression)
@@ -245,7 +266,7 @@ class ExpressionVariableAllocationTest extends CypherFunSuite with AstConstructi
 
   test("nested plan with no available expression variables") {
     // given
-    val nestedPlanExpression = NestedPlanExpression(Argument(), varFor("y"))(pos)
+    val nestedPlanExpression = NestedPlanCollectExpression(Argument(), varFor("y"))(pos)
     val listComprehension = exprParser.parse("[ x IN [1,2,3] | x + 1]")
     val projection = projectPlan(nestedPlanExpression, listComprehension)
 

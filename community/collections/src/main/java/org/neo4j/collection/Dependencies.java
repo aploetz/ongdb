@@ -73,7 +73,7 @@ public class Dependencies extends DependencyResolver.Adapter implements Dependen
     }
 
     @Override
-    public <T> Iterable<? extends T> resolveTypeDependencies( Class<T> type )
+    public <T> Iterable<T> resolveTypeDependencies( Class<T> type )
     {
         MutableSet<T> options = (MutableSet<T>) typeDependencies.get( type );
         if ( parent != null )
@@ -107,6 +107,20 @@ public class Dependencies extends DependencyResolver.Adapter implements Dependen
         addInterfaces( type, dependency );
 
         return dependency;
+    }
+
+    @Override
+    public boolean containsDependency( Class<?> type )
+    {
+        if ( typeDependencies.containsKey( type ) )
+        {
+            return true;
+        }
+        if ( parent != null )
+        {
+            return parent.containsDependency( type );
+        }
+        return false;
     }
 
     private <T> void addInterfaces( Class<?> type, T dependency )

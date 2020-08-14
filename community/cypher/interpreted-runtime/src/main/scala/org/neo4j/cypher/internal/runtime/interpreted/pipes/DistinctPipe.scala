@@ -19,42 +19,50 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-import org.neo4j.cypher.internal.runtime.ExecutionContext
+import org.neo4j.cypher.internal.runtime.CypherRow
+import org.neo4j.cypher.internal.runtime.PrefetchingIterator
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.DistinctPipe.GroupingCol
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
+import org.neo4j.cypher.internal.util.attribution.Id
+import org.neo4j.kernel.impl.util.collection.DistinctSet
 import org.neo4j.values.AnyValue
-import org.neo4j.values.virtual.VirtualValues
-
-import scala.collection.mutable
+import org.neo4j.values.virtual.ListValueBuilder
 
 case class DistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol])
                        (val id: Id = Id.INVALID_ID) extends PipeWithSource(source) {
 
-  groupingColumns.map(_.expression).foreach(_.registerOwningPipe(this))
-
   private val keyNames = groupingColumns.map(_.key)
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                      state: QueryState): Iterator[ExecutionContext] = {
-    /*
-     * The filtering is done by extracting from the context the values of all return expressions, and keeping them
-     * in a set.
-     */
-    val seen = mutable.Set[AnyValue]()
+  protected def internalCreateResults(input: Iterator[CypherRow],
+                                      state: QueryState): Iterator[CypherRow] = {
+    new PrefetchingIterator[CypherRow] {
+      /*
+       * The filtering is done by extracting from the context the values of all return expressions, and keeping them
+       * in a set.
+       */
+      private var seen = DistinctSet.createDistinctSet[AnyValue](state.memoryTracker.memoryTrackerForOperator(id.x))
 
-    input.filter { ctx =>
-      var i = 0
-      while (i < groupingColumns.length) {
-        ctx.set(groupingColumns(i).key, groupingColumns(i).expression(ctx, state))
-        i += 1
+      override def produceNext(): Option[CypherRow] = {
+        while (input.hasNext) {
+          val next: CypherRow = input.next()
+
+          var i = 0
+          while (i < groupingColumns.length) {
+            next.set(groupingColumns(i).key, groupingColumns(i).expression(next, state))
+            i += 1
+          }
+          val builder = ListValueBuilder.newListBuilder(keyNames.length)
+          keyNames.foreach(name => builder.add(next.getByName(name)))
+          val groupingValue = builder.build()
+
+          if (seen.add(groupingValue)) {
+            return Some(next)
+          }
+        }
+        seen.close()
+        seen = null
+        None
       }
-      val groupingValue = VirtualValues.list(keyNames.map(ctx.getByName): _*)
-      val added = seen.add(groupingValue)
-      if (added) {
-        state.memoryTracker.allocated(groupingValue)
-      }
-      added
     }
   }
 

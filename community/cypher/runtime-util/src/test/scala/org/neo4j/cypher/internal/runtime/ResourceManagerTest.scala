@@ -20,9 +20,12 @@
 package org.neo4j.cypher.internal.runtime
 
 import org.mockito.ArgumentMatchers.anyInt
-import org.mockito.Mockito.{verify, verifyNoMoreInteractions, when}
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.internal.kernel.api.{AutoCloseablePlus, CloseListener}
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
+import org.mockito.Mockito.when
+import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
+import org.neo4j.internal.kernel.api.AutoCloseablePlus
+import org.neo4j.internal.kernel.api.CloseListener
 
 import scala.util.Try
 

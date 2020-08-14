@@ -45,10 +45,10 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.rule.ImpermanentDbmsRule;
 import org.neo4j.values.storable.Values;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.neo4j.internal.schema.SchemaDescriptor.forLabel;
-import static org.neo4j.test.assertion.Assert.assertException;
 
 @RunWith( Parameterized.class )
 public class CompositeUniquenessConstraintValidationIT
@@ -139,9 +139,9 @@ public class CompositeUniquenessConstraintValidationIT
         transaction.schemaWrite().constraintDrop( constraintDescriptor );
         commit();
 
-        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.implicit, LoginContext.AUTH_DISABLED ) )
+        try ( KernelTransaction tx = kernel.beginTransaction( KernelTransaction.Type.IMPLICIT, LoginContext.AUTH_DISABLED ) )
         {
-            try ( NodeCursor node = tx.cursors().allocateNodeCursor() )
+            try ( NodeCursor node = tx.cursors().allocateNodeCursor( tx.pageCursorTracer() ) )
             {
                 tx.dataRead().allNodesScan( node );
                 while ( node.next() )
@@ -233,11 +233,8 @@ public class CompositeUniquenessConstraintValidationIT
             setProperty( n2, prop, aValues[prop] ); // still ok
         }
 
-        assertException( () ->
-        {
-            setProperty( n2, lastPropertyOffset, aValues[lastPropertyOffset] ); // boom!
-
-        }, UniquePropertyValueValidationException.class );
+        assertThatThrownBy( () -> setProperty( n2, lastPropertyOffset, aValues[lastPropertyOffset] ) ).isInstanceOf(
+                UniquePropertyValueValidationException.class );
 
         // Then should fail
         commit();
@@ -259,11 +256,8 @@ public class CompositeUniquenessConstraintValidationIT
             setProperty( node, prop, aValues[prop] ); // still ok
         }
 
-        assertException( () ->
-        {
-            setProperty( node, lastPropertyOffset, aValues[lastPropertyOffset] ); // boom!
-
-        }, UniquePropertyValueValidationException.class );
+        assertThatThrownBy( () -> setProperty( node, lastPropertyOffset, aValues[lastPropertyOffset] ) ).isInstanceOf(
+                UniquePropertyValueValidationException.class );
         commit();
     }
 
@@ -278,11 +272,7 @@ public class CompositeUniquenessConstraintValidationIT
         long node = createNode();
         setProperties( node, bValues ); // ok because no label is set
 
-        assertException( () ->
-        {
-            addLabel( node, label ); // boom!
-
-        }, UniquePropertyValueValidationException.class );
+        assertThatThrownBy( () -> addLabel( node, label ) ).isInstanceOf( UniquePropertyValueValidationException.class );
         commit();
     }
 
@@ -301,10 +291,8 @@ public class CompositeUniquenessConstraintValidationIT
             setProperty( nodeB, prop, bValues[prop] ); // still ok
         }
 
-        assertException( () ->
-        {
-            setProperty( nodeB, lastPropertyOffset, bValues[lastPropertyOffset] ); // boom!
-        }, UniquePropertyValueValidationException.class );
+        assertThatThrownBy( () -> setProperty( nodeB, lastPropertyOffset, bValues[lastPropertyOffset] ) )
+                .isInstanceOf( UniquePropertyValueValidationException.class );
         commit();
     }
 
@@ -319,11 +307,7 @@ public class CompositeUniquenessConstraintValidationIT
         long nodeB = createNode();
         setProperties( nodeB, bValues );
 
-        assertException( () ->
-        {
-            addLabel( nodeB, label ); // boom!
-
-        }, UniquePropertyValueValidationException.class );
+        assertThatThrownBy( () -> addLabel( nodeB, label ) ).isInstanceOf( UniquePropertyValueValidationException.class );
         commit();
     }
 
@@ -333,7 +317,7 @@ public class CompositeUniquenessConstraintValidationIT
         {
             fail( "tx already opened" );
         }
-        transaction = kernel.beginTransaction( KernelTransaction.Type.implicit, LoginContext.AUTH_DISABLED );
+        transaction = kernel.beginTransaction( KernelTransaction.Type.IMPLICIT, LoginContext.AUTH_DISABLED );
     }
 
     protected void commit() throws TransactionFailureException
