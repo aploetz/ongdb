@@ -16,7 +16,7 @@
     <packaging>jar</packaging>
     <version>4.0.7-SNAPSHOT</version>
     <name>ONgDB - Enterprise Cypher</name>
-    <description>Neo4j query language</description>
+    <description>ONgDB query language</description>
     <url>https://ongdb.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
 

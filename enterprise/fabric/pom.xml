@@ -10,7 +10,7 @@
     <artifactId>ongdb-fabric</artifactId>
     <version>4.0.7-SNAPSHOT</version>
 
-    <name>Neo4j - Fabric</name>
+    <name>ONgDB - Fabric</name>
 
     <properties>
         <moduleName>org.graphfoundation.ongdb.fabric</moduleName>

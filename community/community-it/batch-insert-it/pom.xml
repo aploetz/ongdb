@@ -23,9 +23,9 @@
     </properties>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <licenses>
@@ -59,7 +59,7 @@
             <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
-             <groupId>org.graphfoundation.ongdb.community</groupId>
+            <groupId>org.graphfoundation.ongdb.community</groupId>
             <artifactId>it-test-support</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-dbms</artifactId>
-    <name>ongdb- Database Management System</name>
+    <name>ONgDB - Database Management System</name>
 
     <properties>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>

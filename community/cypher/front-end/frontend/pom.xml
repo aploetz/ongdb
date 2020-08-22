@@ -26,12 +26,12 @@
         See https://www.opencypher.org for more information on the openCypher project and query language.
     </description>
 
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+    <url>https://components.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <properties>
@@ -52,14 +52,12 @@
         <!-- neo4j -->
 
         <dependency>
-
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
@@ -72,7 +70,6 @@
         </dependency>
 
         <dependency>
-
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
@@ -118,7 +115,6 @@
         </dependency>
 
         <dependency>
-
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>

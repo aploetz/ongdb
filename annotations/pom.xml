@@ -13,22 +13,22 @@
     <artifactId>annotations</artifactId>
     <packaging>jar</packaging>
 
-    <name>Neo4j - Annotation processors</name>
+    <name>ONgDB - Annotation processors</name>
     <description>Annotations and annotation processors used to build Neo4j project.</description>
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+    <url>https://components.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <developers>
         <developer>
-            <id>neo4j</id>
-            <name>The Neo4j Team</name>
-            <url>https://neo4j.com/</url>
-            <organization>Neo4j Inc.</organization>
+            <id>ongdb</id>
+            <name>The ONgDB Team</name>
+            <url>https://graphfoundation.org/</url>
+            <organization>Graph Foundation</organization>
             <organizationUrl>https://neo4j.com/</organizationUrl>
         </developer>
     </developers>

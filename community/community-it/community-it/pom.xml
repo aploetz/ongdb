@@ -27,9 +27,9 @@
     </properties>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <licenses>
@@ -112,7 +112,7 @@
         </dependency>
         <dependency>
             <groupId>org.neo4j.driver</groupId>
-                <artifactId>neo4j-java-driver</artifactId>
+            <artifactId>neo4j-java-driver</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.vintage</groupId>

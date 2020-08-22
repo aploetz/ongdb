@@ -13,14 +13,14 @@
   <modelVersion>4.0.0</modelVersion>
   <artifactId>ongdb-cypher-logical-plan-builder</artifactId>
   <packaging>jar</packaging>
-  <name>Neo4j - Cypher Logical Plan Builder</name>
-  <description>Neo4j - Cypher logical plan builder</description>
-  <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+  <name>ONgDB - Cypher Logical Plan Builder</name>
+  <description>ONgDB - Cypher logical plan builder</description>
+  <url>https://components.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
   <scm>
-    <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-    <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-    <url>https://github.com/neo4j/neo4j</url>
+    <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+    <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+    <url>https://github.com/graphfoundation/ongdb</url>
   </scm>
 
   <properties>
@@ -98,7 +98,7 @@
 
     <dependency>
       <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util</artifactId>
+      <artifactId>ongdb-util</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
     </dependency>
