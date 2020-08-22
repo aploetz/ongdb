@@ -36,23 +36,12 @@ import scala.collection.mutable.ListBuffer
 case class OptionalExpandIntoPipe(source: Pipe, fromName: String, relName: String, toName: String,
                                   dir: SemanticDirection, types: RelationshipTypes, predicate: Option[Expression])
                                  (val id: Id = Id.INVALID_ID)
-<<<<<<< HEAD
-  extends PipeWithSource(source) with CachingExpandInto {
-  private final val CACHE_SIZE = 100000
-
-  predicate.foreach(_.registerOwningPipe(this))
-
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    //cache of known connected nodes
-    val relCache = new RelationshipsCache(CACHE_SIZE, state.memoryTracker)
-=======
   extends PipeWithSource(source)  {
   private val kernelDirection = dir match {
     case SemanticDirection.OUTGOING => Direction.OUTGOING
     case SemanticDirection.INCOMING => Direction.INCOMING
     case SemanticDirection.BOTH => Direction.BOTH
   }
->>>>>>> neo4j/4.1
 
   protected def internalCreateResults(input: Iterator[CypherRow],
                                       state: QueryState): Iterator[CypherRow] = {

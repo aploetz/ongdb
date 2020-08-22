@@ -19,8 +19,6 @@
  */
 package org.neo4j.internal.recordstorage;
 
-import org.apache.commons.lang3.exception.CloneFailedException;
-
 import java.nio.ByteBuffer;
 
 import org.neo4j.io.memory.HeapScopedBuffer;
@@ -374,15 +372,9 @@ public class RecordPropertyCursor extends PropertyRecord implements StoragePrope
     }
 
     @Override
-<<<<<<< HEAD
-    public final PropertyRecord clone()
-    {
-        throw new CloneFailedException( "Record cursors are not cloneable." );
-=======
     public PropertyRecord copy()
     {
         throw new UnsupportedOperationException( "Record cursors are not copyable." );
->>>>>>> neo4j/4.1
     }
 
     @Override

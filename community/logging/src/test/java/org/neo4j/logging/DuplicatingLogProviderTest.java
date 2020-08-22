@@ -64,10 +64,6 @@ class DuplicatingLogProviderTest
 
         // Then
         DuplicatingLog log = logProvider.getLog( "test context" );
-<<<<<<< HEAD
-        assertThat( logProvider.getLog( "test context" ), sameInstance( log ) );
-=======
         assertThat( logProvider.getLog( "test context" ) ).isSameAs( log );
->>>>>>> neo4j/4.1
     }
 }

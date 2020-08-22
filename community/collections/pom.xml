@@ -16,12 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-collections</artifactId>
-=======
-    <artifactId>neo4j-collections</artifactId>
->>>>>>> neo4j/4.1
-
     <packaging>jar</packaging>
     <name>ONgDB - Collections</name>
     <description>Collections and collection utilities for Neo4j.</description>
@@ -60,18 +55,13 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>ongdb-common</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-unsafe</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-common</artifactId>
->>>>>>> neo4j/4.1
+		<dependency>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-unsafe</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

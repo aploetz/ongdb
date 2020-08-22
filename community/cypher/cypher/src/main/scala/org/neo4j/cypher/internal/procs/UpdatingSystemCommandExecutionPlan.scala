@@ -30,10 +30,7 @@ import org.neo4j.cypher.internal.runtime.InputDataStream
 import org.neo4j.cypher.internal.runtime.ProfileMode
 import org.neo4j.cypher.internal.util.InternalNotification
 import org.neo4j.cypher.result.RuntimeResult
-<<<<<<< HEAD
-=======
 import org.neo4j.graphdb.Transaction
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.TransientFailureException
 import org.neo4j.internal.kernel.api.security.AccessMode
 import org.neo4j.internal.kernel.api.security.SecurityContext
@@ -51,16 +48,12 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
                                               systemParams: MapValue,
                                               queryHandler: QueryHandler,
                                               source: Option[ExecutionPlan] = None,
-<<<<<<< HEAD
-                                              checkCredentialsExpired: Boolean = true)
-=======
                                               checkCredentialsExpired: Boolean = true,
                                               initFunction: (MapValue, KernelTransaction) => Boolean = (_, _) => true,
                                               finallyFunction: MapValue => Unit = _ => {},
                                               parameterGenerator: (Transaction, SecurityContext) => MapValue = (_, _) => MapValue.EMPTY,
                                               parameterConverter: (Transaction, MapValue) => MapValue = (_, p) => p,
                                               assertPrivilegeAction: Transaction => Unit = _ => {})
->>>>>>> neo4j/4.1
   extends ChainedExecutionPlan(source) {
 
   override def runSpecific(ctx: SystemUpdateCountingQueryContext,
@@ -74,14 +67,9 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
 
     var revertAccessModeChange: KernelTransaction.Revertable = null
     try {
-<<<<<<< HEAD
-      if (checkCredentialsExpired) tc.securityContext().assertCredentialsNotExpired()
-      val fullAccess = tc.securityContext().withMode(AccessMode.Static.FULL)
-=======
       val securityContext = tc.securityContext()
       if (checkCredentialsExpired) securityContext.assertCredentialsNotExpired()
       val fullAccess = securityContext.withMode(AccessMode.Static.FULL)
->>>>>>> neo4j/4.1
       revertAccessModeChange = tc.kernelTransaction().overrideWith(fullAccess)
       val tx = tc.transaction()
       assertPrivilegeAction(tx)
@@ -95,11 +83,6 @@ case class UpdatingSystemCommandExecutionPlan(name: String,
           systemSubscriber.onError(e)
       }
       systemSubscriber.assertNotFailed()
-<<<<<<< HEAD
-
-      val execution = normalExecutionEngine.executeSubQuery(query, systemParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
-=======
->>>>>>> neo4j/4.1
       try {
         if (initFunction(updatedParams, tc.kernelTransaction())) {
           val execution = normalExecutionEngine.executeSubQuery(query, updatedParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
@@ -156,17 +139,10 @@ class QueryHandlerBuilder(parent: QueryHandler) extends QueryHandler {
 
   override def onNoResults(params: MapValue): Option[Either[Throwable, IgnoreResults]] = parent.onNoResults(params)
 
-<<<<<<< HEAD
-  def handleError(f: Throwable => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
-    override def onError(t: Throwable): Throwable = t match {
-      case t: TransientFailureException => t
-      case _ => f(t)
-=======
   def handleError(f: (Throwable, MapValue) => Throwable): QueryHandlerBuilder = new QueryHandlerBuilder(this) {
     override def onError(t: Throwable, p: MapValue): Throwable = t match {
       case t: TransientFailureException => t
       case _ => f(t, p)
->>>>>>> neo4j/4.1
     }
   }
 

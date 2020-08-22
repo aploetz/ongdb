@@ -19,11 +19,7 @@
  */
 package org.neo4j.internal.kernel.api;
 
-<<<<<<< HEAD
-import org.neo4j.internal.schema.IndexOrder;
-=======
 import org.neo4j.storageengine.api.ReadTracer;
->>>>>>> neo4j/4.1
 
 /**
  * Tracer of kernel API reads. The Kernel will callback the tracer methods on various key events

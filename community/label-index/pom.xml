@@ -16,11 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-label-index</artifactId>
-=======
-    <artifactId>neo4j-label-index</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Label index</name>
@@ -119,21 +115,17 @@
             <artifactId>junit-jupiter</artifactId>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
+            <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>layout-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
+            <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>log-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

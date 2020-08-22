@@ -74,8 +74,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-graphdb-api</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-graphdb-api</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

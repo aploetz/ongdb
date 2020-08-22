@@ -2638,11 +2638,7 @@ public class FullCheckIntegrationTest
     @SuppressWarnings( "unchecked" )
     private <T extends AbstractBaseRecord> T cloneRecord( T record )
     {
-<<<<<<< HEAD
-        return (T) record.clone();
-=======
         return (T) record.copy();
->>>>>>> neo4j/4.1
     }
 
     private PropertyRecord newInitialisedPropertyRecord( IdGenerator next, SchemaRule rule )

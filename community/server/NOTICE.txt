@@ -50,11 +50,8 @@ Apache Software License, Version 2.0
   jackson-databind
   Jackson-JAXRS-base
   Jackson-JAXRS-JSON
-<<<<<<< HEAD
-=======
   Jakarta Bean Validation API
   Java Agent for Memory Measurements
->>>>>>> neo4j/4.1
   Java Concurrency Tools Core Library
   Javassist
   jersey-container-servlet

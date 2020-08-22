@@ -27,11 +27,6 @@ public interface QueryExecutionMonitor
 
     void startExecution( ExecutingQuery query );
 
-<<<<<<< HEAD
-    void endFailure( ExecutingQuery query , String reason );
-
-    void endSuccess( ExecutingQuery query  );
-=======
     void endFailure( ExecutingQuery query, Throwable failure );
 
     void endFailure( ExecutingQuery query, String reason );
@@ -39,7 +34,6 @@ public interface QueryExecutionMonitor
     void endSuccess( ExecutingQuery query );
 
     default void beforeEnd( ExecutingQuery query, boolean success ) {}
->>>>>>> neo4j/4.1
 
     QueryExecutionMonitor NO_OP = new QueryExecutionMonitor()
     {

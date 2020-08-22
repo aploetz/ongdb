@@ -79,12 +79,7 @@ public class PageCacheRule extends ExternalResource
      */
     public PageCache getPageCache( FileSystemAbstraction fs, PageCacheConfig overriddenConfig )
     {
-<<<<<<< HEAD
-        SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory();
-        factory.open( fs );
-=======
         SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory( fs );
->>>>>>> neo4j/4.1
         return getPageCache( factory, overriddenConfig );
     }
 

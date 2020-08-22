@@ -97,11 +97,7 @@ public class GBPTreeCountsStore implements CountsStore
     private volatile boolean started;
 
     public GBPTreeCountsStore( PageCache pageCache, File file, FileSystemAbstraction fileSystem, RecoveryCleanupWorkCollector recoveryCollector,
-<<<<<<< HEAD
-            CountsBuilder initialCountsBuilder, boolean readOnly, Monitor monitor ) throws IOException
-=======
             CountsBuilder initialCountsBuilder, boolean readOnly, PageCacheTracer pageCacheTracer, Monitor monitor ) throws IOException
->>>>>>> neo4j/4.1
     {
         this.readOnly = readOnly;
         this.monitor = monitor;
@@ -109,23 +105,6 @@ public class GBPTreeCountsStore implements CountsStore
         // First just read the header so that we can avoid creating it if this store is read-only
         CountsHeader header = new CountsHeader( NEEDS_REBUILDING_HIGH_ID );
         GBPTree<CountsKey,CountsValue> instantiatedTree;
-<<<<<<< HEAD
-        try
-        {
-            instantiatedTree = instantiateTree( pageCache, file, recoveryCollector, readOnly, header );
-        }
-        catch ( MetadataMismatchException e )
-        {
-            // Corrupt, delete and rebuild
-            fileSystem.deleteFileOrThrow( file );
-            header = new CountsHeader( NEEDS_REBUILDING_HIGH_ID );
-            instantiatedTree = instantiateTree( pageCache, file, recoveryCollector, readOnly, header );
-        }
-        this.tree = instantiatedTree;
-
-        boolean successful = false;
-=======
->>>>>>> neo4j/4.1
         try
         {
             instantiatedTree = instantiateTree( pageCache, file, recoveryCollector, readOnly, header, pageCacheTracer );

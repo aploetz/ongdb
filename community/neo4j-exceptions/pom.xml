@@ -12,11 +12,7 @@
 
     <artifactId>ongdb-exceptions</artifactId>
     <packaging>jar</packaging>
-<<<<<<< HEAD
     <name>ONgDB - Exceptions</name>
-=======
-    <name>Neo4j - Exceptions</name>
->>>>>>> neo4j/4.1
 
     <description>ONgDB exceptions</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>

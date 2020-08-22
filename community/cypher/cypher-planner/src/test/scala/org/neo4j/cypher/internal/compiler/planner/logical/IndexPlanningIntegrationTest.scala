@@ -224,11 +224,7 @@ class IndexPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
       case SemiApply(
              CartesianProduct(_: NodeIndexSeek, _: AllNodesScan),
              Expand(
-<<<<<<< HEAD
-               Selection(_, _: Argument), _, _, _, _, _, _)) => ()
-=======
                Selection(_, _: Argument), _, _, _, _, _, _, _)) => ()
->>>>>>> neo4j/4.1
     }
   }
 

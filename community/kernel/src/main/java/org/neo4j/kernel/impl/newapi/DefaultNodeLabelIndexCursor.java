@@ -25,11 +25,8 @@ import org.eclipse.collections.api.set.primitive.LongSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.security.AccessMode;
-<<<<<<< HEAD
-=======
 import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.schema.IndexOrder;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.api.index.IndexProgressor.EntityTokenClient;
 import org.neo4j.storageengine.api.txstate.LongDiffSets;
@@ -87,14 +84,11 @@ class DefaultNodeLabelIndexCursor extends IndexCursor<IndexProgressor> implement
             }
             removed = mergeToSet( read.txState().addedAndRemovedNodes().getRemoved(), changes.getRemoved() );
         }
-<<<<<<< HEAD
-=======
         else
         {
             useMergeSort = false;
         }
 
->>>>>>> neo4j/4.1
         if ( tracer != null )
         {
             tracer.onLabelScan( label );
@@ -111,11 +105,7 @@ class DefaultNodeLabelIndexCursor extends IndexCursor<IndexProgressor> implement
         initSecurity( label );
     }
 
-<<<<<<< HEAD
-    NodeLabelClient nodeLabelClient()
-=======
     EntityTokenClient nodeLabelClient()
->>>>>>> neo4j/4.1
     {
         return ( reference, labels ) ->
         {
@@ -142,11 +132,7 @@ class DefaultNodeLabelIndexCursor extends IndexCursor<IndexProgressor> implement
         shortcutSecurity = accessMode.allowsTraverseAllNodesWithLabel( label );
     }
 
-<<<<<<< HEAD
-    protected boolean allowed( long reference, LabelSet labels )
-=======
     protected boolean allowed( long reference, TokenSet labels )
->>>>>>> neo4j/4.1
     {
         if ( shortcutSecurity )
         {

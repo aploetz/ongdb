@@ -19,11 +19,7 @@
  */
 package org.neo4j.kernel.impl.newapi;
 
-<<<<<<< HEAD
-import org.neo4j.internal.kernel.api.LabelSet;
-=======
 import org.neo4j.internal.kernel.api.TokenSet;
->>>>>>> neo4j/4.1
 
 class FullAccessNodeLabelIndexCursor extends DefaultNodeLabelIndexCursor
 {
@@ -32,11 +28,7 @@ class FullAccessNodeLabelIndexCursor extends DefaultNodeLabelIndexCursor
         super( pool, nodeCursor );
     }
 
-<<<<<<< HEAD
-    protected boolean allowed( long reference, LabelSet labels )
-=======
     protected boolean allowed( long reference, TokenSet labels )
->>>>>>> neo4j/4.1
     {
         return true;
     }

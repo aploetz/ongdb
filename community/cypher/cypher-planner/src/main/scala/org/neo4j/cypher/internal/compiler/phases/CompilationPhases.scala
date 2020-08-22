@@ -33,26 +33,6 @@ import org.neo4j.cypher.internal.compiler.planner.logical.OptionalMatchRemover
 import org.neo4j.cypher.internal.compiler.planner.logical.QueryPlanner
 import org.neo4j.cypher.internal.compiler.planner.logical.plans.rewriter.PlanRewriter
 import org.neo4j.cypher.internal.compiler.planner.logical.steps.InsertCachedProperties
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.compiler.planner.logical.OptionalMatchRemover
-import org.neo4j.cypher.internal.compiler.planner.logical.QueryPlanner
-import org.neo4j.cypher.internal.compiler.planner.CheckForUnresolvedTokens
-import org.neo4j.cypher.internal.compiler.planner.ResolveTokens
-import org.neo4j.cypher.internal.compiler.MultiDatabaseAdministrationCommandPlanBuilder
-import org.neo4j.cypher.internal.compiler.SchemaCommandPlanBuilder
-import org.neo4j.cypher.internal.compiler.UnsupportedSystemCommand
-import org.neo4j.cypher.internal.ir.UnionQuery
-import org.neo4j.cypher.internal.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v4_0.ast.Statement
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticFeature._
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticState
-import org.neo4j.cypher.internal.v4_0.frontend.phases._
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.IfNoParameter
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.InnerVariableNamer
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.LiteralExtraction
-import org.neo4j.cypher.internal.v4_0.rewriting.Deprecations
-import org.neo4j.cypher.internal.v4_0.rewriting.RewriterStepSequencer
-=======
 import org.neo4j.cypher.internal.frontend.phases.AstRewriting
 import org.neo4j.cypher.internal.frontend.phases.BaseContains
 import org.neo4j.cypher.internal.frontend.phases.BaseContext
@@ -82,7 +62,6 @@ import org.neo4j.cypher.internal.rewriting.rewriters.IfNoParameter
 import org.neo4j.cypher.internal.rewriting.rewriters.InnerVariableNamer
 import org.neo4j.cypher.internal.rewriting.rewriters.LiteralExtraction
 import org.neo4j.cypher.internal.util.symbols.CypherType
->>>>>>> neo4j/4.1
 
 object CompilationPhases {
 
@@ -128,29 +107,6 @@ object CompilationPhases {
   }
 
   // Phase 1
-<<<<<<< HEAD
-  def parsing(sequencer: String => RewriterStepSequencer,
-              innerVariableNamer: InnerVariableNamer,
-              compatibilityMode: Boolean = false,
-              literalExtraction: LiteralExtraction = IfNoParameter
-             ): Transformer[BaseContext, BaseState, BaseState] = {
-    if (compatibilityMode) {
-      Parsing.adds(BaseContains[Statement]) andThen
-        SyntaxDeprecationWarnings(Deprecations.removedFeaturesIn4_0) andThen
-        PreparatoryRewriting(Deprecations.removedFeaturesIn4_0) andThen
-        SyntaxDeprecationWarnings(Deprecations.V2) andThen
-        PreparatoryRewriting(Deprecations.V2) andThen
-        SemanticAnalysis(warn = true, MultipleDatabases).adds(BaseContains[SemanticState]) andThen
-        AstRewriting(sequencer, literalExtraction, innerVariableNamer = innerVariableNamer)
-    } else {
-      Parsing.adds(BaseContains[Statement]) andThen
-        SyntaxDeprecationWarnings(Deprecations.V2) andThen
-        PreparatoryRewriting(Deprecations.V2) andThen
-        SemanticAnalysis(warn = true, MultipleDatabases).adds(BaseContains[SemanticState]) andThen
-        AstRewriting(sequencer, literalExtraction, innerVariableNamer = innerVariableNamer)
-    }
-}
-=======
   def parsing(config: ParsingConfig): Transformer[BaseContext, BaseState, BaseState] = {
     parsingBase(config) andThen
       AstRewriting(config.sequencer, config.literalExtraction, innerVariableNamer = config.innerVariableNamer, parameterTypeMapping = config.parameterTypeMapping)
@@ -171,7 +127,6 @@ object CompilationPhases {
       AstRewriting(config.sequencer, config.literalExtraction, innerVariableNamer = config.innerVariableNamer, parameterTypeMapping = config.parameterTypeMapping) andThen
       SemanticAnalysis(warn = true, config.semanticFeatures: _*).adds(BaseContains[SemanticState])
   }
->>>>>>> neo4j/4.1
 
   // Phase 2
   val prepareForCaching: Transformer[PlannerContext, BaseState, BaseState] =
@@ -189,27 +144,16 @@ object CompilationPhases {
   ): Transformer[PlannerContext, BaseState, LogicalPlanState] =
     SchemaCommandPlanBuilder andThen
       If((s: LogicalPlanState) => s.maybeLogicalPlan.isEmpty)(
-<<<<<<< HEAD
-        SemanticAnalysis(warn = false, MultipleDatabases) andThen
-          Namespacer andThen
-          isolateAggregation andThen
-          SemanticAnalysis(warn = false, MultipleDatabases) andThen
-=======
         SemanticAnalysis(warn = false, semanticFeatures: _*) andThen
           Namespacer andThen
           isolateAggregation andThen
           SemanticAnalysis(warn = false, semanticFeatures: _*) andThen
->>>>>>> neo4j/4.1
           Namespacer andThen
           transitiveClosure andThen
           rewriteEqualityToInPredicate andThen
           CNFNormalizer andThen
           LateAstRewriting andThen
-<<<<<<< HEAD
-          SemanticAnalysis(warn = false, MultipleDatabases) andThen
-=======
           SemanticAnalysis(warn = false, semanticFeatures: _*) andThen
->>>>>>> neo4j/4.1
           ResolveTokens andThen
           CreatePlannerQuery.adds(CompilationContains[UnionQuery]) andThen
           OptionalMatchRemover andThen

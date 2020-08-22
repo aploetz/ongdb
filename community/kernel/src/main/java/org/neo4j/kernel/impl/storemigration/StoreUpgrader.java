@@ -34,11 +34,8 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
-<<<<<<< HEAD
-=======
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.internal.Version;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
@@ -89,21 +86,12 @@ public class StoreUpgrader
     private final FileSystemAbstraction fileSystem;
     private final Log log;
     private final LogsUpgrader logsUpgrader;
-<<<<<<< HEAD
-
-=======
->>>>>>> neo4j/4.1
     private final String configuredFormat;
     private final PageCacheTracer pageCacheTracer;
 
-<<<<<<< HEAD
-    public StoreUpgrader( StoreVersionCheck storeVersionCheck, MigrationProgressMonitor progressMonitor,
-                          Config config, FileSystemAbstraction fileSystem, LogProvider logProvider, LogsUpgrader logsUpgrader )
-=======
     public StoreUpgrader( StoreVersionCheck storeVersionCheck, MigrationProgressMonitor progressMonitor, Config config,
                           FileSystemAbstraction fileSystem, LogProvider logProvider, LogsUpgrader logsUpgrader,
                           PageCacheTracer pageCacheTracer )
->>>>>>> neo4j/4.1
     {
         this.storeVersionCheck = storeVersionCheck;
         this.progressMonitor = progressMonitor;
@@ -199,11 +187,7 @@ public class StoreUpgrader
         return versionResult.outcome.isSuccessful() && versionResult.actualVersion.equals( configuredVersion );
     }
 
-<<<<<<< HEAD
-    private void migrate( DatabaseLayout dbDirectoryLayout, DatabaseLayout migrationLayout, File migrationStateFile )
-=======
     private void migrate( DatabaseLayout dbDirectoryLayout, DatabaseLayout migrationLayout, File migrationStateFile, PageCursorTracer cursorTracer )
->>>>>>> neo4j/4.1
     {
         // One or more participants would like to do migration
         progressMonitor.started( participants.size() );
@@ -216,11 +200,7 @@ public class StoreUpgrader
         {
             StoreVersionCheck.Result upgradeCheck = storeVersionCheck.checkUpgrade( storeVersionCheck.configuredVersion(), cursorTracer );
             versionToMigrateFrom = getVersionFromResult( upgradeCheck );
-<<<<<<< HEAD
-            logsUpgrader.assertCleanlyShutDownByCheckPoint( dbDirectoryLayout );
-=======
             logsUpgrader.assertCleanlyShutDown( dbDirectoryLayout );
->>>>>>> neo4j/4.1
             cleanMigrationDirectory( migrationLayout.databaseDirectory() );
             MigrationStatus.migrating.setMigrationStatus( fileSystem, migrationStateFile, versionToMigrateFrom );
             migrateToIsolatedDirectory( dbDirectoryLayout, migrationLayout, versionToMigrateFrom );

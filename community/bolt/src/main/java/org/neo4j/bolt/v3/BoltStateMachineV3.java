@@ -34,9 +34,9 @@ import org.neo4j.bolt.v3.runtime.TransactionStreamingState;
 
 public class BoltStateMachineV3 extends AbstractBoltStateMachine
 {
-    public BoltStateMachineV3( BoltStateMachineSPI boltSPI, BoltChannel boltChannel, Clock clock, boolean renameThreads, String defaultDatabaseName )
+    public BoltStateMachineV3( BoltStateMachineSPI boltSPI, BoltChannel boltChannel, Clock clock )
     {
-        super( boltSPI, boltChannel, clock, renameThreads, defaultDatabaseName );
+        super( boltSPI, boltChannel, clock );
     }
 
     @Override

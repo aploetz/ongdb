@@ -13,13 +13,8 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-compatibility-spec-suite</artifactId>
     <packaging>jar</packaging>
-<<<<<<< HEAD
     <name>ONgDB - Cypher Compatibility Specification Suite</name>
     <description>ONgDB query language compatibility suite</description>
-=======
-    <name>Neo4j - Cypher Compatibility Specification Suite</name>
-    <description>Neo4j query language compatibility suite</description>
->>>>>>> neo4j/4.1
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
     <scm>

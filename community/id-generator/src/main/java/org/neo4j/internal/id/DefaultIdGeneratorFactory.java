@@ -86,11 +86,7 @@ public class DefaultIdGeneratorFactory implements IdGeneratorFactory
     {
         // highId not used when opening an IndexedIdGenerator
         return new IndexedIdGenerator( pageCache, fileName, recoveryCleanupWorkCollector, idType, allowLargeIdCaches, highIdSupplier, maxValue, readOnly,
-<<<<<<< HEAD
-                defaultIdMonitor( fs, fileName ), openOptions );
-=======
                 cursorTracer, defaultIdMonitor( fs, fileName ), openOptions );
->>>>>>> neo4j/4.1
     }
 
     @Override
@@ -109,13 +105,8 @@ public class DefaultIdGeneratorFactory implements IdGeneratorFactory
 
         IndexedIdGenerator generator =
                 new IndexedIdGenerator( pageCache, fileName, recoveryCleanupWorkCollector, idType, allowLargeIdCaches, () -> highId, maxId, readOnly,
-<<<<<<< HEAD
-                        defaultIdMonitor( fs, fileName ), openOptions );
-        generator.checkpoint( UNLIMITED );
-=======
                         cursorTracer, defaultIdMonitor( fs, fileName ), openOptions );
         generator.checkpoint( UNLIMITED, cursorTracer );
->>>>>>> neo4j/4.1
         generators.put( idType, generator );
         return generator;
     }

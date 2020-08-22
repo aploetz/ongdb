@@ -76,10 +76,6 @@ class DefaultNodeCursor extends TraceableCursor implements NodeCursor
         this.currentAddedInTx = NO_ID;
         this.checkHasChanges = true;
         this.addedNodes = ImmutableEmptyLongIterator.INSTANCE;
-<<<<<<< HEAD
-        this.accessMode = read.ktx.securityContext().mode();
-=======
->>>>>>> neo4j/4.1
         if ( tracer != null )
         {
             tracer.onAllNodesScan();
@@ -155,11 +151,7 @@ class DefaultNodeCursor extends TraceableCursor implements NodeCursor
      * Some code paths need to consider created, but not changed labels.
      */
     @Override
-<<<<<<< HEAD
-    public LabelSet labelsIgnoringTxStateSetRemove()
-=======
     public TokenSet labelsIgnoringTxStateSetRemove()
->>>>>>> neo4j/4.1
     {
         if ( currentAddedInTx != NO_ID )
         {

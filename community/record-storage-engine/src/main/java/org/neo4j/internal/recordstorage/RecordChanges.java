@@ -225,11 +225,7 @@ public class RecordChanges<RECORD,ADDITIONAL> implements RecordAccess<RECORD,ADD
         {
             if ( before == null )
             {
-<<<<<<< HEAD
-                this.before = loader.clone( record );
-=======
                 this.before = loader.copy( record );
->>>>>>> neo4j/4.1
             }
         }
 

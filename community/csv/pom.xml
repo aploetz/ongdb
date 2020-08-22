@@ -16,12 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-csv</artifactId>
-=======
-    <artifactId>neo4j-csv</artifactId>
->>>>>>> neo4j/4.1
-
     <packaging>jar</packaging>
     <name>ONgDB - CSV reading and parsing</name>
     <description>Efficient reading and parsing of CSV input streams.</description>
@@ -78,15 +73,7 @@
 
         <!-- test dependencies -->
         <dependency>
-<<<<<<< HEAD
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
-=======
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>io-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

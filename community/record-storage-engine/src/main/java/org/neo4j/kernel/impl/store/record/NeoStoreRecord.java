@@ -60,11 +60,7 @@ public class NeoStoreRecord extends PrimitiveRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public NeoStoreRecord clone()
-=======
     public NeoStoreRecord copy()
->>>>>>> neo4j/4.1
     {
         return new NeoStoreRecord( this );
     }

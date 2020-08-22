@@ -11,11 +11,7 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-expression-evaluator</artifactId>
     <packaging>jar</packaging>
-<<<<<<< HEAD
     <name>ONgDB - Cypher Expression Evaluator</name>
-=======
-    <name>Neo4j - Cypher Expression Evaluator</name>
->>>>>>> neo4j/4.1
 
     <description>Cypher Expression Evaluator</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -63,35 +59,20 @@
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-parser-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-ast-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-ast</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-ast</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-expressions-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-expressions</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -129,34 +110,6 @@
             <groupId>org.scalacheck</groupId>
             <artifactId>scalacheck_${scala.binary.version}</artifactId>
         </dependency>
-
-<<<<<<< HEAD
-        <!-- other -->
-
-
-        <!-- test dependencies -->
-
-
-
-        <!--<dependency>-->
-            <!--<groupId>org.graphfoundation.ongdb</groupId>-->
-            <!--<artifactId>ongdb-expressions-4.0</artifactId>-->
-            <!--<version>${project.version}</version>-->
-            <!--<type>test-jar</type>-->
-            <!--<scope>test</scope>-->
-        <!--</dependency>-->
-
-        <!--<dependency>-->
-            <!--<groupId>org.graphfoundation.ongdb</groupId>-->
-            <!--<artifactId>ongdb-ast-4.0</artifactId>-->
-            <!--<version>${project.version}</version>-->
-            <!--<type>test-jar</type>-->
-            <!--<scope>test</scope>-->
-        <!--</dependency>-->
-
-
-=======
->>>>>>> neo4j/4.1
     </dependencies>
 
 </project>

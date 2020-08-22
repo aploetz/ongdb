@@ -31,11 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
-<<<<<<< HEAD
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-=======
->>>>>>> neo4j/4.1
 import java.util.concurrent.locks.LockSupport;
 
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -52,6 +47,14 @@ import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.internal.helpers.collection.Iterables.asSet;
 
+/**
+ * Token creation should be able to handle cases of concurrent token creation
+ * with different/same names. Short random interval (1-3) give a high chances of same token name in this test.
+ * <p>
+ * Newly created token should be visible only when token cache already have both mappings:
+ * "name -> id" and "id -> name" populated.
+ * Otherwise attempt to retrieve labels from newly created node can fail.
+ */
 @DbmsExtension
 class TokenCreationIT
 {
@@ -60,16 +63,6 @@ class TokenCreationIT
     @Inject
     private GraphDatabaseService db;
 
-<<<<<<< HEAD
-    /**
-     * Token creation should be able to handle cases of concurrent token creation
-     * with different/same names. Short random interval (1-3) give a high chances of the same token name in this test.
-     * <p>
-     * Newly created token should be visible only when token cache already have both mappings:
-     * "name -> id" and "id -> name" populated.
-     * Otherwise, attempt to retrieve labels from the newly created node can fail.
-     */
-=======
     private volatile boolean stop;
     private ExecutorService executorService;
 
@@ -85,21 +78,9 @@ class TokenCreationIT
         executorService.shutdown();
     }
 
->>>>>>> neo4j/4.1
     @RepeatedTest( 5 )
     void concurrentLabelTokenCreation() throws InterruptedException, ExecutionException
     {
-<<<<<<< HEAD
-        AtomicBoolean stop = new AtomicBoolean();
-        int concurrentWorkers = 10;
-        CountDownLatch latch = new CountDownLatch( concurrentWorkers );
-        for ( int i = 0; i < concurrentWorkers; i++ )
-        {
-            new LabelCreator( db, latch, stop ).start();
-        }
-        LockSupport.parkNanos( TimeUnit.MILLISECONDS.toNanos( 500 ) );
-        stop.set( true );
-=======
         CountDownLatch latch = new CountDownLatch( WORKERS );
         List<Future<?>> futures = new ArrayList<>();
         for ( int i = 0; i < WORKERS; i++ )
@@ -108,7 +89,6 @@ class TokenCreationIT
         }
         LockSupport.parkNanos( MILLISECONDS.toNanos( 500 ) );
         stop = true;
->>>>>>> neo4j/4.1
         latch.await();
         consumeFutures( futures );
     }
@@ -118,9 +98,6 @@ class TokenCreationIT
         Futures.getAll( futures );
     }
 
-<<<<<<< HEAD
-    private static class LabelCreator extends Thread
-=======
     private Label[] getLabels()
     {
         int randomLabelValue = ThreadLocalRandom.current().nextInt( 2 ) + 1;
@@ -133,17 +110,14 @@ class TokenCreationIT
     }
 
     private class LabelCreator implements Runnable
->>>>>>> neo4j/4.1
     {
         private final GraphDatabaseService database;
         private final CountDownLatch createLatch;
-        private final AtomicBoolean stop;
 
-        LabelCreator( GraphDatabaseService database, CountDownLatch createLatch, AtomicBoolean stop )
+        LabelCreator( GraphDatabaseService database, CountDownLatch createLatch )
         {
             this.database = database;
             this.createLatch = createLatch;
-            this.stop = stop;
         }
 
         @Override
@@ -151,7 +125,7 @@ class TokenCreationIT
         {
             try
             {
-                while ( !stop.get() )
+                while ( !stop )
                 {
 
                     try ( Transaction transaction = database.beginTx() )
@@ -164,7 +138,7 @@ class TokenCreationIT
                     }
                     catch ( Exception e )
                     {
-                        stop.set( true );
+                        stop = true;
                         throw e;
                     }
                 }
@@ -173,17 +147,6 @@ class TokenCreationIT
             {
                 createLatch.countDown();
             }
-        }
-
-        private Label[] getLabels()
-        {
-            int randomLabelValue = ThreadLocalRandom.current().nextInt( 2 ) + 1;
-            Label[] labels = new Label[randomLabelValue];
-            for ( int i = 0; i < labels.length; i++ )
-            {
-                labels[i] = Label.label( RandomStringUtils.randomAscii( randomLabelValue ) );
-            }
-            return labels;
         }
     }
 }

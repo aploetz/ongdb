@@ -25,13 +25,8 @@ import org.neo4j.internal.kernel.api.DefaultCloseListenable
 import org.neo4j.internal.kernel.api.KernelReadTracer
 import org.neo4j.internal.kernel.api.NodeCursor
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor
-<<<<<<< HEAD
-import org.neo4j.values.storable.Value
-import org.neo4j.values.storable.ValueComparator
-=======
 import org.neo4j.io.IOUtils
 import org.neo4j.values.storable.Value
->>>>>>> neo4j/4.1
 import org.neo4j.values.storable.Values.COMPARATOR
 
 import scala.annotation.tailrec
@@ -77,11 +72,7 @@ abstract class CompositeValueIndexCursor extends DefaultCloseListenable with Nod
   }
 
   override def closeInternal(): Unit = {
-<<<<<<< HEAD
-    cursors.foreach(_.close())
-=======
     IOUtils.closeAll(cursors:_*)
->>>>>>> neo4j/4.1
   }
 
   override def isClosed: Boolean = closed
@@ -159,9 +150,5 @@ private class MergeSortCursor(override val cursors: Array[NodeValueIndexCursor],
       true
     }
   }
-<<<<<<< HEAD
-}
-=======
 }
 
->>>>>>> neo4j/4.1

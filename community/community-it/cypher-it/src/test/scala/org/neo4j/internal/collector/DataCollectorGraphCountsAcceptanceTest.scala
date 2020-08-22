@@ -23,10 +23,6 @@ import org.neo4j.configuration.GraphDatabaseSettings.index_background_sampling_e
 import org.neo4j.cypher.ExecutionEngineFunSuite
 import org.neo4j.cypher.GraphIcing
 import org.neo4j.graphdb.config.Setting
-<<<<<<< HEAD
-import scala.collection.Map
-=======
->>>>>>> neo4j/4.1
 
 class DataCollectorGraphCountsAcceptanceTest extends ExecutionEngineFunSuite with GraphIcing with SampleGraphs {
 

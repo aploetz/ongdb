@@ -52,8 +52,4 @@ object SelectionMatcher {
       (arg.predicate.exprs.toSeq, arg.source)
       )
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> neo4j/4.1

@@ -46,10 +46,7 @@ import org.neo4j.internal.batchimport.AdditionalInitialIds;
 import org.neo4j.internal.batchimport.BatchImporter;
 import org.neo4j.internal.batchimport.BatchImporterFactory;
 import org.neo4j.internal.batchimport.Configuration;
-<<<<<<< HEAD
-=======
 import org.neo4j.internal.batchimport.ImportLogic;
->>>>>>> neo4j/4.1
 import org.neo4j.internal.batchimport.InputIterable;
 import org.neo4j.internal.batchimport.InputIterator;
 import org.neo4j.internal.batchimport.input.BadCollector;
@@ -121,7 +118,6 @@ import org.neo4j.storageengine.migration.SchemaRuleMigrationAccess;
 import org.neo4j.token.TokenHolders;
 import org.neo4j.token.api.TokenHolder;
 import org.neo4j.token.api.TokenNotFoundException;
-import org.neo4j.util.FeatureToggles;
 
 import static java.util.Arrays.asList;
 import static org.eclipse.collections.impl.factory.Sets.immutable;
@@ -161,7 +157,6 @@ import static org.neo4j.storageengine.api.TransactionIdStore.UNKNOWN_TX_COMMIT_T
  */
 public class RecordStorageMigrator extends AbstractStoreMigrationParticipant
 {
-    private static final String MIGRATION_THREADS = "migration_threads";
     private static final char TX_LOG_COUNTERS_SEPARATOR = 'A';
     private static final String RECORD_STORAGE_MIGRATION_TAG = "recordStorageMigration";
     private static final String NODE_CHUNK_MIGRATION_TAG = "nodeChunkMigration";
@@ -278,14 +273,9 @@ public class RecordStorageMigrator extends AbstractStoreMigrationParticipant
         // out which stores, if any, have been migrated to the new format. The counts themselves are equivalent in both the old and the migrated stores.
         StoreFactory oldStoreFactory = createStoreFactory( directoryLayout, oldFormat, new ScanOnOpenReadOnlyIdGeneratorFactory() );
         try ( NeoStores oldStores = oldStoreFactory.openAllNeoStores();
-<<<<<<< HEAD
-              GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, migrationLayout.countStore(), fileSystem,
-                      immediate(), new CountsComputer( oldStores, pageCache, directoryLayout ), false, GBPTreeCountsStore.NO_MONITOR ) )
-=======
                 GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, migrationLayout.countStore(), fileSystem, immediate(),
                         new CountsComputer( oldStores, pageCache, cacheTracer, directoryLayout, memoryTracker ), false, cacheTracer,
                         GBPTreeCountsStore.NO_MONITOR ) )
->>>>>>> neo4j/4.1
         {
             countsStore.start( cursorTracer, memoryTracker );
             countsStore.checkpoint( IOLimiter.UNLIMITED, cursorTracer );
@@ -454,25 +444,11 @@ public class RecordStorageMigrator extends AbstractStoreMigrationParticipant
                 {
                     return FileUtils.highIODevice( sourceDirectoryStructure.databaseDirectory().toPath() );
                 }
-
-                @Override
-                public int maxNumberOfProcessors()
-                {
-                    return FeatureToggles.getInteger( RecordStorageMigrator.class, MIGRATION_THREADS, super.maxNumberOfProcessors() );
-                }
             };
             AdditionalInitialIds additionalInitialIds =
                     readAdditionalIds( lastTxId, lastTxChecksum, lastTxLogVersion, lastTxLogByteOffset );
 
             // We have to make sure to keep the token ids if we're migrating properties/labels
-<<<<<<< HEAD
-            BatchImporter importer = BatchImporterFactory.withHighestPriority().instantiate(
-                    migrationDirectoryStructure, fileSystem, pageCache, importConfig, logService,
-                    withDynamicProcessorAssignment( migrationBatchImporterMonitor( legacyStore, progressReporter, importConfig ), importConfig ),
-                    additionalInitialIds, config, newFormat, NO_MONITOR, jobScheduler, badCollector, LogFilesInitializer.NULL );
-            InputIterable nodes = () -> legacyNodesAsInput( legacyStore, requiresPropertyMigration );
-            InputIterable relationships = () -> legacyRelationshipsAsInput( legacyStore, requiresPropertyMigration );
-=======
             BatchImporter importer = batchImporterFactory.instantiate(
                     migrationDirectoryStructure, fileSystem, pageCache, cacheTracer, importConfig, logService,
                     withDynamicProcessorAssignment( migrationBatchImporterMonitor( legacyStore, progressReporter,
@@ -480,7 +456,6 @@ public class RecordStorageMigrator extends AbstractStoreMigrationParticipant
                     LogFilesInitializer.NULL, memoryTracker );
             InputIterable nodes = () -> legacyNodesAsInput( legacyStore, requiresPropertyMigration, cacheTracer, memoryTracker );
             InputIterable relationships = () -> legacyRelationshipsAsInput( legacyStore, requiresPropertyMigration, cacheTracer, memoryTracker );
->>>>>>> neo4j/4.1
             long propertyStoreSize = storeSize( legacyStore.getPropertyStore() ) / 2 +
                 storeSize( legacyStore.getPropertyStore().getStringStore() ) / 2 +
                 storeSize( legacyStore.getPropertyStore().getArrayStore() ) / 2;

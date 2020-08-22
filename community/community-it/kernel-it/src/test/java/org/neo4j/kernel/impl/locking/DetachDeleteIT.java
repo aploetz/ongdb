@@ -23,10 +23,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-<<<<<<< HEAD
-import org.junit.jupiter.api.Assertions;
-=======
->>>>>>> neo4j/4.1
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -175,11 +171,7 @@ class DetachDeleteIT
                 // The try-lock should fail because the detach-delete should already be holding an exclusive lock on that node.
                 assertFalse( locksClient.trySharedLock( ResourceTypes.NODE, otherNodeId ) );
                 // The detach-delete should also hold an exclusive lock on the associated relationship.
-<<<<<<< HEAD
-                Assertions.assertFalse( locksClient.trySharedLock( ResourceTypes.RELATIONSHIP, otherRelId.get() ) );
-=======
                 assertFalse( locksClient.trySharedLock( ResourceTypes.RELATIONSHIP, otherRelId.get() ) );
->>>>>>> neo4j/4.1
             }
             finally
             {

@@ -99,52 +99,6 @@ object Arguments {
     override def name = "runtime-impl"
   }
 
-<<<<<<< HEAD
-  case class DbmsAction(value: String) extends Argument {
-
-    override def name = "dbms-action"
-  }
-
-  case class DatabaseAction(value: String) extends Argument {
-
-    override def name = "database-action"
-  }
-
-  case class Database(value: String) extends Argument {
-
-    override def name = "database"
-  }
-
-  case class Role(value: String) extends Argument {
-
-    override def name = "role"
-  }
-
-  case class User(value: String) extends Argument {
-
-    override def name = "user"
-  }
-
-  case class Qualifier(value: String) extends Argument {
-
-    override def name = "qualifier"
-  }
-
-  case class Scope(value: String) extends Argument {
-
-    override def name = "scope"
-  }
-
-  case class ExpandExpression(from: String, relName: String, relTypes: Seq[String], to: String,
-                              direction: SemanticDirection, minLength: Int, maxLength: Option[Int]) extends Argument
-
-  case class CountNodesExpression(ident: String, labels: List[Option[String]]) extends Argument
-
-  case class CountRelationshipsExpression(ident: String, startLabel: Option[String],
-                                          typeNames: Seq[String], endLabel: Option[String]) extends Argument
-
-=======
->>>>>>> neo4j/4.1
   case class SourceCode(className: String, sourceCode: String) extends Argument {
 
     override def name: String = "source:" + className

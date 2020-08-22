@@ -273,18 +273,12 @@ abstract class ProfileTimeTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     // then
     val queryProfile = runtimeResult.runtimeResult.queryProfile()
     queryProfile.operatorProfile(0).time() should be > 0L // produce results
-<<<<<<< HEAD
-    queryProfile.operatorProfile(1).time() should be > 0L // pruning var expand
-=======
     queryProfile.operatorProfile(1).time() should be(OperatorProfile.NO_DATA) // pruning var expand (OperatorProfile.NO_DATA as long as we use slotted fallback)
->>>>>>> neo4j/4.1
     queryProfile.operatorProfile(2).time() should be > 0L // all node scan
     // Should not attribute anything to the invalid id
     queryProfile.operatorProfile(Id.INVALID_ID.x) should be(NO_PROFILE)
   }
 
-<<<<<<< HEAD
-=======
   test("should profile time with shortest path") {
     // given
     val nodesPerLabel = 10
@@ -315,7 +309,6 @@ abstract class ProfileTimeTestBase[CONTEXT <: RuntimeContext](edition: Edition[C
     queryProfile.operatorProfile(Id.INVALID_ID.x) should be(NO_PROFILE)
   }
 
->>>>>>> neo4j/4.1
   test("should profile time with expand into") {
     val size = sizeHint / 10
     given { circleGraph(size) }

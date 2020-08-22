@@ -252,17 +252,6 @@ class WithPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
 
     result should beLike {
       case
-<<<<<<< HEAD
-          SelectionMatcher(Seq(
-            LessThan(FunctionInvocation(Namespace(List()), FunctionName("rand"), false, Vector()),
-                 Variable("  p@111"))),
-                         Limit(
-                         Distinct(
-                         Apply(
-                         Projection(_, _),
-                         AllNodesScan("  n1@66", _)
-                         ), _), _, _)
-=======
         SelectionMatcher(Seq(
         LessThan(FunctionInvocation(Namespace(List()), FunctionName("rand"), false, Vector()),
         Variable("  p@111"))),
@@ -271,7 +260,6 @@ class WithPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         Projection(
         AllNodesScan("  n1@66", _), _),
          _), _, _)
->>>>>>> neo4j/4.1
         ) => ()
     }
   }

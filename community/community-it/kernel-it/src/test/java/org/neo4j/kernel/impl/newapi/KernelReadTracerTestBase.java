@@ -361,39 +361,6 @@ public abstract class KernelReadTracerTestBase<G extends KernelAPIReadTestSuppor
     }
 
     @Test
-<<<<<<< HEAD
-    void shouldTraceGroupTraversal()
-    {
-        // given
-        TestKernelReadTracer tracer = new TestKernelReadTracer();
-
-        try ( NodeCursor nodeCursor = cursors.allocateNodeCursor();
-              RelationshipGroupCursor groupCursor = cursors.allocateRelationshipGroupCursor() )
-        {
-            // when
-            groupCursor.setTracer( tracer );
-
-            read.singleNode( foo, nodeCursor );
-            assertTrue( nodeCursor.next() );
-            nodeCursor.relationships( groupCursor );
-
-            assertTrue( groupCursor.next() );
-            int expectedType = groupCursor.type();
-            tracer.assertEvents( OnRelationshipGroup( expectedType ) );
-
-            groupCursor.removeTracer();
-            assertTrue( groupCursor.next() );
-            tracer.assertEvents();
-
-            groupCursor.setTracer( tracer );
-            assertFalse( groupCursor.next() );
-            tracer.assertEvents();
-        }
-    }
-
-    @Test
-=======
->>>>>>> neo4j/4.1
     void shouldTracePropertyAccess()
     {
         // given

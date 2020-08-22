@@ -16,11 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-logging</artifactId>
-=======
-    <artifactId>neo4j-logging</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Logging</name>
@@ -60,15 +56,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <groupId>org.codehaus.jettison</groupId>
             <artifactId>jettison</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
+            <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

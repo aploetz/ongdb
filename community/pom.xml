@@ -77,10 +77,7 @@
     <module>neo4j-exceptions</module>
     <module>layout</module>
     <module>push-to-cloud</module>
-<<<<<<< HEAD
-=======
     <module>fabric</module>
->>>>>>> neo4j/4.1
   </modules>
 
   <licenses>

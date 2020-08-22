@@ -34,13 +34,8 @@ import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 import scala.collection.immutable.BitSet
 
-import scala.collection.immutable.BitSet
-
-<<<<<<< HEAD
 class ExpandSolverStepTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
-=======
->>>>>>> neo4j/4.1
   implicit def converter(s: Symbol): String = s.toString()
 
   private val pattern1 = PatternRelationship("r1", ("a", "b"), SemanticDirection.OUTGOING, Seq.empty, SimplePatternLength)

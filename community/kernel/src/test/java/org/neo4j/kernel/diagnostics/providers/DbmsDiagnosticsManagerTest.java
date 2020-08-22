@@ -224,16 +224,6 @@ class DbmsDiagnosticsManagerTest
         assertThat( logProvider ).doesNotContainMessage( "Additional diagnostics" );
     }
 
-    private void assertContainingAdditionalDiagnostics( DiagnosticsProvider diagnosticsProvider )
-    {
-        logProvider.rawMessageMatcher().assertContains( diagnosticsProvider.getDiagnosticsName() );
-    }
-
-    private void assertNoAdditionalDiagnostics()
-    {
-        logProvider.rawMessageMatcher().assertNotContains( "Additional diagnostics" );
-    }
-
     private void assertContainsDatabaseDiagnostics()
     {
         assertThat( logProvider ).containsMessages( "Database: " + DEFAULT_DATABASE_NAME.toLowerCase(),

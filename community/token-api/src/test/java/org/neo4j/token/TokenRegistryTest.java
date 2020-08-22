@@ -137,11 +137,7 @@ class TokenRegistryTest
         var second = new NamedToken( INBOUND1_TYPE, 2 );
         var e = assertThrows( NonUniqueTokenException.class,
                 () -> registry.setInitialTokens( asList( first, second ) ) );
-<<<<<<< HEAD
-        assertThat( e.getMessage(), containsString( first.toString() ) );
-=======
         assertThat( e.getMessage() ).contains( first.toString() );
->>>>>>> neo4j/4.1
     }
 
     @Test

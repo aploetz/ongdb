@@ -39,23 +39,12 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     private final CursorPool<DefaultRelationshipTraversalCursor> pool;
     private final DefaultNodeCursor nodeCursor;
     private LongIterator addedRelationships;
-<<<<<<< HEAD
-    private int type = ANY_RELATIONSHIP_TYPE;
-    private RelationshipDirection direction;
-    private boolean lazySelection;
-    private boolean filterInitialized;
-    private AccessMode mode;
-
-    DefaultRelationshipTraversalCursor( CursorPool<DefaultRelationshipTraversalCursor> pool, StorageRelationshipTraversalCursor storeCursor,
-                                        DefaultNodeCursor nodeCursor )
-=======
     private long originNodeReference;
     private RelationshipSelection selection;
     private AccessMode mode;
 
     DefaultRelationshipTraversalCursor( CursorPool<DefaultRelationshipTraversalCursor> pool, StorageRelationshipTraversalCursor storeCursor,
             DefaultNodeCursor nodeCursor )
->>>>>>> neo4j/4.1
     {
         super( storeCursor );
         this.pool = pool;
@@ -133,29 +122,7 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
     @Override
     public boolean next()
     {
-<<<<<<< HEAD
-        boolean hasChanges;
-
-        if ( !filterInitialized )
-        {
-            hasChanges = hasChanges(); // <- may setup filter state if needed, for getting the correct relationships from tx-state
-            setupFilterStateIfNeeded();
-            if ( filterInitialized && allowed() && !(hasChanges && read.txState().relationshipIsDeletedInThisTx( relationshipReference() )) )
-            {
-                if ( tracer != null )
-                {
-                    tracer.onRelationship( relationshipReference() );
-                }
-                return true;
-            }
-        }
-        else
-        {
-            hasChanges = hasChanges();
-        }
-=======
         boolean hasChanges = hasChanges();
->>>>>>> neo4j/4.1
 
         // tx-state relationships
         if ( hasChanges )
@@ -180,38 +147,12 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
             boolean skip = hasChanges && read.txState().relationshipIsDeletedInThisTx( storeCursor.entityReference() );
             if ( !skip && allowed() )
             {
-<<<<<<< HEAD
-                if ( tracer != null )
-                {
-                    tracer.onRelationship( relationshipReference() );
-                }
-=======
->>>>>>> neo4j/4.1
                 return true;
             }
         }
         return false;
     }
 
-<<<<<<< HEAD
-    private boolean allowed()
-    {
-        if ( mode == null )
-        {
-            mode = read.ktx.securityContext().mode();
-        }
-        return mode.allowsTraverseRelType( storeCursor.type() ) && allowedToSeeEndNode( mode );
-    }
-
-    private boolean allowedToSeeEndNode( AccessMode mode )
-    {
-        if ( mode.allowsTraverseAllLabels() )
-        {
-            return true;
-        }
-        read.singleNode( storeCursor.neighbourNodeReference(), nodeCursor );
-        return nodeCursor.next();
-=======
     @Override
     public void setTracer( KernelReadTracer tracer )
     {
@@ -233,7 +174,6 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
             mode = read.ktx.securityContext().mode();
         }
         return mode.allowsTraverseRelType( storeCursor.type() ) && allowedToSeeEndNode( mode );
->>>>>>> neo4j/4.1
     }
 
     private boolean allowedToSeeEndNode( AccessMode mode )
@@ -252,14 +192,7 @@ class DefaultRelationshipTraversalCursor extends DefaultRelationshipCursor<Stora
         if ( !isClosed() )
         {
             read = null;
-<<<<<<< HEAD
-            type = ANY_RELATIONSHIP_TYPE;
-            direction = null;
-            filterInitialized = false;
-            lazySelection = false;
-=======
             selection = null;
->>>>>>> neo4j/4.1
             mode = null;
             storeCursor.close();
 

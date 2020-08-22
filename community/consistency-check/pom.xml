@@ -7,11 +7,7 @@
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
-<<<<<<< HEAD
     <artifactId>ongdb-consistency-check</artifactId>
-=======
-    <artifactId>neo4j-consistency-check</artifactId>
->>>>>>> neo4j/4.1
 
     <name>ONgDB - Consistency Checker</name>
     <description>Tool for checking consistency of a Neo4j data store.</description>
@@ -101,24 +97,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-kernel</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>io-test-utils</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>log-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
@@ -139,15 +118,5 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
-<<<<<<< HEAD
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-record-storage-engine</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-=======
->>>>>>> neo4j/4.1
     </dependencies>
 </project>

@@ -484,15 +484,9 @@ class IndexPopulationJobTest
             job.run();
 
             // Then
-<<<<<<< HEAD
-            LogMatcherBuilder match = inLog( IndexPopulationJob.class );
-            logProvider.assertExactly( match.info( "Index population started: [%s]", ":FIRST(name)" ),
-                    match.info( containsString( "TIME/PHASE Final: SCAN[" ) ) );
-=======
             var matcher = assertThat( logProvider ).forClass( IndexPopulationJob.class ).forLevel( INFO );
             matcher.containsMessageWithArguments( "Index population started: [%s]", ":FIRST(name)" )
                     .containsMessages( "TIME/PHASE Final: SCAN[" );
->>>>>>> neo4j/4.1
         }
         finally
         {
@@ -518,15 +512,9 @@ class IndexPopulationJobTest
             job.run();
 
             // Then
-<<<<<<< HEAD
-            LogMatcherBuilder match = inLog( IndexPopulationJob.class );
-            logProvider.assertExactly( match.info( "Index population started: [%s]", ":FIRST(name)" ),
-                    match.info( containsString( "TIME/PHASE Final: SCAN[" ) ));
-=======
             var matcher = assertThat( logProvider ).forClass( IndexPopulationJob.class ).forLevel( INFO );
             matcher.containsMessageWithArguments( "Index population started: [%s]", ":FIRST(name)" )
                     .containsMessages( "TIME/PHASE Final: SCAN[" );
->>>>>>> neo4j/4.1
         }
         finally
         {

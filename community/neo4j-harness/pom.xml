@@ -63,15 +63,9 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb.app</groupId>
-            <artifactId>ongdb-server</artifactId>
-            <version>${project.version}</version>
-=======
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-nop</artifactId>
             <scope>runtime</scope>
->>>>>>> neo4j/4.1
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

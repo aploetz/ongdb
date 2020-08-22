@@ -806,11 +806,7 @@ public class Config implements Configuration
         {
             super( setting, value, defaultValue, false );
             this.solved = solved;
-<<<<<<< HEAD
-            setting.validate( solved );
-=======
             setting.validate( solved, validationConfig );
->>>>>>> neo4j/4.1
         }
 
         @Override
@@ -824,11 +820,7 @@ public class Config implements Configuration
         {
             T oldValue = solved;
             solved = setting.solveDependency( value != null ? value : defaultValue, getObserver( setting.dependency() ).getValue() );
-<<<<<<< HEAD
-            setting.validate( solved );
-=======
             setting.validate( solved, validationConfig );
->>>>>>> neo4j/4.1
             internalSetValue( value );
             notifyListeners( oldValue, solved );
         }
@@ -875,11 +867,7 @@ public class Config implements Configuration
             this.value = isDefault ? defaultValue : value;
             if ( validate )
             {
-<<<<<<< HEAD
-                setting.validate( this.value );
-=======
                 setting.validate( this.value, validationConfig );
->>>>>>> neo4j/4.1
             }
         }
 

@@ -29,18 +29,15 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.kernel.impl.store.format.standard.Standard;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.values.storable.PointValue;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.arrayWithSize;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
-import static org.neo4j.configuration.GraphDatabaseSettings.record_format;
 import static org.neo4j.values.storable.CoordinateReferenceSystem.Cartesian;
 import static org.neo4j.values.storable.Values.pointValue;
 
@@ -103,7 +100,7 @@ class PointPropertiesRecordFormatIT
             {
                 Node node = nodes.next();
                 PointValue[] points = (PointValue[]) node.getProperty( propertyKey );
-                assertThat( points, arrayWithSize( 2 ) );
+                assertThat( points ).hasSize( 2 );
             }
         }
         managementService.shutdown();
@@ -111,7 +108,7 @@ class PointPropertiesRecordFormatIT
 
     private static DatabaseManagementService startDatabaseService( File storeDir )
     {
-        return new TestDatabaseManagementServiceBuilder( storeDir ).setConfig( record_format, Standard.LATEST_NAME ).build();
+        return new TestDatabaseManagementServiceBuilder( storeDir ).build();
     }
 
     private static GraphDatabaseService getDefaultDatabase( DatabaseManagementService managementService )

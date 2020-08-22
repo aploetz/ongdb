@@ -53,7 +53,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_database;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.configuration.GraphDatabaseSettings.transaction_logs_root_path;
@@ -196,7 +195,6 @@ class LoaderTest
         Path parentPath = databaseLayout.databaseDirectory().getParentFile().toPath();
         try ( Closeable ignored = withPermissions( parentPath, emptySet() ) )
         {
-            assumeFalse( parentPath.toFile().canWrite() );
             AccessDeniedException exception = assertThrows( AccessDeniedException.class, () -> new Loader().load( archive, databaseLayout ) );
             assertEquals( parentPath.toString(), exception.getMessage() );
         }
@@ -220,7 +218,6 @@ class LoaderTest
         Path txLogsRoot = databaseLayout.getTransactionLogsDirectory().getParentFile().toPath();
         try ( Closeable ignored = withPermissions( txLogsRoot, emptySet() ) )
         {
-            assumeFalse( txLogsRoot.toFile().canWrite() );
             AccessDeniedException exception = assertThrows( AccessDeniedException.class, () -> new Loader().load( archive, databaseLayout ) );
             assertEquals( txLogsRoot.toString(), exception.getMessage() );
         }

@@ -122,19 +122,11 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
     @Override
     public void force( IOLimiter ioLimiter, PageCursorTracer cursorTracer ) throws IOException
     {
-<<<<<<< HEAD
-        if ( tryOpenCall( "force" ) )
-        {
-            try
-            {
-                super.force( ioLimiter );
-=======
         if ( tryOpenCall() )
         {
             try
             {
                 super.force( ioLimiter, cursorTracer );
->>>>>>> neo4j/4.1
             }
             finally
             {
@@ -218,11 +210,7 @@ class ContractCheckingIndexProxy extends DelegatingIndexProxy
         }
     }
 
-<<<<<<< HEAD
-    private boolean tryOpenCall( String name )
-=======
     private boolean tryOpenCall()
->>>>>>> neo4j/4.1
     {
         // do not open call unless we are in STARTED
         if ( State.STARTED == state.get() )

@@ -19,14 +19,6 @@
  */
 package org.neo4j.internal.recordstorage;
 
-<<<<<<< HEAD
-import org.apache.commons.lang3.exception.CloneFailedException;
-import org.eclipse.collections.api.map.primitive.MutableIntObjectMap;
-import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
-
-import org.neo4j.internal.recordstorage.RecordRelationshipTraversalCursor.Record;
-=======
->>>>>>> neo4j/4.1
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipGroupStore;
@@ -140,15 +132,9 @@ class RecordRelationshipGroupCursor extends RelationshipGroupRecord implements A
     }
 
     @Override
-<<<<<<< HEAD
-    public RelationshipGroupRecord clone()
-    {
-        throw new CloneFailedException( "Record cursors are not cloneable." );
-=======
     public RelationshipGroupRecord copy()
     {
         throw new UnsupportedOperationException( "Record cursors are not copyable." );
->>>>>>> neo4j/4.1
     }
 
     @Override

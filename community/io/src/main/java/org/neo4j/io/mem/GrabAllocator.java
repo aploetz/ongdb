@@ -24,8 +24,6 @@ import org.neo4j.memory.MemoryTracker;
 
 import java.lang.ref.Cleaner;
 
-import java.lang.ref.Cleaner;
-
 import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.util.FeatureToggles.getInteger;
 

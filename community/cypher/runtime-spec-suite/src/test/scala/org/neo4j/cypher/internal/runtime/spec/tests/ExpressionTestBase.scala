@@ -367,8 +367,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("prop").withRows(singleColumn(Seq(null)))
   }
 
-<<<<<<< HEAD
-=======
   test("should read property from correct entity (rel/long slot)") {
     // given
     val size = 100
@@ -417,7 +415,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("longNodeProp", "refNodeProp").withRows(expected)
   }
 
->>>>>>> neo4j/4.1
   test("result of all function should be a boolean") {
     // given
     val size = 100
@@ -493,8 +490,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     val expected = for (i <- 0 until size) yield Array[Any](i, true)
     runtimeResult should beColumns("x", "y").withRows(expected)
   }
-<<<<<<< HEAD
-=======
 }
 
 // Supported by all non-parallel runtimes
@@ -519,7 +514,6 @@ trait ThreadUnsafeExpressionTests[CONTEXT <: RuntimeContext] {
     // then
     runtimeResult should beColumns("t").withRows(singleColumn((1 to size).map(_ => "TO")))
   }
->>>>>>> neo4j/4.1
 }
 
 // Supported by all runtimes that can deal with changes in the tx-state

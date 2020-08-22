@@ -49,7 +49,6 @@ import org.neo4j.internal.batchimport.input.IdType;
 import org.neo4j.io.layout.Neo4jLayout;
 import org.neo4j.kernel.impl.util.Converters;
 import org.neo4j.kernel.impl.util.Validators;
-import org.neo4j.util.DocumentationURLs;
 import org.neo4j.util.VisibleForTesting;
 
 import static java.lang.Math.toIntExact;
@@ -101,7 +100,7 @@ public class ImportCommand extends AbstractCommand
             "  INTEGER: arbitrary integer values for identifying nodes,%n" +
             "  ACTUAL: (advanced) actual node ids.%n" +
             "For more information on id handling, please see the Neo4j Manual: " +
-            DocumentationURLs.IMPORT_TOOL )
+            "https://neo4j.com/docs/operations-manual/current/tools/import/" )
     private IdType idType = IdType.STRING;
 
     @Option( names = "--input-encoding", paramLabel = "<character-set>", description = "Character set that input data is encoded in." )

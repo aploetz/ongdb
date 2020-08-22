@@ -43,9 +43,6 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
-<<<<<<< HEAD
-  Java Concurrency Tools Core Library
-=======
   fastinfoset
   Jackson module: JAXB Annotations
   Jackson-annotations
@@ -73,7 +70,6 @@ Apache Software License, Version 2.0
   Jetty :: Utilities
   Jetty :: Webapp Application Support
   Jetty :: XML utilities
->>>>>>> neo4j/4.1
   jPowerShell
   jProcesses
   Lucene Common Analyzers
@@ -172,8 +168,6 @@ MIT License
   jersey-media-jaxb
   SLF4J API Module
   SLF4J NOP Binding
-<<<<<<< HEAD
-=======
 
 Unlicense
   jersey-container-servlet
@@ -182,7 +176,6 @@ Unlicense
   jersey-core-common
   jersey-inject-hk2
   jersey-media-jaxb
->>>>>>> neo4j/4.1
 
 Dependencies with multiple licenses
 -----------------------------------

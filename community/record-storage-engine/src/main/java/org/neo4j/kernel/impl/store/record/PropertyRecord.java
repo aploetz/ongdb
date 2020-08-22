@@ -428,11 +428,7 @@ public class PropertyRecord extends AbstractBaseRecord implements Iterable<Prope
     }
 
     @Override
-<<<<<<< HEAD
-    public PropertyRecord clone()
-=======
     public PropertyRecord copy()
->>>>>>> neo4j/4.1
     {
         return new PropertyRecord( this );
     }

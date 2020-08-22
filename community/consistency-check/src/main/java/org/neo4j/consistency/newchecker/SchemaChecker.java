@@ -124,13 +124,8 @@ class SchemaChecker
                     continue;
                 }
 
-<<<<<<< HEAD
-                SchemaRule schemaRule = schemaStorage.loadSingleSchemaRule( id );
-                SchemaRecord previousContentRecord = verifiedRulesWithRecords.put( new SchemaRuleKey( schemaRule ), record.clone() );
-=======
                 SchemaRule schemaRule = schemaStorage.loadSingleSchemaRule( id, cursorTracer );
                 SchemaRecord previousContentRecord = verifiedRulesWithRecords.put( new SchemaRuleKey( schemaRule ), record.copy() );
->>>>>>> neo4j/4.1
                 if ( previousContentRecord != null )
                 {
                     reporter.forSchema( record ).duplicateRuleContent( previousContentRecord );
@@ -141,11 +136,7 @@ class SchemaChecker
                     IndexDescriptor rule = (IndexDescriptor) schemaRule;
                     if ( rule.isUnique() && rule.getOwningConstraintId().isPresent() )
                     {
-<<<<<<< HEAD
-                        SchemaRecord previousObligation = constraintObligations.put( rule.getOwningConstraintId().getAsLong(), record.clone() );
-=======
                         SchemaRecord previousObligation = constraintObligations.put( rule.getOwningConstraintId().getAsLong(), record.copy() );
->>>>>>> neo4j/4.1
                         if ( previousObligation != null )
                         {
                             reporter.forSchema( record ).duplicateObligation( previousObligation );
@@ -157,11 +148,7 @@ class SchemaChecker
                     ConstraintDescriptor rule = (ConstraintDescriptor) schemaRule;
                     if ( rule.enforcesUniqueness() )
                     {
-<<<<<<< HEAD
-                        SchemaRecord previousObligation = indexObligations.put( rule.asIndexBackedConstraint().ownedIndexId(), record.clone() );
-=======
                         SchemaRecord previousObligation = indexObligations.put( rule.asIndexBackedConstraint().ownedIndexId(), record.copy() );
->>>>>>> neo4j/4.1
                         if ( previousObligation != null )
                         {
                             reporter.forSchema( record ).duplicateObligation( previousObligation );

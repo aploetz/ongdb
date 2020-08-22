@@ -19,16 +19,6 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.Predicate
-import org.neo4j.cypher.internal.logical.plans.ExpandInto
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.{INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
-import org.neo4j.graphdb.{Label, Node, RelationshipType}
-
-import scala.util.Random
-=======
 import org.neo4j.cypher.internal.CypherRuntime
 import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.builder.AbstractLogicalPlanBuilder.Predicate
@@ -38,7 +28,6 @@ import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
 import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.graphdb.Label
 import org.neo4j.graphdb.RelationshipType
->>>>>>> neo4j/4.1
 
 abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
   edition: Edition[CONTEXT],
@@ -75,11 +64,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*..1]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -102,11 +87,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*2..4]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -133,11 +114,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*0]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -156,11 +133,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*0..1]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -182,11 +155,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*0..2]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -216,11 +185,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*2..2]-(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -264,11 +229,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*4..4]-(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -314,11 +275,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*5..5]-(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -364,11 +321,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..4]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -414,11 +367,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..2]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -445,11 +394,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)<-[*1..2]-(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -470,11 +415,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..2]-(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -506,11 +447,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[:A*1..2]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -534,11 +471,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[:B*1..2]->(y)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -561,11 +494,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.middle.getId))
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -589,11 +518,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.start.getId))
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -612,11 +537,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .distinct("y AS y")
       .pruningVarExpand("(X)-[*1..2]-(y)", nodePredicate = Predicate("n", "id(n) <> "+g.start.getId))
       .projection("x AS X")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -634,11 +555,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .produceResults("y")
       .distinct("y AS y")
       .pruningVarExpand("(x)-[*1..2]->(y)", relationshipPredicate = Predicate("r", "id(r) <> "+g.startMiddle.getId))
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
@@ -663,11 +580,7 @@ abstract class PruningVarLengthExpandTestBase[CONTEXT <: RuntimeContext](
       .pruningVarExpand("(x)-[*2..2]-(y)",
         nodePredicate = Predicate("n", "id(n) <> "+g.sa1.getId),
         relationshipPredicate = Predicate("r", "id(r) <> "+g.startMiddle.getId))
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "START")
-=======
       .nodeByLabelScan("x", "START", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)

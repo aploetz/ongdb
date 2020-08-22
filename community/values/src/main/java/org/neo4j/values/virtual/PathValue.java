@@ -29,11 +29,8 @@ import org.neo4j.values.TernaryComparator;
 import org.neo4j.values.ValueMapper;
 import org.neo4j.values.VirtualValue;
 
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 
->>>>>>> neo4j/4.1
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 
 public abstract class PathValue extends VirtualValue

@@ -51,10 +51,7 @@ import org.neo4j.test.extension.testdirectory.TestDirectorySupportExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.Objects.requireNonNull;
-<<<<<<< HEAD
-=======
 import static java.lang.String.format;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -137,9 +134,6 @@ class PushToCloudCommandTest
         verify( targetCommunicator ).copy( anyBoolean(), any(), any(), any(), eq( false ), any() );
     }
 
-<<<<<<< HEAD
-    //
-=======
     @Test
     public void shouldUseNeo4jAsDefaultUsernameIfUserHitsEnter() throws Exception
     {
@@ -193,7 +187,6 @@ class PushToCloudCommandTest
         verify( targetCommunicator ).copy( anyBoolean(), any(), any(), any(), eq( false ), any() );
     }
 
->>>>>>> neo4j/4.1
     @Test
     void shouldAcceptDumpAsSource() throws Exception
     {

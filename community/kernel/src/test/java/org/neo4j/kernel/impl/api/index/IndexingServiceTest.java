@@ -145,16 +145,11 @@ import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.IndexUpdateMode.RECOVERY;
 import static org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor.PROVIDER_DESCRIPTOR;
 import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingMode.backgroundRebuildAll;
-<<<<<<< HEAD
-import static org.neo4j.logging.AssertableLogProvider.inLog;
-import static org.neo4j.register.Registers.newDoubleLongRegister;
-=======
 import static org.neo4j.logging.AssertableLogProvider.Level.DEBUG;
 import static org.neo4j.logging.AssertableLogProvider.Level.ERROR;
 import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
 import static org.neo4j.logging.LogAssertions.assertThat;
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 import static org.neo4j.values.storable.Values.stringValue;
 
 @ExtendWith( SuppressOutputExtension.class )
@@ -497,11 +492,7 @@ class IndexingServiceTest
             {
                 IndexDescriptor index = storeIndex( id, 1, id, indexProviderDescriptor );
                 indexDescriptors.add( index );
-<<<<<<< HEAD
-                when( indexProvider.getInitialState( index ) ).thenReturn( ONLINE );
-=======
                 when( indexProvider.getInitialState( index, NULL ) ).thenReturn( ONLINE );
->>>>>>> neo4j/4.1
                 id++;
             }
         }
@@ -515,21 +506,13 @@ class IndexingServiceTest
         IndexingService indexingService = IndexingServiceFactory.createIndexingService( config,
                 mock( JobScheduler.class ), providerMap, storeView, nameLookup,
                 indexDescriptors, internalLogProvider, userLogProvider,
-<<<<<<< HEAD
-                IndexingService.NO_MONITOR, schemaState, indexStatisticsStore, false );
-=======
                 IndexingService.NO_MONITOR, schemaState, indexStatisticsStore, PageCacheTracer.NULL, INSTANCE, false );
->>>>>>> neo4j/4.1
 
         // when starting IndexingService
         indexingService.init();
         for ( IndexProviderDescriptor indexProviderDescriptor : indexProviderDescriptors )
         {
-<<<<<<< HEAD
-            onBothLogProviders( logProvider -> logProvider.rawMessageMatcher().assertNotContains( indexProviderDescriptor.name() ) );
-=======
             onBothLogProviders( logProvider -> assertThat( logProvider ).doesNotContainMessage( indexProviderDescriptor.name() ) );
->>>>>>> neo4j/4.1
         }
 
         userLogProvider.clear();
@@ -540,19 +523,6 @@ class IndexingServiceTest
         {
             if ( isDeprecated( indexProviderDescriptor ) )
             {
-<<<<<<< HEAD
-                userLogProvider.rawMessageMatcher().assertContainsSingle(
-                        Matchers.allOf(
-                                Matchers.containsString( "Deprecated index providers in use:" ),
-                                Matchers.containsString( indexProviderDescriptor.name() + " (2 indexes)" ),
-                                Matchers.containsString( "Use procedure 'db.indexes()' to see what indexes use which index provider." )
-                        )
-                );
-            }
-            else
-            {
-                onBothLogProviders( logProvider -> logProvider.rawMessageMatcher().assertNotContains( indexProviderDescriptor.name() ) );
-=======
                 assertThat( userLogProvider ).containsMessages( "Deprecated index providers in use:",
                         indexProviderDescriptor.name() + " (2 indexes)",
                         "Use procedure 'db.indexes()' to see what indexes use which index provider." );
@@ -560,7 +530,6 @@ class IndexingServiceTest
             else
             {
                 onBothLogProviders( logProvider -> assertThat( logProvider ).doesNotContainMessage( indexProviderDescriptor.name() ) );
->>>>>>> neo4j/4.1
             }
         }
     }
@@ -1377,11 +1346,7 @@ class IndexingServiceTest
 
         // when
         IndexProxy proxy = indexingService.getIndexProxy( indexDescriptor );
-<<<<<<< HEAD
-        try ( IndexUpdater updater = proxy.newUpdater( IndexUpdateMode.ONLINE ) )
-=======
         try ( IndexUpdater updater = proxy.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
->>>>>>> neo4j/4.1
         {
             updater.process( IndexEntryUpdate.add( 123, indexDescriptor, stringValue( "some value" ) ) );
         }

@@ -16,17 +16,10 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
+
     <artifactId>ongdb-import-util</artifactId>
-
     <packaging>jar</packaging>
-    <name>ONgDB - Common</name>
-=======
-    <artifactId>neo4j-import-util</artifactId>
-
-    <packaging>jar</packaging>
-    <name>Neo4j - Import Utilities</name>
->>>>>>> neo4j/4.1
+    <name>ONgDB - Import Utilities</name>
     <description>Utilities for implementing import functionality.</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
@@ -95,19 +88,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>layout-test-utils</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-=======
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest</artifactId>
->>>>>>> neo4j/4.1
         </dependency>
     </dependencies>
 </project>

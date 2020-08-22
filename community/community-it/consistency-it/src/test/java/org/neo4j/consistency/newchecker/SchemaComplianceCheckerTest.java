@@ -167,26 +167,16 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
 
             // (N1) w/ property
             {
-<<<<<<< HEAD
-                long propId = propertyStore.nextId();
-                nodeId = node( nodeStore.nextId(), propId, NULL, label1 );
-=======
                 long propId = propertyStore.nextId( PageCursorTracer.NULL );
                 nodeId = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
->>>>>>> neo4j/4.1
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId, value );
             }
 
             // (N2) w/ property
             {
-<<<<<<< HEAD
-                long propId = propertyStore.nextId();
-                long nodeId2 = node( nodeStore.nextId(), propId, NULL, label1 );
-=======
                 long propId = propertyStore.nextId( PageCursorTracer.NULL );
                 long nodeId2 = node( nodeStore.nextId( PageCursorTracer.NULL ), propId, NULL, label1 );
->>>>>>> neo4j/4.1
                 property( propId, NULL, NULL, propertyValue( propertyKey1, value ) );
                 indexValue( descriptor, indexId, nodeId2, value );
             }
@@ -203,11 +193,7 @@ class SchemaComplianceCheckerTest extends CheckerTestBase
             throws IndexNotFoundKernelException, IndexEntryConflictException
     {
         IndexingService indexingService = db.getDependencyResolver().resolveDependency( IndexingService.class );
-<<<<<<< HEAD
-        try ( IndexUpdater indexUpdater = indexingService.getIndexProxy( indexId ).newUpdater( ONLINE ) )
-=======
         try ( IndexUpdater indexUpdater = indexingService.getIndexProxy( indexId ).newUpdater( ONLINE, PageCursorTracer.NULL ) )
->>>>>>> neo4j/4.1
         {
             indexUpdater.process( add( nodeId, descriptor, value ) );
         }

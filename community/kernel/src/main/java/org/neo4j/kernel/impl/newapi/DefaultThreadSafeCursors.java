@@ -26,12 +26,9 @@ import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
-<<<<<<< HEAD
-=======
 import org.neo4j.internal.kernel.api.RelationshipTypeIndexCursor;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.memory.MemoryTracker;
->>>>>>> neo4j/4.1
 import org.neo4j.storageengine.api.StorageReader;
 
 /**
@@ -48,48 +45,20 @@ public class DefaultThreadSafeCursors extends DefaultCursors implements CursorFa
     }
 
     @Override
-<<<<<<< HEAD
-    public DefaultNodeCursor allocateNodeCursor()
-=======
     public DefaultNodeCursor allocateNodeCursor( PageCursorTracer cursorTracer )
->>>>>>> neo4j/4.1
     {
         return trace( new DefaultNodeCursor(
                 DefaultNodeCursor::release, storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) );
     }
 
     @Override
-<<<<<<< HEAD
-    public FullAccessNodeCursor allocateFullAccessNodeCursor()
-=======
     public FullAccessNodeCursor allocateFullAccessNodeCursor( PageCursorTracer cursorTracer )
->>>>>>> neo4j/4.1
     {
         return trace( new FullAccessNodeCursor(
                 DefaultNodeCursor::release, storageReader.allocateNodeCursor( cursorTracer ), storageReader.allocateNodeCursor( cursorTracer ) ) );
     }
 
     @Override
-<<<<<<< HEAD
-    public DefaultRelationshipScanCursor allocateRelationshipScanCursor()
-    {
-        return trace( new DefaultRelationshipScanCursor(
-                DefaultRelationshipScanCursor::release, storageReader.allocateRelationshipScanCursor(), allocateNodeCursor() ) );
-    }
-
-    @Override
-    public FullAccessRelationshipScanCursor allocateFullAccessRelationshipScanCursor()
-    {
-        return trace( new FullAccessRelationshipScanCursor(
-                DefaultRelationshipScanCursor::release, storageReader.allocateRelationshipScanCursor(), allocateFullAccessNodeCursor() ) );
-    }
-
-    @Override
-    public DefaultRelationshipTraversalCursor allocateRelationshipTraversalCursor()
-    {
-        return trace( new DefaultRelationshipTraversalCursor(
-                DefaultRelationshipTraversalCursor::release, storageReader.allocateRelationshipTraversalCursor(), allocateNodeCursor() ) );
-=======
     public DefaultRelationshipScanCursor allocateRelationshipScanCursor( PageCursorTracer cursorTracer )
     {
         return trace( new DefaultRelationshipScanCursor( DefaultRelationshipScanCursor::release,
@@ -108,78 +77,47 @@ public class DefaultThreadSafeCursors extends DefaultCursors implements CursorFa
     {
         return trace( new DefaultRelationshipTraversalCursor( DefaultRelationshipTraversalCursor::release,
                 storageReader.allocateRelationshipTraversalCursor( cursorTracer ), allocateNodeCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public PropertyCursor allocatePropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-<<<<<<< HEAD
-        return trace( new DefaultPropertyCursor(
-                DefaultPropertyCursor::release, storageReader.allocatePropertyCursor(), allocateFullAccessNodeCursor(),
-                allocateFullAccessRelationshipScanCursor() ) );
-=======
         return trace( new DefaultPropertyCursor( DefaultPropertyCursor::release,
                 storageReader.allocatePropertyCursor( cursorTracer, memoryTracker ), allocateFullAccessNodeCursor( cursorTracer ),
                 allocateFullAccessRelationshipScanCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public PropertyCursor allocateFullAccessPropertyCursor( PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
     {
-<<<<<<< HEAD
-        return trace( new FullAccessPropertyCursor(
-                DefaultPropertyCursor::release, storageReader.allocatePropertyCursor(), allocateFullAccessNodeCursor(),
-                allocateFullAccessRelationshipScanCursor() ) );
-=======
         return trace( new FullAccessPropertyCursor( DefaultPropertyCursor::release,
                 storageReader.allocatePropertyCursor( cursorTracer, memoryTracker ), allocateFullAccessNodeCursor( cursorTracer ),
                 allocateFullAccessRelationshipScanCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public NodeValueIndexCursor allocateNodeValueIndexCursor( PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        return trace( new DefaultRelationshipGroupCursor(
-                DefaultRelationshipGroupCursor::release, storageReader.allocateRelationshipGroupCursor(), allocateRelationshipTraversalCursor() ) );
-=======
         return trace( new DefaultNodeValueIndexCursor(
                 DefaultNodeValueIndexCursor::release, allocateNodeCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public NodeLabelIndexCursor allocateNodeLabelIndexCursor( PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        return trace( new DefaultNodeValueIndexCursor(
-                DefaultNodeValueIndexCursor::release, allocateNodeCursor() ) );
-=======
         return trace( new DefaultNodeLabelIndexCursor( DefaultNodeLabelIndexCursor::release, allocateNodeCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public RelationshipIndexCursor allocateRelationshipIndexCursor( PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        return trace( new DefaultNodeLabelIndexCursor( DefaultNodeLabelIndexCursor::release, allocateNodeCursor() ) );
-=======
         return trace( new DefaultRelationshipIndexCursor( DefaultRelationshipIndexCursor::release, allocateRelationshipScanCursor( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
     public RelationshipTypeIndexCursor allocateRelationshipTypeIndexCursor()
     {
-<<<<<<< HEAD
-        return trace( new DefaultRelationshipIndexCursor( DefaultRelationshipIndexCursor::release, allocateRelationshipScanCursor() ) );
-=======
         return trace( new DefaultRelationshipTypeIndexCursor( DefaultRelationshipTypeIndexCursor::release ) );
->>>>>>> neo4j/4.1
     }
 
     public void close()

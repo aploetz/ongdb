@@ -375,11 +375,7 @@ class NodeStoreTest
         nodeStore.updateRecord( record, NULL );
 
         // when
-<<<<<<< HEAD
-        nodeStore.getRecord( primaryUnitId, record, NORMAL );
-=======
         nodeStore.getRecord( primaryUnitId, record, NORMAL, NULL );
->>>>>>> neo4j/4.1
         record.setSecondaryUnitIdOnCreate( secondaryUnitId );
         IdUpdateListener idUpdateListener = mock( IdUpdateListener.class );
         nodeStore.updateRecord( record, idUpdateListener, NULL );
@@ -409,31 +405,6 @@ class NodeStoreTest
         // when loading that node and making it heavy
         NodeRecord loadedRecord = nodeStore.getRecord( record.getId(), nodeStore.newRecord(), NORMAL, NULL );
         InvalidRecordException e = assertThrows( InvalidRecordException.class, () -> nodeStore.ensureHeavy( loadedRecord, NULL ) );
-
-        // then
-        assertThat( e.getMessage(), containsString( loadedRecord.toString() ) );
-    }
-
-    @Test
-    public void shouldIncludeNodeRecordInExceptionLoadingDynamicLabelRecords() throws IOException
-    {
-        // given a node with reference to a dynamic label record
-        nodeStore = newNodeStore( fs );
-        NodeRecord record = new NodeRecord( 5L ).initialize( true, NULL_REFERENCE.longValue(), false, 1234, NO_LABELS_FIELD.longValue() );
-        NodeLabels labels = NodeLabelsField.parseLabelsField( record );
-        labels.put( new long[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, nodeStore, nodeStore.getDynamicLabelStore() );
-        nodeStore.updateRecord( record );
-
-        // ... and where e.g. the dynamic label record is unused
-        for ( DynamicRecord dynamicLabelRecord : record.getDynamicLabelRecords() )
-        {
-            dynamicLabelRecord.setInUse( false );
-            nodeStore.getDynamicLabelStore().updateRecord( dynamicLabelRecord );
-        }
-
-        // when loading that node and making it heavy
-        NodeRecord loadedRecord = nodeStore.getRecord( record.getId(), nodeStore.newRecord(), NORMAL );
-        InvalidRecordException e = assertThrows( InvalidRecordException.class, () -> nodeStore.ensureHeavy( loadedRecord ) );
 
         // then
         assertThat( e.getMessage(), containsString( loadedRecord.toString() ) );

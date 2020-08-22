@@ -27,10 +27,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.neo4j.annotations.api.IgnoreApiCheck;
-<<<<<<< HEAD
-=======
 import org.neo4j.graphdb.config.Configuration;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.internal.helpers.Exceptions;
 

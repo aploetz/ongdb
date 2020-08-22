@@ -311,14 +311,9 @@ class MultipleIndexPopulationStressIT
         {
             DatabaseLayout layout = Neo4jLayout.of( directory.homeDir() ).databaseLayout( DEFAULT_DATABASE_NAME );
             BatchImporter importer = new ParallelBatchImporter(
-<<<<<<< HEAD
-                    layout, fileSystemRule.get(), null, DEFAULT, NullLogService.getInstance(), ExecutionMonitors.invisible(), EMPTY, config, recordFormats,
-                    NO_MONITOR, jobScheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer() );
-=======
                     layout, fileSystemAbstraction, null, PageCacheTracer.NULL, DEFAULT, NullLogService.getInstance(),
                     ExecutionMonitors.invisible(), EMPTY, config, recordFormats, NO_MONITOR, jobScheduler, Collector.EMPTY,
                     TransactionLogInitializer.getLogFilesInitializer(), INSTANCE );
->>>>>>> neo4j/4.1
             importer.doImport( input );
         }
     }

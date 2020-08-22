@@ -8,13 +8,8 @@
         <relativePath>../..</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-dbms</artifactId>
     <name>ONgDB - Database Management System</name>
-=======
-    <artifactId>neo4j-dbms</artifactId>
-    <name>Neo4j - Database Management System</name>
->>>>>>> neo4j/4.1
 
     <properties>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
@@ -118,15 +113,11 @@
             <artifactId>commons-compress</artifactId>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb.licensing-proxy</groupId>
-=======
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-text</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j.licensing-proxy</groupId>
->>>>>>> neo4j/4.1
+           <groupId>org.graphfoundation.ongdb.licensing-proxy</groupId>
             <artifactId>zstd-proxy</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -143,23 +134,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-kernel</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-            <type>test-jar</type>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-command-line</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-            <type>test-jar</type>
-        </dependency>
-        <dependency>
-=======
->>>>>>> neo4j/4.1
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
         </dependency>

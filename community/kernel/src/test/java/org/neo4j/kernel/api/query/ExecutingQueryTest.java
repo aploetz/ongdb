@@ -45,7 +45,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.graphdb.QueryExecutionType.QueryType.READ_ONLY;
 import static org.neo4j.kernel.database.TestDatabaseIdRepository.randomNamedDatabaseId;
@@ -131,10 +130,7 @@ class ExecutingQueryTest
     void shouldReportWaitTime()
     {
         // given
-<<<<<<< HEAD
-=======
         query.onObfuscatorReady( null );
->>>>>>> neo4j/4.1
         query.onCompilationCompleted( new CompilerInfo( "the-planner", "the-runtime", emptyList() ), READ_ONLY, null );
         query.onExecutionStarted( new FakeMemoryTracker() );
 
@@ -316,27 +312,6 @@ class ExecutingQueryTest
     @Test
     void shouldNotAllowCompletingCompilationMultipleTimes()
     {
-<<<<<<< HEAD
-        testPasswordObfuscation( "create USER foo SET PaSsWoRd " );
-    }
-
-    @Test
-    void shouldObfuscateCreateOrReplaceUser()
-    {
-        testPasswordObfuscation( "create OR replace USER foo SET PaSsWoRd " );
-    }
-
-    @Test
-    void shouldObfuscateCreateUserIfNotExits()
-    {
-        testPasswordObfuscation( "create USER foo IF not EXisTS SET PaSsWoRd " );
-    }
-
-    @Test
-    void shouldObfuscateAlterUser()
-    {
-        testPasswordObfuscation( "alter USER foo SET PaSsWoRd " );
-=======
         query.onObfuscatorReady( null );
         query.onCompilationCompleted( null, null, null );
         assertThatIllegalStateException().isThrownBy( () -> query.onCompilationCompleted( null, null, null ) );
@@ -346,7 +321,6 @@ class ExecutingQueryTest
     void shouldNotAllowStartingExecutionWithoutCompilation()
     {
         assertThatIllegalStateException().isThrownBy( () -> query.onExecutionStarted( null ) );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -373,54 +347,6 @@ class ExecutingQueryTest
         query.onObfuscatorReady(null );
         query.onCompilationCompleted( null, null, null );
         assertThatIllegalStateException().isThrownBy( query::onRetryAttempted );
-    }
-
-    @Test
-    void shouldNotAllowCompletingCompilationMultipleTimes()
-    {
-        query.onCompilationCompleted( null, null, null );
-        assertThrows( IllegalStateException.class, () -> query.onCompilationCompleted( null, null, null ) );
-    }
-
-    @Test
-    void shouldNotAllowStartingExecutionWithoutCompilation()
-    {
-        assertThrows( IllegalStateException.class, () -> query.onExecutionStarted( null ) );
-    }
-
-    @Test
-    void shouldAllowRetryingAfterStartingExecutiong()
-    {
-        assertEquals( "planning", query.snapshot().status() );
-
-        query.onCompilationCompleted( null, null, null );
-        assertEquals( "planned", query.snapshot().status() );
-
-        query.onExecutionStarted( new FakeMemoryTracker() );
-        assertEquals( "running", query.snapshot().status() );
-
-        query.onRetryAttempted();
-        assertEquals( "planning", query.snapshot().status() );
-    }
-
-    @Test
-    void shouldNotAllowRetryingWithoutStartingExecuting()
-    {
-        query.onCompilationCompleted( null, null, null );
-        assertThrows( IllegalStateException.class, query::onRetryAttempted );
-    }
-
-    private void testPasswordObfuscation( String startOfQuery )
-    {
-        var exeQuery1 = createExecutingQuery( 1, startOfQuery + "'bar'", page, clock, cpuClock, NAMED_SYSTEM_DATABASE_ID, EMPTY_MAP );
-        assertThat( exeQuery1.queryText(), equalTo( startOfQuery + "'******'" ) );
-        assertThat( exeQuery1.queryParameters().size(), equalTo( 0 ) );
-
-        MapValue params = map( new String[]{"password"}, new AnyValue[]{stringValue( "bar" )} );
-        MapValue obfuscatedParams = map( new String[]{"password"}, new AnyValue[]{stringValue( "******" )} );
-        var exeQuery2 = createExecutingQuery( 1, startOfQuery + "$password", page, clock, cpuClock, NAMED_SYSTEM_DATABASE_ID, params );
-        assertThat( exeQuery2.queryText(), equalTo( startOfQuery + "$password" ) );
-        assertThat( exeQuery2.queryParameters(), equalTo( obfuscatedParams ) );
     }
 
     private LockWaitEvent lock( String resourceType, long resourceId )

@@ -179,13 +179,8 @@ class KernelTransactionTestBase
                 mock( DatabaseTracers.class, RETURNS_MOCKS ), storageEngine,
                 new CanWrite(), EmptyVersionContextSupplier.EMPTY, () -> collectionsFactory,
                 new StandardConstraintSemantics(), mock( SchemaState.class ), mockedTokenHolders(),
-<<<<<<< HEAD
-                mock( IndexingService.class ), mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies,
-                new TestDatabaseIdRepository().defaultDatabase(), leaseService );
-=======
                 mock( IndexingService.class ), mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ), mock( IndexStatisticsStore.class ),
                 dependencies, new TestDatabaseIdRepository().defaultDatabase(), leaseService, memoryPool );
->>>>>>> neo4j/4.1
     }
 
     public static class CapturingCommitProcess implements TransactionCommitProcess

@@ -19,27 +19,17 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-<<<<<<< HEAD
-=======
 import org.neo4j.cypher.internal.CypherRuntime
 import org.neo4j.cypher.internal.RuntimeContext
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.logical.plans.GetValue
 import org.neo4j.cypher.internal.logical.plans.IndexOrderAscending
 import org.neo4j.cypher.internal.logical.plans.IndexOrderDescending
 import org.neo4j.cypher.internal.logical.plans.ManyQueryExpression
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.CypherRuntime
-import org.neo4j.cypher.internal.RuntimeContext
-import org.neo4j.graphdb.Label
-=======
 import org.neo4j.cypher.internal.runtime.spec.Edition
 import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
 import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
 import org.neo4j.graphdb.Label
 import org.neo4j.graphdb.Node
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.RelationshipType
 
 // Supported by all runtimes
@@ -576,8 +566,6 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     runtimeResult should beColumns("x").withRows(rowCount(5))
   }
 
-<<<<<<< HEAD
-=======
   test("should seek nodes with multiple less than bounds") {
     val nodes = given {
       index("Honey", "prop")
@@ -715,7 +703,6 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     runtimeResult should beColumns("x").withRows(singleColumn(expected))
   }
 
->>>>>>> neo4j/4.1
   test("should seek nodes of a unique index with a property") {
     val nodes = given {
       uniqueIndex("Honey", "prop")
@@ -1064,11 +1051,7 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     //when
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("x")
-<<<<<<< HEAD
-      .optional() // The optional is here to avoid fully fusing
-=======
       .nonFuseable()
->>>>>>> neo4j/4.1
       .expandAll("(x)-->(y)")
       .nodeIndexOperator("x:A(prop = 42 OR 1337)")
       .build()
@@ -1077,8 +1060,6 @@ trait NodeIndexSeekRangeAndCompositeTestBase[CONTEXT <: RuntimeContext] {
     // then
     runtimeResult should beColumns("x").withRows(rowCount(sizeHint * 5))
   }
-<<<<<<< HEAD
-=======
 }
 
 // Supported by slotted, pipelined, parallel (not compiled though because of composite index)
@@ -1113,7 +1094,6 @@ trait EnterpriseNodeIndexSeekTestBase[CONTEXT <: RuntimeContext] {
     } yield honey(10)
     runtimeResult should beColumns("x").withRows(singleColumn(expected))
   }
->>>>>>> neo4j/4.1
 }
 
 // Buggy in compiled runtime

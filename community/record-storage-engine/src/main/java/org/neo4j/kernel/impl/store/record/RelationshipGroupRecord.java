@@ -173,11 +173,7 @@ public class RelationshipGroupRecord extends AbstractBaseRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public RelationshipGroupRecord clone()
-=======
     public RelationshipGroupRecord copy()
->>>>>>> neo4j/4.1
     {
         return new RelationshipGroupRecord( this );
     }

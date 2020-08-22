@@ -63,10 +63,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.id.indexed.IndexedIdGenerator.NO_MONITOR;
-<<<<<<< HEAD
-=======
 import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
->>>>>>> neo4j/4.1
 import static org.neo4j.test.OtherThreadExecutor.command;
 
 @PageCacheExtension
@@ -101,22 +98,6 @@ class FreeIdScannerTest
         tree.close();
     }
 
-<<<<<<< HEAD
-    FreeIdScanner scanner( int idsPerEntry, int cacheSize, long generation )
-    {
-        return scanner( idsPerEntry, new SpmcLongQueue( cacheSize ), generation );
-    }
-
-    FreeIdScanner scanner( int idsPerEntry, ConcurrentLongQueue cache, long generation )
-    {
-        this.cache = cache;
-        this.reuser = new RecordingReservedMarker( tree, generation, new AtomicLong() );
-        this.atLeastOneFreeId = new AtomicBoolean();
-        return new FreeIdScanner( idsPerEntry, tree, cache, atLeastOneFreeId, reuser, generation, false );
-    }
-
-=======
->>>>>>> neo4j/4.1
     @Test
     void shouldNotThinkItsWorthScanningIfNoFreedIdsAndNoOngoingScan()
     {
@@ -553,11 +534,7 @@ class FreeIdScannerTest
             marker.markDeleted( id );
             marker.markFree( id );
         } );
-<<<<<<< HEAD
-        scanner.tryLoadFreeIdsIntoCache(); // loads 0 - cacheSize
-=======
         scanner.tryLoadFreeIdsIntoCache( NULL ); // loads 0 - cacheSize
->>>>>>> neo4j/4.1
         assertCacheHasIdsNonExhaustive( range( 0, halfCacheSize ) ); // takes out 0 - cacheSize/2, which means cacheSize/2 - cacheSize is still in cache
         // simulate marking these ids as used and then delete and free them again so that they can be picked up by the scanner after clearCache
         forEachId( generation, range( 0, halfCacheSize ) ).accept( ( marker, id ) ->
@@ -568,13 +545,8 @@ class FreeIdScannerTest
         } );
 
         // when
-<<<<<<< HEAD
-        scanner.clearCache(); // should clear cacheSize/2 - cacheSize
-        scanner.tryLoadFreeIdsIntoCache();
-=======
         scanner.clearCache( NULL ); // should clear cacheSize/2 - cacheSize
         scanner.tryLoadFreeIdsIntoCache( NULL );
->>>>>>> neo4j/4.1
         assertCacheHasIdsNonExhaustive( range( 0, halfCacheSize ) );
         assertCacheHasIdsNonExhaustive( range( halfCacheSize, cacheSize ) );
     }
@@ -663,13 +635,8 @@ class FreeIdScannerTest
     {
         return handler ->
         {
-<<<<<<< HEAD
-            try ( IdRangeMarker marker = new IdRangeMarker( IDS_PER_ENTRY, layout, tree.writer(), mock( Lock.class ), IdRangeMerger.DEFAULT,
-                    true, atLeastOneFreeId, generation, new AtomicLong(), false, NO_MONITOR ) )
-=======
             try ( IdRangeMarker marker = new IdRangeMarker( IDS_PER_ENTRY, layout, tree.writer( NULL ),
                     mock( Lock.class ), IdRangeMerger.DEFAULT, true, atLeastOneFreeId, generation, new AtomicLong(), false, NO_MONITOR ) )
->>>>>>> neo4j/4.1
             {
                 for ( Range range : ranges )
                 {
@@ -683,11 +650,7 @@ class FreeIdScannerTest
         };
     }
 
-<<<<<<< HEAD
-    private class RecordingReservedMarker implements Supplier<ReservedMarker>
-=======
     private class RecordingReservedMarker implements MarkerProvider
->>>>>>> neo4j/4.1
     {
         private final MutableLongList reservedIds = LongLists.mutable.empty();
         private final MutableLongList unreservedIds = LongLists.mutable.empty();
@@ -703,16 +666,10 @@ class FreeIdScannerTest
         }
 
         @Override
-<<<<<<< HEAD
-        public ReservedMarker get()
-        {
-            ReservedMarker actual = instantiateRealMarker();
-=======
         public ReservedMarker getMarker( PageCursorTracer cursorTracer )
         {
             ReservedMarker actual = instantiateRealMarker();
             cursorTracer.beginPin( false, 1, null ).done();
->>>>>>> neo4j/4.1
             return new ReservedMarker()
             {
                 @Override
@@ -743,11 +700,7 @@ class FreeIdScannerTest
             {
                 Lock lock = new ReentrantLock();
                 lock.lock();
-<<<<<<< HEAD
-                return new IdRangeMarker( IDS_PER_ENTRY, layout, tree.writer(), lock, new IdRangeMerger( false, NO_MONITOR ), true, atLeastOneFreeId,
-=======
                 return new IdRangeMarker( IDS_PER_ENTRY, layout, tree.writer( NULL ), lock, new IdRangeMerger( false, NO_MONITOR ), true, atLeastOneFreeId,
->>>>>>> neo4j/4.1
                         generation, highestWrittenId, false, NO_MONITOR );
             }
             catch ( IOException e )

@@ -98,17 +98,7 @@ public class StubNodeCursor extends DefaultCloseListenable implements NodeCursor
     }
 
     @Override
-<<<<<<< HEAD
-    public LabelSet labelsIgnoringTxStateSetRemove()
-    {
-        return labels();
-    }
-
-    @Override
-    public boolean hasLabel( int label )
-=======
     public TokenSet labelsIgnoringTxStateSetRemove()
->>>>>>> neo4j/4.1
     {
         return labels();
     }

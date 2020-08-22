@@ -15,11 +15,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-values</artifactId>
-=======
-    <artifactId>neo4j-values</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Value</name>
@@ -64,8 +60,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-unsafe</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-unsafe</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

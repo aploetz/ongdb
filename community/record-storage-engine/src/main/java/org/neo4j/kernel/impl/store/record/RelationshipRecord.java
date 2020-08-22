@@ -198,11 +198,7 @@ public class RelationshipRecord extends PrimitiveRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public RelationshipRecord clone()
-=======
     public RelationshipRecord copy()
->>>>>>> neo4j/4.1
     {
         return new RelationshipRecord( this );
     }

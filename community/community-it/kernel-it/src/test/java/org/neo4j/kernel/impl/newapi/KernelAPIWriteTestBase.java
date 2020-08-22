@@ -91,11 +91,7 @@ public abstract class KernelAPIWriteTestBase<WriteSupport extends KernelAPIWrite
     protected KernelTransaction beginTransaction( LoginContext loginContext ) throws TransactionFailureException
     {
         Kernel kernel = testSupport.kernelToTest();
-<<<<<<< HEAD
-        return kernel.beginTransaction( KernelTransaction.Type.implicit, loginContext );
-=======
         return kernel.beginTransaction( KernelTransaction.Type.IMPLICIT, loginContext );
->>>>>>> neo4j/4.1
     }
 
     @AfterAll

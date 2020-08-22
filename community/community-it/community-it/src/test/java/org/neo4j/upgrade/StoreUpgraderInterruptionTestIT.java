@@ -32,15 +32,6 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-<<<<<<< HEAD
-
-import java.io.File;
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-
-=======
->>>>>>> neo4j/4.1
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.ProgressReporter;
 import org.neo4j.configuration.Config;
@@ -87,10 +78,7 @@ import static org.neo4j.configuration.GraphDatabaseSettings.allow_upgrade;
 import static org.neo4j.consistency.store.StoreAssertions.assertConsistentStore;
 import static org.neo4j.io.pagecache.tracing.PageCacheTracer.NULL;
 import static org.neo4j.kernel.impl.storemigration.MigrationTestUtils.checkNeoStoreHasDefaultFormatVersion;
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 import static org.neo4j.storageengine.api.StorageEngineFactory.selectStorageEngine;
 
 @RunWith( Parameterized.class )
@@ -189,8 +177,6 @@ public class StoreUpgraderInterruptionTestIT
     private SchemaIndexMigrator createIndexMigrator()
     {
         return new SchemaIndexMigrator( "upgrade test indexes", fs, IndexProvider.EMPTY.directoryStructure(), selectStorageEngine() );
-<<<<<<< HEAD
-=======
     }
 
     @Test
@@ -224,7 +210,6 @@ public class StoreUpgraderInterruptionTestIT
         assertEquals( 208, recordMigratorTracer.hits() );
         assertEquals( 260, recordMigratorTracer.pins() );
         assertEquals( 260, recordMigratorTracer.unpins() );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -280,17 +265,11 @@ public class StoreUpgraderInterruptionTestIT
 
         Dependencies dependencies = new Dependencies();
         dependencies.satisfyDependencies( new Monitors() );
-<<<<<<< HEAD
-        LogsUpgrader logsUpgrader = new LogsUpgrader(
-                fs, selectStorageEngine(), workingDatabaseLayout, pageCache, legacyTransactionLogsLocator, config, dependencies );
-        StoreUpgrader upgrader = new StoreUpgrader( versionCheck, progressMonitor, config, fs, NullLogProvider.getInstance(), logsUpgrader );
-=======
         RecordStorageEngineFactory storageEngineFactory = new RecordStorageEngineFactory();
         LogsUpgrader logsUpgrader = new LogsUpgrader(
                 fs, storageEngineFactory, workingDatabaseLayout, pageCache, legacyTransactionLogsLocator, config, dependencies, NULL, INSTANCE );
         StoreUpgrader upgrader = new StoreUpgrader(
                 versionCheck, progressMonitor, config, fs, NullLogProvider.getInstance(), logsUpgrader, NULL );
->>>>>>> neo4j/4.1
         for ( StoreMigrationParticipant participant : participants )
         {
             upgrader.addParticipant( participant );

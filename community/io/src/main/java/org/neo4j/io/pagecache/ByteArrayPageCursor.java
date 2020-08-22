@@ -19,10 +19,6 @@
  */
 package org.neo4j.io.pagecache;
 
-<<<<<<< HEAD
-import org.eclipse.collections.api.map.primitive.LongObjectMap;
-=======
->>>>>>> neo4j/4.1
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
 import org.eclipse.collections.impl.factory.primitive.LongObjectMaps;
 

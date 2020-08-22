@@ -377,12 +377,7 @@ public abstract class ListValue extends VirtualValue implements SequenceValue, I
                 {
                     throw new OutOfMemoryError( "Cannot index an collection of size " + l );
                 }
-<<<<<<< HEAD
-                length = (int) l;
-                return Math.max( length, 0 );
-=======
                 length = Math.max( (int) l, 0 );
->>>>>>> neo4j/4.1
             }
             return length;
         }

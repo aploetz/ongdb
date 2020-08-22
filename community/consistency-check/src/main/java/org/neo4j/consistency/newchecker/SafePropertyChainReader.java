@@ -144,11 +144,7 @@ class SafePropertyChainReader implements AutoCloseable
                             {
                             case STRING:
                                 dynamicRecords.clear();
-<<<<<<< HEAD
-                                if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.clone() ), stringReader, seenDynamicRecordIds,
-=======
                                 if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.copy() ), stringReader, seenDynamicRecordIds,
->>>>>>> neo4j/4.1
                                         block.getSingleValueLong(), stringStoreBlockSize, NO_DYNAMIC_HANDLER,
                                         ( id, record ) -> reporter.forProperty( propertyRecord ).stringNotInUse( block, record ),
                                         ( id, record ) -> reporter.forDynamicBlock( RecordType.STRING_PROPERTY, stringReader.record() ).nextNotInUse( record ),
@@ -161,11 +157,7 @@ class SafePropertyChainReader implements AutoCloseable
                                 break;
                             case ARRAY:
                                 dynamicRecords.clear();
-<<<<<<< HEAD
-                                if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.clone() ), arrayReader, seenDynamicRecordIds,
-=======
                                 if ( safeLoadDynamicRecordChain( record -> dynamicRecords.add( record.copy() ), arrayReader, seenDynamicRecordIds,
->>>>>>> neo4j/4.1
                                         block.getSingleValueLong(), arrayStoreBlockSize, NO_DYNAMIC_HANDLER,
                                         ( id, record ) -> reporter.forProperty( propertyRecord ).arrayNotInUse( block, record ),
                                         ( id, record ) -> reporter.forDynamicBlock( RecordType.ARRAY_PROPERTY, arrayReader.record() ).nextNotInUse( record ),

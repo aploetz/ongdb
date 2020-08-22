@@ -22,40 +22,26 @@ package org.neo4j.kernel.impl.transaction.log.files;
 import java.io.File;
 import java.io.IOException;
 
-<<<<<<< HEAD
-import org.neo4j.exceptions.UnderlyingStorageException;
-import org.neo4j.io.fs.FileSystemAbstraction;
-import org.neo4j.io.layout.DatabaseLayout;
-=======
 import org.apache.commons.lang3.mutable.MutableLong;
 import org.neo4j.exceptions.UnderlyingStorageException;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.transaction.log.FlushablePositionAwareChecksumChannel;
 import org.neo4j.kernel.impl.transaction.log.LogEntryCursor;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.LogPositionMarker;
 import org.neo4j.kernel.impl.transaction.log.ReadableLogChannel;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
-<<<<<<< HEAD
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntryByteCodes;
-=======
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryTypeCodes;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryWriter;
 import org.neo4j.kernel.impl.transaction.log.entry.LogHeader;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.lifecycle.Lifespan;
-<<<<<<< HEAD
-import org.neo4j.storageengine.api.LogFilesInitializer;
-=======
 import org.neo4j.storageengine.api.CommandReaderFactory;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 import org.neo4j.storageengine.api.StorageEngineFactory;
->>>>>>> neo4j/4.1
 import org.neo4j.storageengine.api.TransactionId;
 import org.neo4j.storageengine.api.TransactionMetaDataStore;
 
@@ -71,11 +57,8 @@ public class TransactionLogInitializer
 {
     private final FileSystemAbstraction fs;
     private final TransactionMetaDataStore store;
-<<<<<<< HEAD
-=======
     private final CommandReaderFactory commandReaderFactory;
     private final PageCacheTracer tracer;
->>>>>>> neo4j/4.1
 
     /**
      * Get a {@link LogFilesInitializer} implementation, suitable for e.g. passing to a batch importer.
@@ -87,13 +70,9 @@ public class TransactionLogInitializer
         {
             try
             {
-<<<<<<< HEAD
-                TransactionLogInitializer initializer = new TransactionLogInitializer( fileSystem, store );
-=======
                 TransactionLogInitializer initializer = new TransactionLogInitializer(
                         fileSystem, store, StorageEngineFactory.selectStorageEngine().commandReaderFactory(),
                         PageCacheTracer.NULL );
->>>>>>> neo4j/4.1
                 initializer.initializeEmptyLogFile( databaseLayout, databaseLayout.getTransactionLogsDirectory() );
             }
             catch ( IOException e )
@@ -103,12 +82,6 @@ public class TransactionLogInitializer
         };
     }
 
-<<<<<<< HEAD
-    public TransactionLogInitializer( FileSystemAbstraction fs, TransactionMetaDataStore store )
-    {
-        this.fs = fs;
-        this.store = store;
-=======
     public TransactionLogInitializer( FileSystemAbstraction fs, TransactionMetaDataStore store, CommandReaderFactory commandReaderFactory,
                                       PageCacheTracer tracer )
     {
@@ -116,7 +89,6 @@ public class TransactionLogInitializer
         this.store = store;
         this.commandReaderFactory = commandReaderFactory;
         this.tracer = tracer;
->>>>>>> neo4j/4.1
     }
 
     /**
@@ -144,21 +116,13 @@ public class TransactionLogInitializer
             LogFiles logFiles = span.getLogFiles();
             LogHeader logHeader = logFiles.extractHeader( logFiles.getLowestLogVersion() );
             ReadableLogChannel readableChannel = logFiles.getLogFile().getReader( logHeader.getStartPosition() );
-<<<<<<< HEAD
-            try ( LogEntryCursor cursor = new LogEntryCursor( new VersionAwareLogEntryReader( false ), readableChannel ) )
-=======
             VersionAwareLogEntryReader entryReader = new VersionAwareLogEntryReader( commandReaderFactory, false );
             try ( LogEntryCursor cursor = new LogEntryCursor( entryReader, readableChannel ) )
->>>>>>> neo4j/4.1
             {
                 while ( cursor.next() )
                 {
                     LogEntry entry = cursor.get();
-<<<<<<< HEAD
-                    if ( entry.getType() == LogEntryByteCodes.TX_COMMIT )
-=======
                     if ( entry.getType() == LogEntryTypeCodes.TX_COMMIT )
->>>>>>> neo4j/4.1
                     {
                         // The log files already contain a transaction, so there is nothing for us to do.
                         return;
@@ -177,10 +141,7 @@ public class TransactionLogInitializer
                                            .withTransactionIdStore( store )
                                            .withStoreId( store.getStoreId() )
                                            .withLogsDirectory( transactionLogsDirectory )
-<<<<<<< HEAD
-=======
                                            .withCommandReaderFactory( commandReaderFactory )
->>>>>>> neo4j/4.1
                                            .build();
         return new LogFilesSpan( new Lifespan( logFiles ), logFiles );
     }
@@ -198,14 +159,10 @@ public class TransactionLogInitializer
         writableChannel.getCurrentPosition( marker );
         LogPosition position = marker.newPosition();
         writer.writeCheckPointEntry( position );
-<<<<<<< HEAD
-        store.setLastCommittedAndClosedTransactionId( transactionId, checksum, timestamp, position.getByteOffset(), position.getLogVersion() );
-=======
         try ( PageCursorTracer cursorTracer = tracer.createPageCursorTracer( "LogsUpgrader" ) )
         {
             store.setLastCommittedAndClosedTransactionId(
                     transactionId, checksum, timestamp, position.getByteOffset(), position.getLogVersion(), cursorTracer );
         }
->>>>>>> neo4j/4.1
     }
 }

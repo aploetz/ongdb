@@ -19,10 +19,7 @@
  */
 package org.neo4j.kernel.impl.store;
 
-<<<<<<< HEAD
-=======
 import org.eclipse.collections.api.set.ImmutableSet;
->>>>>>> neo4j/4.1
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
 import org.eclipse.collections.impl.factory.primitive.LongSets;
 
@@ -832,12 +829,8 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
 
     void logIdUsage( Logger logger, PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        logger.log( format( "%s[%s]: used=%s high=%s", getTypeDescriptor(), getStorageFile().getName(), getNumberOfIdsInUse(), getHighestPossibleIdInUse() ) );
-=======
         logger.log( format( "%s[%s]: used=%s high=%s", getTypeDescriptor(), getStorageFile().getName(), getNumberOfIdsInUse(),
                 getHighestPossibleIdInUse( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override

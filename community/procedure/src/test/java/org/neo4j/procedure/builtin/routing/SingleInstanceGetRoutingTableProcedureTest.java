@@ -42,14 +42,9 @@ import org.neo4j.kernel.availability.DatabaseAvailabilityGuard;
 import org.neo4j.kernel.database.Database;
 import org.neo4j.kernel.database.DatabaseIdRepository;
 import org.neo4j.kernel.database.NamedDatabaseId;
-<<<<<<< HEAD
-import org.neo4j.kernel.database.TestDatabaseIdRepository;
-import org.neo4j.logging.AssertableLogProvider;
-=======
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.logging.AssertableLogProvider.Level;
 import org.neo4j.logging.LogAssertions;
->>>>>>> neo4j/4.1
 import org.neo4j.logging.LogProvider;
 import org.neo4j.values.AnyValue;
 import org.neo4j.values.storable.Values;
@@ -57,12 +52,7 @@ import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.MapValueBuilder;
 
 import static java.util.Collections.singletonList;
-<<<<<<< HEAD
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.endsWith;
-=======
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,12 +116,7 @@ public class SingleInstanceGetRoutingTableProcedureTest
         var exception = assertThrows( ProcedureException.class, () -> proc.invoke( ID, MapValue.EMPTY ) );
 
         assertEquals( Status.Procedure.ProcedureCallFailed, exception.status() );
-<<<<<<< HEAD
-        assertThat( exception.getLocalizedMessage(),
-                    endsWith( " Please update your configuration for '" + BoltConnector.enabled.name() + "'" ) );
-=======
         assertThat( exception ).hasMessageEndingWith( " Please update your configuration for '" + BoltConnector.enabled.name() + "'" );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -158,10 +143,6 @@ public class SingleInstanceGetRoutingTableProcedureTest
         var portRegister = mock( ConnectorPortRegister.class );
         var config = Config.defaults();
 
-<<<<<<< HEAD
-        databaseIdRepository.filter( UNKNOWN_ID.name() );
-        var input = new AnyValue[]{MapValue.EMPTY, stringValue( UNKNOWN_ID.name() )};
-=======
         var databaseIdRepository = mock( DatabaseIdRepository.Caching.class );
         when( databaseIdRepository.getByName( UNKNOWN_DATABASE_NAME )).thenReturn( Optional.empty() );
         var databaseManager = mock( DatabaseManager.class );
@@ -170,7 +151,6 @@ public class SingleInstanceGetRoutingTableProcedureTest
 
         var procedure = newProcedure( databaseManager, portRegister, config, nullLogProvider() );
 
->>>>>>> neo4j/4.1
         var error = assertThrows( ProcedureException.class, () -> procedure.apply( null, input, null ) );
         assertEquals( DatabaseNotFound, error.status() );
     }
@@ -190,11 +170,7 @@ public class SingleInstanceGetRoutingTableProcedureTest
     }
 
     @Test
-<<<<<<< HEAD
-    void shouldThrowWhenAddressCtxIsPresentButEmpty()
-=======
     void shouldThrowWhenAddressCtxIsPresentButEmpty() throws ProcedureException
->>>>>>> neo4j/4.1
     {
         // given
         var ctxContents = new MapValueBuilder();

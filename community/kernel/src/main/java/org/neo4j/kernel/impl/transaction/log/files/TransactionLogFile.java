@@ -26,16 +26,11 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.io.ByteUnit;
 import org.neo4j.io.IOUtils;
-<<<<<<< HEAD
-import org.neo4j.io.fs.FileSystemAbstraction;
-import org.neo4j.io.memory.BufferScope;
-=======
 import org.neo4j.io.fs.DelegatingStoreChannel;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.memory.NativeScopedBuffer;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.transaction.log.FlushablePositionAwareChecksumChannel;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.LogVersionBridge;
@@ -64,20 +59,12 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     private final LogFiles logFiles;
     private final TransactionLogFilesContext context;
     private final LogVersionBridge readerLogVersionBridge;
-<<<<<<< HEAD
-    private BufferScope bufferScope;
-    private PositionAwarePhysicalFlushableChecksumChannel writer;
-    private LogVersionRepository logVersionRepository;
-
-    private volatile PhysicalLogVersionedStoreChannel channel;
-=======
     private final PageCacheTracer pageCacheTracer;
     private final MemoryTracker memoryTracker;
 
     private volatile PhysicalLogVersionedStoreChannel channel;
     private PositionAwarePhysicalFlushableChecksumChannel writer;
     private LogVersionRepository logVersionRepository;
->>>>>>> neo4j/4.1
 
     TransactionLogFile( LogFiles logFiles, TransactionLogFilesContext context )
     {
@@ -104,12 +91,7 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
         //try to set position
         seekChannelPosition( currentLogVersion );
 
-<<<<<<< HEAD
-        bufferScope = new BufferScope( calculateLogBufferSize() );
-        writer = new PositionAwarePhysicalFlushableChecksumChannel( channel, bufferScope.buffer );
-=======
         writer = new PositionAwarePhysicalFlushableChecksumChannel( channel, new NativeScopedBuffer( calculateLogBufferSize(), memoryTracker ) );
->>>>>>> neo4j/4.1
     }
 
     private void seekChannelPosition( long currentLogVersion ) throws IOException
@@ -183,11 +165,7 @@ class TransactionLogFile extends LifecycleAdapter implements LogFile
     @Override
     public void shutdown() throws IOException
     {
-<<<<<<< HEAD
-        IOUtils.closeAll( writer, bufferScope );
-=======
         IOUtils.closeAll( writer );
->>>>>>> neo4j/4.1
     }
 
     @Override

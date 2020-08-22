@@ -178,11 +178,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
 
             denseNodeThreshold = config.get( GraphDatabaseSettings.dense_node_threshold );
 
-<<<<<<< HEAD
-            countsStore = openCountsStore( pageCache, fs, databaseLayout, config, logProvider, recoveryCleanupWorkCollector );
-=======
             countsStore = openCountsStore( pageCache, fs, databaseLayout, config, logProvider, recoveryCleanupWorkCollector, cacheTracer );
->>>>>>> neo4j/4.1
 
             consistencyCheckApply = config.get( GraphDatabaseInternalSettings.consistency_check_on_apply );
         }
@@ -193,10 +189,6 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         }
     }
 
-<<<<<<< HEAD
-    private GBPTreeCountsStore openCountsStore( PageCache pageCache, FileSystemAbstraction fs, DatabaseLayout layout, Config config, LogProvider logProvider,
-            RecoveryCleanupWorkCollector recoveryCleanupWorkCollector )
-=======
     private void buildApplierChains()
     {
         for ( TransactionApplicationMode mode : TransactionApplicationMode.values() )
@@ -237,7 +229,6 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
 
     private GBPTreeCountsStore openCountsStore( PageCache pageCache, FileSystemAbstraction fs, DatabaseLayout layout, Config config, LogProvider logProvider,
             RecoveryCleanupWorkCollector recoveryCleanupWorkCollector, PageCacheTracer pageCacheTracer )
->>>>>>> neo4j/4.1
     {
         boolean readOnly = config.get( GraphDatabaseSettings.read_only );
         try
@@ -386,38 +377,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
      */
     protected TransactionApplierFactoryChain applierChain( TransactionApplicationMode mode )
     {
-<<<<<<< HEAD
-        ArrayList<BatchTransactionApplier> appliers = new ArrayList<>();
-        // Graph store application. The order of the decorated store appliers is irrelevant
-        if ( consistencyCheckApply && mode.needsAuxiliaryStores() )
-        {
-            appliers.add( new ConsistencyCheckingBatchApplier( neoStores ) );
-        }
-        appliers.add( new NeoStoreBatchTransactionApplier( mode, neoStores, cacheAccess, lockService( mode ), idGeneratorWorkSyncs ) );
-        if ( mode.needsHighIdTracking() )
-        {
-            appliers.add( new HighIdBatchTransactionApplier( neoStores ) );
-        }
-        if ( mode.needsCacheInvalidationOnUpdates() )
-        {
-            appliers.add( new CacheInvalidationBatchTransactionApplier( neoStores, cacheAccess ) );
-        }
-        if ( mode.needsAuxiliaryStores() )
-        {
-            // Counts store application
-            appliers.add( new CountsStoreBatchTransactionApplier( countsStore, mode ) );
-
-            // Schema index application
-            appliers.add( new IndexBatchTransactionApplier( indexUpdateListener, labelScanStoreSync, indexUpdatesSync,
-                    neoStores.getNodeStore(), neoStores.getPropertyStore(), this, schemaCache, indexActivator ) );
-        }
-
-        // Perform the application
-        return new BatchTransactionApplierFacade(
-                appliers.toArray( new BatchTransactionApplier[0] ) );
-=======
         return applierChains.get( mode );
->>>>>>> neo4j/4.1
     }
 
     private LockService lockService( TransactionApplicationMode mode )

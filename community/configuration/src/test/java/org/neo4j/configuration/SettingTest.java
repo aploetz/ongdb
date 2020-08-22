@@ -212,9 +212,6 @@ class SettingTest
 
         assertEquals( "1s", setting.valueToString( setting.parse( "1s" ) ) );
         assertEquals( "3m", setting.valueToString( setting.parse( "3m" ) ) );
-<<<<<<< HEAD
-        assertEquals( "0s", setting.valueToString( setting.parse( "0s" ) ) );
-=======
 
         // Anything less than a millisecond is rounded down
         assertEquals( "0s", setting.valueToString( setting.parse( "0s" ) ) );
@@ -226,17 +223,12 @@ class SettingTest
         assertEquals( "11d19h25m4s50ms", setting.valueToString( setting.parse( "11d19h25m4s50ms607μs80ns" ) ) );
         // Weird time strings will be converted to something more readable
         assertEquals( "2m1ms", setting.valueToString( setting.parse( "1m60000ms1000000ns" ) ) );
->>>>>>> neo4j/4.1
 
         String descriptionWithConstraint = SettingImpl.newBuilder( "setting", DURATION, ofMinutes( 1 ) )
                 .addConstraint( min( Duration.ofSeconds( 10 ) ) )
                 .build()
                 .description();
 
-<<<<<<< HEAD
-        String expected = "setting, a duration (Valid units are: 'ns', 'ms', 's', 'm' and 'h'; default unit is 's') which is minimum `10s`";
-        assertEquals( expected, descriptionWithConstraint );
-=======
         String expected = "setting, a duration (Valid units are: 'ns', 'μs', 'ms', 's', 'm', 'h' and 'd'; default unit is 's') which is minimum `10s`";
         assertEquals( expected, descriptionWithConstraint );
     }
@@ -274,7 +266,6 @@ class SettingTest
         // Anything less than a millisecond is rounded down
         assertEquals( "0ns-0ns", setting.valueToString( setting.parse( "999μs-999999ns" ) ) );
         assertEquals( 0, setting.parse( "999μs-999999ns" ).getDelta().toNanos() );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -452,15 +443,9 @@ class SettingTest
     void testPowerOf2Constraint()
     {
         var setting = (SettingImpl<Long>) settingBuilder( "setting", LONG ).addConstraint( POWER_OF_2 ).build();
-<<<<<<< HEAD
-        assertDoesNotThrow( () -> setting.validate( 8L ) );
-        assertDoesNotThrow( () -> setting.validate( 4294967296L ) );
-        assertThrows( IllegalArgumentException.class, () -> setting.validate( 1023L ) );
-=======
         assertDoesNotThrow( () -> setting.validate( 8L, EMPTY ) );
         assertDoesNotThrow( () -> setting.validate( 4294967296L, EMPTY ) );
         assertThrows( IllegalArgumentException.class, () -> setting.validate( 1023L, EMPTY ) );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -486,16 +471,6 @@ class SettingTest
 
         var durationSetting = (SettingImpl<Duration>) settingBuilder( "setting", DURATION )
                 .addConstraint( any( min( ofMinutes( 30 ) ), is( Duration.ZERO ) )  ).build();
-<<<<<<< HEAD
-        assertDoesNotThrow( () -> durationSetting.validate( ofMinutes( 30 ) ) );
-        assertDoesNotThrow( () -> durationSetting.validate( Duration.ofHours( 1 ) ) );
-        assertDoesNotThrow( () -> durationSetting.validate( Duration.ZERO ) );
-        assertThrows( IllegalArgumentException.class, () -> durationSetting.validate( ofMinutes( 29 ) ) );
-        assertThrows( IllegalArgumentException.class, () -> durationSetting.validate( Duration.ofMillis( 1 ) ) );
-
-        String expected = "setting, a duration (Valid units are: 'ns', 'ms', 's', 'm' and 'h'; default unit is 's') which is minimum `30m` or is `0s`";
-        assertEquals( expected, durationSetting.description() );
-=======
         assertDoesNotThrow( () -> durationSetting.validate( ofMinutes( 30 ), EMPTY ) );
         assertDoesNotThrow( () -> durationSetting.validate( Duration.ofHours( 1 ), EMPTY ) );
         assertDoesNotThrow( () -> durationSetting.validate( Duration.ZERO, EMPTY ) );
@@ -550,7 +525,6 @@ class SettingTest
         assertDoesNotThrow( () -> dependingEnumSetting.validate( List.of( "a", "b", "c", "d" ), simpleConfig ) );
         assertThrows( IllegalArgumentException.class, () -> dependingEnumSetting.validate( List.of( "a", "b" ), simpleConfig ) );
         assertThrows( IllegalArgumentException.class, () -> dependingEnumSetting.validate( List.of( "a", "b", "c" ), simpleConfig ) );
->>>>>>> neo4j/4.1
     }
 
     @Test

@@ -44,15 +44,7 @@ import org.neo4j.test.extension.SuppressOutputExtension;
 import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
 import org.neo4j.test.rule.TestDirectory;
 
-<<<<<<< HEAD
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.hamcrest.MatcherAssert.assertThat;
-=======
 import static org.assertj.core.api.Assertions.assertThat;
->>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 @ExtendWith( SuppressOutputExtension.class )

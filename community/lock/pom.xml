@@ -16,11 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-lock</artifactId>
-=======
-    <artifactId>neo4j-lock</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Locking</name>
@@ -64,16 +60,6 @@
             <artifactId>eclipse-collections</artifactId>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-common</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-=======
->>>>>>> neo4j/4.1
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
         </dependency>

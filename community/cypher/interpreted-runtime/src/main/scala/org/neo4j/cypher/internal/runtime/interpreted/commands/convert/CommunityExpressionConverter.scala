@@ -264,21 +264,12 @@ case class CommunityExpressionConverter(tokenContext: TokenContext) extends Expr
         if (signature.isAggregate)
           commands.expressions.AggregationFunctionInvocation(signature, callArgumentCommands)
         else
-<<<<<<< HEAD
-          commandexpressions.FunctionInvocation(signature, callArgumentCommands.toArray)
-      case _: ast.MapProjection => throw new InternalException("`MapProjection` should have been rewritten away")
-      case _: ast.PatternComprehension => throw new InternalException("`PatternComprehension` should have been rewritten away")
-      case _: ast.PatternExpression => throw new InternalException("`PatternExpression` should have been rewritten away")
-      case _: NestedPlanExpression => throw new InternalException("`NestedPlanExpression` should have been rewritten away")
-      case _: ast.Parameter => throw new InternalException("`Parameter` should have been rewritten away")
-=======
           commands.expressions.FunctionInvocation(signature, callArgumentCommands.toArray)
       case _: internal.expressions.MapProjection => throw new InternalException("`MapProjection` should have been rewritten away")
       case _: internal.expressions.PatternComprehension => throw new InternalException("`PatternComprehension` should have been rewritten away")
       case _: internal.expressions.PatternExpression => throw new InternalException("`PatternExpression` should have been rewritten away")
       case _: NestedPlanExpression => throw new InternalException("`NestedPlanExpression` should have been rewritten away")
       case _: internal.expressions.Parameter => throw new InternalException("`Parameter` should have been rewritten away")
->>>>>>> neo4j/4.1
       case _: ExistsSubClause => throw new InternalException("`ExistsSubClause` should have been rewritten away")
       case CoerceToPredicate(inner) => predicates.CoercedPredicate(self.toCommandExpression(id, inner))
       case _ => null
@@ -340,13 +331,8 @@ case class CommunityExpressionConverter(tokenContext: TokenContext) extends Expr
             self.toCommandPredicate(id, expression)
           case expression: pipes.NestedPipeCollectExpression =>
             self.toCommandPredicate(id, expression)
-<<<<<<< HEAD
-          case e: ast.ContainerIndex =>
-            commandexpressions.ContainerIndexExists(self.toCommandExpression(id, e.expr), self.toCommandExpression(id, e.idx))
-=======
           case e: internal.expressions.ContainerIndex =>
             commands.expressions.ContainerIndexExists(self.toCommandExpression(id, e.expr), self.toCommandExpression(id, e.idx))
->>>>>>> neo4j/4.1
           case _: NestedPlanExpression =>
             throw new InternalException("should have been rewritten away")
         }

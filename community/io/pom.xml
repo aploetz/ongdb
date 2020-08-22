@@ -16,11 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-io</artifactId>
-=======
-    <artifactId>neo4j-io</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - IO</name>
@@ -64,8 +60,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-native</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-native</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -95,18 +91,5 @@
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
         </dependency>
-<<<<<<< HEAD
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>test-utils</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-=======
->>>>>>> neo4j/4.1
     </dependencies>
 </project>

@@ -55,12 +55,9 @@ case class TestPath(override val startNode: Node, _relationships: Seq[Relationsh
 
   def take(n: Int): TestPath =
     TestPath(startNode, _relationships.take(n))
-<<<<<<< HEAD
-=======
 
   def slice(from: Int, until: Int): TestPath =
     TestPath(_relationships(from).getStartNode, _relationships.slice(from, until))
->>>>>>> neo4j/4.1
 
   def reverse: TestPath =
     TestPath(endNode(), _relationships.reverse)

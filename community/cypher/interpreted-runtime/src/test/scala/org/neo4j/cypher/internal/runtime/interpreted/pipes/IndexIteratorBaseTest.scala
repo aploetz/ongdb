@@ -20,11 +20,7 @@
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
 import org.mockito.Mockito
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-=======
 import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
->>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor
 
 class IndexIteratorBaseTest extends CypherFunSuite {

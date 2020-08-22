@@ -156,19 +156,4 @@ public abstract class TokenRecord extends AbstractBaseRecord
     {
         // default: nothing additional
     }
-<<<<<<< HEAD
-
-    @Override
-    public TokenRecord clone()
-    {
-        TokenRecord clone = (TokenRecord) super.clone();
-        clone.nameRecords = new ArrayList<>( nameRecords.size() );
-        for ( DynamicRecord record : nameRecords )
-        {
-            nameRecords.add( record.clone() );
-        }
-        return clone;
-    }
-=======
->>>>>>> neo4j/4.1
 }

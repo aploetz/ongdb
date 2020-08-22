@@ -92,14 +92,9 @@ public class KernelTransactionFactory
                         mock( DatabaseTracers.class, RETURNS_MOCKS ), storageEngine,
                         new CanWrite(), EmptyVersionContextSupplier.EMPTY, ON_HEAP,
                         new StandardConstraintSemantics(), mock( SchemaState.class ), mockedTokenHolders(),
-<<<<<<< HEAD
-                        mock( IndexingService.class ), mock( LabelScanStore.class ), mock( IndexStatisticsStore.class ), dependencies,
-                        new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES );
-=======
                         mock( IndexingService.class ), mock( LabelScanStore.class ), mock( RelationshipTypeScanStore.class ),
                         mock( IndexStatisticsStore.class ), dependencies, new TestDatabaseIdRepository().defaultDatabase(), LeaseService.NO_LEASES,
                         MemoryPools.NO_TRACKING );
->>>>>>> neo4j/4.1
 
         StatementLocks statementLocks = new SimpleStatementLocks( new NoOpClient() );
 

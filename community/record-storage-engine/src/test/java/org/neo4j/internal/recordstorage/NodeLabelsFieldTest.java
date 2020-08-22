@@ -595,11 +595,7 @@ class NodeLabelsFieldTest
 
     private static <T extends AbstractBaseRecord> Iterable<T> cloned( Iterable<T> items, final Class<T> itemClass )
     {
-<<<<<<< HEAD
-        return Iterables.map( obj -> itemClass.cast( obj.clone() ), items );
-=======
         return Iterables.map( obj -> itemClass.cast( obj.copy() ), items );
->>>>>>> neo4j/4.1
     }
 
     private static LongSet idsOf( Set<DynamicRecord> records )

@@ -16,11 +16,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-monitoring</artifactId>
-=======
-    <artifactId>neo4j-monitoring</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Monitoring</name>

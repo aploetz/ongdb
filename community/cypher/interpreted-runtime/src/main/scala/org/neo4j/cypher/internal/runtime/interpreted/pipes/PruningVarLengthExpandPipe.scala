@@ -19,19 +19,6 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-<<<<<<< HEAD
-import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap
-import org.neo4j.cypher.internal.runtime.NoMemoryTracker
-import org.neo4j.cypher.internal.runtime.QueryMemoryTracker
-import org.neo4j.cypher.internal.runtime.{ExecutionContext, IsNoValue}
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v4_0.util.attribution.Id
-import org.neo4j.exceptions.InternalException
-import org.neo4j.values.storable.{Value, Values}
-import org.neo4j.values.virtual.{NodeReference, NodeValue, RelationshipValue, VirtualNodeValue}
-
-import scala.collection.mutable.ArrayBuffer
-=======
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap
 import org.neo4j.collection.trackable.HeapTrackingCollections
 import org.neo4j.cypher.internal.expressions.SemanticDirection
@@ -47,7 +34,6 @@ import org.neo4j.values.virtual.NodeReference
 import org.neo4j.values.virtual.NodeValue
 import org.neo4j.values.virtual.RelationshipValue
 import org.neo4j.values.virtual.VirtualNodeValue
->>>>>>> neo4j/4.1
 
 case class PruningVarLengthExpandPipe(source: Pipe,
                                       fromName: String,
@@ -200,12 +186,8 @@ case class PruningVarLengthExpandPipe(source: Pipe,
     private def initiate(memoryTracker: MemoryTracker): Unit = {
       nodeState = expandMap.get(node.id())
       if (nodeState == NodeState.UNINITIALIZED) {
-<<<<<<< HEAD
-        nodeState = new NodeState(queryState.memoryTracker)
-=======
         nodeState = new NodeState(memoryTracker)
         memoryTracker.allocateHeap(NodeState.INSTANCE_SIZE)
->>>>>>> neo4j/4.1
         expandMap.put(node.id(), nodeState)
       }
     }
@@ -219,11 +201,7 @@ case class PruningVarLengthExpandPipe(source: Pipe,
     val NOOP_REL: Int = 0
 
     val NOOP: NodeState = {
-<<<<<<< HEAD
-      val noop = new NodeState(NoMemoryTracker)
-=======
       val noop = new NodeState(EmptyMemoryTracker.INSTANCE)
->>>>>>> neo4j/4.1
       noop.rels = Array(null)
       noop.depths = Array[Byte](0)
       noop
@@ -231,15 +209,9 @@ case class PruningVarLengthExpandPipe(source: Pipe,
   }
 
   /**
-<<<<<<< HEAD
-    * The state of expansion for one node
-    */
-  class NodeState(memoryTracker: QueryMemoryTracker) {
-=======
    * The state of expansion for one node
    */
   class NodeState(memoryTracker: MemoryTracker) {
->>>>>>> neo4j/4.1
 
     // All relationships that connect to this node, filtered by the var-length predicates
     var rels: Array[RelationshipValue] = _
@@ -284,20 +256,12 @@ case class PruningVarLengthExpandPipe(source: Pipe,
           if (filteringStep.filterRelationship(row, queryState)(rel) &&
             filteringStep.filterNode(row, queryState)(rel.otherNode(node))) {
             builder += rel
-<<<<<<< HEAD
-            memoryTracker.allocated(rel)
-=======
             memoryTracker.allocateHeap(rel.estimatedHeapUsage)
->>>>>>> neo4j/4.1
           }
         }
         rels = builder.result()
         depths = new Array[Byte](rels.length)
-<<<<<<< HEAD
-        memoryTracker.allocated(rels.length * java.lang.Byte.BYTES)
-=======
         memoryTracker.allocateHeap(HeapEstimator.shallowSizeOfObjectArray(rels.length) + HeapEstimator.sizeOf(depths))
->>>>>>> neo4j/4.1
       }
     }
   }
@@ -309,11 +273,7 @@ case class PruningVarLengthExpandPipe(source: Pipe,
     private var inputRow:CypherRow = _
     private val nodeState = new Array[PruningDFS](self.max + 1)
     private val path = new Array[Long](max)
-<<<<<<< HEAD
-    queryState.memoryTracker.allocated(max * java.lang.Long.BYTES)
-=======
     memoryTracker.allocateHeap(HeapEstimator.shallowSizeOfObjectArray(nodeState.length) + HeapEstimator.sizeOf(path))
->>>>>>> neo4j/4.1
     private var depth = -1
 
     def startRow( inputRow:CypherRow ): Unit = {
@@ -359,11 +319,7 @@ case class PruningVarLengthExpandPipe(source: Pipe,
       if(filteringStep.filterNode(inputRow, queryState)(node)) {
         push(node,
           pathLength = 0,
-<<<<<<< HEAD
-          expandMap = new LongObjectHashMap[NodeState](),
-=======
           expandMap = HeapTrackingCollections.newLongObjectMap[NodeState](memoryTracker),
->>>>>>> neo4j/4.1
           prevLocalRelIndex = -1,
           prevNodeState = NodeState.NOOP)
       } else {

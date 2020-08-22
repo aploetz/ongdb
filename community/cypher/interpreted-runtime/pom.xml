@@ -11,11 +11,7 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-interpreted-runtime</artifactId>
     <packaging>jar</packaging>
-<<<<<<< HEAD
     <name>ONgDB - Cypher Interpreted Runtime</name>
-=======
-    <name>Neo4j - Cypher Interpreted Runtime</name>
->>>>>>> neo4j/4.1
 
     <description>The traditional cypher interpreted runtime</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -87,8 +83,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-csv</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-csv</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -148,26 +144,16 @@
         <!-- test dependencies -->
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-ast-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-ast</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-ast</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

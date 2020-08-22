@@ -30,13 +30,7 @@ import org.neo4j.graphdb.facade.GraphDatabaseDependencies;
 import org.neo4j.kernel.impl.factory.DbmsInfo;
 import org.neo4j.kernel.impl.scheduler.BufferingExecutor;
 import org.neo4j.test.extension.Inject;
-<<<<<<< HEAD
-import org.neo4j.test.extension.SkipThreadLeakageGuard;
 import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
-import org.neo4j.test.extension.testdirectory.TestDirectoryExtension;
-=======
-import org.neo4j.test.extension.testdirectory.EphemeralTestDirectoryExtension;
->>>>>>> neo4j/4.1
 import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
@@ -47,10 +41,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.graphdb.facade.GraphDatabaseDependencies.newDependencies;
 import static org.neo4j.scheduler.Group.LOG_ROTATION;
 
-<<<<<<< HEAD
-@SkipThreadLeakageGuard
-=======
->>>>>>> neo4j/4.1
 @EphemeralTestDirectoryExtension
 class GlobalModuleTest
 {

@@ -29,11 +29,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import org.neo4j.configuration.Config;
-<<<<<<< HEAD
-import org.neo4j.configuration.GraphDatabaseSettings;
-=======
 import org.neo4j.configuration.GraphDatabaseInternalSettings;
->>>>>>> neo4j/4.1
 import org.neo4j.counts.CountsAccessor;
 import org.neo4j.function.Predicates;
 import org.neo4j.graphdb.RelationshipType;
@@ -90,7 +86,6 @@ import org.neo4j.storageengine.api.CommandCreationContext;
 import org.neo4j.storageengine.api.CommandsToApply;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.TransactionApplicationMode;
-import org.neo4j.storageengine.api.TransactionIdStore;
 import org.neo4j.test.extension.Inject;
 import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.extension.pagecache.PageCacheExtension;
@@ -100,7 +95,6 @@ import org.neo4j.time.Clocks;
 import org.neo4j.token.DelegatingTokenHolder;
 import org.neo4j.token.TokenCreator;
 import org.neo4j.token.TokenHolders;
-import org.neo4j.token.api.TokenConstants;
 import org.neo4j.token.api.TokenHolder;
 import org.neo4j.values.storable.Values;
 
@@ -294,37 +288,22 @@ class BatchingNeoStoresTest
     {
         // given
         try ( GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem,
-<<<<<<< HEAD
-                RecoveryCleanupWorkCollector.immediate(), CountsBuilder.EMPTY, false, GBPTreeCountsStore.NO_MONITOR ) )
-        {
-            countsStore.start();
-            countsStore.checkpoint( IOLimiter.UNLIMITED );
-=======
                 RecoveryCleanupWorkCollector.immediate(), CountsBuilder.EMPTY, false, PageCacheTracer.NULL, GBPTreeCountsStore.NO_MONITOR ) )
         {
             countsStore.start( NULL, INSTANCE );
             countsStore.checkpoint( IOLimiter.UNLIMITED, NULL );
->>>>>>> neo4j/4.1
         }
 
         // when
         try ( BatchingNeoStores stores = BatchingNeoStores.batchingNeoStoresWithExternalPageCache( fileSystem,
                 pageCache, PageCacheTracer.NULL, databaseLayout, LATEST_RECORD_FORMATS, Configuration.DEFAULT,
-<<<<<<< HEAD
-                NullLogService.getInstance(), EMPTY, Config.defaults() ) )
-=======
                 NullLogService.getInstance(), EMPTY, Config.defaults(), INSTANCE ) )
->>>>>>> neo4j/4.1
         {
             stores.createNew();
             stores.buildCountsStore( new CountsBuilder()
             {
                 @Override
-<<<<<<< HEAD
-                public void initialize( CountsAccessor.Updater updater )
-=======
                 public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
->>>>>>> neo4j/4.1
                 {
                     updater.incrementNodeCount( 1, 10 );
                     updater.incrementNodeCount( 2, 20 );
@@ -337,30 +316,17 @@ class BatchingNeoStoresTest
                 {
                     return BASE_TX_ID + 1;
                 }
-<<<<<<< HEAD
-            } );
-=======
             }, PageCacheTracer.NULL, NULL, INSTANCE );
->>>>>>> neo4j/4.1
         }
 
         // then
         try ( GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem,
-<<<<<<< HEAD
-                RecoveryCleanupWorkCollector.immediate(), CountsBuilder.EMPTY, false, GBPTreeCountsStore.NO_MONITOR ) )
-        {
-            assertEquals( 10, countsStore.nodeCount( 1 ) );
-            assertEquals( 20, countsStore.nodeCount( 2 ) );
-            assertEquals( 30, countsStore.relationshipCount( ANY_LABEL, 1, 2 ) );
-            assertEquals( 50, countsStore.relationshipCount( 1, 2, ANY_LABEL ) );
-=======
                 RecoveryCleanupWorkCollector.immediate(), CountsBuilder.EMPTY, false, PageCacheTracer.NULL, GBPTreeCountsStore.NO_MONITOR ) )
         {
             assertEquals( 10, countsStore.nodeCount( 1, NULL ) );
             assertEquals( 20, countsStore.nodeCount( 2, NULL ) );
             assertEquals( 30, countsStore.relationshipCount( ANY_LABEL, 1, 2, NULL ) );
             assertEquals( 50, countsStore.relationshipCount( 1, 2, ANY_LABEL, NULL ) );
->>>>>>> neo4j/4.1
         }
     }
 

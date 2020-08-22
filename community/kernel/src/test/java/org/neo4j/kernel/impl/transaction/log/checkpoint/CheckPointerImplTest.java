@@ -261,7 +261,7 @@ class CheckPointerImplTest
         verify( spyLock, times( 2 ) ).unlock();
     }
 
-    private static StoreCopyCheckPointMutex mutex( Lock lock )
+    private StoreCopyCheckPointMutex mutex( Lock lock )
     {
         return new StoreCopyCheckPointMutex( new ReadWriteLock()
         {
@@ -509,11 +509,7 @@ class CheckPointerImplTest
     @Test
     void mustRequestFastestPossibleFlushWhenForceCheckPointIsCalledDuringBackgroundCheckPoint()
     {
-<<<<<<< HEAD
-        assertTimeoutPreemptively( ofSeconds( 10 ), () ->
-=======
         assertTimeoutPreemptively( TIMEOUT, () ->
->>>>>>> neo4j/4.1
                 verifyAsyncActionCausesConcurrentFlushingRush( checkPointer -> checkPointer.forceCheckPoint( new SimpleTriggerInfo( "async" ) ) ) );
 
     }
@@ -521,11 +517,7 @@ class CheckPointerImplTest
     @Test
     void mustRequestFastestPossibleFlushWhenTryCheckPointIsCalledDuringBackgroundCheckPoint()
     {
-<<<<<<< HEAD
-        assertTimeoutPreemptively( ofSeconds( 10 ), () ->
-=======
         assertTimeoutPreemptively( TIMEOUT, () ->
->>>>>>> neo4j/4.1
                 verifyAsyncActionCausesConcurrentFlushingRush( checkPointer -> checkPointer.tryCheckPoint( new SimpleTriggerInfo( "async" ) ) ) );
     }
 

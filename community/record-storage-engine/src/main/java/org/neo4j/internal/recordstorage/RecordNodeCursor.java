@@ -19,12 +19,8 @@
  */
 package org.neo4j.internal.recordstorage;
 
-<<<<<<< HEAD
-import org.apache.commons.lang3.exception.CloneFailedException;
-=======
 import org.eclipse.collections.api.set.primitive.MutableIntSet;
 import org.eclipse.collections.impl.factory.primitive.IntSets;
->>>>>>> neo4j/4.1
 
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
@@ -398,15 +394,9 @@ public class RecordNodeCursor extends NodeRecord implements StorageNodeCursor
     }
 
     @Override
-<<<<<<< HEAD
-    public final NodeRecord clone()
-    {
-        throw new CloneFailedException( "Record cursors are not cloneable." );
-=======
     public RecordNodeCursor copy()
     {
         throw new UnsupportedOperationException( "Record cursors are not copyable." );
->>>>>>> neo4j/4.1
     }
 
     @Override

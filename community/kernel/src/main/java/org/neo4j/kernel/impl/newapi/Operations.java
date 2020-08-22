@@ -516,11 +516,7 @@ public class Operations implements Write, SchemaWrite
             throws UniquePropertyValueValidationException, UnableToValidateConstraintException
     {
         IndexDescriptor index = allStoreHolder.indexGetForName( constraint.getName() );
-<<<<<<< HEAD
-        try ( FullAccessNodeValueIndexCursor valueCursor = cursors.allocateFullAccessNodeValueIndexCursor();
-=======
         try ( FullAccessNodeValueIndexCursor valueCursor = cursors.allocateFullAccessNodeValueIndexCursor( cursorTracer );
->>>>>>> neo4j/4.1
               IndexReaders indexReaders = new IndexReaders( index, allStoreHolder ) )
         {
             assertIndexOnline( index );
@@ -1179,11 +1175,7 @@ public class Operations implements Write, SchemaWrite
         }
 
         //enforce constraints
-<<<<<<< HEAD
-        try ( NodeLabelIndexCursor nodes = cursors.allocateFullAccessNodeLabelIndexCursor() )
-=======
         try ( NodeLabelIndexCursor nodes = cursors.allocateFullAccessNodeLabelIndexCursor( cursorTracer ) )
->>>>>>> neo4j/4.1
         {
             allStoreHolder.nodeLabelScan( schema.getLabelId(), nodes, IndexOrder.NONE );
             constraintSemantics.validateNodeKeyConstraint( nodes, nodeCursor, propertyCursor, schema.asLabelSchemaDescriptor(), token );
@@ -1200,11 +1192,7 @@ public class Operations implements Write, SchemaWrite
         ConstraintDescriptor constraint = lockAndValidatePropertyExistenceConstraint( schema, name );
 
         //enforce constraints
-<<<<<<< HEAD
-        try ( NodeLabelIndexCursor nodes = cursors.allocateFullAccessNodeLabelIndexCursor() )
-=======
         try ( NodeLabelIndexCursor nodes = cursors.allocateFullAccessNodeLabelIndexCursor( cursorTracer ) )
->>>>>>> neo4j/4.1
         {
             allStoreHolder.nodeLabelScan( schema.getLabelId(), nodes, IndexOrder.NONE );
             constraintSemantics.validateNodePropertyExistenceConstraint( nodes, nodeCursor, propertyCursor, schema, token );

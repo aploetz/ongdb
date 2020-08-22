@@ -34,7 +34,7 @@
 
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-front-end-4.0</artifactId>
+            <artifactId>ongdb-front-end</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -51,14 +51,14 @@
         </dependency>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util-4.0</artifactId>
+            <artifactId>ongdb-util</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-ast-4.0</artifactId>
+            <artifactId>ongdb-ast</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
             <version>${project.version}</version>
@@ -70,7 +70,7 @@
         </dependency>
         <dependency>
            <groupId>org.neo4j.driver</groupId>
-            <artifactId>neo4j-java-driver</artifactId>
+                <artifactId>neo4j-java-driver</artifactId>
             <scope>compile</scope>
             <optional>true</optional>
         </dependency>

@@ -19,15 +19,6 @@
  */
 package org.neo4j.cypher.internal.runtime.spec.tests
 
-<<<<<<< HEAD
-import org.neo4j.configuration.GraphDatabaseSettings
-import org.neo4j.cypher.internal.ir.ProvidedOrder
-import org.neo4j.cypher.internal.logical.builder.Parser
-import org.neo4j.cypher.internal.logical.plans.GetValue
-import org.neo4j.cypher.internal.logical.plans.{DoNotGetValue, IndexOrder, IndexOrderAscending, IndexOrderDescending}
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.{CypherRuntime, RuntimeContext}
-=======
 import org.neo4j.cypher.internal.CypherRuntime
 import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.ir.ordering.ProvidedOrder
@@ -42,18 +33,12 @@ import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
 import org.neo4j.cypher.internal.runtime.spec.Edition
 import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
 import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
->>>>>>> neo4j/4.1
 
 abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
                                                                  edition: Edition[CONTEXT],
                                                                  runtime: CypherRuntime[CONTEXT],
                                                                  val sizeHint: Int
-                                                               ) extends RuntimeTestSuite[CONTEXT](
-  edition.copyWith(
-    // Choosing a number that will align less well with HashTable sizes
-    GraphDatabaseSettings.cypher_pipelined_batch_size_small -> Integer.valueOf(3),
-    GraphDatabaseSettings.cypher_pipelined_batch_size_big -> Integer.valueOf(3)
-  ), runtime) {
+                                                               ) extends RuntimeTestSuite[CONTEXT](edition, runtime) {
 
   trait SeqMutator { def apply[X](in: Seq[X]): Seq[X]}
   case class ProvidedOrderTest(orderString: String, indexOrder: IndexOrder, providedOrderFactory: String => ProvidedOrder, expectedMutation: SeqMutator)
@@ -274,8 +259,6 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
       runtimeResult should beColumns("x", "zProp").withRows(inOrder(expected))
     }
 
-<<<<<<< HEAD
-=======
     test(s"Aggregation on RHS of Apply keeps $orderString order from Apply's LHS") {
       // Size set up to not match with any Morsel size
       val size = (2 * 3 * 4 * 5) + 1
@@ -365,18 +348,12 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
       runtimeResult should beColumns("num", "name").withRows(inOrder(expected))
     }
 
->>>>>>> neo4j/4.1
     // This seems to work since AttachBuffer creates views of size 1.
     // And the the RHS of MrBuff has always only one complete controller, which
     // happens to be the next one in ArgumentRowId order.
     test(s"Cartesian Product on RHS of Apply keeps $orderString order from Apply's LHS") {
-<<<<<<< HEAD
-      // This size is specifically chosen to potentially break with Morsel size 3
-      val size = 121
-=======
       // Size set up to not match with any Morsel size
       val size = (2 * 3 * 4 * 5) + 1
->>>>>>> neo4j/4.1
       index("Honey", "num")
       val nodes = given {
         nodePropertyGraph(size, {
@@ -386,11 +363,7 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
 
       // when
       val logicalQuery = new LogicalQueryBuilder(this)
-<<<<<<< HEAD
-        .produceResults("num", "name")
-=======
         .produceResults("num", "name").withLeveragedOrder()
->>>>>>> neo4j/4.1
         .projection("a.num AS num")
         .apply()
         .|.projection("a.name AS name")
@@ -411,13 +384,8 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
     }
 
     test(s"Hash join on RHS of Apply keeps $orderString order from Apply's LHS") {
-<<<<<<< HEAD
-      // This size is specifically chosen to potentially break with Morsel size 3
-      val size = 121
-=======
       // Size set up to not match with any Morsel size
       val size = (2 * 3 * 4 * 5) + 1
->>>>>>> neo4j/4.1
       index("Honey", "num")
       val nodes = given {
         nodePropertyGraph(size, {
@@ -427,11 +395,7 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
 
       // when
       val logicalQuery = new LogicalQueryBuilder(this)
-<<<<<<< HEAD
-        .produceResults("num", "name")
-=======
         .produceResults("num", "name").withLeveragedOrder()
->>>>>>> neo4j/4.1
         .projection("a.num AS num")
         .apply()
         .|.projection("a.name AS name")
@@ -452,13 +416,8 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
     }
 
     test(s"Optional on RHS of Apply keeps $orderString order from Apply's LHS") {
-<<<<<<< HEAD
-      // This size is specifically chosen to potentially break with Morsel size 3
-      val size = 121
-=======
       // Size set up to not match with any Morsel size
       val size = (2 * 3 * 4 * 5) + 1
->>>>>>> neo4j/4.1
       index("Honey", "num")
       val nodes = given {
         nodePropertyGraph(size, {
@@ -468,11 +427,7 @@ abstract class ProvidedOrderTestBase[CONTEXT <: RuntimeContext](
 
       // when
       val logicalQuery = new LogicalQueryBuilder(this)
-<<<<<<< HEAD
-        .produceResults("num", "name")
-=======
         .produceResults("num", "name").withLeveragedOrder()
->>>>>>> neo4j/4.1
         .projection("a.num AS num")
         .apply()
         .|.optional("a")

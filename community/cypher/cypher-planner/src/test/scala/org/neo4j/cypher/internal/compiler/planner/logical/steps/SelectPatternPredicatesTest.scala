@@ -526,13 +526,9 @@ class SelectPatternPredicatesTest extends CypherFunSuite with LogicalPlanningTes
 
     // Then
     result should equal(
-<<<<<<< HEAD
-      Seq(SelectOrAntiSemiApply(LetSemiApply(aPlan, inner, "  FRESHID0"), inner, varFor("  FRESHID0")))
-=======
       Seq(SelectOrSemiApply(
         LetAntiSemiApply(aPlan, inner, "  FRESHID0"), inner, varFor("  FRESHID0")
       ))
->>>>>>> neo4j/4.1
     )
   }
 }

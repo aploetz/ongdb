@@ -20,11 +20,7 @@
 package org.neo4j.bolt.runtime.statemachine.impl;
 
 import org.neo4j.bolt.BoltChannel;
-<<<<<<< HEAD
-import org.neo4j.bolt.BoltServer;
-=======
 import org.neo4j.bolt.BoltProtocolVersion;
->>>>>>> neo4j/4.1
 import org.neo4j.bolt.dbapi.BoltGraphDatabaseManagementServiceSPI;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachine;
 import org.neo4j.bolt.runtime.statemachine.BoltStateMachineFactory;
@@ -49,7 +45,6 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
     private final Authentication authentication;
     private final SystemNanoClock clock;
     private final String defaultDatabaseName;
-    private final boolean renameThreads;
 
     public BoltStateMachineFactoryImpl( BoltGraphDatabaseManagementServiceSPI boltGraphDatabaseManagementServiceSPI, Authentication authentication,
             SystemNanoClock clock, Config config, LogService logging )
@@ -59,7 +54,6 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
         this.authentication = authentication;
         this.clock = clock;
         this.defaultDatabaseName = config.get( GraphDatabaseSettings.default_database );
-        this.renameThreads = config.get( GraphDatabaseSettings.bolt_worker_threads_contain_database_name );
     }
 
     @Override
@@ -87,14 +81,14 @@ public class BoltStateMachineFactoryImpl implements BoltStateMachineFactory
     {
         var transactionSpiProvider = new TransactionStateMachineSPIProviderV3( boltGraphDatabaseManagementServiceSPI, defaultDatabaseName, boltChannel, clock );
         var boltSPI = new BoltStateMachineSPIImpl( logging, authentication, transactionSpiProvider );
-        return new BoltStateMachineV3( boltSPI, boltChannel, clock, renameThreads, defaultDatabaseName );
+        return new BoltStateMachineV3( boltSPI, boltChannel, clock );
     }
 
     private BoltStateMachine newStateMachineV4( BoltChannel boltChannel )
     {
         var transactionSpiProvider = new TransactionStateMachineSPIProviderV4( boltGraphDatabaseManagementServiceSPI, defaultDatabaseName, boltChannel, clock );
         var boltSPI = new BoltStateMachineSPIImpl( logging, authentication, transactionSpiProvider );
-        return new BoltStateMachineV4( boltSPI, boltChannel, clock , renameThreads, defaultDatabaseName );
+        return new BoltStateMachineV4( boltSPI, boltChannel, clock );
     }
 
     private BoltStateMachine newStateMachineV41( BoltChannel boltChannel )

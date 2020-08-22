@@ -63,49 +63,12 @@ object PlanDescriptionArgumentSerializer {
       case PlannerVersion(value) => value
       case Runtime(runtime) => runtime
       case RuntimeVersion(value) => value
-<<<<<<< HEAD
-      case DbmsAction(action) => action
-      case DatabaseAction(action) => action
-      case Database(name) => name
-      case Role(name) => name
-      case User(name) => name
-      case Qualifier(name) => name
-      case Scope(name) => name
-      case SourceCode(className, sourceCode) => sourceCode
-      case ByteCode(className, byteCode) => byteCode
-      case RuntimeImpl(runtimeName) => runtimeName
-      case ExpandExpression(from, rel, typeNames, to, dir: SemanticDirection, min, max) =>
-        val left = if (dir == SemanticDirection.INCOMING) "<-" else "-"
-        val right = if (dir == SemanticDirection.OUTGOING) "->" else "-"
-        val types = typeNames.mkString(":", "|", "")
-        val lengthDescr = (min, max) match {
-          case (1, Some(1)) => ""
-          case (1, None) => "*"
-          case (1, Some(m)) => s"*..$m"
-          case _ => s"*$min..${max.getOrElse("")}"
-        }
-        val relInfo = if (lengthDescr == "" && typeNames.isEmpty && rel.unnamed) "" else s"[$rel$types$lengthDescr]"
-        s"($from)$left$relInfo$right($to)"
-      case CountNodesExpression(ident, label) =>
-        val node = label.map(":" + _).mkString
-        s"count( ($node) )" + (if (ident.startsWith(" ")) "" else s" AS $ident")
-      case CountRelationshipsExpression(ident, startLabel, typeNames, endLabel) =>
-        val start = startLabel.map(l => ":" + l).mkString
-        val end = endLabel.map(l => ":" + l).mkString
-        val types = typeNames.mkString(":", "|", "")
-        s"count( ($start)-[$types]->($end) )" + (if (ident.unnamed) "" else s" AS $ident")
-      case Signature(procedureName, args, results) =>
-        val argString = args.mkString(", ")
-        val resultString = results.map { case (name, typ) => s"$name :: $typ" }.mkString(", ")
-        s"$procedureName($argString) :: ($resultString)"
-=======
       case SourceCode(className, sourceCode) => sourceCode
       case ByteCode(className, byteCode) => byteCode
       case RuntimeImpl(runtimeName) => runtimeName
       case PipelineInfo(pipelineId, fused) =>
         val fusion = if (fused) "Fused in" else "In"
         s"$fusion Pipeline $pipelineId"
->>>>>>> neo4j/4.1
 
       // Do not add a fallthrough here - we rely on exhaustive checking to ensure
       // that we don't forget to add new types of arguments here

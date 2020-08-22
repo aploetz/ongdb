@@ -112,11 +112,6 @@ public class IndexStatisticsTest
     @Before
     public void before()
     {
-<<<<<<< HEAD
-        db.withSetting( GraphDatabaseSettings.multi_threaded_schema_index_population_enabled, multiThreadedPopulationEnabled );
-
-=======
->>>>>>> neo4j/4.1
         int batchSize = random.nextInt( 1, 5 );
         FeatureToggles.set( MultipleIndexPopulator.class, MultipleIndexPopulator.QUEUE_THRESHOLD_NAME, batchSize );
         FeatureToggles.set( MultipleIndexPopulator.class, "print_debug", true );

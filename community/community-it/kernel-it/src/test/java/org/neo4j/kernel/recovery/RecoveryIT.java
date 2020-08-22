@@ -23,10 +23,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.Test;
->>>>>>> neo4j/4.1
 import org.neo4j.configuration.Config;
 import org.neo4j.dbms.DatabaseStateService;
 import org.neo4j.dbms.api.DatabaseManagementService;
@@ -52,10 +49,7 @@ import org.neo4j.kernel.availability.CompositeDatabaseAvailabilityGuard;
 import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.extension.context.ExtensionContext;
-<<<<<<< HEAD
-=======
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.storemigration.LegacyTransactionLogsLocator;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.ReadableLogChannel;
@@ -69,10 +63,7 @@ import org.neo4j.kernel.impl.transaction.tracing.DatabaseTracer;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
-<<<<<<< HEAD
-=======
 import org.neo4j.lock.LockTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.storageengine.api.StorageEngineFactory;
@@ -472,14 +463,8 @@ class RecoveryIT
 
             var failure = dbStateService.causeOfFailure( restartedDb.databaseId() );
             assertTrue( failure.isPresent() );
-<<<<<<< HEAD
-            assertThat( getRootCause( failure.get() ).getMessage(), containsString( "Transaction logs are missing and recovery is not possible." ) );
-            AssertableLogProvider.MessageMatcher messageMatcher = logProvider.formattedMessageMatcher();
-            messageMatcher.assertContains( txLogFiles[0].getName() );
-=======
             assertThat( failure.get() ).hasRootCauseMessage( "Transaction logs are missing and recovery is not possible." );
             assertThat( logProvider.serialize() ).contains( txLogFiles[0].getName() );
->>>>>>> neo4j/4.1
         }
         finally
         {
@@ -488,11 +473,7 @@ class RecoveryIT
     }
 
     @Test
-<<<<<<< HEAD
-    void startDatabaseWithRemovedSingleTransactionLogFile() throws Exception
-=======
     void startDatabaseWithRemovedSingleTransactionLogFile() throws Throwable
->>>>>>> neo4j/4.1
     {
         GraphDatabaseAPI database = createDatabase();
         PageCache pageCache = getDatabasePageCache( database );
@@ -889,11 +870,6 @@ class RecoveryIT
 
     private GraphDatabaseAPI createDatabase()
     {
-<<<<<<< HEAD
-        createBuilder();
-        managementService = builder.build();
-        return (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
-=======
         return createDatabase( logical_log_rotation_threshold.defaultValue() );
     }
 
@@ -913,16 +889,6 @@ class RecoveryIT
             builder = builderWithRelationshipTypeScanStoreSet()
                     .setConfig( preallocate_logical_logs, false )
                     .setConfig( logical_log_rotation_threshold, logThreshold );
-        }
->>>>>>> neo4j/4.1
-    }
-
-    private void createBuilder()
-    {
-        if ( builder == null )
-        {
-            builder = new TestDatabaseManagementServiceBuilder( neo4jLayout ).
-                    setConfig( logical_log_rotation_threshold, logical_log_rotation_threshold.defaultValue() );
         }
     }
 
@@ -961,13 +927,8 @@ class RecoveryIT
         try
         {
             PageCache restartedCache = getDatabasePageCache( restartedDatabase );
-<<<<<<< HEAD
-            assertThat( getRecord( restartedCache, databaseAPI.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP ),
-                    greaterThan( 0L ) );
-=======
             final long record = getRecord( restartedCache, databaseAPI.databaseLayout().metadataStore(), LAST_MISSING_STORE_FILES_RECOVERY_TIMESTAMP, NULL );
             assertThat( record ).isGreaterThan( 0L );
->>>>>>> neo4j/4.1
         }
         finally
         {

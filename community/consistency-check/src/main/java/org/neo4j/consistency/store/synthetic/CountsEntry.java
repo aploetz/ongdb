@@ -19,8 +19,6 @@
  */
 package org.neo4j.consistency.store.synthetic;
 
-import org.apache.commons.lang3.exception.CloneFailedException;
-
 import org.neo4j.consistency.checking.RecordCheck;
 import org.neo4j.consistency.report.ConsistencyReport;
 import org.neo4j.internal.counts.CountsKey;
@@ -64,15 +62,9 @@ public class CountsEntry extends AbstractBaseRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public final AbstractBaseRecord clone()
-    {
-        throw new CloneFailedException( "Synthetic records cannot be cloned." );
-=======
     public CountsEntry copy()
     {
         throw new UnsupportedOperationException( "Synthetic records cannot be copied." );
->>>>>>> neo4j/4.1
     }
 
     public CountsKey getCountsKey()

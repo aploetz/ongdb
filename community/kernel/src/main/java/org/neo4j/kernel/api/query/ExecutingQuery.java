@@ -155,12 +155,6 @@ public class ExecutingQuery
 
     // update state
 
-<<<<<<< HEAD
-    public void onCompilationCompleted( CompilerInfo compilerInfo,
-                                        QueryExecutionType.QueryType queryType,
-                                        Supplier<ExecutionPlanDescription> planDescriptionSupplier )
-    {
-=======
     public void onTransactionBound( TransactionBinding transactionBinding )
     {
         this.transactionBinding = transactionBinding;
@@ -191,7 +185,6 @@ public class ExecutingQuery
                                         QueryExecutionType.QueryType queryType,
                                         Supplier<ExecutionPlanDescription> planDescriptionSupplier )
     {
->>>>>>> neo4j/4.1
         assertExpectedStatus( SimpleState.planning() );
 
         this.compilerInfo = compilerInfo;
@@ -218,13 +211,9 @@ public class ExecutingQuery
         this.planDescriptionSupplier = null;
         this.queryType = null;
         this.memoryTracker = OptionalMemoryTracker.NONE;
-<<<<<<< HEAD
-        this.status = SimpleState.planning();
-=======
         this.obfuscatedQueryParameters = null;
         this.obfuscatedQueryText = null;
         this.status = SimpleState.parsing();
->>>>>>> neo4j/4.1
     }
 
     public LockTracer lockTracer()
@@ -406,14 +395,6 @@ public class ExecutingQuery
         }
         WAIT_TIME.addAndGet( this, waiting.waitTimeNanos( clock.nanos() ) );
         status = waiting.previousStatus();
-    }
-
-    private void assertExpectedStatus( ExecutingQueryStatus expectedStatus )
-    {
-        if ( status != expectedStatus )
-        {
-            throw new IllegalStateException( String.format( "Expected query in '%s' state, actual state is '%s'.", expectedStatus.name(), status.name() ) );
-        }
     }
 
     private void assertExpectedStatus( ExecutingQueryStatus expectedStatus )

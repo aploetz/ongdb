@@ -623,10 +623,6 @@ public class BatchInserterImpl implements BatchInserter
 
     private void rebuildCounts( PageCacheTracer cacheTracer, MemoryTracker memoryTracker ) throws IOException
     {
-<<<<<<< HEAD
-        new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem, RecoveryCleanupWorkCollector.immediate(),
-                new CountsComputer( neoStores, pageCache, databaseLayout ), false, GBPTreeCountsStore.NO_MONITOR ).close();
-=======
         File countsStoreFile = databaseLayout.countStore();
         fileSystem.deleteRecursively( countsStoreFile );
         CountsComputer initialCountsBuilder = new CountsComputer( neoStores, pageCache, cacheTracer, databaseLayout, memoryTracker );
@@ -635,7 +631,6 @@ public class BatchInserterImpl implements BatchInserter
         {
             countsStore.start( PageCursorTracer.NULL, memoryTracker );
         }
->>>>>>> neo4j/4.1
     }
 
     private void createEmptyTransactionLog()

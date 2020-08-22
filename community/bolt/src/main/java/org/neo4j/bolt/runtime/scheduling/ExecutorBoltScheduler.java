@@ -218,8 +218,8 @@ public class ExecutorBoltScheduler extends LifecycleAdapter implements BoltSched
             connection.initKeepAliveTimer();
         }
         activeWorkItems.computeIfAbsent( connection.id(),
-                key -> scheduleBatchOrHandleError( connection )
-                        .whenCompleteAsync( ( result, error ) -> handleCompletion( connection, result, error ), forkJoinPool ) );
+                key -> scheduleBatchOrHandleError( connection ).whenCompleteAsync( ( result, error ) -> handleCompletion( connection, result, error ),
+                        forkJoinPool ) );
     }
 
     private CompletableFuture<Boolean> scheduleBatchOrHandleError( BoltConnection connection )

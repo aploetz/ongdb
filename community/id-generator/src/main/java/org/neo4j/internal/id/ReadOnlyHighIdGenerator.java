@@ -60,11 +60,7 @@ class ReadOnlyHighIdGenerator implements IdGenerator
     }
 
     @Override
-<<<<<<< HEAD
-    public Marker marker()
-=======
     public Marker marker( PageCursorTracer cursorTracer )
->>>>>>> neo4j/4.1
     {
         throw new UnsupportedOperationException( "Should not be required" );
     }

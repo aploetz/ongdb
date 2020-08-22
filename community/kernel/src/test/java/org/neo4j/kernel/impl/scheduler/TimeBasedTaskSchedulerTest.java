@@ -38,13 +38,7 @@ import org.neo4j.time.FakeClock;
 import org.neo4j.util.concurrent.BinaryLatch;
 
 import static java.time.Duration.ofMinutes;
-<<<<<<< HEAD
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-=======
 import static org.assertj.core.api.Assertions.assertThat;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -201,11 +195,7 @@ class TimeBasedTaskSchedulerTest
         clock.forward( 20, TimeUnit.NANOSECONDS ); // should run at MOST 2 times
         scheduler.tick();
         assertSemaphoreAcquire();
-<<<<<<< HEAD
-        assertThat( timesScheduled.get(), lessThanOrEqualTo( 2 ) );
-=======
         assertThat( timesScheduled.get() ).isLessThanOrEqualTo( 2 );
->>>>>>> neo4j/4.1
     }
 
     @Test

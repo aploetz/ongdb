@@ -76,14 +76,6 @@ public class QuerySnapshot
     }
 
     public String id()
-<<<<<<< HEAD
-    {
-        return query.id();
-    }
-
-    public String queryText()
-=======
->>>>>>> neo4j/4.1
     {
         return query.id();
     }

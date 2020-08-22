@@ -54,11 +54,7 @@ sealed trait SetOperation {
 
 object SetOperation {
 
-<<<<<<< HEAD
-  private[pipes] def toMap(executionContext: ExecutionContext, state: QueryState, expression: Expression): MapValue = {
-=======
   private[pipes] def toMap(executionContext: CypherRow, state: QueryState, expression: Expression): MapValue = {
->>>>>>> neo4j/4.1
     /* Make the map expression look like a map */
     expression(executionContext, state) match {
       case IsMap(map) => map(state)

@@ -105,11 +105,7 @@ public class NodeStore extends CommonAbstractStore<NodeRecord,NoStoreHeader>
         // Load any dynamic labels and populate the node record
         try
         {
-<<<<<<< HEAD
-            node.setLabelField( node.getLabelField(), dynamicLabelStore.getRecords( firstDynamicLabelRecord, RecordLoad.NORMAL, false ) );
-=======
             node.setLabelField( node.getLabelField(), dynamicLabelStore.getRecords( firstDynamicLabelRecord, RecordLoad.NORMAL, false, cursorTracer ) );
->>>>>>> neo4j/4.1
         }
         catch ( InvalidRecordException e )
         {

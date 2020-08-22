@@ -74,16 +74,12 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-collections</artifactId>
+            <artifactId>ongdb-collections</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
+            <groupId>org.graphfoundation.ongdb</groupId>
             <artifactId>test-utils</artifactId>
             <version>${project.version}</version>
         </dependency>

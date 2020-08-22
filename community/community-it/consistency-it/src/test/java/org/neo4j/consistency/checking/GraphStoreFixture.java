@@ -276,11 +276,7 @@ public abstract class GraphStoreFixture implements AutoCloseable
                         new CountsBuilder()
                         {
                             @Override
-<<<<<<< HEAD
-                            public void initialize( CountsAccessor.Updater updater )
-=======
                             public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
->>>>>>> neo4j/4.1
                             {
                                 throw new UnsupportedOperationException( "Should not be rebuilt" );
                             }
@@ -290,13 +286,8 @@ public abstract class GraphStoreFixture implements AutoCloseable
                             {
                                 return 0;
                             }
-<<<<<<< HEAD
-                        }, true, NO_MONITOR );
-                counts.start();
-=======
                         }, true, PageCacheTracer.NULL, NO_MONITOR );
                 counts.start( NULL, INSTANCE );
->>>>>>> neo4j/4.1
             }
             return counts;
         };

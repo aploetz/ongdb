@@ -111,11 +111,7 @@ public class ThreadLeakageGuardExtension implements AfterAllCallback, BeforeAllC
 
         if ( !leakedThreads.isEmpty() )
         {
-<<<<<<< HEAD
-            String message = format( "%d leaked thread(s) detected:\n%s", leakedThreads.size(), leakedThreads.toString() );
-=======
             String message = format( "%d leaked thread(s) detected:%n%s", leakedThreads.size(), leakedThreads );
->>>>>>> neo4j/4.1
             if ( PRINT_ONLY )
             {
                 printError( context, message );
@@ -136,11 +132,7 @@ public class ThreadLeakageGuardExtension implements AfterAllCallback, BeforeAllC
         errorStream.println( message );
     }
 
-<<<<<<< HEAD
-    private PrintStream getErrorStream( SuppressOutput suppressOutput )
-=======
     private static PrintStream getErrorStream( SuppressOutput suppressOutput )
->>>>>>> neo4j/4.1
     {
         PrintStream errStream = System.err;
         if ( suppressOutput == null )
@@ -250,11 +242,7 @@ public class ThreadLeakageGuardExtension implements AfterAllCallback, BeforeAllC
 
         while ( (group = group.getParent()) != null )
         {
-<<<<<<< HEAD
-            str.append( ":" ).append( group.getName() );
-=======
             str.append( ':' ).append( group.getName() );
->>>>>>> neo4j/4.1
         }
 
         return str.toString();

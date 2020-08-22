@@ -33,11 +33,6 @@ import java.util.function.IntSupplier;
 
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.common.Edition;
-<<<<<<< HEAD
-import org.neo4j.configuration.Config;
-import org.neo4j.configuration.SettingImpl;
-import org.neo4j.configuration.SettingValueParsers;
-=======
 import org.neo4j.common.EntityType;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.SettingImpl;
@@ -45,7 +40,6 @@ import org.neo4j.configuration.SettingValueParsers;
 import org.neo4j.dbms.database.SystemGraphComponent;
 import org.neo4j.dbms.database.SystemGraphComponents;
 import org.neo4j.dbms.database.TestSystemGraphComponent;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Relationship;
@@ -402,12 +396,8 @@ class BuiltInProceduresTest
     @Test
     void shouldPing() throws ProcedureException, IndexNotFoundKernelException
     {
-<<<<<<< HEAD
-        assertThat( call( "db.ping" ), contains( record( Boolean.TRUE ) ) );
-=======
         assertThat( call( "db.ping" ) ).containsExactly(
                 record( Boolean.TRUE ) );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -433,24 +423,13 @@ class BuiltInProceduresTest
         when( resolver.resolveDependency( Config.class ) ).thenReturn( mockConfig );
 
         // When / Then
-<<<<<<< HEAD
-        assertThat( call( "dbms.clientConfig" ), containsInAnyOrder(
-=======
         assertThat( call( "dbms.clientConfig" ) ).containsExactlyInAnyOrder(
->>>>>>> neo4j/4.1
                 record( "browser.allow_outgoing_connections", "browser.allow_outgoing_connections, a string", "", false ),
                 record( "browser.credential_timeout", "browser.credential_timeout, a string", "", false ),
                 record( "browser.retain_connection_credentials", "browser.retain_connection_credentials, a string", "", false ),
                 record( "dbms.security.auth_enabled", "dbms.security.auth_enabled, a string", "", false ),
                 record( "browser.remote_content_hostname_whitelist", "browser.remote_content_hostname_whitelist, a string", "", false ),
                 record( "browser.post_connect_cmd", "browser.post_connect_cmd, a string", "", false ),
-<<<<<<< HEAD
-                record( "dbms.default_database", "dbms.default_database, a string", "", false ))
-        );
-    }
-
-    private static Matcher<Object[]> record( Object... fields )
-=======
                 record( "dbms.default_database", "dbms.default_database, a string", "", false )
         );
     }
@@ -510,7 +489,6 @@ class BuiltInProceduresTest
     }
 
     private static Object[] record( Object... fields )
->>>>>>> neo4j/4.1
     {
         return fields;
     }

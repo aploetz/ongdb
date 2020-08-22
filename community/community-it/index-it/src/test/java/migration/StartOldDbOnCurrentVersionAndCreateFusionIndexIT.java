@@ -49,7 +49,6 @@ import org.neo4j.internal.kernel.api.SchemaRead;
 import org.neo4j.internal.kernel.api.TokenRead;
 import org.neo4j.internal.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.internal.schema.IndexDescriptor;
-import org.neo4j.internal.schema.IndexOrder;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.io.compress.ZipUtils;
@@ -57,10 +56,10 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileUtils;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.impl.index.schema.fusion.NativeLuceneFusionIndexProviderFactory30;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.index.schema.GenericNativeIndexProvider;
+import org.neo4j.kernel.impl.index.schema.fusion.NativeLuceneFusionIndexProviderFactory30;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
@@ -79,6 +78,7 @@ import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAM
 import static org.neo4j.internal.helpers.ArrayUtil.concat;
 import static org.neo4j.internal.helpers.collection.Iterables.asList;
 import static org.neo4j.internal.helpers.collection.Iterators.single;
+import static org.neo4j.internal.kernel.api.IndexQueryConstraints.unconstrained;
 import static org.neo4j.test.Unzip.unzip;
 
 @Neo4jLayoutExtension
@@ -90,7 +90,7 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
     private static final String KEY2 = "key2";
     private DatabaseManagementService managementService;
     // number of new indexes dbms will create on its own for internal purposes, like system database
-    private static final int NUMBER_OF_NEW_INDEXES = 3;
+    private static final int NUMBER_OF_SYSTEM_INDEXES = 2;
 
     private enum Provider
     {
@@ -231,7 +231,7 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
 
                 Iterator<String> fts1props = fts1.getPropertyKeys().iterator();
                 assertTrue( fts1props.hasNext() );
-                assertEquals( fts1props.next(), "prop1" );
+                assertEquals( "prop1", fts1props.next() );
                 assertFalse( fts1props.hasNext() );
 
                 IndexDefinition fts2 = tx.schema().getIndexByName( "fts2" );
@@ -245,9 +245,9 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
 
                 Iterator<String> fts2props = fts2.getPropertyKeys().iterator();
                 assertTrue( fts2props.hasNext() );
-                assertEquals( fts2props.next(), "prop1" );
+                assertEquals( "prop1", fts2props.next() );
                 assertTrue( fts2props.hasNext() );
-                assertEquals( fts2props.next(), "prop2" );
+                assertEquals( "prop2", fts2props.next() );
                 assertFalse( fts2props.hasNext() );
 
                 IndexDefinition fts3 = tx.schema().getIndexByName( "fts3" );
@@ -259,7 +259,7 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
 
                 Iterator<String> fts3props = fts3.getPropertyKeys().iterator();
                 assertTrue( fts3props.hasNext() );
-                assertEquals( fts3props.next(), "prop1" );
+                assertEquals( "prop1", fts3props.next() );
                 assertFalse( fts3props.hasNext() );
                 // TODO verify the index configuration of 'fts3' -- it is eventually consistent.
 
@@ -274,9 +274,9 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
 
                 Iterator<String> fts4props = fts4.getPropertyKeys().iterator();
                 assertTrue( fts4props.hasNext() );
-                assertEquals( fts4props.next(), "prop1" );
+                assertEquals( "prop1", fts4props.next() );
                 assertTrue( fts4props.hasNext() );
-                assertEquals( fts4props.next(), "prop2" );
+                assertEquals( "prop2", fts4props.next() );
                 assertFalse( fts4props.hasNext() );
                 // TODO verify the index configuration of 'fts3' -- it is eventually consistent.
 
@@ -315,7 +315,8 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
         managementService = setupDb( storeDir, indexRecoveryTracker );
         try
         {
-            verifyInitialState( indexRecoveryTracker, expectedNumberOfIndexes + NUMBER_OF_NEW_INDEXES, InternalIndexState.ONLINE );
+            int numberNewIndexes = 2;
+            verifyInitialState( indexRecoveryTracker, expectedNumberOfIndexes + numberNewIndexes + NUMBER_OF_SYSTEM_INDEXES, InternalIndexState.ONLINE );
         }
         finally
         {
@@ -514,9 +515,9 @@ class StartOldDbOnCurrentVersionAndCreateFusionIndexIT
             IndexDescriptor index = single( ktx.schemaRead().index( SchemaDescriptor.forLabel( labelId, propertyKeyIds ) ) );
             IndexReadSession indexSession = ktx.dataRead().indexReadSession( index );
             int count = 0;
-            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor() )
+            try ( NodeValueIndexCursor cursor = ktx.cursors().allocateNodeValueIndexCursor( ktx.pageCursorTracer() ) )
             {
-                ktx.dataRead().nodeIndexSeek( indexSession, cursor, IndexOrder.NONE, false, predicates );
+                ktx.dataRead().nodeIndexSeek( indexSession, cursor, unconstrained(), predicates );
                 while ( cursor.next() )
                 {
                     count++;

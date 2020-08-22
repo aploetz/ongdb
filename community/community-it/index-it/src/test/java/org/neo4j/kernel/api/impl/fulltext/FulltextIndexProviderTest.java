@@ -121,20 +121,12 @@ class FulltextIndexProviderTest
 {
     private static final String NAME = "fulltext";
 
-<<<<<<< HEAD
-    @Rule
-    public Timeout timeout = VerboseTimeout.builder().withTimeout( 10, TimeUnit.MINUTES ).build();
-
-    @Rule
-    public DbmsRule db = new EmbeddedDbmsRule();
-=======
     @Inject
     DbmsController controller;
     @Inject
     GraphDatabaseAPI db;
     @Inject
     KernelImpl kernel;
->>>>>>> neo4j/4.1
 
     private Node node1;
     private Node node2;

@@ -74,14 +74,6 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-collections</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-=======
->>>>>>> neo4j/4.1
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>annotations</artifactId>
         </dependency>

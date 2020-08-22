@@ -11,11 +11,7 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-planner-spi</artifactId>
     <packaging>jar</packaging>
-<<<<<<< HEAD
     <name>ONgDB - Cypher Planner SPI</name>
-=======
-    <name>Neo4j - Cypher Planner SPI</name>
->>>>>>> neo4j/4.1
 
     <description>Cypher planner SPI</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -59,13 +55,8 @@
         <!-- neo4j -->
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
         </dependency>
 

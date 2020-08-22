@@ -27,19 +27,12 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.kernel.api.IndexQuery;
-<<<<<<< HEAD
-=======
 import org.neo4j.internal.kernel.api.IndexQueryConstraints;
->>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.IndexReadSession;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
-<<<<<<< HEAD
-import org.neo4j.internal.kernel.api.RelationshipGroupCursor;
-=======
->>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.RelationshipIndexCursor;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
 import org.neo4j.internal.kernel.api.RelationshipTraversalCursor;
@@ -55,14 +48,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.internal.kernel.api.InternalIndexState.ONLINE;
-<<<<<<< HEAD
-import static org.neo4j.kernel.impl.index.schema.FulltextIndexProviderFactory.DESCRIPTOR;
-=======
 import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.index.schema.FulltextIndexProviderFactory.DESCRIPTOR;
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
 import static org.neo4j.storageengine.api.RelationshipSelection.ALL_RELATIONSHIPS;
->>>>>>> neo4j/4.1
 
 public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSupport> extends KernelAPIReadTestBase<G>
 {
@@ -92,19 +81,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseNodeCursor()
     {
-<<<<<<< HEAD
-        NodeCursor c1 = cursors.allocateNodeCursor();
-        read.singleNode( startNode, c1 );
-        c1.close();
-
-        NodeCursor c2 = cursors.allocateNodeCursor();
-=======
         NodeCursor c1 = cursors.allocateNodeCursor( NULL );
         read.singleNode( startNode, c1 );
         c1.close();
 
         NodeCursor c2 = cursors.allocateNodeCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -112,19 +93,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseFullAccessNodeCursor()
     {
-<<<<<<< HEAD
-        NodeCursor c1 = cursors.allocateFullAccessNodeCursor();
-        read.singleNode( startNode, c1 );
-        c1.close();
-
-        NodeCursor c2 = cursors.allocateFullAccessNodeCursor();
-=======
         NodeCursor c1 = cursors.allocateFullAccessNodeCursor( NULL );
         read.singleNode( startNode, c1 );
         c1.close();
 
         NodeCursor c2 = cursors.allocateFullAccessNodeCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -132,19 +105,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseRelationshipScanCursor()
     {
-<<<<<<< HEAD
-        RelationshipScanCursor c1 = cursors.allocateRelationshipScanCursor();
-        read.singleRelationship( relationship, c1 );
-        c1.close();
-
-        RelationshipScanCursor c2 = cursors.allocateRelationshipScanCursor();
-=======
         RelationshipScanCursor c1 = cursors.allocateRelationshipScanCursor( NULL );
         read.singleRelationship( relationship, c1 );
         c1.close();
 
         RelationshipScanCursor c2 = cursors.allocateRelationshipScanCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -152,37 +117,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseFullAccessRelationshipScanCursor()
     {
-<<<<<<< HEAD
-        RelationshipScanCursor c1 = cursors.allocateFullAccessRelationshipScanCursor();
-        read.singleRelationship( relationship, c1 );
-        c1.close();
-
-        RelationshipScanCursor c2 = cursors.allocateFullAccessRelationshipScanCursor();
-        assertEquals( c1, c2 );
-        c2.close();
-    }
-
-    @Test
-    void shouldReuseRelationshipGroupCursor()
-    {
-        NodeCursor node = cursors.allocateNodeCursor();
-        RelationshipGroupCursor c1 = cursors.allocateRelationshipGroupCursor();
-
-        read.singleNode( startNode, node );
-        node.next();
-        node.relationships( c1 );
-
-        node.close();
-        c1.close();
-
-        RelationshipGroupCursor c2 = cursors.allocateRelationshipGroupCursor();
-=======
         RelationshipScanCursor c1 = cursors.allocateFullAccessRelationshipScanCursor( NULL );
         read.singleRelationship( relationship, c1 );
         c1.close();
 
         RelationshipScanCursor c2 = cursors.allocateFullAccessRelationshipScanCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -190,22 +129,6 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseRelationshipTraversalCursor()
     {
-<<<<<<< HEAD
-        NodeCursor node = cursors.allocateNodeCursor();
-        RelationshipGroupCursor group = cursors.allocateRelationshipGroupCursor();
-        RelationshipTraversalCursor c1 = cursors.allocateRelationshipTraversalCursor();
-
-        read.singleNode( startNode, node );
-        node.next();
-        node.relationships( group );
-        group.outgoing( c1 );
-
-        node.close();
-        group.close();
-        c1.close();
-
-        RelationshipTraversalCursor c2 = cursors.allocateRelationshipTraversalCursor();
-=======
         NodeCursor node = cursors.allocateNodeCursor( NULL );
         RelationshipTraversalCursor c1 = cursors.allocateRelationshipTraversalCursor( NULL );
 
@@ -217,7 +140,6 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
         c1.close();
 
         RelationshipTraversalCursor c2 = cursors.allocateRelationshipTraversalCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -225,13 +147,8 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReusePropertyCursor()
     {
-<<<<<<< HEAD
-        NodeCursor node = cursors.allocateNodeCursor();
-        PropertyCursor c1 = cursors.allocatePropertyCursor();
-=======
         NodeCursor node = cursors.allocateNodeCursor( NULL );
         PropertyCursor c1 = cursors.allocatePropertyCursor( NULL, INSTANCE );
->>>>>>> neo4j/4.1
 
         read.singleNode( propNode, node );
         node.next();
@@ -240,11 +157,7 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
         node.close();
         c1.close();
 
-<<<<<<< HEAD
-        PropertyCursor c2 = cursors.allocatePropertyCursor();
-=======
         PropertyCursor c2 = cursors.allocatePropertyCursor( NULL, INSTANCE );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -252,13 +165,8 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     @Test
     void shouldReuseFullAccessPropertyCursor()
     {
-<<<<<<< HEAD
-        NodeCursor node = cursors.allocateNodeCursor();
-        PropertyCursor c1 = cursors.allocateFullAccessPropertyCursor();
-=======
         NodeCursor node = cursors.allocateNodeCursor( NULL );
         PropertyCursor c1 = cursors.allocateFullAccessPropertyCursor( NULL, INSTANCE );
->>>>>>> neo4j/4.1
 
         read.singleNode( propNode, node );
         node.next();
@@ -267,11 +175,7 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
         node.close();
         c1.close();
 
-<<<<<<< HEAD
-        PropertyCursor c2 = cursors.allocateFullAccessPropertyCursor();
-=======
         PropertyCursor c2 = cursors.allocateFullAccessPropertyCursor( NULL, INSTANCE );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -284,19 +188,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
         Predicates.awaitEx( () -> tx.schemaRead().indexGetState( indexDescriptor ) == ONLINE, 1, MINUTES );
         IndexReadSession indexSession = tx.dataRead().indexReadSession( indexDescriptor );
 
-<<<<<<< HEAD
-        NodeValueIndexCursor c1 = cursors.allocateNodeValueIndexCursor();
-        read.nodeIndexSeek( indexSession, c1, IndexOrder.NONE, false, IndexQuery.exact( prop, "zero" ) );
-        c1.close();
-
-        NodeValueIndexCursor c2 = cursors.allocateNodeValueIndexCursor();
-=======
         NodeValueIndexCursor c1 = cursors.allocateNodeValueIndexCursor( NULL );
         read.nodeIndexSeek( indexSession, c1, IndexQueryConstraints.unconstrained(), IndexQuery.exact( prop, "zero" ) );
         c1.close();
 
         NodeValueIndexCursor c2 = cursors.allocateNodeValueIndexCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }
@@ -306,19 +202,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
     {
         try ( KernelTransaction tx = beginTransaction() )
         {
-<<<<<<< HEAD
-            NodeLabelIndexCursor c1 = tx.cursors().allocateNodeLabelIndexCursor();
-            tx.dataRead().nodeLabelScan( 1, c1 );
-            c1.close();
-
-            NodeLabelIndexCursor c2 = tx.cursors().allocateNodeLabelIndexCursor();
-=======
             NodeLabelIndexCursor c1 = tx.cursors().allocateNodeLabelIndexCursor( NULL );
             tx.dataRead().nodeLabelScan( 1, c1, IndexOrder.NONE );
             c1.close();
 
             NodeLabelIndexCursor c2 = tx.cursors().allocateNodeLabelIndexCursor( NULL );
->>>>>>> neo4j/4.1
             assertEquals( c1, c2 );
             c2.close();
         }
@@ -350,19 +238,11 @@ public abstract class DefaultPooledCursorsTestBase<G extends KernelAPIReadTestSu
 
         Predicates.awaitEx( () -> tx.schemaRead().indexGetState( index ) == ONLINE, 1, MINUTES );
 
-<<<<<<< HEAD
-        RelationshipIndexCursor c1 = cursors.allocateRelationshipIndexCursor();
-        read.relationshipIndexSeek( index, c1, IndexQuery.fulltextSearch( "hello" ) );
-        c1.close();
-
-        RelationshipIndexCursor c2 = cursors.allocateRelationshipIndexCursor();
-=======
         RelationshipIndexCursor c1 = cursors.allocateRelationshipIndexCursor( NULL );
         read.relationshipIndexSeek( index, c1, IndexQueryConstraints.unconstrained(), IndexQuery.fulltextSearch( "hello" ) );
         c1.close();
 
         RelationshipIndexCursor c2 = cursors.allocateRelationshipIndexCursor( NULL );
->>>>>>> neo4j/4.1
         assertEquals( c1, c2 );
         c2.close();
     }

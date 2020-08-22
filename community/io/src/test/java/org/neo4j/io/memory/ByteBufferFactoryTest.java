@@ -19,13 +19,10 @@
  */
 package org.neo4j.io.memory;
 
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
->>>>>>> neo4j/4.1
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -38,13 +35,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-<<<<<<< HEAD
-import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
-=======
 import org.neo4j.memory.LocalMemoryTracker;
 import org.neo4j.util.concurrent.Futures;
->>>>>>> neo4j/4.1
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -174,14 +166,6 @@ class ByteBufferFactoryTest
         factory.close();
     }
 
-<<<<<<< HEAD
-    @Test
-    void byteBufferMustThrowOutOfBoundsAfterRelease()
-    {
-        ByteBuffer buffer = ByteBuffers.allocateDirect( Long.BYTES );
-        buffer.get( 0 );
-        ByteBuffers.releaseBuffer( buffer );
-=======
     @Disabled
     void releaseAllBuffersReleaseMemoryFromThreadLocalBuffers()
     {
@@ -206,23 +190,16 @@ class ByteBufferFactoryTest
         ByteBuffer buffer = ByteBuffers.allocateDirect( Long.BYTES, tracker );
         buffer.get( 0 );
         ByteBuffers.releaseBuffer( buffer, tracker );
->>>>>>> neo4j/4.1
         assertThrows( IndexOutOfBoundsException.class, () -> buffer.get( 0 ) );
     }
 
     @Test
     void doubleFreeOfByteBufferIsOkay()
     {
-<<<<<<< HEAD
-        ByteBuffer buffer = ByteBuffers.allocateDirect( Long.BYTES );
-        ByteBuffers.releaseBuffer( buffer );
-        ByteBuffers.releaseBuffer( buffer ); // This must not throw.
-=======
         var tracker = new LocalMemoryTracker();
         ByteBuffer buffer = ByteBuffers.allocateDirect( Long.BYTES, tracker );
         ByteBuffers.releaseBuffer( buffer, tracker );
         ByteBuffers.releaseBuffer( buffer, tracker ); // This must not throw.
->>>>>>> neo4j/4.1
         assertThrows( IndexOutOfBoundsException.class, () -> buffer.get( 0 ) ); // And this still throws.
     }
 }

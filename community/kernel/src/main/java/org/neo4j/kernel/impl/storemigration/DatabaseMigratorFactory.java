@@ -28,10 +28,7 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.database.NamedDatabaseId;
 import org.neo4j.logging.internal.LogService;
-<<<<<<< HEAD
-=======
 import org.neo4j.memory.MemoryTracker;
->>>>>>> neo4j/4.1
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.StorageEngineFactory;
 
@@ -62,14 +59,8 @@ public class DatabaseMigratorFactory
     public DatabaseMigrator createDatabaseMigrator( DatabaseLayout databaseLayout, StorageEngineFactory storageEngineFactory,
             DependencyResolver dependencies )
     {
-<<<<<<< HEAD
-        final DatabaseConfig dbConfig = new DatabaseConfig( config, namedDatabaseId );
-        final LegacyTransactionLogsLocator logsLocator = new LegacyTransactionLogsLocator( dbConfig, databaseLayout );
-        return new DatabaseMigrator( fs, dbConfig, logService, dependencies, pageCache, jobScheduler, databaseLayout, logsLocator, storageEngineFactory );
-=======
         DatabaseConfig dbConfig = new DatabaseConfig( config, namedDatabaseId );
         return new DatabaseMigrator( fs, dbConfig, logService, dependencies, pageCache, jobScheduler, databaseLayout,
                 storageEngineFactory, pageCacheTracer, memoryTracker );
->>>>>>> neo4j/4.1
     }
 }

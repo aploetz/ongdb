@@ -84,12 +84,7 @@ import org.neo4j.test.mockito.mock.Link;
 import org.neo4j.test.mockito.mock.SpatialMocks;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-<<<<<<< HEAD
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.startsWith;
-=======
 import static org.assertj.core.api.Assertions.assertThat;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -567,13 +562,8 @@ class ExecutionResultSerializerTest
     {
         // given
         var points = List.of(
-<<<<<<< HEAD
-                new Coordinate( 1, 2 ),
-                new Coordinate( 2, 3 ) );
-=======
         new Coordinate( 1, 2 ),
         new Coordinate( 2, 3 ) );
->>>>>>> neo4j/4.1
 
         var row = Map.of( "geom", SpatialMocks.mockGeometry( "LineString", points, mockCartesian() ) );
 
@@ -589,20 +579,12 @@ class ExecutionResultSerializerTest
 
         // then
         String result = output.toString( UTF_8 );
-<<<<<<< HEAD
-        assertThat( result, startsWith(
-=======
         assertThat( result ).startsWith(
->>>>>>> neo4j/4.1
                 "{\"results\":[{\"columns\":[\"geom\"],\"data\":[" + "{\"row\":[{\"type\":\"LineString\",\"coordinates\":[[1.0,2.0],[2.0,3.0]],\"crs\":" +
                 "{\"srid\":7203,\"name\":\"cartesian\",\"type\":\"link\",\"properties\":" +
                 "{\"href\":\"http://spatialreference.org/ref/sr-org/7203/ogcwkt/\",\"type\":\"ogcwkt\"}}}],\"meta\":[]}]}]," +
                 "\"errors\":[{\"code\":\"Neo.DatabaseError.Statement.ExecutionFailed\"," +
-<<<<<<< HEAD
-                "\"message\":\"Unsupported Geometry type: type=MockGeometry, value=LineString\"" ) );
-=======
                 "\"message\":\"Unsupported Geometry type: type=MockGeometry, value=LineString\"" );
->>>>>>> neo4j/4.1
     }
 
     @Test

@@ -32,10 +32,7 @@ import java.util.function.Supplier;
 import org.neo4j.internal.id.BatchingIdSequence;
 import org.neo4j.io.pagecache.ByteArrayPageCursor;
 import org.neo4j.io.pagecache.PageCursor;
-<<<<<<< HEAD
-=======
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.store.IntStoreHeader;
 import org.neo4j.kernel.impl.store.format.RecordGenerators.Generator;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
@@ -195,11 +192,7 @@ public abstract class AbstractRecordFormatTest
         do
         {
             cursor.setOffset( 0 );
-<<<<<<< HEAD
-            format.read( read, cursor, NORMAL, recordSize );
-=======
             format.read( read, cursor, NORMAL, recordSize, 1 );
->>>>>>> neo4j/4.1
         }
         while ( cursor.shouldRetry() );
         assertWithinBounds( written, cursor, "reading" );
@@ -228,19 +221,11 @@ public abstract class AbstractRecordFormatTest
     {
         if ( prepare && record.inUse() )
         {
-<<<<<<< HEAD
-            format.prepare( record, recordSize, idSequence );
-        }
-
-        cursor.setOffset( 0 );
-        format.write( record, cursor, recordSize );
-=======
             format.prepare( record, recordSize, idSequence, PageCursorTracer.NULL );
         }
 
         cursor.setOffset( 0 );
         format.write( record, cursor, recordSize, 1 );
->>>>>>> neo4j/4.1
         assertWithinBounds( record, cursor, "writing" );
     }
 

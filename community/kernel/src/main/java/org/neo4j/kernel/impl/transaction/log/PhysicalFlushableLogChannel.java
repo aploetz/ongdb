@@ -25,11 +25,7 @@ import org.neo4j.io.memory.ScopedBuffer;
 
 class PhysicalFlushableLogChannel extends PhysicalFlushableChecksumChannel
 {
-<<<<<<< HEAD
-    PhysicalFlushableLogChannel( StoreChannel channel, ByteBuffer byteBuffer )
-=======
     PhysicalFlushableLogChannel( StoreChannel channel, ScopedBuffer scopedBuffer )
->>>>>>> neo4j/4.1
     {
         super( channel, scopedBuffer );
     }

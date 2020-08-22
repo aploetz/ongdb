@@ -80,14 +80,8 @@ class TimeZonesTest
         Path path = Paths.get( TimeZones.class.getResource( "/TZIDS" ).toURI() );
         String timeZonesInfo = Files.readString( path ).replace( "\r\n", "\n" );
         byte[] timeZonesHash = DigestUtils.sha256( timeZonesInfo );
-<<<<<<< HEAD
-        assertThat( timeZonesHash, equalTo(
-                new byte[]{49, -67, -18, -59, -6, -102, -16, -13, 35, 37, -37, 65, 80, 6, 77, -84, -12, -117, -54, -105, 36, 18, -119, -73, 92, 37, -64, 96,
-                        66, -52, 48, 51} ) );
-=======
         assertThat( timeZonesHash ).isEqualTo(
                 new byte[]{49, -67, -18, -59, -6, -102, -16, -13, 35, 37, -37, 65, 80, 6, 77, -84, -12, -117, -54, -105, 36, 18, -119, -73, 92, 37, -64, 96,
                         66, -52, 48, 51} );
->>>>>>> neo4j/4.1
     }
 }

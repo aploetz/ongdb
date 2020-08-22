@@ -262,11 +262,7 @@ public class RecordBuilders
 
         @SuppressWarnings( "unchecked" )
         @Override
-<<<<<<< HEAD
-        public T clone( T record )
-=======
         public T copy( T record )
->>>>>>> neo4j/4.1
         {
             return (T)record.copy();
         }

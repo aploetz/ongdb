@@ -58,19 +58,10 @@ class FreeIdScanner implements Closeable
     private final MarkerProvider markerProvider;
     private final long generation;
     private final ScanLock lock;
-<<<<<<< HEAD
-    private final long[] pendingItemsToCache;
-    private int pendingItemsToCacheCursor;
-    /**
-     * State for whether or not there's an ongoing scan, and if so where it should begin from. This is used in {@link #findSomeIdsToCache(int)}
-     * both to know where to initiate a scan from and to set it, if the cache got full before scan completed, or set it to null of the scan ended.
-     * The actual {@link Seeker} itself is local to the scan method.
-=======
     /**
      * State for whether or not there's an ongoing scan, and if so where it should begin from. This is used in
      * {@link #findSomeIdsToCache(LinkedChunkLongArray, int, PageCursorTracer)} both to know where to initiate a scan from and to set it, if the cache got
      * full before scan completed, or set it to null of the scan ended. The actual {@link Seeker} itself is local to the scan method.
->>>>>>> neo4j/4.1
      */
     private Long ongoingScanRangeIndex;
 
@@ -191,38 +182,23 @@ class FreeIdScanner implements Closeable
         boolean startedNow = ongoingScanRangeIndex == null;
         IdRangeKey from = ongoingScanRangeIndex == null ? LOW_KEY : new IdRangeKey( ongoingScanRangeIndex );
         boolean seekerExhausted = false;
-<<<<<<< HEAD
-        try ( Seeker<IdRangeKey,IdRange> scanner = tree.seek( from, HIGH_KEY ) )
-        {
-            // Continue scanning until the cache is full or there's nothing more to scan
-            while ( pendingItemsToCacheCursor < maxItemsToCache )
-=======
         try ( Seeker<IdRangeKey,IdRange> scanner = tree.seek( from, HIGH_KEY, cursorTracer ) )
         {
             // Continue scanning until the cache is full or there's nothing more to scan
             while ( pendingItemsToCache.size() < maxItemsToCache )
->>>>>>> neo4j/4.1
             {
                 if ( !scanner.next() )
                 {
                     seekerExhausted = true;
                     break;
                 }
-<<<<<<< HEAD
-                queueIdsFromTreeItem( scanner.key(), scanner.value(), maxItemsToCache );
-=======
                 queueIdsFromTreeItem( scanner.key(), scanner.value(), pendingItemsToCache, maxItemsToCache );
->>>>>>> neo4j/4.1
             }
             // If there's more left to scan "this round" then make a note of it so that we start from this place the next time
             ongoingScanRangeIndex = seekerExhausted ? null : scanner.key().getIdRangeIdx();
         }
 
-<<<<<<< HEAD
-        boolean somethingWasCached = pendingItemsToCacheCursor > 0;
-=======
         boolean somethingWasCached = pendingItemsToCache.size() > 0;
->>>>>>> neo4j/4.1
         if ( seekerExhausted )
         {
             if ( !somethingWasCached && startedNow )
@@ -234,20 +210,12 @@ class FreeIdScanner implements Closeable
         return somethingWasCached;
     }
 
-<<<<<<< HEAD
-    private void queueIdsFromTreeItem( IdRangeKey key, IdRange range, int maxItemsToCache )
-=======
     private void queueIdsFromTreeItem( IdRangeKey key, IdRange range, LinkedChunkLongArray pendingItemsToCache, int maxItemsToCache )
->>>>>>> neo4j/4.1
     {
         final long baseId = key.getIdRangeIdx() * idsPerEntry;
         final boolean differentGeneration = generation != range.getGeneration();
 
-<<<<<<< HEAD
-        for ( int i = 0; i < idsPerEntry && pendingItemsToCacheCursor < maxItemsToCache; i++ )
-=======
         for ( int i = 0; i < idsPerEntry && pendingItemsToCache.size() < maxItemsToCache; i++ )
->>>>>>> neo4j/4.1
         {
             final IdState state = range.getState( i );
             if ( state == FREE || (differentGeneration && state == DELETED) )

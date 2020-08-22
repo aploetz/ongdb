@@ -4,11 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <artifactId>testing-parent</artifactId>
-<<<<<<< HEAD
         <groupId>org.graphfoundation.ongdb</groupId>
-=======
-        <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
         <version>4.1.2-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -63,24 +59,8 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.junit.platform</groupId>
-            <artifactId>junit-platform-launcher</artifactId>
-            <version>${junit.platform.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest</artifactId>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-layout</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-layout</artifactId>
->>>>>>> neo4j/4.1
+			<groupId>org.graphfoundation.ongdb</groupId>
+			<artifactId>ongdb-layout</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

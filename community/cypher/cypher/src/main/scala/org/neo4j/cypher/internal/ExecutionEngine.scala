@@ -21,10 +21,6 @@ package org.neo4j.cypher.internal
 
 import java.lang
 import java.time.Clock
-<<<<<<< HEAD
-import java.{lang, util}
-=======
->>>>>>> neo4j/4.1
 
 import org.neo4j.cypher.CypherExecutionMode
 import org.neo4j.cypher.internal.QueryCache.ParameterTypeMap
@@ -38,15 +34,11 @@ import org.neo4j.exceptions.ParameterNotFoundException
 import org.neo4j.internal.helpers.collection.Pair
 import org.neo4j.internal.kernel.api.security.AccessMode
 import org.neo4j.kernel.GraphDatabaseQueryService
-<<<<<<< HEAD
-import org.neo4j.kernel.impl.query.{FunctionInformation, QueryExecution, QueryExecutionMonitor, QuerySubscriber, TransactionalContext}
-=======
 import org.neo4j.kernel.impl.query.FunctionInformation
 import org.neo4j.kernel.impl.query.QueryExecution
 import org.neo4j.kernel.impl.query.QueryExecutionMonitor
 import org.neo4j.kernel.impl.query.QuerySubscriber
 import org.neo4j.kernel.impl.query.TransactionalContext
->>>>>>> neo4j/4.1
 import org.neo4j.logging.LogProvider
 import org.neo4j.monitoring.Monitors
 import org.neo4j.values.virtual.MapValue
@@ -74,11 +66,7 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
   require(queryService != null, "Can't work with a null graph database")
 
   // HELPER OBJECTS
-<<<<<<< HEAD
-  private val queryExecutionMonitor = kernelMonitors.newMonitor(classOf[QueryExecutionMonitor])
-=======
   private val defaultQueryExecutionMonitor = kernelMonitors.newMonitor(classOf[QueryExecutionMonitor])
->>>>>>> neo4j/4.1
 
   private val preParser = new PreParser(config.version,
     config.planner,
@@ -135,27 +123,11 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
               profile: Boolean,
               prePopulate: Boolean,
               subscriber: QuerySubscriber): QueryExecution = {
-<<<<<<< HEAD
-    queryExecutionMonitor.start( context.executingQuery() )
-=======
     defaultQueryExecutionMonitor.startProcessing(context.executingQuery())
->>>>>>> neo4j/4.1
     executeSubQuery(query, params, context, isOutermostQuery = true, profile, prePopulate, subscriber)
   }
 
   /**
-<<<<<<< HEAD
-    * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`
-    * Note. This method will monitor the query start after it has been parsed. The caller is responsible for monitoring any query failing before this point.
-    *
-    * @param query       the query to execute
-    * @param params      the parameters of the query
-    * @param context     the context in which to run the query
-    * @param prePopulate if `true` pre populate all results
-    * @param subscriber  the subscriber where results will be streamed
-    * @return a `QueryExecution` that controls the demand to the subscriber
-    */
-=======
    * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`
    * Note. This method will monitor the query start after it has been parsed. The caller is responsible for monitoring any query failing before this point.
    *
@@ -166,7 +138,6 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
    * @param subscriber  the subscriber where results will be streamed
    * @return a `QueryExecution` that controls the demand to the subscriber
    */
->>>>>>> neo4j/4.1
   def execute(query: FullyParsedQuery,
               params: MapValue,
               context: TransactionalContext,
@@ -174,36 +145,14 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
               input: InputDataStream,
               queryMonitor: QueryExecutionMonitor,
               subscriber: QuerySubscriber): QueryExecution = {
-<<<<<<< HEAD
-    queryExecutionMonitor.start( context.executingQuery() )
-    val queryTracer = tracer.compileQuery(query.description)
-    closing(context, queryTracer) {
-      doExecute(query, params, context, isOutermostQuery = true, prePopulate, input, queryTracer, subscriber)
-=======
     queryMonitor.startProcessing(context.executingQuery())
     val queryTracer = tracer.compileQuery(query.description)
     closing(context, queryTracer) {
       doExecute(query, params, context, isOutermostQuery = true, prePopulate, input, queryMonitor, queryTracer, subscriber)
->>>>>>> neo4j/4.1
     }
   }
 
   /**
-<<<<<<< HEAD
-    * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
-    * This method assumes the query is running as one of many queries within a single transaction and therefor needs
-    * to be told using the shouldCloseTransaction field if the TaskCloser needs to have a transaction close registered.
-    *
-    * @param query the query to execute
-    * @param params the parameters of the query
-    * @param context the transactional context in which to run the query
-    * @param isOutermostQuery provide `true` if this is the outer-most query and should close the transaction when finished or error
-    * @param profile if `true` run with profiling enabled
-    * @param prePopulate if `true` pre populate all results
-    * @param subscriber the subscriber where results will be streamed
-    * @return a `QueryExecution` that controls the demand to the subscriber
-    */
-=======
    * Executes query returns a `QueryExecution` that can be used to control demand to the provided `QuerySubscriber`.
    * This method assumes the query is running as one of many queries within a single transaction and therefor needs
    * to be told using the shouldCloseTransaction field if the TaskCloser needs to have a transaction close registered.
@@ -217,7 +166,6 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
    * @param subscriber the subscriber where results will be streamed
    * @return a `QueryExecution` that controls the demand to the subscriber
    */
->>>>>>> neo4j/4.1
   def executeSubQuery(query: String,
                       params: MapValue,
                       context: TransactionalContext,
@@ -227,14 +175,9 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
                       subscriber: QuerySubscriber): QueryExecution = {
     val queryTracer = tracer.compileQuery(query)
     closing(context, queryTracer) {
-<<<<<<< HEAD
-      val preParsedQuery = preParser.preParseQuery(query, profile)
-      doExecute(preParsedQuery, params, context, isOutermostQuery, prePopulate, NoInput, queryTracer, subscriber)
-=======
       val couldContainSensitiveFields = isOutermostQuery && compilerLibrary.supportsAdministrativeCommands()
       val preParsedQuery = preParser.preParseQuery(query, profile, couldContainSensitiveFields)
       doExecute(preParsedQuery, params, context, isOutermostQuery, prePopulate, NoInput, defaultQueryExecutionMonitor, queryTracer, subscriber)
->>>>>>> neo4j/4.1
     }
   }
 
@@ -255,29 +198,6 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
                         tracer: QueryCompilationEvent,
                         subscriber: QuerySubscriber): QueryExecution = {
 
-<<<<<<< HEAD
-    def parseAndCompile: (ExecutableQuery, MapValue) = {
-      try {
-        val executableQuery = getOrCompile(context, query, tracer, params)
-        if (query.options.executionMode.name != "explain") {
-          checkParameters(executableQuery.paramNames, params, executableQuery.extractedParams)
-        }
-        val combinedParams = params.updatedWith(executableQuery.extractedParams)
-
-        if (isOutermostQuery)
-          context.executingQuery().onCompilationCompleted(executableQuery.compilerInfo, executableQuery.queryType, () => executableQuery.planDescription())
-
-        (executableQuery, combinedParams)
-      } catch {
-        case up: Throwable =>
-          // log failures in query compilation, the execute method that comes next handles itself
-          queryExecutionMonitor.endFailure(context.executingQuery(), up.getMessage)
-          throw up
-      }
-    }
-    val (executableQuery, combinedParams) = parseAndCompile
-    executableQuery.execute(context, isOutermostQuery, query.options, combinedParams, prePopulate, input, subscriber)
-=======
     val executableQuery = try {
       getOrCompile(context, query, tracer, params)
     } catch {
@@ -297,7 +217,6 @@ class ExecutionEngine(val queryService: GraphDatabaseQueryService,
     }
 
     executableQuery.execute(context, isOutermostQuery, query.options, combinedParams, prePopulate, input, queryMonitor, subscriber)
->>>>>>> neo4j/4.1
   }
 
   /*

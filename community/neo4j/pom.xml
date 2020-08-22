@@ -9,11 +9,7 @@
         <relativePath>../..</relativePath>
     </parent>
 
-<<<<<<< HEAD
     <artifactId>ongdb</artifactId>
-=======
-    <artifactId>neo4j</artifactId>
->>>>>>> neo4j/4.1
 
     <name>ONgDB - Community</name>
     <packaging>jar</packaging>
@@ -64,18 +60,13 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-procedure</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-fabric</artifactId>
+            <artifactId>ongdb-fabric</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-procedure</artifactId>
->>>>>>> neo4j/4.1
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-procedure</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -140,8 +131,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j.app</groupId>
-            <artifactId>neo4j-server</artifactId>
+            <groupId>org.graphfoundation.ongdb.app</groupId>
+            <artifactId>ongdb-server</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -163,18 +154,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-record-storage-engine</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
-            <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
@@ -205,16 +185,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-consistency-check</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-=======
->>>>>>> neo4j/4.1
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>annotations</artifactId>
         </dependency>

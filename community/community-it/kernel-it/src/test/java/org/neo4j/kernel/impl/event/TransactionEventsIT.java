@@ -244,18 +244,6 @@ class TransactionEventsIT
     }
 
     @Test
-    void exceptionMessageShouldGetPassedThrough()
-    {
-        var message = "some message from a transaction event handler";
-        dbms.registerTransactionEventListener( DEFAULT_DATABASE_NAME, getBeforeCommitListener( transactionData ->
-        {
-            throw new RuntimeException( message );
-        } ) );
-        var e = assertThrows( TransactionFailureException.class, this::runTransaction );
-        assertThat( getRootCause( e ).getMessage(), equalTo( message ) );
-    }
-
-    @Test
     void registerUnregisterWithConcurrentTransactions() throws Exception
     {
         ExecutorService executor = Executors.newFixedThreadPool( 2 );

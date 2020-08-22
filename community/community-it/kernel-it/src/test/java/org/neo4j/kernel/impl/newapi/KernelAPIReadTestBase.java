@@ -140,10 +140,6 @@ public abstract class KernelAPIReadTestBase<ReadSupport extends KernelAPIReadTes
 
     private static KernelTransaction beginTransaction( Kernel kernel, LoginContext loginContext ) throws TransactionFailureException
     {
-<<<<<<< HEAD
-        return kernel.beginTransaction( KernelTransaction.Type.implicit, loginContext );
-=======
         return kernel.beginTransaction( KernelTransaction.Type.IMPLICIT, loginContext );
->>>>>>> neo4j/4.1
     }
 }

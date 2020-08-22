@@ -26,10 +26,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
 import java.util.Optional;
->>>>>>> neo4j/4.1
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -38,12 +35,9 @@ import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
-<<<<<<< HEAD
-=======
 import org.neo4j.dbms.database.SystemGraphComponent;
 import org.neo4j.dbms.database.SystemGraphComponents;
 import org.neo4j.fabric.transaction.TransactionManager;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.kernel.api.exceptions.ProcedureException;
 import org.neo4j.internal.kernel.api.procs.ProcedureCallContext;
@@ -67,15 +61,11 @@ import org.neo4j.storageengine.api.StoreIdProvider;
 
 import static java.lang.String.format;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
-<<<<<<< HEAD
-import static org.neo4j.procedure.Mode.DBMS;
-=======
 import static org.neo4j.dbms.database.SystemGraphComponent.Status.REQUIRES_UPGRADE;
 import static org.neo4j.kernel.api.exceptions.Status.Procedure.ProcedureCallFailed;
 import static org.neo4j.procedure.Mode.DBMS;
 import static org.neo4j.procedure.Mode.READ;
 import static org.neo4j.procedure.Mode.WRITE;
->>>>>>> neo4j/4.1
 import static org.neo4j.procedure.builtin.ProceduresTimeFormatHelper.formatTime;
 import static org.neo4j.procedure.builtin.StoreIdDecodeUtils.decodeId;
 
@@ -96,31 +86,21 @@ public class BuiltInDbmsProcedures
     @Context
     public SecurityContext securityContext;
 
-<<<<<<< HEAD
-=======
     @Context
     public ProcedureCallContext callContext;
 
     @Context
     public SystemGraphComponents systemGraphComponents;
 
->>>>>>> neo4j/4.1
     @SystemProcedure
     @Description( "Provides information regarding the DBMS." )
     @Procedure( name = "dbms.info", mode = DBMS )
     public Stream<SystemInfo> databaseInfo() throws NoSuchAlgorithmException
     {
         var systemGraph = getSystemDatabase();
-<<<<<<< HEAD
-        var storeId = systemGraph.storeId();
-        var creationTime = formatTime( storeId.getCreationTime(), getConfiguredTimeZone() );
-        String id = decodeId( storeId );
-        return Stream.of( new SystemInfo( id, systemGraph.databaseName(), creationTime ) );
-=======
         var storeIdProvider = getSystemDatabaseStoreIdProvider( systemGraph );
         var creationTime = formatTime( storeIdProvider.getStoreId().getCreationTime(), getConfiguredTimeZone() );
         return Stream.of( new SystemInfo( decodeId( storeIdProvider ), systemGraph.databaseName(), creationTime ) );
->>>>>>> neo4j/4.1
     }
 
     @Admin
@@ -212,11 +192,7 @@ public class BuiltInDbmsProcedures
     public Stream<ProcedureResult> listProcedures()
     {
         securityContext.assertCredentialsNotExpired();
-<<<<<<< HEAD
-        return graph.getDependencyResolver().resolveDependency( GlobalProceduresRegistry.class ).getAllProcedures().stream()
-=======
         return graph.getDependencyResolver().resolveDependency( GlobalProcedures.class ).getAllProcedures().stream()
->>>>>>> neo4j/4.1
                 .filter( proc -> !proc.internal() )
                 .sorted( Comparator.comparing( a -> a.name().toString() ) )
                 .map( ProcedureResult::new );
@@ -265,12 +241,6 @@ public class BuiltInDbmsProcedures
         return Stream.of( new StringResult( result ) );
     }
 
-<<<<<<< HEAD
-    private GraphDatabaseAPI getSystemDatabase()
-    {
-        return (GraphDatabaseAPI) graph.getDependencyResolver()
-                .resolveDependency( DatabaseManagementService.class ).database( SYSTEM_DATABASE_NAME );
-=======
     @Admin
     @SystemProcedure
     @Description( "Report the current status of the system database sub-graph schema." )
@@ -327,7 +297,6 @@ public class BuiltInDbmsProcedures
     private StoreIdProvider getSystemDatabaseStoreIdProvider( GraphDatabaseAPI databaseAPI )
     {
         return databaseAPI.getDependencyResolver().resolveDependency( StoreIdProvider.class );
->>>>>>> neo4j/4.1
     }
 
     private ZoneId getConfiguredTimeZone()

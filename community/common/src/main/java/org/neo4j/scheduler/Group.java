@@ -95,7 +95,6 @@ public enum Group
     CATCHUP_SERVER( "CatchupServer" ),
     THROUGHPUT_MONITOR( "ThroughputMonitor" ),
     PANIC_SERVICE( "PanicService" ),
-    CORE_STATE_APPLIER( "CoreStateApplier" ),
 
     /** Rolls back idle transactions on the server. */
     SERVER_TRANSACTION_TIMEOUT( "ServerTransactionTimeout" ),
@@ -104,14 +103,10 @@ public enum Group
 
     // FABRIC
     FABRIC_IDLE_DRIVER_MONITOR( "FabricIdleDriverMonitor" ),
-<<<<<<< HEAD
-    FABRIC_WORKER( "FabricWorker" );
-=======
     FABRIC_WORKER( "FabricWorker" ),
 
     //TESTING
     TESTING( "TestingGroup", ExecutorServiceFactory.callingThread() );
->>>>>>> neo4j/4.1
 
     private final String name;
     private final ExecutorServiceFactory executorServiceFactory;

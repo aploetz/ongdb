@@ -49,11 +49,7 @@ public class RelationshipTypeTokenRecord extends TokenRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public RelationshipTypeTokenRecord clone()
-=======
     public RelationshipTypeTokenRecord copy()
->>>>>>> neo4j/4.1
     {
         return new RelationshipTypeTokenRecord( this );
     }

@@ -2,23 +2,14 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <parent>
-<<<<<<< HEAD
         <groupId>org.graphfoundation.ongdb</groupId>
-        <artifactId>ongdb-front-end-parent-4.0</artifactId>
-=======
-        <groupId>org.neo4j</groupId>
-        <artifactId>neo4j-front-end-parent</artifactId>
->>>>>>> neo4j/4.1
+        <artifactId>ongdb-front-end-parent</artifactId>
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
-    <artifactId>ongdb-front-end-4.0</artifactId>
-=======
-    <artifactId>neo4j-front-end</artifactId>
->>>>>>> neo4j/4.1
+    <artifactId>ongdb-front-end</artifactId>
     <packaging>jar</packaging>
     <name>openCypher Front End</name>
 
@@ -61,116 +52,75 @@
         <!-- neo4j -->
 
         <dependency>
-<<<<<<< HEAD
+
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
+
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-expressions-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-expressions</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-rewriting-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-rewriting</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
+
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-rewriting-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-rewriting</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-parser-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-macros</artifactId>
->>>>>>> neo4j/4.1
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-macros</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- neo4j testing -->
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-util-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-expressions-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-expressions</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-ast-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-ast</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-ast</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
+
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-parser-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

@@ -18,11 +18,7 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
     <artifactId>ongdb-data-collector</artifactId>
-=======
-    <artifactId>neo4j-data-collector</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
     <name>ONgDB - Data Collector</name>
@@ -82,23 +78,13 @@
 
         <!-- Test are located with other IT tests to solve problems with depending of TestGraphDatabaseFactory et.c. -->
         <dependency>
-<<<<<<< HEAD
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-parser-4.0</artifactId>
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-rewriting-4.0</artifactId>
-=======
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-rewriting</artifactId>
->>>>>>> neo4j/4.1
+            <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

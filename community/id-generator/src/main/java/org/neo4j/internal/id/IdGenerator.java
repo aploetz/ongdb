@@ -36,11 +36,7 @@ public interface IdGenerator extends IdSequence, Closeable, ConsistencyCheckable
     void markHighestWrittenAtHighId();
     long getHighId();
     long getHighestPossibleIdInUse();
-<<<<<<< HEAD
-    Marker marker();
-=======
     Marker marker( PageCursorTracer cursorTracer );
->>>>>>> neo4j/4.1
 
     @Override
     void close();
@@ -129,11 +125,7 @@ public interface IdGenerator extends IdSequence, Closeable, ConsistencyCheckable
         @Override
         public Marker marker( PageCursorTracer cursorTracer )
         {
-<<<<<<< HEAD
-            return delegate.marker();
-=======
             return delegate.marker( cursorTracer );
->>>>>>> neo4j/4.1
         }
 
         @Override

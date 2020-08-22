@@ -84,7 +84,7 @@
 
     <dependency>
       <groupId>org.graphfoundation.ongdb</groupId>
-      <artifactId>ongdb-parser-4.0</artifactId>
+      <artifactId>ongdb-parser</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -98,14 +98,14 @@
 
     <dependency>
       <groupId>org.graphfoundation.ongdb</groupId>
-      <artifactId>ongdb-util-4.0</artifactId>
+      <artifactId>ongdb-util</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.graphfoundation.ongdb</groupId>
-      <artifactId>ongdb-ast-4.0</artifactId>
+      <artifactId>ongdb-ast</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

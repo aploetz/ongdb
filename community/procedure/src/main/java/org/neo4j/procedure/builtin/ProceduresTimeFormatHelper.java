@@ -38,11 +38,7 @@ public class ProceduresTimeFormatHelper
                 .format( ISO_OFFSET_DATE_TIME );
     }
 
-<<<<<<< HEAD
-    public static String formatInterval( final long l )
-=======
     static String formatInterval( final long l )
->>>>>>> neo4j/4.1
     {
         final long hr = MILLISECONDS.toHours( l );
         final long min = MILLISECONDS.toMinutes( l - HOURS.toMillis( hr ) );

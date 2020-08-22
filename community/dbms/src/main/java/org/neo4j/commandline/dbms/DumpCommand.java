@@ -83,10 +83,7 @@ public class DumpCommand extends AbstractCommand
     {
         var databaseName = database.name();
         Path archive = calculateArchive( databaseName, to.toAbsolutePath() );
-<<<<<<< HEAD
-=======
         var memoryTracker =  EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 
         Config config = buildConfig();
         DatabaseLayout databaseLayout = Neo4jLayout.of( config ).databaseLayout( databaseName );
@@ -102,11 +99,7 @@ public class DumpCommand extends AbstractCommand
 
         try ( Closeable ignored = LockChecker.checkDatabaseLock( databaseLayout ) )
         {
-<<<<<<< HEAD
-            checkDbState( databaseLayout, config );
-=======
             checkDbState( databaseLayout, config, memoryTracker );
->>>>>>> neo4j/4.1
             dump( databaseLayout, archive );
         }
         catch ( FileLockException e )

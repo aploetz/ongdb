@@ -66,10 +66,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-<<<<<<< HEAD
-=======
 import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
->>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_TX_LOGS_ROOT_DIR_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.data_directory;
 import static org.neo4j.configuration.GraphDatabaseSettings.default_database;
@@ -141,11 +138,7 @@ class LoadCommandTest
                         "      --force         If an existing database should be replaced.%n" +
                         "      --info          Print meta-data information about the archive file,%n" +
                         "                        instead of loading the contained database."
-<<<<<<< HEAD
-        ) ) );
-=======
         ) );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -323,28 +316,6 @@ class LoadCommandTest
         }
         String output = baos.toString();
         assertThat( output ).contains( "ZSTD", "42", "1337" );
-    }
-
-    @Test
-    void infoMustPrintArchiveMetaData() throws IOException
-    {
-        when( loader.getMetaData( archive ) ).thenReturn( new Loader.DumpMetaData( "ZSTD", "42", "1337" ) );
-        var baos = new ByteArrayOutputStream();
-        try ( PrintStream out = new PrintStream( baos ) )
-        {
-            Path dir = Path.of( "." );
-            var command = new LoadCommand( new ExecutionContext( dir, dir, out, out, testDirectory.getFileSystem() ), loader );
-            CommandLine.populateCommand( command,
-                    "--info",
-                    "--from",
-                    archive.toAbsolutePath().toString() );
-            command.execute();
-            out.flush();
-        }
-        String output = baos.toString();
-        assertThat( output, containsString( "ZSTD" ) );
-        assertThat( output, containsString( "42" ) );
-        assertThat( output, containsString( "1337" ) );
     }
 
     private DatabaseLayout createDatabaseLayout( Path storePath, String databaseName, Path transactionLogsPath )

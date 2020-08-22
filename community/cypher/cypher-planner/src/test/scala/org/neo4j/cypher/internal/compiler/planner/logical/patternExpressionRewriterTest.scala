@@ -88,8 +88,6 @@ class patternExpressionRewriterTest extends CypherFunSuite with LogicalPlanningT
     verify(strategy).planPatternExpression(Set.empty, patExpr1, context)
     verify(strategy).planPatternExpression(Set.empty, patExpr3, context)
     verify(strategy).planPatternExpression(Set.empty, patExpr4, context)
-<<<<<<< HEAD
-=======
     verifyNoMoreInteractions( strategy )
   }
 
@@ -105,7 +103,6 @@ class patternExpressionRewriterTest extends CypherFunSuite with LogicalPlanningT
 
     // then
     verify(strategy).planPatternExpression(Set.empty, patExpr1, context)
->>>>>>> neo4j/4.1
     verifyNoMoreInteractions( strategy )
 
     rewritten shouldBe a[NestedPlanExistsExpression]
@@ -128,19 +125,10 @@ class patternExpressionRewriterTest extends CypherFunSuite with LogicalPlanningT
   private def createStrategy: QueryGraphSolver = {
     val strategy = mock[QueryGraphSolver]
     when(strategy.planPatternExpression(any[Set[String]], any[PatternExpression], any[LogicalPlanningContext])).thenAnswer(
-<<<<<<< HEAD
-      new Answer[(LogicalPlan, PatternExpression)] {
-        override def answer(invocation: InvocationOnMock): (LogicalPlan, PatternExpression) = {
-          val expr:PatternExpression = invocation.getArgument(1)
-          val (namedExpr, _) = PatternExpressionPatternElementNamer(expr)
-          (dummyPlan, namedExpr)
-        }
-=======
       (invocation: InvocationOnMock) => {
         val expr: PatternExpression = invocation.getArgument(1)
         val (namedExpr, _) = PatternExpressionPatternElementNamer(expr)
         (dummyPlan, namedExpr)
->>>>>>> neo4j/4.1
       })
     strategy
   }

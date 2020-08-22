@@ -57,11 +57,7 @@ public class SchemaRecord extends PrimitiveRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public SchemaRecord clone()
-=======
     public SchemaRecord copy()
->>>>>>> neo4j/4.1
     {
         return new SchemaRecord( this );
     }

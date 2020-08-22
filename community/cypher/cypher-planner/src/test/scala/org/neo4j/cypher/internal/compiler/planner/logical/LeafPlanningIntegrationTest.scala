@@ -19,11 +19,7 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical
 
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher._
-=======
 import org.neo4j.cypher.internal.compiler.planner.BeLikeMatcher.beLike
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.compiler.planner.LogicalPlanningTestSupport2
 import org.neo4j.cypher.internal.compiler.planner.StubbedLogicalPlanningConfiguration
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
@@ -35,17 +31,6 @@ import org.neo4j.cypher.internal.expressions.PropertyKeyToken
 import org.neo4j.cypher.internal.expressions.SemanticDirection.INCOMING
 import org.neo4j.cypher.internal.expressions.SignedDecimalIntegerLiteral
 import org.neo4j.cypher.internal.ir.RegularSinglePlannerQuery
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.planner.spi.DelegatingGraphStatistics
-import org.neo4j.cypher.internal.planner.spi.PlanningAttributes.Cardinalities
-import org.neo4j.cypher.internal.v4_0.expressions.SemanticDirection.INCOMING
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.util._
-import org.neo4j.cypher.internal.v4_0.util.symbols._
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v4_0.util.test_helpers.Extractors.SetExtractor
-=======
 import org.neo4j.cypher.internal.logical.plans.Aggregation
 import org.neo4j.cypher.internal.logical.plans.AllNodesScan
 import org.neo4j.cypher.internal.logical.plans.Apply
@@ -95,7 +80,6 @@ import org.neo4j.cypher.internal.util.NonEmptyList
 import org.neo4j.cypher.internal.util.symbols.CTAny
 import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 import org.neo4j.cypher.internal.util.test_helpers.Extractors.SetExtractor
->>>>>>> neo4j/4.1
 
 class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTestSupport2 with PlanMatchHelp {
 
@@ -449,23 +433,14 @@ class LeafPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTes
         case Apply(
               Expand(
                 NodeByIdSeek("m", _, _),
-<<<<<<< HEAD
-              "m", _, _, "n", _, _),
-=======
               "m", _, _, "n", _, _, _),
->>>>>>> neo4j/4.1
               Optional(
                 Selection(_,
                   Expand(
                     Expand(
                         Argument(SetExtractor("n")),
-<<<<<<< HEAD
-                    _, _, _, _, _, _)
-                  , _, _, _, _, _, _)
-=======
                     _, _, _, _, _, _, _)
                   , _, _, _, _, _, _, _)
->>>>>>> neo4j/4.1
                 ),
               _)
             ) => ()

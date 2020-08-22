@@ -337,10 +337,7 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
                 switch ( state )
                 {
                 case ONLINE:
-<<<<<<< HEAD
-=======
                 case FAILED:
->>>>>>> neo4j/4.1
                     proxy.start();
                     break;
                 case POPULATING:

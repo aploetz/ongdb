@@ -74,11 +74,7 @@ public class PropertyKeyTokenRecord extends TokenRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public PropertyKeyTokenRecord clone()
-=======
     public PropertyKeyTokenRecord copy()
->>>>>>> neo4j/4.1
     {
         return new PropertyKeyTokenRecord( this );
     }
