@@ -11,8 +11,8 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-fabric</artifactId>
     <packaging>jar</packaging>
-    <name>Neo4j - Fabric</name>
-    <description>Neo4j - Fabric</description>
+    <name>ongdb- Fabric</name>
+    <description>ongdb- Fabric</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
     <scm>

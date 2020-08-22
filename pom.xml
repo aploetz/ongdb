@@ -437,7 +437,7 @@
 
         <!-- Licensing settings -->
         <plugin>
-          <groupId>org.graphfoundation.ongdb.build.plugins</groupId>
+          <groupId>org.neo4j.build.plugins</groupId>
           <artifactId>licensing-maven-plugin</artifactId>
           <version>1.7.8</version>
           <configuration>
@@ -588,11 +588,6 @@
                 <files>
                   <file>${project.build.sourceDirectory}/com</file>
                   <file>${project.build.testSourceDirectory}/com</file>
-                </files>
-              </requireFilesDontExist>
-              <requireFilesDontExist>
-                <files>
-                  <file>enterprise</file>
                 </files>
               </requireFilesDontExist>
               <requireMavenVersion>
@@ -749,7 +744,7 @@
       </plugin>
 
       <plugin>
-        <groupId>org.graphfoundation.ongdb</groupId>
+        <groupId>org.neo4j</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
         <version>1.1.1</version>
         <configuration>
@@ -882,7 +877,7 @@
       <build>
         <plugins>
           <plugin>
-            <groupId>org.graphfoundation.ongdb.build.plugins</groupId>
+            <groupId>org.neo4j.build.plugins</groupId>
             <artifactId>licensing-maven-plugin</artifactId>
           </plugin>
           <plugin>

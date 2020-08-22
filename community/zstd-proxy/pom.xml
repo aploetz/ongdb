@@ -37,7 +37,7 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>org.graphfoundation.ongdb.build.plugins</groupId>
+        <groupId>org.neo4j.build.plugins</groupId>
         <artifactId>licensing-maven-plugin</artifactId>
       </plugin>
       <plugin>

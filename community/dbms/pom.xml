@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-dbms</artifactId>
-    <name>ONgDB - Database Management System</name>
+    <name>ongdb- Database Management System</name>
 
     <properties>
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
@@ -92,16 +92,6 @@
             <artifactId>ongdb-lucene-index</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-batch-insert</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-procedure</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
         <dependency>
             <groupId>org.jprocesses</groupId>
@@ -117,7 +107,7 @@
             <artifactId>commons-text</artifactId>
         </dependency>
         <dependency>
-           <groupId>org.graphfoundation.ongdb.licensing-proxy</groupId>
+            <groupId>org.graphfoundation.ongdb.licensing-proxy</groupId>
             <artifactId>zstd-proxy</artifactId>
             <version>${project.version}</version>
         </dependency>

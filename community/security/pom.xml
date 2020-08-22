@@ -18,7 +18,7 @@
     <artifactId>ongdb-security</artifactId>
 
     <packaging>jar</packaging>
-    <name>ONgDB - Security</name>
+    <name>ongdb- Security</name>
     <description>Authentication, Authorization, Encryption and related components.</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 

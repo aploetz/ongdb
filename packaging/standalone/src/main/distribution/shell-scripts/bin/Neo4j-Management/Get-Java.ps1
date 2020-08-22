@@ -1,9 +1,9 @@
-# Copyright (c) 2002-2020 "Neo4j"
+# Copyright (c) 2002-2020 "Neo4j,"
 # Neo4j Sweden AB [http://neo4j.com]
 #
-# This file is part of ONgDB.
+# This file is part of Neo4j.
 #
-# ONgDB is free software: you can redistribute it and/or modify
+# Neo4j is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
@@ -148,7 +148,7 @@ function Get-Java
     $ShellArgs = @()
     if ($PsCmdlet.ParameterSetName -eq 'ServerInvoke')
     {
-      $serverMainClass = 'org.neo4j.server.enterprise.EnterpriseEntryPoint'
+      $serverMainClass = ''
       if ($Neo4jServer.ServerType -eq 'Community') { $serverMainClass = 'org.neo4j.server.CommunityEntryPoint' }
 
       if ($serverMainClass -eq '') { Write-Error "Unable to determine the Server Main Class from the server information"; return $null }
