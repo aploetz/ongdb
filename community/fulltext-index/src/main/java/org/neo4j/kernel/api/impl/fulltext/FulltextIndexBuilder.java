@@ -39,6 +39,8 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
     private boolean populating;
     private IndexUpdateSink indexUpdateSink = NullIndexUpdateSink.INSTANCE;
 
+    private boolean sorting;
+
     private FulltextIndexBuilder( FulltextIndexDescriptor descriptor, Config config, TokenHolder propertyKeyTokenHolder )
     {
         super( config );
@@ -77,6 +79,13 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
         return this;
     }
 
+
+    FulltextIndexBuilder withSorting( boolean isSorting )
+    {
+        this.sorting = isSorting;
+        return this;
+    }
+
     /**
      * Build lucene schema index with specified configuration
      *
@@ -97,6 +106,10 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
             if ( populating )
             {
                 writerConfigFactory = () -> IndexWriterConfigs.population( descriptor.analyzer() );
+            }
+            else if (sorting)
+            {
+                writerConfigFactory = () -> IndexWriterConfigs.sorted( descriptor.analyzer() );
             }
             else
             {

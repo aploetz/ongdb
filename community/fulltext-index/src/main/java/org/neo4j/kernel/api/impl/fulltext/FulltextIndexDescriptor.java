@@ -40,6 +40,8 @@ class FulltextIndexDescriptor extends StoreIndexDescriptor
     private final List<String> sortProperties;
     private final Map<String,String> sortTypes;
 
+    private final String indexSortProperty;
+
     FulltextIndexDescriptor( StoreIndexDescriptor indexDescriptor, List<String> propertyNames, Analyzer analyzer, String analyzerName,
                              boolean eventuallyConsistent, List<String> sortProperties, Map<String,String> sortTypes )
     {
@@ -50,6 +52,21 @@ class FulltextIndexDescriptor extends StoreIndexDescriptor
         this.eventuallyConsistent = eventuallyConsistent;
         this.sortProperties = sortProperties;
         this.sortTypes = sortTypes;
+
+        this.indexSortProperty = "";
+    }
+
+    FulltextIndexDescriptor( StoreIndexDescriptor indexDescriptor, List<String> propertyNames, Analyzer analyzer, String analyzerName,
+                                    boolean eventuallyConsistent, List<String> sortProperties, Map<String,String> sortTypes, String indexSortProperty )
+    {
+        super( indexDescriptor );
+        this.propertyNames = propertyNames;
+        this.analyzer = analyzer;
+        this.analyzerName = analyzerName;
+        this.eventuallyConsistent = eventuallyConsistent;
+        this.sortProperties = sortProperties;
+        this.sortTypes = sortTypes;
+        this.indexSortProperty = indexSortProperty;
     }
 
     Collection<String> propertyNames()

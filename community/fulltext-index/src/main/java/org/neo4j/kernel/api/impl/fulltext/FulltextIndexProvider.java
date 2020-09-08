@@ -244,6 +244,7 @@ class FulltextIndexProvider extends IndexProvider implements FulltextAdapter, Au
                 .withOperationalMode( operationalMode )
                 .withIndexStorage( indexStorage )
                 .withPopulatingMode( true )
+                .withSorting( true )
                 .build();
         if ( fulltextIndex.isReadOnly() )
         {
@@ -384,6 +385,9 @@ class FulltextIndexProvider extends IndexProvider implements FulltextAdapter, Au
         {
             throw new IllegalArgumentException( "No such analyzer: " + analyzerName, e );
         }
+
+        String indexSortString = (String) indexConfiguration.getOrDefault( FulltextIndexSettings.INDEX_CONFIG_SORT, "" );
+
         return new FulltextSchemaDescriptor( schema, indexConfiguration );
     }
 
