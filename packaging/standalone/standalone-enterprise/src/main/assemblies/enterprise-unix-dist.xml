@@ -125,6 +125,7 @@
         <include>org.apache.lucene:lucene-analyzers-common</include>
         <include>org.apache.lucene:lucene-queryparser</include>
         <include>org.apache.lucene:lucene-codecs</include>
+        <include>org.apache.lucene:lucene-misc</include>
         <include>io.netty:netty</include>
         <include>org.scala-lang:*</include>
         <include>org.parboiled:*</include>

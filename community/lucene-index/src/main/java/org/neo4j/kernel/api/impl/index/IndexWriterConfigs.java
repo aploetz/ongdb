@@ -127,6 +127,14 @@ public final class IndexWriterConfigs
         return writerConfig;
     }
 
+    public static IndexWriterConfig populationAndSorting( Analyzer analyzer )
+    {
+        IndexWriterConfig writerConfig = sorting( analyzer );
+        writerConfig.setMaxBufferedDocs( POPULATION_MAX_BUFFERED_DOCS );
+        writerConfig.setRAMBufferSizeMB( POPULATION_RAM_BUFFER_SIZE_MB );
+        return writerConfig;
+    }
+
     public static IndexWriterConfig transactionState( Analyzer analyzer )
     {
         IndexWriterConfig config = standard( analyzer );
@@ -135,7 +143,7 @@ public final class IndexWriterConfigs
         return config;
     }
 
-    public static IndexWriterConfig sorted( Analyzer analyzer )
+    public static IndexWriterConfig sorting( Analyzer analyzer )
     {
         IndexWriterConfig writerConfig = new IndexWriterConfig( analyzer );
 

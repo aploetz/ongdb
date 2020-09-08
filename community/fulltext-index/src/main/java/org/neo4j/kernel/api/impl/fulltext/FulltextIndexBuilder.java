@@ -105,11 +105,17 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
             Factory<IndexWriterConfig> writerConfigFactory;
             if ( populating )
             {
-                writerConfigFactory = () -> IndexWriterConfigs.population( descriptor.analyzer() );
+                if (!sorting)
+                {
+                    writerConfigFactory = () -> IndexWriterConfigs.population( descriptor.analyzer() );
+                }
+                else {
+                    writerConfigFactory = () -> IndexWriterConfigs.populationAndSorting( descriptor.analyzer() );
+                }
             }
             else if (sorting)
             {
-                writerConfigFactory = () -> IndexWriterConfigs.sorted( descriptor.analyzer() );
+                writerConfigFactory = () -> IndexWriterConfigs.sorting( descriptor.analyzer() );
             }
             else
             {
