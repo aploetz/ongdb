@@ -57,6 +57,9 @@ public class FulltextIndexSettings
     private static final String INDEX_CONFIG_FILE = "fulltext-index.properties";
     private static final String INDEX_CONFIG_PROPERTY_NAMES = "propertyNames";
 
+    // Index Sorting Property
+    private static final String INDEX_CONFIG_SORT = "sort";
+
     static FulltextIndexDescriptor readOrInitialiseDescriptor( StoreIndexDescriptor descriptor, String defaultAnalyzerName,
             TokenHolder propertyKeyTokenHolder, File indexFolder, FileSystemAbstraction fileSystem )
     {

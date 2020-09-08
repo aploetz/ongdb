@@ -31,6 +31,8 @@ import org.apache.lucene.index.KeepOnlyLastCommitDeletionPolicy;
 import org.apache.lucene.index.LogByteSizeMergePolicy;
 import org.apache.lucene.index.PooledConcurrentMergeScheduler;
 import org.apache.lucene.index.SnapshotDeletionPolicy;
+import org.apache.lucene.index.SortingMergePolicy;
+import org.apache.lucene.search.Sort;
 
 import org.neo4j.index.impl.lucene.explicit.LuceneDataSource;
 import org.neo4j.util.FeatureToggles;
@@ -131,5 +133,41 @@ public final class IndexWriterConfigs
         // Index transaction state is never directly persisted, so never commit it on close.
         config.setCommitOnClose( false );
         return config;
+    }
+
+    public static IndexWriterConfig sorted( Analyzer analyzer )
+    {
+        IndexWriterConfig writerConfig = new IndexWriterConfig( analyzer );
+
+        writerConfig.setMaxBufferedDocs( MAX_BUFFERED_DOCS );
+        writerConfig.setMaxBufferedDeleteTerms( MAX_BUFFERED_DELETE_TERMS );
+        writerConfig.setIndexDeletionPolicy( new SnapshotDeletionPolicy( new KeepOnlyLastCommitDeletionPolicy() ) );
+        writerConfig.setUseCompoundFile( true );
+        writerConfig.setRAMBufferSizeMB( STANDARD_RAM_BUFFER_SIZE_MB );
+        writerConfig.setCodec(new Lucene54Codec()
+        {
+            @Override
+            public PostingsFormat getPostingsFormatForField( String field )
+            {
+                PostingsFormat postingFormat = super.getPostingsFormatForField( field );
+                return CODEC_BLOCK_TREE_ORDS_POSTING_FORMAT ? blockTreeOrdsPostingsFormat : postingFormat;
+            }
+        });
+        if ( CUSTOM_MERGE_SCHEDULER )
+        {
+            writerConfig.setMergeScheduler( new PooledConcurrentMergeScheduler() );
+        }
+
+        LogByteSizeMergePolicy logByteSizeMergePolicy = new LogByteSizeMergePolicy();
+        logByteSizeMergePolicy.setNoCFSRatio( MERGE_POLICY_NO_CFS_RATIO );
+        logByteSizeMergePolicy.setMinMergeMB( MERGE_POLICY_MIN_MERGE_MB );
+        logByteSizeMergePolicy.setMergeFactor( MERGE_POLICY_MERGE_FACTOR );
+
+
+        SortingMergePolicy mergePolicy = new SortingMergePolicy( logByteSizeMergePolicy, Sort.INDEXORDER);
+        mergePolicy.setNoCFSRatio( MERGE_POLICY_NO_CFS_RATIO );
+        writerConfig.setMergePolicy( mergePolicy );
+
+        return writerConfig;
     }
 }

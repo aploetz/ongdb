@@ -230,6 +230,8 @@ class FulltextIndexProvider extends IndexProvider implements FulltextAdapter, Au
         }
     }
 
+    // todo remove comment
+    // This is where the index gets created? or populated? or both?
     @Override
     public IndexPopulator getPopulator( StoreIndexDescriptor descriptor, IndexSamplingConfig samplingConfig, ByteBufferFactory bufferFactory )
     {
