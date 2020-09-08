@@ -30,6 +30,7 @@ Apache Software License, Version 2.0
   Lucene codecs
   Lucene Common Analyzers
   Lucene Core
+  Lucene Miscellaneous
   Lucene QueryParsers
   Netty/All-in-One
 
