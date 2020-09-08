@@ -513,7 +513,6 @@
                             <id>list-all-licenses</id>
                             <phase>compile</phase>
                             <goals>
-                                <goal>check</goal>
                             </goals>
                             <configuration>
                                 <licensingRequirementFiles>
