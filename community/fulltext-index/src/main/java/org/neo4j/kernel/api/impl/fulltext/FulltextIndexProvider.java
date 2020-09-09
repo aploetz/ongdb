@@ -386,7 +386,7 @@ class FulltextIndexProvider extends IndexProvider implements FulltextAdapter, Au
             throw new IllegalArgumentException( "No such analyzer: " + analyzerName, e );
         }
 
-        String indexSortString = (String) indexConfiguration.getOrDefault( FulltextIndexSettings.INDEX_CONFIG_SORT, "" );
+        String indexSortString = (String) indexConfiguration.getOrDefault( FulltextIndexSettings.INDEX_CONFIG_INDEX_SORT, "" );
 
         return new FulltextSchemaDescriptor( schema, indexConfiguration );
     }

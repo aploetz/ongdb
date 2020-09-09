@@ -84,6 +84,11 @@ class FulltextIndexDescriptor extends StoreIndexDescriptor
         return sortTypes;
     }
 
+    String getIndexSortProperty()
+    {
+        return indexSortProperty;
+    }
+
     public Analyzer analyzer()
     {
         return analyzer;

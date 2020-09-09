@@ -93,6 +93,7 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
      */
     public DatabaseFulltextIndex build()
     {
+        String indexSortProperty = descriptor.getIndexSortProperty();
         if ( isReadOnly() )
         {
             final ReadOnlyIndexPartitionFactory partitionFactory = new ReadOnlyIndexPartitionFactory();
@@ -110,12 +111,13 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
                     writerConfigFactory = () -> IndexWriterConfigs.population( descriptor.analyzer() );
                 }
                 else {
-                    writerConfigFactory = () -> IndexWriterConfigs.populationAndSorting( descriptor.analyzer() );
+                    // pass sort in at this level, instead of the two params?
+                    writerConfigFactory = () -> IndexWriterConfigs.populationAndSorting( descriptor.analyzer(), FulltextUtils.buildSort( indexSortProperty, descriptor.sortTypes().get(  indexSortProperty ) ));
                 }
             }
             else if (sorting)
             {
-                writerConfigFactory = () -> IndexWriterConfigs.sorting( descriptor.analyzer() );
+                writerConfigFactory = () -> IndexWriterConfigs.sorting( descriptor.analyzer(),  FulltextUtils.buildSort( indexSortProperty, descriptor.sortTypes().get(  indexSortProperty ) ) );
             }
             else
             {
@@ -127,4 +129,9 @@ public class FulltextIndexBuilder extends AbstractLuceneIndexBuilder<FulltextInd
             return new WritableFulltextIndex( indexUpdateSink, fulltextIndex );
         }
     }
+
+
+
+
+
 }

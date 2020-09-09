@@ -33,8 +33,11 @@ import org.apache.lucene.index.PooledConcurrentMergeScheduler;
 import org.apache.lucene.index.SnapshotDeletionPolicy;
 import org.apache.lucene.index.SortingMergePolicy;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortedNumericSortField;
 
 import org.neo4j.index.impl.lucene.explicit.LuceneDataSource;
+import org.neo4j.kernel.impl.util.FulltextSortType;
 import org.neo4j.util.FeatureToggles;
 
 /**
@@ -127,9 +130,9 @@ public final class IndexWriterConfigs
         return writerConfig;
     }
 
-    public static IndexWriterConfig populationAndSorting( Analyzer analyzer )
+    public static IndexWriterConfig populationAndSorting( Analyzer analyzer, Sort indexSort )
     {
-        IndexWriterConfig writerConfig = sorting( analyzer );
+        IndexWriterConfig writerConfig = sorting( analyzer, indexSort );
         writerConfig.setMaxBufferedDocs( POPULATION_MAX_BUFFERED_DOCS );
         writerConfig.setRAMBufferSizeMB( POPULATION_RAM_BUFFER_SIZE_MB );
         return writerConfig;
@@ -143,7 +146,7 @@ public final class IndexWriterConfigs
         return config;
     }
 
-    public static IndexWriterConfig sorting( Analyzer analyzer )
+    public static IndexWriterConfig sorting( Analyzer analyzer, Sort indexSort )
     {
         IndexWriterConfig writerConfig = new IndexWriterConfig( analyzer );
 
@@ -171,8 +174,8 @@ public final class IndexWriterConfigs
         logByteSizeMergePolicy.setMinMergeMB( MERGE_POLICY_MIN_MERGE_MB );
         logByteSizeMergePolicy.setMergeFactor( MERGE_POLICY_MERGE_FACTOR );
 
-
-        SortingMergePolicy mergePolicy = new SortingMergePolicy( logByteSizeMergePolicy, Sort.INDEXORDER);
+        // buildSort from SimpleFulltextIndexReader
+        SortingMergePolicy mergePolicy = new SortingMergePolicy( logByteSizeMergePolicy, indexSort);
         mergePolicy.setNoCFSRatio( MERGE_POLICY_NO_CFS_RATIO );
         writerConfig.setMergePolicy( mergePolicy );
 
