@@ -76,6 +76,9 @@ public class FulltextIndexSettings
         String analyzerName = indexConfiguration.getProperty( INDEX_CONFIG_ANALYZER, defaultAnalyzerName );
         Analyzer analyzer = createAnalyzer( analyzerName );
 
+        String indexSortProperty = indexConfiguration.getProperty( INDEX_CONFIG_INDEX_SORT, "" );
+
+
         List<String> names = new ArrayList<>();
         for ( int propertyKeyId : propIds )
         {
@@ -118,7 +121,7 @@ public class FulltextIndexSettings
         }
         List<String> sortPropertyNames = Collections.unmodifiableList( sortNames );
 
-        return new FulltextIndexDescriptor( descriptor, propertyNames, analyzer, analyzerName, eventuallyConsistent, sortPropertyNames, sortTypes );
+        return new FulltextIndexDescriptor( descriptor, propertyNames, analyzer, analyzerName, eventuallyConsistent, sortPropertyNames, sortTypes, indexSortProperty );
     }
 
     private static void loadPersistedSettings( Properties settings, File indexFolder, FileSystemAbstraction fs )
@@ -167,6 +170,8 @@ public class FulltextIndexSettings
         settings.setProperty( "_schema_entityTokenIds", Arrays.toString( schema.getEntityTokenIds() ) );
         settings.setProperty( "_sortIds", Arrays.toString( schema.getSortIds() ) );
         settings.setProperty( "_sortTypes", Arrays.toString( schema.getSortTypes() ) );
+        settings.setProperty( "_index_sort", descriptor.getIndexSortProperty() );
+
         try ( StoreChannel channel = fs.create( indexConfigFile );
                 Writer writer = fs.openAsWriter( indexConfigFile, StandardCharsets.UTF_8, false ) )
         {
