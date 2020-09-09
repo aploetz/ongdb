@@ -1,25 +1,3 @@
-/*
- * Copyright (c) 2018-2020 "Graph Foundation"
- * Graph Foundation, Inc. [https://graphfoundation.org]
- *
- * Copyright (c) 2002-2020 "Neo4j,"
- * Neo4j Sweden AB [http://neo4j.com]
- *
- * This file is part of ONgDB.
- *
- * ONgDB is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
 package org.neo4j.kernel.api.impl.index.collector;
 
 import org.apache.lucene.document.Document;
@@ -40,9 +18,9 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocsCollector;
 import org.apache.lucene.search.TopFieldCollector;
 import org.apache.lucene.search.TopScoreDocCollector;
-import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.DocIdSetBuilder;
 
 import java.io.IOException;
@@ -63,55 +41,44 @@ import org.neo4j.kernel.impl.api.explicitindex.AbstractIndexHits;
 import org.neo4j.storageengine.api.schema.IndexProgressor;
 import org.neo4j.values.storable.Value;
 
-/**
- * Collector to record per-segment {@code DocIdSet}s and {@code LeafReaderContext}s for every
- * segment that contains a hit. Those items can be later used to read {@code DocValues} fields
- * and iterate over the matched {@code DocIdSet}s. This collector is different from
- * {@code org.apache.lucene.search.CachingCollector} in that the later focuses on predictable RAM usage
- * and feeding other collectors while this collector focuses on exposing the required per-segment data structures
- * to the user.
- */
-public class DocValuesCollector extends SimpleCollector
+public class EarlyTerminationCollector extends SimpleCollector
 {
     private static final EmptyIndexHits<Document> EMPTY_INDEX_HITS = new EmptyIndexHits<>();
+
+    private Collector collector;
+    private Sort indexSort;
 
     private LeafReaderContext context;
     private int segmentHits;
     private int totalHits;
-    private Scorer scorer;
-    private float[] scores;
-    private final boolean keepScores;
-    private final List<MatchingDocs> matchingDocs = new ArrayList<>();
-    private Docs docs;
+    private final List<EarlyTerminationCollector.MatchingDocs> matchingDocs = new ArrayList<>();
+    private EarlyTerminationCollector.Docs docs;
 
     /**
      * Default Constructor, does not keep scores.
      */
-    public DocValuesCollector()
+    public EarlyTerminationCollector()
     {
-        this( false );
     }
 
-    /**
-     * @param keepScores true if you want to trade correctness for speed
-     */
-    public DocValuesCollector( boolean keepScores )
+    @Override
+    public boolean needsScores()
     {
-        this.keepScores = keepScores;
+        return false;
     }
 
     /**
      * @param field the field that contains the values
      * @return an iterator over all NumericDocValues from the given field
      */
-    public LongValuesIterator getValuesIterator( String field )
+    public EarlyTerminationCollector.LongValuesIterator getValuesIterator( String field )
     {
-        return new LongValuesIterator( getMatchingDocs(), getTotalHits(), field );
+        return new EarlyTerminationCollector.LongValuesIterator( getMatchingDocs(), getTotalHits(), field );
     }
 
     public IndexProgressor getIndexProgressor( String field, IndexProgressor.NodeValueClient client )
     {
-        return new LongValuesIndexProgressor( getMatchingDocs(), getTotalHits(), field, client );
+        return new EarlyTerminationCollector.LongValuesIndexProgressor( getMatchingDocs(), getTotalHits(), field, client );
     }
 
     /**
@@ -133,7 +100,7 @@ public class DocValuesCollector extends SimpleCollector
         }
         TopDocs topDocs = getTopDocs( sort, size );
         LeafReaderContext[] contexts = getLeafReaderContexts( getMatchingDocs() );
-        return new TopDocsValuesIterator( topDocs, contexts, field );
+        return new EarlyTerminationCollector.TopDocsValuesIterator( topDocs, contexts, field );
     }
 
     public ValuesIterator getIndexSortedValuesIterator( String field, Sort sort ) throws IOException
@@ -147,9 +114,10 @@ public class DocValuesCollector extends SimpleCollector
         {
             return ValuesIterator.EMPTY;
         }
+
         TopDocs topDocs = getTopDocsFromEarlyTerminatingSortingCollector( sort, size );
         LeafReaderContext[] contexts = getLeafReaderContexts( getMatchingDocs() );
-        return new TopDocsValuesIterator( topDocs, contexts, field );
+        return new EarlyTerminationCollector.TopDocsValuesIterator( topDocs, contexts, field );
     }
 
     /**
@@ -162,7 +130,7 @@ public class DocValuesCollector extends SimpleCollector
      */
     public IndexHits<Document> getIndexHits( Sort sort ) throws IOException
     {
-        List<MatchingDocs> matchingDocs = getMatchingDocs();
+        List<EarlyTerminationCollector.MatchingDocs> matchingDocs = getMatchingDocs();
         int size = getTotalHits();
         if ( size == 0 )
         {
@@ -171,12 +139,12 @@ public class DocValuesCollector extends SimpleCollector
 
         if ( sort == null || sort == Sort.INDEXORDER )
         {
-            return new DocsInIndexOrderIterator( matchingDocs, size, isKeepScores() );
+            return new EarlyTerminationCollector.DocsInIndexOrderIterator( matchingDocs, size );
         }
 
         TopDocs topDocs = getTopDocs( sort, size );
         LeafReaderContext[] contexts = getLeafReaderContexts( matchingDocs );
-        return new TopDocsIterator( topDocs, contexts );
+        return new EarlyTerminationCollector.TopDocsIterator( topDocs, contexts );
     }
 
     /**
@@ -187,42 +155,12 @@ public class DocValuesCollector extends SimpleCollector
         return totalHits;
     }
 
-    /**
-     * @return true if scores were saved.
-     */
-    public boolean isKeepScores()
-    {
-        return keepScores;
-    }
-
     @Override
     public final void collect( int doc ) throws IOException
     {
         docs.addDoc( doc );
-        if ( keepScores )
-        {
-            if ( segmentHits >= scores.length )
-            {
-                float[] newScores = new float[ArrayUtil.oversize( segmentHits + 1, 4 )];
-                System.arraycopy( scores, 0, newScores, 0, segmentHits );
-                scores = newScores;
-            }
-            scores[segmentHits] = scorer.score();
-        }
         segmentHits++;
         totalHits++;
-    }
-
-    @Override
-    public boolean needsScores()
-    {
-        return keepScores;
-    }
-
-    @Override
-    public void setScorer( Scorer scorer )
-    {
-        this.scorer = scorer;
     }
 
     @Override
@@ -234,25 +172,19 @@ public class DocValuesCollector extends SimpleCollector
         }
         int maxDoc = context.reader().maxDoc();
         docs = createDocs( maxDoc );
-        if ( keepScores )
-        {
-            int initialSize = Math.min( 32, maxDoc );
-            scores = new float[initialSize];
-        }
         segmentHits = 0;
         this.context = context;
     }
 
     /**
-     * @return the documents matched by the query, one {@link MatchingDocs} per visited segment that contains a hit.
+     * @return the documents matched by the query, one {@link EarlyTerminationCollector.MatchingDocs} per visited segment that contains a hit.
      */
-    public List<MatchingDocs> getMatchingDocs()
+    public List<EarlyTerminationCollector.MatchingDocs> getMatchingDocs()
     {
         if ( docs != null && segmentHits > 0 )
         {
             createMatchingDocs();
             docs = null;
-            scores = null;
             context = null;
         }
 
@@ -260,30 +192,17 @@ public class DocValuesCollector extends SimpleCollector
     }
 
     /**
-     * @return a new {@link Docs} to record hits.
+     * @return a new {@link EarlyTerminationCollector.Docs} to record hits.
      */
-    private Docs createDocs( final int maxDoc )
+    private EarlyTerminationCollector.Docs createDocs( final int maxDoc )
     {
-        return new Docs( maxDoc );
+        return new EarlyTerminationCollector.Docs( maxDoc );
     }
 
     private void createMatchingDocs()
     {
-        if ( scores == null || scores.length == segmentHits )
-        {
-            matchingDocs.add( new MatchingDocs( this.context, docs.getDocIdSet(), segmentHits, scores ) );
-        }
-        else
-        {
-            // NOTE: we could skip the copy step here since the MatchingDocs are supposed to be
-            // consumed through any of the provided Iterators (actually, the replay method),
-            // which all don't care if scores has null values at the end.
-            // This is for just sanity's sake, we could also make MatchingDocs private
-            // and treat this as implementation detail.
-            float[] finalScores = new float[segmentHits];
-            System.arraycopy( scores, 0, finalScores, 0, segmentHits );
-            matchingDocs.add( new MatchingDocs( this.context, docs.getDocIdSet(), segmentHits, finalScores ) );
-        }
+
+        matchingDocs.add( new EarlyTerminationCollector.MatchingDocs( this.context, docs.getDocIdSet(), segmentHits ) );
     }
 
     private TopDocs getTopDocs( Sort sort, int size ) throws IOException
@@ -309,17 +228,17 @@ public class DocValuesCollector extends SimpleCollector
         TopScoreDocCollector collector = TopScoreDocCollector.create( size );
         EarlyTerminatingSortingCollector earlyTerminatingSortingCollector = new EarlyTerminatingSortingCollector( collector, sort, size, sort );
 
-        replayToEarlyTermination( earlyTerminatingSortingCollector );
+        replayTo( earlyTerminatingSortingCollector );
         return collector.topDocs();
     }
 
-    private static LeafReaderContext[] getLeafReaderContexts( List<MatchingDocs> matchingDocs )
+    private static LeafReaderContext[] getLeafReaderContexts( List<EarlyTerminationCollector.MatchingDocs> matchingDocs )
     {
         int segments = matchingDocs.size();
         LeafReaderContext[] contexts = new LeafReaderContext[segments];
         for ( int i = 0; i < segments; i++ )
         {
-            MatchingDocs matchingDoc = matchingDocs.get( i );
+            EarlyTerminationCollector.MatchingDocs matchingDoc = matchingDocs.get( i );
             contexts[i] = matchingDoc.context;
         }
         return contexts;
@@ -327,31 +246,7 @@ public class DocValuesCollector extends SimpleCollector
 
     private void replayTo( Collector collector ) throws IOException
     {
-        for ( MatchingDocs docs : getMatchingDocs() )
-        {
-            LeafCollector leafCollector = collector.getLeafCollector( docs.context );
-            Scorer scorer;
-            DocIdSetIterator idIterator = docs.docIdSet.iterator();
-            if ( isKeepScores() )
-            {
-                scorer = new ReplayingScorer( docs.scores );
-            }
-            else
-            {
-                scorer = new ConstantScoreScorer( null, Float.NaN, idIterator );
-            }
-            leafCollector.setScorer( scorer );
-            int doc;
-            while ( (doc = idIterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS )
-            {
-                leafCollector.collect( doc );
-            }
-        }
-    }
-
-    private void replayToEarlyTermination( EarlyTerminatingSortingCollector collector ) throws IOException
-    {
-        for ( MatchingDocs docs : getMatchingDocs() )
+        for ( EarlyTerminationCollector.MatchingDocs docs : getMatchingDocs() )
         {
             LeafCollector leafCollector = collector.getLeafCollector( docs.context );
             DocIdSetIterator idIterator = docs.docIdSet.iterator();
@@ -364,23 +259,23 @@ public class DocValuesCollector extends SimpleCollector
     }
 
     /**
-     * Iterates over all per-segment {@link DocValuesCollector.MatchingDocs}.
+     * Iterates over all per-segment {@link EarlyTerminationCollector.MatchingDocs}.
      * Provides base functionality for extracting entity ids and other values from documents.
      */
     private abstract static class LongValuesSource
     {
-        private final Iterator<DocValuesCollector.MatchingDocs> matchingDocs;
+        private final Iterator<EarlyTerminationCollector.MatchingDocs> matchingDocs;
         private final String field;
         final int totalHits;
         final Map<String,NumericDocValues> docValuesCache;
 
         DocIdSetIterator currentIdIterator;
         NumericDocValues currentDocValues;
-        DocValuesCollector.MatchingDocs currentDocs;
+        EarlyTerminationCollector.MatchingDocs currentDocs;
         int index;
         long next;
 
-        LongValuesSource( Iterable<DocValuesCollector.MatchingDocs> allMatchingDocs, int totalHits, String field )
+        LongValuesSource( Iterable<EarlyTerminationCollector.MatchingDocs> allMatchingDocs, int totalHits, String field )
         {
             this.totalHits = totalHits;
             this.field = field;
@@ -450,7 +345,7 @@ public class DocValuesCollector extends SimpleCollector
     }
 
     /**
-     * Iterates over all per-segment {@link DocValuesCollector.MatchingDocs}. Supports two kinds of lookups.
+     * Iterates over all per-segment {@link EarlyTerminationCollector.MatchingDocs}. Supports two kinds of lookups.
      * One, iterate over all long values of the given field (constructor argument).
      * Two, lookup a value for the current doc in a sidecar {@code NumericDocValues} field.
      * That is, this iterator has a main field, that drives the iteration and allow for lookups
@@ -460,17 +355,17 @@ public class DocValuesCollector extends SimpleCollector
      * is crossed; one thread might think it is reading from one segment while another thread has
      * already advanced this Iterator to the next segment, having raced the first thread.
      */
-    public static class LongValuesIterator extends LongValuesSource implements ValuesIterator, PrimitiveLongResourceIterator
+    public static class LongValuesIterator extends EarlyTerminationCollector.LongValuesSource implements ValuesIterator, PrimitiveLongResourceIterator
     {
         private boolean hasNext;
         private boolean hasNextDecided;
 
         /**
-         * @param allMatchingDocs all {@link DocValuesCollector.MatchingDocs} across all segments
+         * @param allMatchingDocs all {@link EarlyTerminationCollector.MatchingDocs} across all segments
          * @param totalHits the total number of hits across all segments
          * @param field the main field, whose values drive the iteration
          */
-        public LongValuesIterator( Iterable<DocValuesCollector.MatchingDocs> allMatchingDocs, int totalHits, String field )
+        public LongValuesIterator( Iterable<EarlyTerminationCollector.MatchingDocs> allMatchingDocs, int totalHits, String field )
         {
             super( allMatchingDocs, totalHits, field );
         }
@@ -546,11 +441,11 @@ public class DocValuesCollector extends SimpleCollector
         }
     }
 
-    private static class LongValuesIndexProgressor extends LongValuesSource implements IndexProgressor
+    private static class LongValuesIndexProgressor extends EarlyTerminationCollector.LongValuesSource implements IndexProgressor
     {
         private final NodeValueClient client;
 
-        LongValuesIndexProgressor( Iterable<MatchingDocs> allMatchingDocs, int totalHits, String field, NodeValueClient client )
+        LongValuesIndexProgressor( Iterable<EarlyTerminationCollector.MatchingDocs> allMatchingDocs, int totalHits, String field, NodeValueClient client )
         {
             super( allMatchingDocs, totalHits, field );
             this.client = client;
@@ -588,18 +483,15 @@ public class DocValuesCollector extends SimpleCollector
         /** Which documents were seen. */
         public final DocIdSet docIdSet;
 
-        /** Non-sparse scores array. Might be null of no scores were required. */
-        public final float[] scores;
 
         /** Total number of hits */
         public final int totalHits;
 
-        MatchingDocs( LeafReaderContext context, DocIdSet docIdSet, int totalHits, float[] scores )
+        MatchingDocs( LeafReaderContext context, DocIdSet docIdSet, int totalHits )
         {
             this.context = context;
             this.docIdSet = docIdSet;
             this.totalHits = totalHits;
-            this.scores = scores;
         }
 
         /**
@@ -702,17 +594,15 @@ public class DocValuesCollector extends SimpleCollector
 
     private static final class DocsInIndexOrderIterator extends AbstractIndexHits<Document>
     {
-        private final Iterator<MatchingDocs> docs;
+        private final Iterator<EarlyTerminationCollector.MatchingDocs> docs;
         private final int size;
-        private final boolean keepScores;
         private DocIdSetIterator currentIdIterator;
         private Scorer currentScorer;
         private LeafReader currentReader;
 
-        private DocsInIndexOrderIterator( List<MatchingDocs> docs, int size, boolean keepScores )
+        private DocsInIndexOrderIterator( List<EarlyTerminationCollector.MatchingDocs> docs, int size )
         {
             this.size = size;
-            this.keepScores = keepScores;
             this.docs = docs.iterator();
         }
 
@@ -767,18 +657,13 @@ public class DocValuesCollector extends SimpleCollector
         {
             while ( currentIdIterator == null && docs.hasNext() )
             {
-                MatchingDocs matchingDocs = docs.next();
+                EarlyTerminationCollector.MatchingDocs matchingDocs = docs.next();
                 try
                 {
                     currentIdIterator = matchingDocs.docIdSet.iterator();
-                    if ( keepScores )
-                    {
-                        currentScorer = new ReplayingScorer( matchingDocs.scores );
-                    }
-                    else
-                    {
-                        currentScorer = new ConstantScoreScorer( null, Float.NaN, currentIdIterator );
-                    }
+
+                    currentScorer = new ConstantScoreScorer( null, Float.NaN, currentIdIterator );
+
                     currentReader = matchingDocs.context.reader();
                 }
                 catch ( IOException e )
@@ -837,12 +722,12 @@ public class DocValuesCollector extends SimpleCollector
     private static final class TopDocsIterator extends AbstractIndexHits<Document>
     {
         private final int size;
-        private final ScoreDocsIterator scoreDocs;
+        private final EarlyTerminationCollector.ScoreDocsIterator scoreDocs;
         private Document currentDoc;
 
         private TopDocsIterator( TopDocs docs, LeafReaderContext[] contexts )
         {
-            scoreDocs = new ScoreDocsIterator( docs, contexts )
+            scoreDocs = new EarlyTerminationCollector.ScoreDocsIterator( docs, contexts )
             {
                 @Override
                 protected void onNextDoc( int localDocID, LeafReaderContext context )
@@ -891,7 +776,7 @@ public class DocValuesCollector extends SimpleCollector
 
     private static final class TopDocsValuesIterator extends ValuesIterator.Adapter
     {
-        private final ScoreDocsIterator scoreDocs;
+        private final EarlyTerminationCollector.ScoreDocsIterator scoreDocs;
         private final String field;
         private final Map<LeafReaderContext,NumericDocValues> docValuesCache;
         private final Map<String,NumericDocValues> readerCache;
@@ -905,7 +790,7 @@ public class DocValuesCollector extends SimpleCollector
             this.field = field;
             docValuesCache = new HashMap<>( contexts.length );
             readerCache = new HashMap<>();
-            scoreDocs = new ScoreDocsIterator( docs, contexts )
+            scoreDocs = new EarlyTerminationCollector.ScoreDocsIterator( docs, contexts )
             {
                 @Override
                 protected void onNextDoc( int localDocID, LeafReaderContext context )

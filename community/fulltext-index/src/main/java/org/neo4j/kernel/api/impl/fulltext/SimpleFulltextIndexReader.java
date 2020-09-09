@@ -31,6 +31,8 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
+import org.apache.lucene.search.TopDocsCollector;
+import org.apache.lucene.search.TopFieldCollector;
 import org.apache.lucene.search.TotalHitCountCollector;
 
 import java.io.IOException;
@@ -149,14 +151,17 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
             // what about when reversedSortOrder is true? Then mergePolicy is different from the current sort.
             if (indexSort != null && indexSort.equals( sortFieldString ))
             {
-                DocValuesCollector docValuesCollector = new DocValuesCollector( true );
+//                DocValuesCollector docValuesCollector = new DocValuesCollector( true );
+                TopFieldCollector topFieldCollector = TopFieldCollector.create(sort, 50, false, false, false);
+
+
                 EarlyTerminatingSortingCollector earlyTerminatingSortingCollector =
-                        new EarlyTerminatingSortingCollector( docValuesCollector, sort, 50, sort );
+                        new EarlyTerminatingSortingCollector( topFieldCollector, sort, 50, sort );
                 getIndexSearcher().search( query, earlyTerminatingSortingCollector );
                 // Is this unsorting the results vvv?
-                ValuesIterator valuesIterator =
-                        docValuesCollector.getValuesIterator( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID );
-                return new ScoreEntityIterator( valuesIterator );
+//                ValuesIterator valuesIterator =
+//                        topFieldCollector.topDocs().getIndexSortedValuesIterator( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID, sort );
+                return null;//new ScoreEntityIterator( valuesIterator );
             }
             else
             {
