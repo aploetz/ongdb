@@ -188,8 +188,7 @@ public class FulltextProcedures
     @Description( "Query the given fulltext index. Returns the matching nodes and their lucene query score, ordered by score." )
     @Procedure( name = "db.index.fulltext.queryNodes", mode = READ )
     public Stream<NodeOutput> queryFulltextForNodes( @Name( "indexName" ) String name, @Name( "queryString" ) String query,
-                                                     @Name( value = "sortProperty", defaultValue = "" ) String sortProperty,
-                                                     @Name( value = "sortDirection", defaultValue = "ASC" ) String sortDirection )
+                                                     @Name( value = "config", defaultValue = "{}" ) Map<String,Object> config )
             throws ParseException, IndexNotFoundKernelException, IOException
     {
         IndexReference indexReference = getValidIndexReference( name );
@@ -201,7 +200,9 @@ public class FulltextProcedures
                     ", so it cannot be queried for nodes." );
         }
 
-        if ( sortProperty.isEmpty() )
+        QueryConfig queryConfig = QueryConfig.parseConfig( config );
+
+        if ( queryConfig.sortProperty.isEmpty() )
         {
             ScoreEntityIterator resultIterator = accessor.query( tx, name, query );
             return resultIterator.stream()
@@ -210,7 +211,7 @@ public class FulltextProcedures
         }
         else
         {
-            ScoreEntityIterator resultIterator = accessor.queryWithSort( tx, name, query, sortProperty, sortDirection );
+            ScoreEntityIterator resultIterator = accessor.queryWithSort( tx, name, query, queryConfig.sortProperty, queryConfig.sortDirection );
             return resultIterator.stream()
                                  .map( result -> NodeOutput.forExistingEntityOrNull( db, result ) )
                                  .filter( Objects::nonNull );
@@ -220,8 +221,7 @@ public class FulltextProcedures
     @Description( "Query the given fulltext index. Returns the matching relationships and their lucene query score, ordered by score." )
     @Procedure( name = "db.index.fulltext.queryRelationships", mode = READ )
     public Stream<RelationshipOutput> queryFulltextForRelationships( @Name( "indexName" ) String name, @Name( "queryString" ) String query,
-                                                                     @Name( value = "sortProperty", defaultValue = "" ) String sortProperty,
-                                                                     @Name( value = "sortDirection", defaultValue = "ASC" ) String sortDirection )
+                                                                     @Name( value = "config", defaultValue = "{}" ) Map<String,Object> config )
             throws ParseException, IndexNotFoundKernelException, IOException
     {
         IndexReference indexReference = getValidIndexReference( name );
@@ -233,7 +233,9 @@ public class FulltextProcedures
                     ", so it cannot be queried for relationships." );
         }
 
-        if ( sortProperty.isEmpty() )
+        QueryConfig queryConfig = QueryConfig.parseConfig( config );
+
+        if ( queryConfig.sortProperty.isEmpty() )
         {
             ScoreEntityIterator resultIterator = accessor.query( tx, name, query );
             return resultIterator.stream()
@@ -242,7 +244,7 @@ public class FulltextProcedures
         }
         else
         {
-            ScoreEntityIterator resultIterator = accessor.queryWithSort( tx, name, query, sortProperty, sortDirection );
+            ScoreEntityIterator resultIterator = accessor.queryWithSort( tx, name, query, queryConfig.sortProperty, queryConfig.sortDirection );
             return resultIterator.stream()
                                  .map( result -> RelationshipOutput.forExistingEntityOrNull( db, result ) )
                                  .filter( Objects::nonNull );
@@ -369,5 +371,42 @@ public class FulltextProcedures
             this.analyzer = name;
             this.description = description;
         }
+    }
+
+    private static final class QueryConfig
+    {
+        private final String sortProperty;
+        private final String sortDirection;
+
+        private final Integer limit;
+        private final Integer offset;
+
+        private QueryConfig( String sortProperty, String sortDirection, Integer limit, Integer offset )
+        {
+            this.sortProperty = sortProperty;
+            this.sortDirection = sortDirection;
+            this.limit = limit;
+            this.offset = offset;
+        }
+
+        public static QueryConfig parseConfig( Map<String,Object> config)
+        {
+            try
+            {
+                String sortProperty = (String) config.getOrDefault( "sortProperty", "" );
+                String sortDirection = (String) config.getOrDefault( "sortDirection", "ASC" );
+
+                Integer limit = (Integer) config.getOrDefault( "limit", Integer.MAX_VALUE );
+                Integer offset  = (Integer) config.getOrDefault( "offset", 0 );
+
+                return new QueryConfig(sortProperty, sortDirection, limit, offset);
+            }
+            catch ( Exception e )
+            {
+                throw new RuntimeException( "Unable to parse procedure configuration.", e );
+            }
+
+        }
+
     }
 }
