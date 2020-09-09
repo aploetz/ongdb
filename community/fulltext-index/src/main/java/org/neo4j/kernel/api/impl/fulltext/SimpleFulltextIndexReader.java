@@ -23,8 +23,6 @@
 package org.neo4j.kernel.api.impl.fulltext;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortingLeafReader;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.EarlyTerminatingSortingCollector;
@@ -61,8 +59,10 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
     private final String[] sortProperties;
     private final Map<String,String> sortTypes;
 
+    private final String indexSort;
+
     SimpleFulltextIndexReader( SearcherReference searcherRef, String[] properties, Analyzer analyzer, TokenHolder propertyKeyTokenHolder,
-                               String[] sortProperties, Map<String,String> sortTypes )
+                               String[] sortProperties, Map<String,String> sortTypes, String indexSort )
     {
         this.searcherRef = searcherRef;
         this.properties = properties;
@@ -70,6 +70,7 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
         this.propertyKeyTokenHolder = propertyKeyTokenHolder;
         this.sortProperties = sortProperties;
         this.sortTypes = sortTypes;
+        this.indexSort = indexSort;
     }
 
     @Override
@@ -100,7 +101,7 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
         MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser( properties, analyzer );
         multiFieldQueryParser.setAllowLeadingWildcard( true );
         Query query = multiFieldQueryParser.parse( queryString );
-        return indexQueryWithSort( query, sortField, sortDirection );
+        return sortedIndexQuery( query, sortField, sortDirection );
     }
 
     @Override
@@ -128,7 +129,7 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
         }
     }
 
-    private void sortedIndexQuery( Query query, String sortFieldString, String sortDirection, Sort mergePolicySort )
+    private ScoreEntityIterator sortedIndexQuery( Query query, String sortFieldString, String sortDirection )
     {
 
         try
@@ -145,16 +146,27 @@ class SimpleFulltextIndexReader extends FulltextIndexReader
                 throw new IOException( "Sort Field '" + sortFieldString + "' is not an indexed property." );
             }
 
-            DocValuesCollector docValuesCollector = new DocValuesCollector( true );
+            // what about when reversedSortOrder is true? Then mergePolicy is different from the current sort.
+            if (indexSort != null && indexSort.equals( sortFieldString ))
+            {
+                DocValuesCollector docValuesCollector = new DocValuesCollector( true );
+                EarlyTerminatingSortingCollector earlyTerminatingSortingCollector =
+                        new EarlyTerminatingSortingCollector( docValuesCollector, sort, 50, sort );
+                getIndexSearcher().search( query, earlyTerminatingSortingCollector );
+                // Is this unsorting the results vvv?
+                ValuesIterator valuesIterator =
+                        docValuesCollector.getValuesIterator( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID );
+                return new ScoreEntityIterator( valuesIterator );
+            }
+            else
+            {
+                DocValuesCollector docValuesCollector = new DocValuesCollector( true );
 
-            EarlyTerminatingSortingCollector earlyTerminatingSortingCollector = new EarlyTerminatingSortingCollector( docValuesCollector, sort, 5, mergePolicySort );
-            SortingLeafReader sortingLeafReader = null;
-//            LeafReaderContext leafReaderContext = new LeafReaderContext(sortingLeafReader);
-//            earlyTerminatingSortingCollector.getLeafCollector( leafReaderContext );
-//            getIndexSearcher().search( query, docValuesCollector );
-//            ValuesIterator sortedValuesIterator =
-//                    docValuesCollector.getSortedValuesIterator( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID, sort );
-//            return new ScoreEntityIterator( sortedValuesIterator );
+                getIndexSearcher().search( query, docValuesCollector );
+                ValuesIterator sortedValuesIterator =
+                        docValuesCollector.getSortedValuesIterator( LuceneFulltextDocumentStructure.FIELD_ENTITY_ID, sort );
+                return new ScoreEntityIterator( sortedValuesIterator );
+            }
         }
         catch ( IOException e )
         {

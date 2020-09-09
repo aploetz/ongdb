@@ -52,6 +52,8 @@ public class LuceneFulltextIndex extends AbstractLuceneIndex<FulltextIndexReader
     private final Collection<String> sortProperties;
     private final Map<String,String> sortTypes;
 
+    private final String indexSort;
+
     LuceneFulltextIndex( PartitionedIndexStorage storage, IndexPartitionFactory partitionFactory, FulltextIndexDescriptor descriptor,
             TokenHolder propertyKeyTokenHolder )
     {
@@ -66,6 +68,7 @@ public class LuceneFulltextIndex extends AbstractLuceneIndex<FulltextIndexReader
 
         sortProperties = descriptor.sortPropertyNames();
         sortTypes = descriptor.sortTypes();
+        indexSort = descriptor.getIndexSortProperty();
     }
 
     @Override
@@ -114,6 +117,11 @@ public class LuceneFulltextIndex extends AbstractLuceneIndex<FulltextIndexReader
         return analyzer;
     }
 
+    String getIndexSort()
+    {
+        return indexSort;
+    }
+
     TokenHolder getPropertyKeyTokenHolder()
     {
         return propertyKeyTokenHolder;
@@ -124,7 +132,7 @@ public class LuceneFulltextIndex extends AbstractLuceneIndex<FulltextIndexReader
     {
         AbstractIndexPartition singlePartition = getFirstPartition( partitions );
         SearcherReference searcher = new PartitionSearcherReference( singlePartition.acquireSearcher() );
-        return new SimpleFulltextIndexReader( searcher, getPropertiesArray(), analyzer, propertyKeyTokenHolder, getSortPropertiesArray(), getSortTypes() );
+        return new SimpleFulltextIndexReader( searcher, getPropertiesArray(), analyzer, propertyKeyTokenHolder, getSortPropertiesArray(), getSortTypes(), indexSort );
     }
 
     @Override
@@ -132,6 +140,6 @@ public class LuceneFulltextIndex extends AbstractLuceneIndex<FulltextIndexReader
     {
         List<PartitionSearcher> searchers = acquireSearchers( partitions );
         return new PartitionedFulltextIndexReader( searchers, getPropertiesArray(), analyzer, propertyKeyTokenHolder, getSortPropertiesArray(),
-                                                   getSortTypes() );
+                                                   getSortTypes(), indexSort );
     }
 }
