@@ -48,10 +48,13 @@ import org.neo4j.internal.helpers.collection.PrefetchingIterator;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.PropertyType;
 import org.neo4j.kernel.impl.store.StoreType;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 
@@ -80,14 +83,14 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
     private final JobScheduler jobScheduler;
     private final Collector badCollector;
     private final LogFilesInitializer logFilesInitializer;
+    private final MemoryTracker memoryTracker;
+    private final PageCacheTracer pageCacheTracer;
 
-    public EnterpriseParallelBatchImporter( DatabaseLayout databaseLayout,
-                                            FileSystemAbstraction fileSystem, PageCache externalPageCache, Configuration config,
-                                            LogService logService, ExecutionMonitor executionMonitor,
-                                            AdditionalInitialIds additionalInitialIds,
-                                            Config dbConfig, RecordFormats recordFormats,
-                                            Monitor monitor, JobScheduler jobScheduler, Collector badCollector,
-                                            LogFilesInitializer logFilesInitializer )
+    public EnterpriseParallelBatchImporter( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem, PageCache externalPageCache,
+                                            PageCacheTracer pageCacheTracer, Configuration config, LogService logService, ExecutionMonitor executionMonitor,
+                                            AdditionalInitialIds additionalInitialIds, Config dbConfig, RecordFormats recordFormats, Monitor monitor,
+                                            JobScheduler jobScheduler, Collector badCollector, LogFilesInitializer logFilesInitializer,
+                                            MemoryTracker memoryTracker )
     {
         this.externalPageCache = externalPageCache;
         this.databaseLayout = databaseLayout;
@@ -101,10 +104,12 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
         this.monitor = monitor;
         this.dataStatisticsStorage =
                 new DataStatisticsStorage( fileSystem,
-                                           new File( this.databaseLayout.databaseDirectory(), FILE_NAME_RELATIONSHIP_DISTRIBUTION ) );
+                                           new File( this.databaseLayout.databaseDirectory(), FILE_NAME_RELATIONSHIP_DISTRIBUTION ), memoryTracker );
         this.jobScheduler = jobScheduler;
         this.badCollector = badCollector;
         this.logFilesInitializer = logFilesInitializer;
+        this.memoryTracker = memoryTracker;
+        this.pageCacheTracer = pageCacheTracer;
     }
 
     /**
@@ -156,24 +161,24 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
     @Override
     public void doImport( Input input ) throws IOException
     {
-        BatchingNeoStores store =
-                ImportLogic
-                        .instantiateNeoStores( this.fileSystem, this.databaseLayout, this.externalPageCache,
-                                               this.recordFormats, this.config,
-                                               this.logService, this.additionalInitialIds, this.dbConfig, this.jobScheduler );
+        BatchingNeoStores store = ImportLogic.instantiateNeoStores( this.fileSystem, this.databaseLayout, this.externalPageCache,
+                                                                    this.pageCacheTracer,
+                                                                    this.recordFormats, this.config,
+                                                                    this.logService, this.additionalInitialIds,
+                                                                    this.dbConfig, this.jobScheduler,
+                                                                    this.memoryTracker );
 
         try
         {
-            ImportLogic logic =
-                    new ImportLogic( this.databaseLayout, store, this.config, this.dbConfig, this.logService,
-                                     this.executionMonitor, this.recordFormats,
-                                     this.badCollector, this.monitor );
+            ImportLogic logic = new ImportLogic( this.databaseLayout, store, this.config, this.dbConfig,
+                                                 this.logService, this.executionMonitor, this.recordFormats,
+                                                 this.badCollector, this.monitor, this.pageCacheTracer, this.memoryTracker );
 
             try
             {
                 BatchImportStateStore stateStore =
                         new BatchImportStateStore( this.fileSystem,
-                                                   new File( this.databaseLayout.databaseDirectory(), FILE_NAME_STATE ) );
+                                                   new File( this.databaseLayout.databaseDirectory(), FILE_NAME_STATE ), this.memoryTracker );
                 PrefetchingIterator<BatchImportState> states = this.setupStates( logic, store );
                 Pair<String,byte[]> previousState = stateStore.get();
                 moveToLastCompletedState( store, stateStore, previousState.first(), previousState.other(),
@@ -234,15 +239,15 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
                 .add( new BatchImportState( STATE_INIT, ArrayUtil.array( new StoreType[0] ),
                                             ArrayUtil.array( new StoreType[0] ) ) );
         batchImportStates.add(
-                new BatchImportState( STATE_START, ArrayUtil.array( new StoreType[]{StoreType.META_DATA} ),
+                new BatchImportState( STATE_START, ArrayUtil.array( StoreType.META_DATA ),
                                       ArrayUtil.array( new StoreType[0] ) ) );
         batchImportStates.add( new BatchImportState( STATE_DATA_IMPORT, ArrayUtil.array(
-                new StoreType[]{StoreType.NODE, StoreType.NODE_LABEL, StoreType.LABEL_TOKEN,
-                                StoreType.LABEL_TOKEN_NAME, StoreType.RELATIONSHIP,
-                                StoreType.RELATIONSHIP_TYPE_TOKEN, StoreType.RELATIONSHIP_TYPE_TOKEN_NAME,
-                                StoreType.PROPERTY, StoreType.PROPERTY_ARRAY,
-                                StoreType.PROPERTY_STRING, StoreType.PROPERTY_KEY_TOKEN,
-                                StoreType.PROPERTY_KEY_TOKEN_NAME} ),
+                StoreType.NODE, StoreType.NODE_LABEL, StoreType.LABEL_TOKEN,
+                StoreType.LABEL_TOKEN_NAME, StoreType.RELATIONSHIP,
+                StoreType.RELATIONSHIP_TYPE_TOKEN, StoreType.RELATIONSHIP_TYPE_TOKEN_NAME,
+                StoreType.PROPERTY, StoreType.PROPERTY_ARRAY,
+                StoreType.PROPERTY_STRING, StoreType.PROPERTY_KEY_TOKEN,
+                StoreType.PROPERTY_KEY_TOKEN_NAME ),
                                                      ArrayUtil.array( new StoreType[0] ) )
         {
             void run( byte[] fromCheckPoint, CheckPointManager checkPointManager ) throws IOException
@@ -255,7 +260,7 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
             void save() throws IOException
             {
                 EnterpriseParallelBatchImporter.this.dataStatisticsStorage
-                        .update( (DataStatistics) logic.getState( DataStatistics.class ) );
+                        .update( logic.getState( DataStatistics.class ) );
             }
 
             void load() throws IOException
@@ -264,7 +269,7 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
             }
         } );
         batchImportStates.add( new BatchImportState( STATE_DATA_LINK, ArrayUtil.array( new StoreType[0] ),
-                                                     ArrayUtil.array( new StoreType[]{StoreType.RELATIONSHIP_GROUP} ) )
+                                                     ArrayUtil.array( StoreType.RELATIONSHIP_GROUP ) )
         {
             void run( byte[] fromCheckPoint, CheckPointManager checkPointManager )
             {
@@ -280,7 +285,7 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
             }
         } );
         batchImportStates.add( new BatchImportState( STATE_DEFRAGMENT,
-                                                     ArrayUtil.array( new StoreType[]{StoreType.RELATIONSHIP_GROUP} ),
+                                                     ArrayUtil.array( StoreType.RELATIONSHIP_GROUP ),
                                                      ArrayUtil.array( new StoreType[0] ) )
         {
             void run( byte[] fromCheckPoint, CheckPointManager checkPointManager )
@@ -316,7 +321,7 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
     {
         while ( states.hasNext() )
         {
-            BatchImportState batchImportState = (BatchImportState) states.next();
+            BatchImportState batchImportState = states.next();
             String stateName = batchImportState.name();
             batchImportState.run( checkPoint, ( cp ) ->
             {
@@ -337,7 +342,7 @@ public class EnterpriseParallelBatchImporter implements BatchImporter
     private void commitState( BatchingNeoStores store, BatchImportStateStore state, String stateName,
                               byte[] checkPoint ) throws IOException
     {
-        store.flushAndForce();
+        store.flushAndForce( PageCursorTracer.NULL );
         if ( stateName != null )
         {
             state.set( stateName, checkPoint );

@@ -75,7 +75,6 @@ import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.SimpleTriggerInfo;
 import org.neo4j.logging.Log;
-import org.neo4j.logging.LogTimeZone;
 import org.neo4j.procedure.Admin;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Description;
@@ -105,8 +104,8 @@ public class EnterpriseBuiltInDbmsProcedures
     private static Set<KernelTransactionHandle> getExecutingTransactions(
             DatabaseContext databaseContext )
     {
-        return ((KernelTransactions) databaseContext.dependencies()
-                                                    .resolveDependency( KernelTransactions.class )).executingTransactions();
+        return databaseContext.dependencies()
+                              .resolveDependency( KernelTransactions.class ).executingTransactions();
     }
 
     @SystemProcedure
@@ -149,7 +148,7 @@ public class EnterpriseBuiltInDbmsProcedures
 
     private NetworkConnectionTracker getConnectionTracker()
     {
-        return (NetworkConnectionTracker) this.resolver
+        return this.resolver
                 .resolveDependency( NetworkConnectionTracker.class );
     }
 
@@ -192,19 +191,19 @@ public class EnterpriseBuiltInDbmsProcedures
                                            f );
                                } );
         Stream<EnterpriseBuiltInDbmsProcedures.FunctionResult> loadedFunctions =
-                ((GlobalProcedures) this.resolver.resolveDependency( GlobalProcedures.class ))
-                        .getAllNonAggregatingFunctions().map( ( f ) ->
-                                                              {
-                                                                  return new EnterpriseBuiltInDbmsProcedures.FunctionResult(
-                                                                          f, false );
-                                                              } );
+                this.resolver.resolveDependency( GlobalProcedures.class )
+                             .getAllNonAggregatingFunctions().map( ( f ) ->
+                                                                   {
+                                                                       return new EnterpriseBuiltInDbmsProcedures.FunctionResult(
+                                                                               f, false );
+                                                                   } );
         Stream<EnterpriseBuiltInDbmsProcedures.FunctionResult> loadedAggregationFunctions =
-                ((GlobalProcedures) this.resolver.resolveDependency( GlobalProcedures.class ))
-                        .getAllAggregatingFunctions().map( ( f ) ->
-                                                           {
-                                                               return new EnterpriseBuiltInDbmsProcedures.FunctionResult(
-                                                                       f, true );
-                                                           } );
+                this.resolver.resolveDependency( GlobalProcedures.class )
+                             .getAllAggregatingFunctions().map( ( f ) ->
+                                                                {
+                                                                    return new EnterpriseBuiltInDbmsProcedures.FunctionResult(
+                                                                            f, true );
+                                                                } );
         return Stream
                 .concat( Stream.concat( languageFunctions, loadedFunctions ), loadedAggregationFunctions )
                 .sorted( Comparator.comparing( ( a ) ->
@@ -219,7 +218,7 @@ public class EnterpriseBuiltInDbmsProcedures
     public Stream<EnterpriseBuiltInDbmsProcedures.ProcedureResult> listProcedures()
     {
         this.securityContext.assertCredentialsNotExpired();
-        GlobalProcedures globalProcedures = (GlobalProcedures) this.resolver
+        GlobalProcedures globalProcedures = this.resolver
                 .resolveDependency( GlobalProcedures.class );
         return globalProcedures.getAllProcedures().stream().sorted( Comparator.comparing( ( a ) ->
                                                                                           {
@@ -233,9 +232,9 @@ public class EnterpriseBuiltInDbmsProcedures
     @Procedure( name = "dbms.setConfigValue", mode = Mode.DBMS )
     public void setConfigValue( @Name( "setting" ) String setting, @Name( "value" ) String value )
     {
-        Config config = (Config) this.resolver.resolveDependency( Config.class );
+        Config config = this.resolver.resolveDependency( Config.class );
         SettingImpl<Object> settingObj = (SettingImpl) config.getSetting( setting );
-        DbmsSettingsWhitelist dbmsSettingsWhiteList = (DbmsSettingsWhitelist) this.resolver
+        DbmsSettingsWhitelist dbmsSettingsWhiteList = this.resolver
                 .resolveDependency( DbmsSettingsWhitelist.class );
         if ( dbmsSettingsWhiteList.isWhiteListed( setting ) )
         {
@@ -287,7 +286,7 @@ public class EnterpriseBuiltInDbmsProcedures
                 KernelTransactionHandle tx = (KernelTransactionHandle) executingTransactionsIterator.next();
                 if ( tx.executingQuery().isPresent() )
                 {
-                    ExecutingQuery query = (ExecutingQuery) tx.executingQuery().get();
+                    ExecutingQuery query = tx.executingQuery().get();
                     if ( this.isAdminOrSelf( query.username() ) )
                     {
                         result.add( new QueryStatusResult( query, (InternalTransaction) this.transaction, zoneId,
@@ -361,7 +360,7 @@ public class EnterpriseBuiltInDbmsProcedures
         Objects.requireNonNull( transactionIds );
         this.securityContext.assertCredentialsNotExpired();
         this.log.warn( "User %s trying to kill transactions: %s.",
-                       new Object[]{this.securityContext.subject().username(), transactionIds.toString()} );
+                       this.securityContext.subject().username(), transactionIds.toString() );
         DatabaseManager<DatabaseContext> databaseManager = this.getDatabaseManager();
         DatabaseIdRepository databaseIdRepository = databaseManager.databaseIdRepository();
         Map<NamedDatabaseId,Set<TransactionId>> byDatabase = new HashMap();
@@ -374,10 +373,10 @@ public class EnterpriseBuiltInDbmsProcedures
             Optional<NamedDatabaseId> namedDatabaseId = databaseIdRepository.getByName( id.getDatabase() );
             namedDatabaseId.ifPresent( ( databaseIdx ) ->
                                        {
-                                           ((Set) byDatabase.computeIfAbsent( databaseIdx, ( ignore ) ->
+                                           byDatabase.computeIfAbsent( databaseIdx, ( ignore ) ->
                                            {
                                                return new HashSet();
-                                           } )).add( id );
+                                           } ).add( id );
                                        } );
         }
 
@@ -428,7 +427,7 @@ public class EnterpriseBuiltInDbmsProcedures
     private TransactionMarkedForTerminationResult terminateTransaction(
             Map<String,KernelTransactionHandle> handles, String transactionId )
     {
-        KernelTransactionHandle handle = (KernelTransactionHandle) handles.get( transactionId );
+        KernelTransactionHandle handle = handles.get( transactionId );
         String currentUser = this.securityContext.subject().username();
         if ( handle == null )
         {
@@ -442,7 +441,7 @@ public class EnterpriseBuiltInDbmsProcedures
         else
         {
             this.log
-                    .debug( "User %s terminated transaction %d.", new Object[]{currentUser, transactionId} );
+                    .debug( "User %s terminated transaction %d.", currentUser, transactionId );
             handle.markForTermination( org.neo4j.kernel.api.exceptions.Status.Transaction.Terminated );
             return new TransactionMarkedForTerminationResult( transactionId, handle.subject().username() );
         }
@@ -462,12 +461,12 @@ public class EnterpriseBuiltInDbmsProcedures
                 .getByName( dbmsQueryId.getDatabase() );
         if ( maybeNamedDatabaseId.isPresent() )
         {
-            NamedDatabaseId namedDatabaseId = (NamedDatabaseId) maybeNamedDatabaseId.get();
+            NamedDatabaseId namedDatabaseId = maybeNamedDatabaseId.get();
             Optional<DatabaseContext> maybeDatabaseContext = databaseManager
                     .getDatabaseContext( namedDatabaseId );
             if ( maybeDatabaseContext.isPresent() )
             {
-                DatabaseContext databaseContext = (DatabaseContext) maybeDatabaseContext.get();
+                DatabaseContext databaseContext = maybeDatabaseContext.get();
                 Iterator iterator = getExecutingTransactions( databaseContext ).iterator();
 
                 while ( iterator.hasNext() )
@@ -475,7 +474,7 @@ public class EnterpriseBuiltInDbmsProcedures
                     KernelTransactionHandle tx = (KernelTransactionHandle) iterator.next();
                     if ( tx.executingQuery().isPresent() )
                     {
-                        ExecutingQuery query = (ExecutingQuery) tx.executingQuery().get();
+                        ExecutingQuery query = tx.executingQuery().get();
                         if ( query.internalQueryId() == dbmsQueryId.getInternalId() )
                         {
                             if ( this.isAdminOrSelf( query.username() ) )
@@ -563,7 +562,7 @@ public class EnterpriseBuiltInDbmsProcedures
             {
                 KernelTransactionHandle tx = (KernelTransactionHandle) etIterator.next();
                 QueryId internalDbmsQueryId = new QueryId( databaseContext.databaseFacade().databaseName(),
-                                                           (Long) tx.executingQuery().map( ExecutingQuery::internalQueryId ).orElse( -1L ) );
+                                                           tx.executingQuery().map( ExecutingQuery::internalQueryId ).orElse( -1L ) );
                 if ( dbmsQueryIds.remove( internalDbmsQueryId ) )
                 {
                     result.add( this.killQueryTransaction( internalDbmsQueryId, tx ) );
@@ -578,7 +577,7 @@ public class EnterpriseBuiltInDbmsProcedures
     @Procedure( name = "dbms.scheduler.groups", mode = Mode.DBMS )
     public Stream<EnterpriseBuiltInDbmsProcedures.ActiveSchedulingGroup> schedulerActiveGroups()
     {
-        JobScheduler scheduler = (JobScheduler) this.resolver.resolveDependency( JobScheduler.class );
+        JobScheduler scheduler = this.resolver.resolveDependency( JobScheduler.class );
         return scheduler.activeGroups().map( EnterpriseBuiltInDbmsProcedures.ActiveSchedulingGroup::new );
     }
 
@@ -618,8 +617,8 @@ public class EnterpriseBuiltInDbmsProcedures
             else
             {
                 long durationNanos = TimeUnit.MILLISECONDS
-                        .toNanos( (Long) TimeUtil.parseTimeMillis.apply( duration ) );
-                JobScheduler scheduler = (JobScheduler) this.resolver.resolveDependency( JobScheduler.class );
+                        .toNanos( TimeUtil.parseTimeMillis.apply( duration ) );
+                JobScheduler scheduler = this.resolver.resolveDependency( JobScheduler.class );
                 long deadline = System.nanoTime() + durationNanos;
 
                 try
@@ -651,7 +650,7 @@ public class EnterpriseBuiltInDbmsProcedures
     @Procedure( name = "db.checkpoint", mode = Mode.DBMS )
     public Stream<EnterpriseBuiltInDbmsProcedures.CheckpointResult> checkpoint() throws IOException
     {
-        CheckPointer checkPointer = (CheckPointer) this.resolver.resolveDependency( CheckPointer.class );
+        CheckPointer checkPointer = this.resolver.resolveDependency( CheckPointer.class );
 
         Objects.requireNonNull( kernelTransaction );
         BooleanSupplier timeoutPredicate = kernelTransaction::isTerminated;
@@ -672,11 +671,11 @@ public class EnterpriseBuiltInDbmsProcedures
             QueryId dbmsQueryId, KernelTransactionHandle handle )
     {
         Optional<ExecutingQuery> query = handle.executingQuery();
-        ExecutingQuery executingQuery = (ExecutingQuery) query.orElseThrow( () ->
-                                                                            {
-                                                                                return new IllegalStateException(
-                                                                                        "Query should exist since we filtered based on query ids" );
-                                                                            } );
+        ExecutingQuery executingQuery = query.orElseThrow( () ->
+                                                           {
+                                                               return new IllegalStateException(
+                                                                       "Query should exist since we filtered based on query ids" );
+                                                           } );
         if ( this.isAdminOrSelf( executingQuery.username() ) )
         {
             if ( handle.isClosing() )
@@ -700,16 +699,16 @@ public class EnterpriseBuiltInDbmsProcedures
 
     private ZoneId getConfiguredTimeZone()
     {
-        Config config = (Config) this.resolver.resolveDependency( Config.class );
-        return ((LogTimeZone) config.get( GraphDatabaseSettings.db_timezone )).getZoneId();
+        Config config = this.resolver.resolveDependency( Config.class );
+        return config.get( GraphDatabaseSettings.db_timezone ).getZoneId();
     }
 
     private boolean isAdminOrSelf( String username )
     {
-        return this.securityContext.isAdmin() || this.securityContext.subject().hasUsername( username );
+        return this.securityContext.allowExecuteAdminProcedure() || securityContext.subject().hasUsername( username );
     }
 
-    public static enum CheckpointResult
+    public enum CheckpointResult
     {
         SUCCESS( true, "Checkpoint completed." ),
         TERMINATED( false,
@@ -718,7 +717,7 @@ public class EnterpriseBuiltInDbmsProcedures
         public final boolean success;
         public final String message;
 
-        private CheckpointResult( boolean success, String message )
+        CheckpointResult( boolean success, String message )
         {
             this.success = success;
             this.message = message;
@@ -745,7 +744,7 @@ public class EnterpriseBuiltInDbmsProcedures
         ActiveSchedulingGroup( ActiveGroup activeGroup )
         {
             this.group = activeGroup.group.groupName();
-            this.threads = (long) activeGroup.threads;
+            this.threads = activeGroup.threads;
         }
     }
 
@@ -792,7 +791,7 @@ public class EnterpriseBuiltInDbmsProcedures
         {
             this.name = signature.name().toString();
             this.signature = signature.toString();
-            this.description = (String) signature.description().orElse( "" );
+            this.description = signature.description().orElse( "" );
             this.mode = signature.mode().toString();
             this.worksOnSystem = signature.systemProcedure();
             this.defaultBuiltInRoles = new ArrayList();
@@ -850,8 +849,8 @@ public class EnterpriseBuiltInDbmsProcedures
         {
             this.name = signature.name().toString();
             this.signature = signature.toString();
-            this.description = (String) signature.description().orElse( "" );
-            this.defaultBuiltInRoles = (List) Stream
+            this.description = signature.description().orElse( "" );
+            this.defaultBuiltInRoles = Stream
                     .of( "admin", "reader", "editor", "publisher", "architect" ).collect( Collectors.toList() );
             this.defaultBuiltInRoles.addAll( Arrays.asList( signature.allowed() ) );
             this.aggregating = isAggregation;
@@ -863,7 +862,7 @@ public class EnterpriseBuiltInDbmsProcedures
             this.signature = info.getSignature();
             this.description = info.getDescription();
             this.aggregating = info.isAggregationFunction();
-            this.defaultBuiltInRoles = (List) Stream
+            this.defaultBuiltInRoles = Stream
                     .of( "admin", "reader", "editor", "publisher", "architect" ).collect( Collectors.toList() );
         }
     }

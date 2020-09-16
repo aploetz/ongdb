@@ -33,20 +33,23 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.kernel.api.CursorFactory;
-import org.neo4j.internal.kernel.api.LabelSet;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.RelationshipScanCursor;
+import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidationException;
 import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.RelationTypeSchemaDescriptor;
 import org.neo4j.internal.schema.SchemaDescriptor;
 import org.neo4j.internal.schema.SchemaProcessor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.schema.NodePropertyExistenceException;
 import org.neo4j.kernel.api.exceptions.schema.RelationshipPropertyExistenceException;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageProperty;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
@@ -60,15 +63,15 @@ import static org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidati
 class PropertyExistenceEnforcer
 {
 
-    private static final PropertyExistenceEnforcer NO_CONSTRAINTS = new PropertyExistenceEnforcer(
-            emptyList(), emptyList() )
+    private static final PropertyExistenceEnforcer NO_CONSTRAINTS = new PropertyExistenceEnforcer( emptyList(), emptyList(), null )
     {
-        @Override
-        TxStateVisitor decorate( TxStateVisitor visitor, Read read, CursorFactory cursorFactory )
+        TxStateVisitor decorate( TxStateVisitor visitor, Read read, CursorFactory cursorFactory,
+                                 PageCursorTracer pageCursorTracer, MemoryTracker memoryTracker )
         {
             return visitor;
         }
     };
+
     private static final Function<StorageReader,PropertyExistenceEnforcer> FACTORY = storageReader ->
     {
         List<LabelSchemaDescriptor> nodes = new ArrayList<>();
@@ -106,18 +109,20 @@ class PropertyExistenceEnforcer
         {
             return NO_CONSTRAINTS;
         }
-        return new PropertyExistenceEnforcer( nodes, relationships );
+        return new PropertyExistenceEnforcer( nodes, relationships, storageReader.tokenNameLookup() );
     };
     private final List<LabelSchemaDescriptor> nodeConstraints;
     private final List<RelationTypeSchemaDescriptor> relationshipConstraints;
     private final MutableLongObjectMap<int[]> mandatoryNodePropertiesByLabel = new LongObjectHashMap<>();
     private final MutableLongObjectMap<int[]> mandatoryRelationshipPropertiesByType = new LongObjectHashMap<>();
+    private final TokenNameLookup tokenNameLookup;
 
     private PropertyExistenceEnforcer( List<LabelSchemaDescriptor> nodes,
-                                       List<RelationTypeSchemaDescriptor> rels )
+                                       List<RelationTypeSchemaDescriptor> rels, TokenNameLookup tokenNameLookup )
     {
         this.nodeConstraints = nodes;
         this.relationshipConstraints = rels;
+        this.tokenNameLookup = tokenNameLookup;
         for ( LabelSchemaDescriptor constraint : nodes )
         {
             update( mandatoryNodePropertiesByLabel, constraint.getLabelId(),
@@ -154,15 +159,15 @@ class PropertyExistenceEnforcer
         return values;
     }
 
-    TxStateVisitor decorate( TxStateVisitor visitor, Read read, CursorFactory cursorFactory )
+    TxStateVisitor decorate( TxStateVisitor visitor, Read read, CursorFactory cursorFactory, PageCursorTracer pageCursorTracer, MemoryTracker memoryTracker )
     {
-        return new Decorator( visitor, read, cursorFactory );
+        return new Decorator( visitor, read, cursorFactory, pageCursorTracer, memoryTracker );
     }
 
-    private void validateNodeProperties( long id, LabelSet labelIds, IntSet propertyKeyIds )
+    private void validateNodeProperties( long id, TokenSet labelIds, IntSet propertyKeyIds )
             throws NodePropertyExistenceException
     {
-        int numberOfLabels = labelIds.numberOfLabels();
+        int numberOfLabels = labelIds.numberOfTokens();
         if ( numberOfLabels > mandatoryNodePropertiesByLabel.size() )
         {
             for ( MutableLongIterator labels = mandatoryNodePropertiesByLabel.keySet().longIterator();
@@ -180,7 +185,7 @@ class PropertyExistenceEnforcer
         {
             for ( int i = 0; i < numberOfLabels; i++ )
             {
-                final long label = labelIds.label( i );
+                final long label = labelIds.token( i );
                 int[] keys = mandatoryNodePropertiesByLabel.get( label );
                 if ( keys != null )
                 {
@@ -210,7 +215,7 @@ class PropertyExistenceEnforcer
         {
             if ( constraint.getLabelId() == label && contains( constraint.getPropertyIds(), propertyKey ) )
             {
-                throw new NodePropertyExistenceException( constraint, VALIDATION, id );
+                throw new NodePropertyExistenceException( constraint, VALIDATION, id, this.tokenNameLookup );
             }
         }
         throw new IllegalStateException( format(
@@ -226,7 +231,7 @@ class PropertyExistenceEnforcer
             if ( constraint.getRelTypeId() == relationshipType && contains( constraint.getPropertyIds(),
                                                                             propertyKey ) )
             {
-                throw new RelationshipPropertyExistenceException( constraint, VALIDATION, id );
+                throw new RelationshipPropertyExistenceException( constraint, VALIDATION, id, this.tokenNameLookup );
             }
         }
         throw new IllegalStateException( format(
@@ -256,14 +261,14 @@ class PropertyExistenceEnforcer
         private final PropertyCursor propertyCursor;
         private final RelationshipScanCursor relationshipCursor;
 
-        Decorator( TxStateVisitor next, Read read, CursorFactory cursorFactory )
+        Decorator( TxStateVisitor next, Read read, CursorFactory cursorFactory, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
         {
             super( next );
             this.read = read;
             this.cursorFactory = cursorFactory;
-            this.nodeCursor = cursorFactory.allocateNodeCursor();
-            this.propertyCursor = cursorFactory.allocatePropertyCursor();
-            this.relationshipCursor = cursorFactory.allocateRelationshipScanCursor();
+            this.nodeCursor = cursorFactory.allocateNodeCursor( cursorTracer );
+            this.propertyCursor = cursorFactory.allocatePropertyCursor( cursorTracer, memoryTracker );
+            this.relationshipCursor = cursorFactory.allocateRelationshipScanCursor( cursorTracer );
         }
 
         @Override
@@ -307,12 +312,12 @@ class PropertyExistenceEnforcer
                 return;
             }
 
-            final LabelSet labelIds;
+            final TokenSet labelIds;
             read.singleNode( nodeId, nodeCursor );
             if ( nodeCursor.next() )
             {
                 labelIds = nodeCursor.labels();
-                if ( labelIds.numberOfLabels() == 0 )
+                if ( labelIds.numberOfTokens() == 0 )
                 {
                     return;
                 }

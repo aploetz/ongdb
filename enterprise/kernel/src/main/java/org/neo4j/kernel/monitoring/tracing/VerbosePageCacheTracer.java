@@ -69,7 +69,7 @@ public class VerbosePageCacheTracer extends DefaultPageCacheTracer
 
         public void addPagesFlushed( int pageCount )
         {
-            VerbosePageCacheTracer.this.flushedPages.getAndAdd( (long) pageCount );
+            VerbosePageCacheTracer.this.flushedPages.getAndAdd( pageCount );
         }
     };
 
@@ -154,7 +154,7 @@ public class VerbosePageCacheTracer extends DefaultPageCacheTracer
         public FlushEvent beginFlush( long filePageId, long cachePageId, PageSwapper swapper )
         {
             if ( this.lastReportingTime
-                    .hasTimedOut( (long) VerbosePageCacheTracer.SPEED_REPORTING_TIME_THRESHOLD,
+                    .hasTimedOut( VerbosePageCacheTracer.SPEED_REPORTING_TIME_THRESHOLD,
                                   TimeUnit.SECONDS ) )
             {
                 long writtenBytes = VerbosePageCacheTracer.this.flushBytesWritten.get();
@@ -200,10 +200,10 @@ public class VerbosePageCacheTracer extends DefaultPageCacheTracer
                     VerbosePageCacheTracer.this.flushedPages.get() - this.flushesOnStart;
             VerbosePageCacheTracer.this.log.info(
                     "Page cache flush completed. Flushed %s in %d pages. Flush took: %s. Average speed: %s.",
-                    new Object[]{VerbosePageCacheTracer.bytesToString( bytesWrittenInTotal ),
-                                 flushedPagesInTotal,
-                                 VerbosePageCacheTracer.nanosToString( pageCacheFlushNanos ),
-                                 VerbosePageCacheTracer.flushSpeed( bytesWrittenInTotal, pageCacheFlushNanos )} );
+                    VerbosePageCacheTracer.bytesToString( bytesWrittenInTotal ),
+                    flushedPagesInTotal,
+                    VerbosePageCacheTracer.nanosToString( pageCacheFlushNanos ),
+                    VerbosePageCacheTracer.flushSpeed( bytesWrittenInTotal, pageCacheFlushNanos ) );
         }
     }
 
@@ -212,8 +212,8 @@ public class VerbosePageCacheTracer extends DefaultPageCacheTracer
 
         private final Stopwatch startTime;
         private final String fileName;
-        private long flushesOnStart;
-        private long bytesWrittenOnStart;
+        private final long flushesOnStart;
+        private final long bytesWrittenOnStart;
 
         FileFlushEvent( String fileName, long flushesOnStart, long bytesWrittenOnStart,
                         Stopwatch startTime )
@@ -239,10 +239,10 @@ public class VerbosePageCacheTracer extends DefaultPageCacheTracer
                     VerbosePageCacheTracer.this.flushedPages.get() - this.flushesOnStart;
             VerbosePageCacheTracer.this.log
                     .info( "'%s' flush completed. Flushed %s in %d pages. Flush took: %s. Average speed: %s.",
-                           new Object[]{this.fileName, VerbosePageCacheTracer.bytesToString( bytesWrittenInTotal ),
-                                        flushedPagesInTotal,
-                                        VerbosePageCacheTracer.nanosToString( fileFlushNanos ),
-                                        VerbosePageCacheTracer.flushSpeed( bytesWrittenInTotal, fileFlushNanos )} );
+                           this.fileName, VerbosePageCacheTracer.bytesToString( bytesWrittenInTotal ),
+                           flushedPagesInTotal,
+                           VerbosePageCacheTracer.nanosToString( fileFlushNanos ),
+                           VerbosePageCacheTracer.flushSpeed( bytesWrittenInTotal, fileFlushNanos ) );
         }
     }
 }

@@ -42,7 +42,7 @@ public class PropertyRecordFormatV3_0_0 extends BaseOneByteHeaderRecordFormat<Pr
 
     public PropertyRecordFormatV3_0_0()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, HighLimitV3_0_0.DEFAULT_MAXIMUM_BITS_PER_ID );
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT, HighLimitV3_0_0.DEFAULT_MAXIMUM_BITS_PER_ID, false );
     }
 
     @Override
@@ -52,7 +52,7 @@ public class PropertyRecordFormatV3_0_0 extends BaseOneByteHeaderRecordFormat<Pr
     }
 
     @Override
-    public void read( PropertyRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( PropertyRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         int offset = cursor.getOffset();
         byte headerByte = cursor.getByte();
@@ -79,7 +79,7 @@ public class PropertyRecordFormatV3_0_0 extends BaseOneByteHeaderRecordFormat<Pr
     }
 
     @Override
-    public void write( PropertyRecord record, PageCursor cursor, int recordSize )
+    public void write( PropertyRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

@@ -32,22 +32,26 @@ import org.neo4j.internal.batchimport.DataStatistics.RelationshipTypeCount;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.PhysicalFlushableChannel;
 import org.neo4j.io.fs.ReadAheadChannel;
-import org.neo4j.io.memory.BufferScope;
+import org.neo4j.io.memory.NativeScopedBuffer;
+import org.neo4j.io.memory.ScopedBuffer;
+import org.neo4j.memory.MemoryTracker;
 
 class DataStatisticsStorage
 {
 
     private final FileSystemAbstraction fs;
     private final File file;
+    private final MemoryTracker memoryTracker;
 
     /**
      * @param fs
      * @param file
      */
-    DataStatisticsStorage( FileSystemAbstraction fs, File file )
+    DataStatisticsStorage( FileSystemAbstraction fs, File file, MemoryTracker memoryTracker )
     {
         this.fs = fs;
         this.file = file;
+        this.memoryTracker = memoryTracker;
     }
 
     /**
@@ -56,7 +60,7 @@ class DataStatisticsStorage
      */
     void update( DataStatistics distribution ) throws IOException
     {
-        PhysicalFlushableChannel channel = new PhysicalFlushableChannel( this.fs.write( this.file ) );
+        PhysicalFlushableChannel channel = new PhysicalFlushableChannel( this.fs.write( this.file ), this.memoryTracker );
 
         try
         {
@@ -95,12 +99,12 @@ class DataStatisticsStorage
      */
     DataStatistics load() throws IOException
     {
-        BufferScope bufferScope = new BufferScope( ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE );
+        ScopedBuffer bufferScope = new NativeScopedBuffer( ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE, this.memoryTracker );
 
         DataStatistics dataStatistics;
         try
         {
-            ReadAheadChannel channel = new ReadAheadChannel( this.fs.read( this.file ), bufferScope.buffer );
+            ReadAheadChannel channel = new ReadAheadChannel( this.fs.read( this.file ), bufferScope );
 
             try
             {

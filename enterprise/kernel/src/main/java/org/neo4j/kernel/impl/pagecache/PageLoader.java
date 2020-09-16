@@ -23,6 +23,7 @@ import java.io.IOException;
 
 interface PageLoader extends Closeable
 {
+    String PAGE_CACHE_PROFILE_LOADER = "PageCacheProfileLoader";
 
     void load( long pageId ) throws IOException;
 }

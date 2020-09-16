@@ -45,7 +45,7 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
     public DynamicRecordFormat()
     {
         super( INT_STORE_HEADER_READER, RECORD_HEADER_SIZE, IN_USE_BIT,
-               HighLimitFormatSettings.DYNAMIC_MAXIMUM_ID_BITS );
+               HighLimitFormatSettings.DYNAMIC_MAXIMUM_ID_BITS, false );
     }
 
     @Override
@@ -55,7 +55,7 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
     }
 
     @Override
-    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize, int recordsPerPage )
     {
         byte headerByte = cursor.getByte();
         boolean inUse = isInUse( headerByte );
@@ -69,8 +69,8 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
             }
             long next = cursor.getLong();
             boolean isStartRecord = (headerByte & START_RECORD_BIT) != 0;
-            record.initialize( inUse, isStartRecord, next, -1, length );
-            readData( record, cursor );
+            record.initialize( inUse, isStartRecord, next, -1 );
+            readData( record, cursor, length );
         }
         else
         {
@@ -92,7 +92,7 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
     }
 
     @Override
-    public void write( DynamicRecord record, PageCursor cursor, int recordSize )
+    public void write( DynamicRecord record, PageCursor cursor, int recordSize, int recordsPerPage )
     {
         if ( record.inUse() )
         {

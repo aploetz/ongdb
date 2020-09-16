@@ -35,6 +35,7 @@ import org.neo4j.kernel.extension.context.ExtensionContext;
 import org.neo4j.kernel.impl.pagecache.monitor.PageCacheWarmerLoggingMonitor;
 import org.neo4j.kernel.impl.pagecache.monitor.PageCacheWarmerMonitor;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.internal.LogService;
 import org.neo4j.monitoring.Monitors;
@@ -43,10 +44,11 @@ import org.neo4j.scheduler.JobScheduler;
 public class PageCachingExtensionFactory extends
                                          ExtensionFactory<PageCachingExtensionFactory.Dependencies>
 {
+    public static final String PAGE_CACHE_WARMER = "pagecachewarmer";
 
     public PageCachingExtensionFactory()
     {
-        super( ExtensionType.DATABASE, "pagecachewarmer" );
+        super( ExtensionType.DATABASE, PAGE_CACHE_WARMER );
     }
 
     public Lifecycle newInstance( ExtensionContext context,
@@ -60,12 +62,13 @@ public class PageCachingExtensionFactory extends
         Database database = deps.getDatabase();
         Log log = logService.getInternalLog( PageCacheWarmer.class );
         Monitors monitors = deps.monitors();
-        PageCacheWarmerMonitor monitor = (PageCacheWarmerMonitor) monitors
-                .newMonitor( PageCacheWarmerMonitor.class, new String[0] );
-        monitors.addMonitorListener( new PageCacheWarmerLoggingMonitor( log ), new String[0] );
+        PageCacheWarmerMonitor monitor = monitors
+                .newMonitor( PageCacheWarmerMonitor.class );
+        monitors.addMonitorListener( new PageCacheWarmerLoggingMonitor( log ) );
         Config config = deps.config();
+        Tracers tracers = deps.tracers();
         return new PageCachingExtension( scheduler, databaseAvailabilityGuard, pageCache, fs, database,
-                                         log, monitor, config );
+                                         log, monitor, config, tracers );
     }
 
     public interface Dependencies
@@ -86,5 +89,7 @@ public class PageCachingExtensionFactory extends
         Monitors monitors();
 
         Config config();
+
+        Tracers tracers();
     }
 }

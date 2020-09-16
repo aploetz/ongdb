@@ -38,7 +38,6 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 import org.neo4j.storageengine.api.IndexCapabilities;
-import org.neo4j.storageengine.api.format.Capability;
 
 /**
  * Record format with very high limits, 50-bit per ID, while at the same time keeping store size small.
@@ -56,16 +55,16 @@ public class HighLimit extends BaseRecordFormats
     protected HighLimit()
     {
         super( STORE_VERSION, StoreVersion.HIGH_LIMIT_V4_0_0.introductionVersion(), 6,
-               new Capability[]{RecordStorageCapability.DENSE_NODES,
-                                RecordStorageCapability.RELATIONSHIP_TYPE_3BYTES, RecordStorageCapability.SCHEMA,
-                                RecordStorageCapability.POINT_PROPERTIES, RecordStorageCapability.TEMPORAL_PROPERTIES,
-                                RecordStorageCapability.SECONDARY_RECORD_UNITS,
-                                RecordStorageCapability.FLEXIBLE_SCHEMA_STORE, RecordStorageCapability.INTERNAL_TOKENS,
-                                RecordStorageCapability.GBPTREE_ID_FILES,
-                                IndexCapabilities.LuceneCapability.LUCENE_8,
-                                IndexCapabilities.IndexProviderCapability.INDEX_PROVIDERS_40,
-                                IndexCapabilities.ConfigCapability.SCHEMA_STORE_CONFIG,
-                                RecordStorageCapability.GBPTREE_COUNTS_STORE} );
+               RecordStorageCapability.DENSE_NODES,
+               RecordStorageCapability.RELATIONSHIP_TYPE_3BYTES, RecordStorageCapability.SCHEMA,
+               RecordStorageCapability.POINT_PROPERTIES, RecordStorageCapability.TEMPORAL_PROPERTIES,
+               RecordStorageCapability.SECONDARY_RECORD_UNITS,
+               RecordStorageCapability.FLEXIBLE_SCHEMA_STORE, RecordStorageCapability.INTERNAL_TOKENS,
+               RecordStorageCapability.GBPTREE_ID_FILES,
+               IndexCapabilities.LuceneCapability.LUCENE_8,
+               IndexCapabilities.IndexProviderCapability.INDEX_PROVIDERS_40,
+               IndexCapabilities.ConfigCapability.SCHEMA_STORE_CONFIG,
+               RecordStorageCapability.GBPTREE_COUNTS_STORE );
     }
 
     @Override
@@ -107,7 +106,7 @@ public class HighLimit extends BaseRecordFormats
     @Override
     public RecordFormat<RelationshipTypeTokenRecord> relationshipTypeToken()
     {
-        return new RelationshipTypeTokenRecordFormat( 24 );
+        return new RelationshipTypeTokenRecordFormat( 24, false );
     }
 
     @Override

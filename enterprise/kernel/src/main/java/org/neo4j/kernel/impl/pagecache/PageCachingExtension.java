@@ -33,6 +33,7 @@ import org.neo4j.kernel.database.Database;
 import org.neo4j.kernel.impl.pagecache.monitor.PageCacheWarmerMonitor;
 import org.neo4j.kernel.impl.transaction.state.DatabaseFileListing;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Log;
 import org.neo4j.scheduler.JobScheduler;
 
@@ -48,20 +49,19 @@ class PageCachingExtension extends LifecycleAdapter
 
     PageCachingExtension( JobScheduler scheduler, DatabaseAvailabilityGuard databaseAvailabilityGuard,
                           PageCache pageCache, FileSystemAbstraction fs,
-                          Database database, Log log, PageCacheWarmerMonitor monitor, Config config )
+                          Database database, Log log, PageCacheWarmerMonitor monitor, Config config, Tracers tracers )
     {
         this.databaseAvailabilityGuard = databaseAvailabilityGuard;
         this.database = database;
         this.config = config;
-        this.pageCacheWarmer = new PageCacheWarmer( fs, pageCache, scheduler,
-                                                    database.getDatabaseLayout().databaseDirectory(), config, log );
+        this.pageCacheWarmer = new PageCacheWarmer( fs, pageCache, scheduler, database.getDatabaseLayout().databaseDirectory(), config, log, tracers );
         this.availabilityListener = new WarmupAvailabilityListener( scheduler, this.pageCacheWarmer,
                                                                     config, log, monitor, database.getNamedDatabaseId() );
     }
 
     public void start()
     {
-        if ( (Boolean) this.config.get( GraphDatabaseSettings.pagecache_warmup_enabled ) )
+        if ( this.config.get( GraphDatabaseSettings.pagecache_warmup_enabled ) )
         {
             this.pageCacheWarmer.start();
             this.databaseAvailabilityGuard.addListener( this.availabilityListener );
@@ -83,7 +83,7 @@ class PageCachingExtension extends LifecycleAdapter
 
     private DatabaseFileListing getNeoStoreFileListing()
     {
-        return (DatabaseFileListing) this.database.getDependencyResolver()
-                                                  .resolveDependency( DatabaseFileListing.class );
+        return this.database.getDependencyResolver()
+                            .resolveDependency( DatabaseFileListing.class );
     }
 }

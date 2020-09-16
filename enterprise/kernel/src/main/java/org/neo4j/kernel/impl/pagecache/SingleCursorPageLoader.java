@@ -20,8 +20,11 @@ package org.neo4j.kernel.impl.pagecache;
 
 import java.io.IOException;
 
+import org.neo4j.io.IOUtils;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_READ_LOCK;
 
@@ -29,10 +32,12 @@ class SingleCursorPageLoader implements PageLoader
 {
 
     private final PageCursor cursor;
+    private final PageCursorTracer pageCursorTracer;
 
-    SingleCursorPageLoader( PagedFile file ) throws IOException
+    SingleCursorPageLoader( PagedFile file, PageCacheTracer pageCacheTracer ) throws IOException
     {
-        cursor = file.io( 0, PF_SHARED_READ_LOCK );
+        this.pageCursorTracer = pageCacheTracer.createPageCursorTracer( PAGE_CACHE_PROFILE_LOADER );
+        this.cursor = file.io( 0, PF_SHARED_READ_LOCK, pageCursorTracer );
     }
 
     @Override
@@ -44,6 +49,6 @@ class SingleCursorPageLoader implements PageLoader
     @Override
     public void close()
     {
-        cursor.close();
+        IOUtils.closeAllUnchecked( this.cursor, this.pageCursorTracer );
     }
 }

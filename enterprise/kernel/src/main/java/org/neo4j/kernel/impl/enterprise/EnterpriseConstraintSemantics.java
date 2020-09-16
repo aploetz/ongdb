@@ -18,6 +18,7 @@
  */
 package org.neo4j.kernel.impl.enterprise;
 
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.NodeCursor;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
@@ -30,9 +31,11 @@ import org.neo4j.internal.schema.ConstraintDescriptor;
 import org.neo4j.internal.schema.LabelSchemaDescriptor;
 import org.neo4j.internal.schema.RelationTypeSchemaDescriptor;
 import org.neo4j.internal.schema.constraints.NodeKeyConstraintDescriptor;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.schema.NodePropertyExistenceException;
 import org.neo4j.kernel.api.exceptions.schema.RelationshipPropertyExistenceException;
 import org.neo4j.kernel.impl.constraints.StandardConstraintSemantics;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
@@ -85,7 +88,7 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
     @Override
     public void validateNodePropertyExistenceConstraint( NodeLabelIndexCursor allNodes,
                                                          NodeCursor nodeCursor,
-                                                         PropertyCursor propertyCursor, LabelSchemaDescriptor descriptor )
+                                                         PropertyCursor propertyCursor, LabelSchemaDescriptor descriptor, TokenNameLookup tokenNameLookup )
             throws CreateConstraintFailureException
     {
         while ( allNodes.next() )
@@ -100,7 +103,7 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
                     {
                         throw createConstraintFailure(
                                 new NodePropertyExistenceException( descriptor, VERIFICATION,
-                                                                    nodeCursor.nodeReference() ) );
+                                                                    nodeCursor.nodeReference(), tokenNameLookup ) );
                     }
                 }
             }
@@ -109,10 +112,10 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
 
     @Override
     public void validateNodeKeyConstraint( NodeLabelIndexCursor allNodes, NodeCursor nodeCursor,
-                                           PropertyCursor propertyCursor, LabelSchemaDescriptor descriptor )
+                                           PropertyCursor propertyCursor, LabelSchemaDescriptor descriptor, TokenNameLookup tokenNameLookup )
             throws CreateConstraintFailureException
     {
-        validateNodePropertyExistenceConstraint( allNodes, nodeCursor, propertyCursor, descriptor );
+        validateNodePropertyExistenceConstraint( allNodes, nodeCursor, propertyCursor, descriptor, tokenNameLookup );
     }
 
     private boolean hasProperty( PropertyCursor propertyCursor, int property )
@@ -130,7 +133,7 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
     @Override
     public void validateRelationshipPropertyExistenceConstraint(
             RelationshipScanCursor relationshipCursor,
-            PropertyCursor propertyCursor, RelationTypeSchemaDescriptor descriptor )
+            PropertyCursor propertyCursor, RelationTypeSchemaDescriptor descriptor, TokenNameLookup tokenNameLookup )
             throws CreateConstraintFailureException
     {
         while ( relationshipCursor.next() )
@@ -144,7 +147,7 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
                 {
                     throw createConstraintFailure(
                             new RelationshipPropertyExistenceException( descriptor, VERIFICATION,
-                                                                        relationshipCursor.relationshipReference() ) );
+                                                                        relationshipCursor.relationshipReference(), tokenNameLookup ) );
                 }
             }
         }
@@ -159,7 +162,7 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
     @Override
     public TxStateVisitor decorateTxStateVisitor( StorageReader storageReader,
                                                   Read read, CursorFactory cursorFactory, ReadableTransactionState txState,
-                                                  TxStateVisitor visitor )
+                                                  TxStateVisitor visitor, PageCursorTracer pageCursorTracer, MemoryTracker memoryTracker )
     {
         if ( !txState.hasDataChanges() )
         {
@@ -171,6 +174,6 @@ public class EnterpriseConstraintSemantics extends StandardConstraintSemantics
             return visitor;
         }
         return getOrCreatePropertyExistenceEnforcerFrom( storageReader )
-                .decorate( visitor, read, cursorFactory );
+                .decorate( visitor, read, cursorFactory, pageCursorTracer, memoryTracker );
     }
 }

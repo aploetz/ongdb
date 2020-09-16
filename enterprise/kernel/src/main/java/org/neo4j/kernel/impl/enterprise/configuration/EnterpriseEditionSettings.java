@@ -39,7 +39,6 @@ public class EnterpriseEditionSettings implements SettingsDeclaration
     public static final Setting<Long> maxNumberOfDatabases =
             SettingImpl.newBuilder( "dbms.max_databases", SettingValueParsers.LONG, 100L )
                        .addConstraint( SettingConstraints.min( 2L ) ).build();
-    ;
 
     @Description( "A list of setting name patterns (comma separated) that are allowed to be dynamically changed. The list may contain both full setting names, and partial names with the wildcard '*'. If this setting is left empty all dynamic settings updates will be blocked." )
     public static final Setting<List<String>> dynamic_setting_whitelist =

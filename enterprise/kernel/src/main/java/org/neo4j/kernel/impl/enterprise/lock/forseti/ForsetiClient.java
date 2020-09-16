@@ -253,7 +253,7 @@ public class ForsetiClient implements Locks.Client
                 {
                     this.assertValid( waitStartMillis, resourceType, resourceId );
                     // Check if there is a lock for this entity in the map
-                    ForsetiLockManager.Lock existingLock = (ForsetiLockManager.Lock) lockMap.get( resourceId );
+                    ForsetiLockManager.Lock existingLock = lockMap.get( resourceId );
                     if ( existingLock == null )
                     {
                         if ( mySharedLock == null )

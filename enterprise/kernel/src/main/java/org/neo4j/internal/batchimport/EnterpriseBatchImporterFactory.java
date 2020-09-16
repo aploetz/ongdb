@@ -31,8 +31,10 @@ import org.neo4j.internal.batchimport.staging.ExecutionMonitor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.layout.DatabaseLayout;
 import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.logging.internal.LogService;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.scheduler.JobScheduler;
 import org.neo4j.storageengine.api.LogFilesInitializer;
 
@@ -43,6 +45,7 @@ public class EnterpriseBatchImporterFactory extends BatchImporterFactory
 {
 
     public static final int PRIORITY = 10;
+    public static final String FACTORY_NAME = "enterprise-importer";
 
     public EnterpriseBatchImporterFactory()
     {
@@ -52,13 +55,14 @@ public class EnterpriseBatchImporterFactory extends BatchImporterFactory
     @Override
     public String getName()
     {
-        return "enterprise-importer";
+        return FACTORY_NAME;
     }
 
     /**
      * @param databaseLayout
      * @param fileSystem
      * @param externalPageCache
+     * @param pageCacheTracer
      * @param config
      * @param logService
      * @param executionMonitor
@@ -69,18 +73,16 @@ public class EnterpriseBatchImporterFactory extends BatchImporterFactory
      * @param jobScheduler
      * @param badCollector
      * @param logFilesInitializer
+     * @param memoryTracker
      * @return
      */
-    public BatchImporter instantiate( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem,
-                                      PageCache externalPageCache, Configuration config,
-                                      LogService logService, ExecutionMonitor executionMonitor,
-                                      AdditionalInitialIds additionalInitialIds, Config dbConfig,
-                                      RecordFormats recordFormats,
-                                      Monitor monitor, JobScheduler jobScheduler, Collector badCollector,
-                                      LogFilesInitializer logFilesInitializer )
+    public BatchImporter instantiate( DatabaseLayout databaseLayout, FileSystemAbstraction fileSystem, PageCache externalPageCache,
+                                      PageCacheTracer pageCacheTracer, Configuration config, LogService logService, ExecutionMonitor executionMonitor,
+                                      AdditionalInitialIds additionalInitialIds, Config dbConfig, RecordFormats recordFormats, Monitor monitor,
+                                      JobScheduler jobScheduler, Collector badCollector, LogFilesInitializer logFilesInitializer, MemoryTracker memoryTracker )
     {
-        return new EnterpriseParallelBatchImporter( databaseLayout, fileSystem, externalPageCache,
-                                                    config, logService, executionMonitor, additionalInitialIds,
-                                                    dbConfig, recordFormats, monitor, jobScheduler, badCollector, logFilesInitializer );
+        return new EnterpriseParallelBatchImporter( databaseLayout, fileSystem, externalPageCache, pageCacheTracer, config, logService, executionMonitor,
+                                                    additionalInitialIds, dbConfig, recordFormats, monitor, jobScheduler, badCollector, logFilesInitializer,
+                                                    memoryTracker );
     }
 }

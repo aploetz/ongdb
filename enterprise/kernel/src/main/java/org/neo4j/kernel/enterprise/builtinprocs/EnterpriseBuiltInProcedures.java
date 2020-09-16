@@ -61,13 +61,13 @@ public class EnterpriseBuiltInProcedures
 
     private IndexProviderDescriptor getIndexProviderDescriptor( String providerName )
     {
-        return ((IndexingService) this.resolver.resolveDependency( IndexingService.class ))
-                .indexProviderByName( providerName );
+        return this.resolver.resolveDependency( IndexingService.class )
+                            .indexProviderByName( providerName );
     }
 
     private IndexProcedures indexProcedures()
     {
         return new IndexProcedures( this.tx,
-                                    (IndexingService) this.resolver.resolveDependency( IndexingService.class ) );
+                                    this.resolver.resolveDependency( IndexingService.class ) );
     }
 }

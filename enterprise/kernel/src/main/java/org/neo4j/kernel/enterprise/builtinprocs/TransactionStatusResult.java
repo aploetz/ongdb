@@ -78,21 +78,21 @@ public class TransactionStatusResult
         this.username = transaction.subject().username();
         this.startTime = ProceduresTimeFormatHelper.formatTime( transaction.startTime(), zoneId );
         this.activeLockCount = transaction.activeLocks().count();
-        Optional<QuerySnapshot> querySnapshot = (Optional) handleSnapshotsMap.get( transaction );
+        Optional<QuerySnapshot> querySnapshot = handleSnapshotsMap.get( transaction );
         TransactionExecutionStatistic statistic = transaction.transactionStatistic();
         this.elapsedTimeMillis = statistic.getElapsedTimeMillis();
         this.cpuTimeMillis = statistic.getCpuTimeMillis();
         this.allocatedBytes = statistic.getHeapAllocatedBytes();
-        this.allocatedDirectBytes = statistic.getDirectAllocatedBytes();
+        this.allocatedDirectBytes = statistic.getNativeAllocatedBytes();
         this.waitTimeMillis = statistic.getWaitTimeMillis();
         this.idleTimeMillis = statistic.getIdleTimeMillis();
         this.pageHits = statistic.getPageHits();
         this.pageFaults = statistic.getPageFaults();
         if ( querySnapshot.isPresent() )
         {
-            QuerySnapshot snapshot = (QuerySnapshot) querySnapshot.get();
+            QuerySnapshot snapshot = querySnapshot.get();
             this.currentQueryId = (new QueryId( database, snapshot.internalQueryId() )).toString();
-            this.currentQuery = snapshot.queryText();
+            this.currentQuery = snapshot.obfuscatedQueryText().orElse( null );
         }
         else
         {

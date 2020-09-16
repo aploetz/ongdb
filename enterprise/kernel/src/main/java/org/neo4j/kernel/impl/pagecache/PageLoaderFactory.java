@@ -24,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import org.neo4j.io.fs.FileUtils;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 
 class PageLoaderFactory
 {
@@ -37,12 +38,9 @@ class PageLoaderFactory
         this.pageCache = pageCache;
     }
 
-    PageLoader getLoader( PagedFile file ) throws IOException
+    PageLoader getLoader( PagedFile file, PageCacheTracer pageCacheTracer ) throws IOException
     {
-        if ( FileUtils.highIODevice( file.file().toPath() ) )
-        {
-            return new ParallelPageLoader( file, executor, pageCache );
-        }
-        return new SingleCursorPageLoader( file );
+        return (FileUtils.highIODevice( file.file().toPath() ) ? new ParallelPageLoader( file, this.executor, pageCacheTracer )
+                                                               : new SingleCursorPageLoader( file, pageCacheTracer ));
     }
 }

@@ -75,7 +75,7 @@ public class Id
     public Id( String database, long internalId, String separator ) throws InvalidArgumentsException
     {
         this.separator = separator;
-        this.database = new NormalizedDatabaseName( (String) Objects.requireNonNull( database ) );
+        this.database = new NormalizedDatabaseName( Objects.requireNonNull( database ) );
         if ( internalId <= 0L )
         {
             throw new InvalidArgumentsException(

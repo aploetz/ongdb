@@ -27,7 +27,6 @@ package org.neo4j.internal.batchimport;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.file.CopyOption;
 import java.nio.file.StandardCopyOption;
 
 import org.neo4j.internal.helpers.collection.Pair;
@@ -37,8 +36,10 @@ import org.neo4j.io.fs.PhysicalFlushableChannel;
 import org.neo4j.io.fs.ReadAheadChannel;
 import org.neo4j.io.fs.ReadPastEndException;
 import org.neo4j.io.fs.ReadableChannel;
-import org.neo4j.io.memory.BufferScope;
+import org.neo4j.io.memory.NativeScopedBuffer;
+import org.neo4j.io.memory.ScopedBuffer;
 import org.neo4j.kernel.impl.store.PropertyType;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.string.UTF8;
 
 public class BatchImportStateStore
@@ -50,12 +51,14 @@ public class BatchImportStateStore
     private final FileSystemAbstraction fs;
     private final File stateFile;
     private final File tempFile;
+    private final MemoryTracker memoryTracker;
 
-    BatchImportStateStore( FileSystemAbstraction fs, File stateFile )
+    BatchImportStateStore( FileSystemAbstraction fs, File stateFile, MemoryTracker memoryTracker )
     {
         this.fs = fs;
         this.stateFile = stateFile;
         this.tempFile = new File( stateFile.getAbsolutePath() + TMP_FILE_EXTENSTION );
+        this.memoryTracker = memoryTracker;
     }
 
     public Pair<String,byte[]> get() throws IOException
@@ -68,13 +71,13 @@ public class BatchImportStateStore
         {
             try
             {
-                BufferScope bufferScope = new BufferScope( ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE );
+                ScopedBuffer bufferScope = new NativeScopedBuffer( ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE, this.memoryTracker );
 
                 Pair checkpointName;
                 try
                 {
                     ReadAheadChannel channel = new ReadAheadChannel( this.fs.read( this.stateFile ),
-                                                                     bufferScope.buffer );
+                                                                     bufferScope );
 
                     try
                     {
@@ -130,7 +133,7 @@ public class BatchImportStateStore
     public void set( String name, byte[] checkPoint ) throws IOException
     {
         this.fs.mkdirs( this.tempFile.getParentFile() );
-        PhysicalFlushableChannel channel = new PhysicalFlushableChannel( this.fs.write( this.tempFile ) );
+        PhysicalFlushableChannel channel = new PhysicalFlushableChannel( this.fs.write( this.tempFile ), this.memoryTracker );
 
         try
         {
@@ -154,13 +157,13 @@ public class BatchImportStateStore
 
         channel.close();
         this.fs.renameFile( this.tempFile, this.stateFile,
-                            new CopyOption[]{StandardCopyOption.ATOMIC_MOVE} );
+                            StandardCopyOption.ATOMIC_MOVE );
     }
 
     public void remove() throws IOException
     {
         this.fs.renameFile( this.stateFile, this.tempFile,
-                            new CopyOption[]{StandardCopyOption.ATOMIC_MOVE} );
+                            StandardCopyOption.ATOMIC_MOVE );
         this.fs.deleteFileOrThrow( this.tempFile );
     }
 

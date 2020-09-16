@@ -132,9 +132,9 @@ public class QueryStatusResult
     {
         this.queryId = (new QueryId( database, query.internalQueryId() )).toString();
         this.username = query.username();
-        this.query = query.queryText();
+        this.query = query.obfuscatedQueryText().orElse( null );
         this.database = database;
-        this.parameters = asRawMap( query.queryParameters(),
+        this.parameters = asRawMap( query.obfuscatedQueryParameters().orElse( MapValue.EMPTY ),
                                     new QueryStatusResult.ParameterWriter( manager ) );
         this.startTime = ProceduresTimeFormatHelper.formatTime( query.startTimestampMillis(), zoneId );
         this.elapsedTimeMillis = this.asMillis( query.elapsedTimeMicros() );
@@ -152,7 +152,7 @@ public class QueryStatusResult
         this.planner = query.planner();
         this.runtime = query.runtime();
         this.indexes = query.indexes();
-        this.allocatedBytes = (Long) query.allocatedBytes().orElse( null );
+        this.allocatedBytes = query.allocatedBytes();
         this.pageHits = query.pageHits();
         this.pageFaults = query.pageFaults();
         this.connectionId = clientConnection.connectionId();

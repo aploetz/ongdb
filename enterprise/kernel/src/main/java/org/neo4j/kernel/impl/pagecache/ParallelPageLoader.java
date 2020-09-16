@@ -22,9 +22,10 @@ import java.io.IOException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 
 import static org.neo4j.io.pagecache.PagedFile.PF_SHARED_READ_LOCK;
 
@@ -33,15 +34,15 @@ class ParallelPageLoader implements PageLoader
 
     private final PagedFile file;
     private final Executor executor;
-    private final PageCache pageCache;
+    private final PageCacheTracer pageCacheTracer;
     private final AtomicLong received;
     private final AtomicLong processed;
 
-    ParallelPageLoader( PagedFile file, Executor executor, PageCache pageCache )
+    ParallelPageLoader( PagedFile file, Executor executor, PageCacheTracer pageCacheTracer )
     {
         this.file = file;
         this.executor = executor;
-        this.pageCache = pageCache;
+        this.pageCacheTracer = pageCacheTracer;
         received = new AtomicLong();
         processed = new AtomicLong();
     }
@@ -49,12 +50,13 @@ class ParallelPageLoader implements PageLoader
     @Override
     public void load( long pageId )
     {
+        PageCursorTracer pageCursorTracer = this.pageCacheTracer.createPageCursorTracer( PAGE_CACHE_PROFILE_LOADER );
         received.getAndIncrement();
         executor.execute( () ->
                           {
                               try
                               {
-                                  try ( PageCursor cursor = file.io( pageId, PF_SHARED_READ_LOCK ) )
+                                  try ( PageCursor cursor = file.io( pageId, PF_SHARED_READ_LOCK, pageCursorTracer ) )
                                   {
                                       cursor.next();
                                   }
@@ -64,7 +66,7 @@ class ParallelPageLoader implements PageLoader
                               }
                               finally
                               {
-                                  pageCache.reportEvents();
+
                                   processed.getAndIncrement();
                               }
                           } );

@@ -53,7 +53,10 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.io.pagecache.impl.FileIsNotMappedException;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.transaction.state.DatabaseFileListing.StoreFileProvider;
+import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Log;
 import org.neo4j.scheduler.Group;
 import org.neo4j.scheduler.JobHandle;
@@ -81,6 +84,8 @@ public class PageCacheWarmer implements StoreFileProvider
     public static final String SUFFIX_CACHEPROF = ".cacheprof";
 
     private static final int IO_PARALLELISM = Runtime.getRuntime().availableProcessors();
+    private static final String PAGE_CACHE_WARMER = "PageCacheWarmer";
+    private static final String PAGE_CACHE_PROFILER = "PageCacheProfiler";
 
     private final FileSystemAbstraction fs;
     private final PageCache pageCache;
@@ -90,12 +95,12 @@ public class PageCacheWarmer implements StoreFileProvider
     private final Log log;
     private final ProfileRefCounts refCounts;
     private final Config config;
+    private final PageCacheTracer pageCacheTracer;
     private volatile boolean stopped;
     private ExecutorService executor;
     private PageLoaderFactory pageLoaderFactory;
 
-    PageCacheWarmer( FileSystemAbstraction fs, PageCache pageCache, JobScheduler scheduler,
-                     File databaseDirectory, Config config, Log log )
+    PageCacheWarmer( FileSystemAbstraction fs, PageCache pageCache, JobScheduler scheduler, File databaseDirectory, Config config, Log log, Tracers tracers )
     {
         this.fs = fs;
         this.pageCache = pageCache;
@@ -103,6 +108,7 @@ public class PageCacheWarmer implements StoreFileProvider
         this.databaseDirectory = databaseDirectory;
         this.profilesDirectory = new File( databaseDirectory, "profiles" );
         this.log = log;
+        this.pageCacheTracer = tracers.getPageCacheTracer();
         this.refCounts = new ProfileRefCounts();
         this.config = config;
     }
@@ -193,7 +199,7 @@ public class PageCacheWarmer implements StoreFileProvider
             Pattern whitelist = Pattern.compile(
                     this.config.get( GraphDatabaseSettings.pagecache_warmup_prefetch_whitelist ) );
             this.log.info( "Warming up page cache by pre-fetching files matching regex: %s",
-                           new Object[]{whitelist.pattern()} );
+                           whitelist.pattern() );
             List<JobHandle> handles = new ArrayList();
             LongAdder totalPageCounter = new LongAdder();
             Iterator iterator = this.pageCache.listExistingMappings().iterator();
@@ -233,11 +239,12 @@ public class PageCacheWarmer implements StoreFileProvider
 
     private long touchAllPages( PagedFile pagedFile )
     {
-        this.log.debug( "Pre-fetching %s", new Object[]{pagedFile.file().getName()} );
+        this.log.debug( "Pre-fetching %s", pagedFile.file().getName() );
 
         try
         {
-            PageCursor cursor = pagedFile.io( 0L, 9 );
+            PageCursorTracer pageCursorTracer = this.pageCacheTracer.createPageCursorTracer( PAGE_CACHE_WARMER );
+            PageCursor cursor = pagedFile.io( 0L, 9, pageCursorTracer );
 
             long p;
             try
@@ -248,7 +255,7 @@ public class PageCacheWarmer implements StoreFileProvider
                 {
                     if ( this.stopped || !cursor.next() )
                     {
-                        this.pageCache.reportEvents();
+
                         p = pages;
                         break;
                     }
@@ -336,12 +343,11 @@ public class PageCacheWarmer implements StoreFileProvider
 
                 if ( this.stopped )
                 {
-                    this.pageCache.reportEvents();
+
                     return OptionalLong.empty();
                 }
             }
 
-            this.pageCache.reportEvents();
             return OptionalLong.of( pagesInMemory );
         }
     }
@@ -361,7 +367,7 @@ public class PageCacheWarmer implements StoreFileProvider
         // The file contents checks out. Let's load it in.
         long pagesLoaded = 0;
         try ( InputStream input = savedProfile.get().read( fs );
-              PageLoader loader = pageLoaderFactory.getLoader( file ) )
+              PageLoader loader = pageLoaderFactory.getLoader( file, pageCacheTracer ) )
         {
             long pageId = 0;
             int b;
@@ -371,7 +377,7 @@ public class PageCacheWarmer implements StoreFileProvider
                 {
                     if ( stopped )
                     {
-                        pageCache.reportEvents();
+
                         return pagesLoaded;
                     }
                     if ( (b & 1) == 1 )
@@ -384,7 +390,7 @@ public class PageCacheWarmer implements StoreFileProvider
                 }
             }
         }
-        pageCache.reportEvents();
+
         return pagesLoaded;
     }
 
@@ -409,6 +415,7 @@ public class PageCacheWarmer implements StoreFileProvider
 
     private long profile( PagedFile file, Profile[] existingProfiles ) throws IOException
     {
+        PageCursorTracer pageCursorTracer = this.pageCacheTracer.createPageCursorTracer( PAGE_CACHE_PROFILER );
         long pagesInMemory = 0;
         Profile nextProfile = filterRelevant( existingProfiles, file )
                 .max( naturalOrder() )
@@ -416,7 +423,7 @@ public class PageCacheWarmer implements StoreFileProvider
                 .orElse( Profile.first( this.databaseDirectory, file.file() ) );
 
         try ( OutputStream output = nextProfile.write( fs );
-              PageCursor cursor = file.io( 0, PF_SHARED_READ_LOCK | PF_NO_FAULT ) )
+              PageCursor cursor = file.io( 0, PF_SHARED_READ_LOCK | PF_NO_FAULT, pageCursorTracer ) )
         {
             int stepper = 0;
             int b = 0;
