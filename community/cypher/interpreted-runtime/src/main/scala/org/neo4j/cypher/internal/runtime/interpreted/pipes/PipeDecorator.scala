@@ -19,14 +19,9 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.ResourceLinenumber
-=======
 import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.ResourceLinenumber
 import org.neo4j.cypher.internal.util.attribution.Id
->>>>>>> neo4j/4.1
 import org.neo4j.exceptions.LoadCsvStatusWrapCypherException
 import org.neo4j.exceptions.Neo4jException
 
@@ -136,12 +131,7 @@ class LinenumberPipeDecorator() extends PipeDecorator {
     }
   }
 
-<<<<<<< HEAD
-  override def afterCreateResults(pipe: Pipe, state: QueryState): Unit = {
-    inner.afterCreateResults(pipe, state)
-=======
   override def afterCreateResults(planId: Id, state: QueryState): Unit = {
     inner.afterCreateResults(planId, state)
->>>>>>> neo4j/4.1
   }
 }

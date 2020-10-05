@@ -19,11 +19,12 @@
  */
 package org.neo4j.kernel.impl.transaction;
 
+import org.junit.jupiter.api.Test;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.junit.jupiter.api.Test;
 import org.neo4j.internal.helpers.collection.Visitor;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
@@ -41,10 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.neo4j.io.ByteUnit.KibiByte;
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 class ReadAheadLogChannelTest
@@ -82,11 +80,7 @@ class ReadAheadLogChannelTest
         StoreChannel storeChannel = fileSystem.read( file );
         PhysicalLogVersionedStoreChannel versionedStoreChannel =
                 new PhysicalLogVersionedStoreChannel( storeChannel, -1 /* ignored */, (byte) -1, file, nativeChannelAccessor );
-<<<<<<< HEAD
-        try ( ReadAheadLogChannel channel = new ReadAheadLogChannel( versionedStoreChannel ) )
-=======
         try ( ReadAheadLogChannel channel = new ReadAheadLogChannel( versionedStoreChannel, INSTANCE ) )
->>>>>>> neo4j/4.1
         {
             // THEN
             assertEquals( byteValue, channel.get() );

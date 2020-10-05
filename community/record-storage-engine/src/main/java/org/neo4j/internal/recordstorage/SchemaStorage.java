@@ -52,7 +52,7 @@ import org.neo4j.util.VisibleForTesting;
 import org.neo4j.values.storable.Value;
 import org.neo4j.values.storable.Values;
 
-public class SchemaStorage implements SchemaRuleAccess
+public class SchemaStorage implements SchemaRuleAccess, org.neo4j.kernel.impl.storemigration.SchemaStorage
 {
     private final SchemaStore schemaStore;
     private final TokenHolders tokenHolders;
@@ -90,15 +90,6 @@ public class SchemaStorage implements SchemaRuleAccess
     }
 
     @Override
-<<<<<<< HEAD
-    public Iterator<IndexDescriptor> indexesGetAllIgnoreMalformed()
-    {
-        return indexRules( streamAllSchemaRules( true ) ).iterator();
-    }
-
-    @Override
-    public IndexDescriptor[] indexGetForSchema( SchemaDescriptorSupplier supplier )
-=======
     public Iterator<IndexDescriptor> indexesGetAllIgnoreMalformed( PageCursorTracer cursorTracer )
     {
         return indexRules( streamAllSchemaRules( true, cursorTracer ) ).iterator();
@@ -106,7 +97,6 @@ public class SchemaStorage implements SchemaRuleAccess
 
     @Override
     public IndexDescriptor[] indexGetForSchema( SchemaDescriptorSupplier supplier, PageCursorTracer cursorTracer )
->>>>>>> neo4j/4.1
     {
         SchemaDescriptor schema = supplier.schema();
         return indexRules( streamAllSchemaRules( false, cursorTracer ) )

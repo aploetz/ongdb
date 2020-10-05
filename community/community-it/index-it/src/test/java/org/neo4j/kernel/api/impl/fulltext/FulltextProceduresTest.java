@@ -23,10 +23,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-<<<<<<< HEAD
-import java.util.ArrayList;
-=======
->>>>>>> neo4j/4.1
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,16 +37,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-<<<<<<< HEAD
-import org.neo4j.configuration.Config;
-import org.neo4j.configuration.GraphDatabaseSettings;
-import org.neo4j.consistency.ConsistencyCheckService;
-import org.neo4j.consistency.checking.full.ConsistencyFlags;
-import org.neo4j.dbms.api.DatabaseManagementService;
-import org.neo4j.dbms.api.DatabaseManagementServiceBuilder;
-import org.neo4j.graphdb.Entity;
-import org.neo4j.graphdb.GraphDatabaseService;
-=======
 import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,7 +45,6 @@ import org.junit.jupiter.api.Test;
 import org.neo4j.configuration.Config;
 import org.neo4j.consistency.ConsistencyCheckService;
 import org.neo4j.consistency.checking.full.ConsistencyFlags;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.QueryExecutionException;
@@ -73,29 +58,14 @@ import org.neo4j.graphdb.schema.IndexSetting;
 import org.neo4j.graphdb.schema.IndexSettingImpl;
 import org.neo4j.internal.helpers.collection.Iterables;
 import org.neo4j.internal.helpers.progress.ProgressMonitorFactory;
-<<<<<<< HEAD
-import org.neo4j.io.layout.DatabaseLayout;
-import org.neo4j.io.layout.Neo4jLayout;
-=======
 import org.neo4j.io.IOUtils;
 import org.neo4j.io.layout.DatabaseLayout;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.exceptions.schema.RepeatedLabelInSchemaException;
 import org.neo4j.kernel.api.exceptions.schema.RepeatedPropertyInSchemaException;
 import org.neo4j.kernel.api.exceptions.schema.RepeatedRelationshipTypeInSchemaException;
 import org.neo4j.kernel.impl.index.schema.FulltextIndexProviderFactory;
-<<<<<<< HEAD
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.logging.Level;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.procedure.builtin.FulltextProcedures;
-import org.neo4j.scheduler.Group;
-import org.neo4j.scheduler.JobScheduler;
-import org.neo4j.test.TestDatabaseManagementServiceBuilder;
-=======
-import org.neo4j.logging.NullLogProvider;
-import org.neo4j.procedure.builtin.FulltextProcedures;
->>>>>>> neo4j/4.1
 import org.neo4j.test.ThreadTestUtils;
 import org.neo4j.util.concurrent.BinaryLatch;
 import org.neo4j.values.storable.Value;
@@ -126,48 +96,6 @@ import static org.neo4j.kernel.api.impl.fulltext.FulltextIndexProceduresUtil.asS
 
 class FulltextProceduresTest extends FulltextProceduresTestSupport
 {
-<<<<<<< HEAD
-    private static final String SCORE = "score";
-    private static final String NODE = "node";
-    private static final String RELATIONSHIP = "relationship";
-    private static final String DESCARTES_MEDITATIONES = "/meditationes--rene-descartes--public-domain.txt";
-    private static final Label LABEL = Label.label( "Label" );
-    private static final RelationshipType REL = RelationshipType.withName( "REL" );
-
-    private final Timeout timeout = VerboseTimeout.builder().withTimeout( 1, TimeUnit.HOURS ).build();
-    private final DefaultFileSystemRule fs = new DefaultFileSystemRule();
-    private final TestDirectory testDirectory = TestDirectory.testDirectory();
-    private final ExpectedException expectedException = ExpectedException.none();
-    private final CleanupRule cleanup = new CleanupRule();
-
-    @Rule
-    public final RuleChain rules = RuleChain.outerRule( timeout ).around( fs ).around( testDirectory ).around( expectedException ).around( cleanup );
-
-    private GraphDatabaseAPI db;
-    private DatabaseManagementServiceBuilder builder;
-    private static final String PROP = "prop";
-    private static final String EVENTUALLY_CONSISTENT = ", {eventually_consistent: 'true'}";
-    private static final String EVENTUALLY_CONSISTENT_PREFIXED = ", {`fulltext.eventually_consistent`: 'true'}";
-    private DatabaseManagementService managementService;
-
-    @Before
-    public void before()
-    {
-        builder = new TestDatabaseManagementServiceBuilder( testDirectory.homeDir() );
-        builder.setConfig( GraphDatabaseSettings.store_internal_log_level, Level.DEBUG );
-    }
-
-    @After
-    public void tearDown()
-    {
-        if ( db != null )
-        {
-            managementService.shutdown();
-        }
-    }
-
-=======
->>>>>>> neo4j/4.1
     @Test
     void createNodeFulltextIndex()
     {
@@ -519,32 +447,7 @@ class FulltextProceduresTest extends FulltextProceduresTestSupport
     }
 
     @Test
-<<<<<<< HEAD
-    public void mustFailToCreateIndexWithUnknownAnalyzer()
-    {
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            String label = asCypherStringsList( LABEL.name() );
-            String props = asCypherStringsList( PROP );
-            String analyzer = props + ", {analyzer: 'blablalyzer'}";
-            try
-            {
-                tx.execute( format( NODE_CREATE, "my_index", label, analyzer ) ).close();
-                fail( "Expected query to fail." );
-            }
-            catch ( QueryExecutionException e )
-            {
-                assertThat( e.getMessage(), containsString( "blablalyzer" ) );
-            }
-        }
-    }
-
-    @Test
-    public void queryShouldFindDataAddedInLaterTransactions()
-=======
     void mustFailToCreateIndexWithUnknownAnalyzer()
->>>>>>> neo4j/4.1
     {
         try ( Transaction tx = db.beginTx() )
         {
@@ -2082,11 +1985,7 @@ class FulltextProceduresTest extends FulltextProceduresTestSupport
     }
 
     @Test
-<<<<<<< HEAD
-    public void eventuallyConsistentIndexMustNotIncludeEntitiesAddedInTransaction()
-=======
     void eventuallyConsistentIndexMustNotIncludeEntitiesAddedInTransaction()
->>>>>>> neo4j/4.1
     {
         try ( Transaction tx = db.beginTx() )
         {
@@ -2804,226 +2703,7 @@ class FulltextProceduresTest extends FulltextProceduresTestSupport
     }
 
     @Test
-<<<<<<< HEAD
-    public void fulltextIndexMustWorkAfterRestartWithTxStateChanges()
-    {
-        // Create node and relationship fulltext indexes
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.execute( format( NODE_CREATE, "nodes", asCypherStringsList( LABEL.name() ), asCypherStringsList( PROP ) ) ).close();
-            createSimpleRelationshipIndex( tx );
-            tx.commit();
-        }
-        awaitIndexesOnline();
-
-        // Restart
-        managementService.shutdown();
-        db = createDatabase();
-
-        // Query node
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.createNode(); // Tx state changed
-            tx.execute( format( QUERY_NODES, "nodes", "*" ) ).close();
-            tx.commit();
-        }
-
-        // Query relationship
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.createNode(); // Tx state changed
-            tx.execute( format( QUERY_RELS, "rels", "*" ) ).close();
-            tx.commit();
-        }
-    }
-
-    @Test
-    public void relationshipIndexAndDetachDelete() throws Exception
-    {
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.execute( format( RELATIONSHIP_CREATE, "rels", asCypherStringsList( REL.name() ), asCypherStringsList( PROP ) ) ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
-            tx.commit();
-        }
-        long nodeId;
-        long relId;
-        try ( Transaction tx = db.beginTx() )
-        {
-            Node node = tx.createNode();
-            nodeId = node.getId();
-            Relationship rel = node.createRelationshipTo( node, REL );
-            relId = rel.getId();
-            rel.setProperty( PROP, "blabla" );
-            tx.commit();
-        }
-
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla", relId );
-            tx.execute( "match (n) where id(n) = " + nodeId + " detach delete n" ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla" );
-            tx.commit();
-        }
-
-        checkDatabaseConsistency();
-    }
-
-    private void checkDatabaseConsistency() throws Exception
-    {
-        managementService.shutdown();
-        DatabaseLayout layout = Neo4jLayout.of( testDirectory.homeDir() ).databaseLayout( DEFAULT_DATABASE_NAME );
-        ConsistencyCheckService cc = new ConsistencyCheckService();
-        ConsistencyCheckService.Result result = cc.runFullConsistencyCheck(
-                layout, Config.defaults(), ProgressMonitorFactory.NONE, NullLogProvider.nullLogProvider(), false, ConsistencyFlags.DEFAULT );
-        if ( !result.isSuccessful() )
-        {
-            Files.lines( result.reportFile().toPath() ).forEach( System.out::println );
-        }
-        assertTrue( result.isSuccessful() );
-    }
-
-    @Test
-    public void relationshipIndexAndDetachDeleteWithRestart() throws Exception
-    {
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.execute( format( RELATIONSHIP_CREATE, "rels", asCypherStringsList( REL.name() ), asCypherStringsList( PROP ) ) ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
-            tx.commit();
-        }
-        long nodeId;
-        long relId;
-        try ( Transaction tx = db.beginTx() )
-        {
-            Node node = tx.createNode();
-            nodeId = node.getId();
-            Relationship rel = node.createRelationshipTo( node, REL );
-            relId = rel.getId();
-            rel.setProperty( PROP, "blabla" );
-            tx.commit();
-        }
-
-        managementService.shutdown();
-        db = createDatabase();
-
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla", relId );
-            tx.execute( "match (n) where id(n) = " + nodeId + " detach delete n" ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla" );
-            tx.commit();
-        }
-
-        checkDatabaseConsistency();
-    }
-
-    @Test
-    public void relationshipIndexAndPropertyRemove() throws Exception
-    {
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.execute( format( RELATIONSHIP_CREATE, "rels", asCypherStringsList( REL.name() ), asCypherStringsList( PROP ) ) ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
-            tx.commit();
-        }
-        long relId;
-        try ( Transaction tx = db.beginTx() )
-        {
-            Node node = tx.createNode();
-            Relationship rel = node.createRelationshipTo( node, REL );
-            relId = rel.getId();
-            rel.setProperty( PROP, "blabla" );
-            tx.commit();
-        }
-
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla", relId );
-            Relationship rel = tx.getRelationshipById( relId );
-            rel.removeProperty( PROP );
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla" );
-            tx.commit();
-        }
-
-        checkDatabaseConsistency();
-    }
-
-    @Test
-    public void relationshipIndexAndPropertyRemoveWithRestart() throws Exception
-    {
-        db = createDatabase();
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.execute( format( RELATIONSHIP_CREATE, "rels", asCypherStringsList( REL.name() ), asCypherStringsList( PROP ) ) ).close();
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
-            tx.commit();
-        }
-        long relId;
-        try ( Transaction tx = db.beginTx() )
-        {
-            Node node = tx.createNode();
-            Relationship rel = node.createRelationshipTo( node, REL );
-            relId = rel.getId();
-            rel.setProperty( PROP, "blabla" );
-            tx.commit();
-        }
-
-        managementService.shutdown();
-        db = createDatabase();
-
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla", relId );
-            Relationship rel = tx.getRelationshipById( relId );
-            rel.removeProperty( PROP );
-            tx.commit();
-        }
-        try ( Transaction tx = db.beginTx() )
-        {
-            assertQueryFindsIds( db, false, "rels", "blabla" );
-            tx.commit();
-        }
-
-        checkDatabaseConsistency();
-    }
-
-    private void assertNoIndexSeeks( Result result )
-=======
     void fulltextIndexMustWorkAfterRestartWithTxStateChanges()
->>>>>>> neo4j/4.1
     {
         // Create node and relationship fulltext indexes
         try ( Transaction tx = db.beginTx() )

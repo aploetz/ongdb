@@ -30,6 +30,9 @@ import org.neo4j.exceptions.EntityNotFoundException
 import org.neo4j.graphdb.Label
 import org.neo4j.graphdb.Node
 import org.neo4j.graphdb.Relationship
+import org.neo4j.values.storable.Values.NO_VALUE
+import org.neo4j.values.storable.Values.intValue
+import org.neo4j.values.virtual.VirtualValues.list
 
 abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT],
                                                              runtime: CypherRuntime[CONTEXT]) extends RuntimeTestSuite(edition, runtime) {
@@ -367,8 +370,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("prop").withRows(singleColumn(Seq(null)))
   }
 
-<<<<<<< HEAD
-=======
   test("should read property from correct entity (rel/long slot)") {
     // given
     val size = 100
@@ -417,7 +418,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     runtimeResult should beColumns("longNodeProp", "refNodeProp").withRows(expected)
   }
 
->>>>>>> neo4j/4.1
   test("result of all function should be a boolean") {
     // given
     val size = 100
@@ -493,8 +493,6 @@ abstract class ExpressionTestBase[CONTEXT <: RuntimeContext](edition: Edition[CO
     val expected = for (i <- 0 until size) yield Array[Any](i, true)
     runtimeResult should beColumns("x", "y").withRows(expected)
   }
-<<<<<<< HEAD
-=======
 }
 
 // Supported by all non-parallel runtimes
@@ -519,7 +517,6 @@ trait ThreadUnsafeExpressionTests[CONTEXT <: RuntimeContext] {
     // then
     runtimeResult should beColumns("t").withRows(singleColumn((1 to size).map(_ => "TO")))
   }
->>>>>>> neo4j/4.1
 }
 
 // Supported by all runtimes that can deal with changes in the tx-state
@@ -584,5 +581,43 @@ trait ExpressionWithTxStateChangesTests[CONTEXT <: RuntimeContext] {
 
     // then
     an [EntityNotFoundException] should be thrownBy consume(execute(logicalQuery, runtime, input))
+  }
+
+  test("should handle IN list") {
+    // given
+    val size = 100
+    val input = for (i <- 0 until size) yield Array[Any](list((0 to i).map(intValue):_*))
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("x", "y")
+      .projection("5 IN x AS y")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, inputValues(input:_*))
+
+    // then
+    val expected = for (i <- 0 until size) yield Array[Any]((0 to i).toArray, i >= 5)
+    runtimeResult should beColumns("x", "y").withRows(expected)
+  }
+
+  test("should handle IN list where list contains nulls") {
+    // given
+    val size = 100
+    val input = for (s <- 0 until size) yield Array[Any](list((0 to s).map(i => if (i % 2 == 0) NO_VALUE else intValue(i)):_*))
+
+    // when
+    val logicalQuery = new LogicalQueryBuilder(this)
+      .produceResults("y")
+      .projection("5 IN x AS y")
+      .input(variables = Seq("x"))
+      .build()
+
+    val runtimeResult = execute(logicalQuery, runtime, inputValues(input:_*))
+
+    // then
+    val expected = for (i <- 0 until size) yield Array[Any](if (i >= 5) true else null)
+    runtimeResult should beColumns("y").withRows(expected)
   }
 }

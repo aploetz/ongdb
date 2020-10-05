@@ -164,11 +164,7 @@ public class NodeRecord extends PrimitiveRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public NodeRecord clone()
-=======
     public NodeRecord copy()
->>>>>>> neo4j/4.1
     {
         return new NodeRecord( this );
     }

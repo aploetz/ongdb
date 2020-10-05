@@ -363,12 +363,8 @@ class CountsComputerTest
 
     private GBPTreeCountsStore createCountsStore( CountsBuilder builder ) throws IOException
     {
-<<<<<<< HEAD
-        return new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem, immediate(), builder, false, GBPTreeCountsStore.NO_MONITOR );
-=======
         return new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem, immediate(), builder, false, PageCacheTracer.NULL,
                 GBPTreeCountsStore.NO_MONITOR );
->>>>>>> neo4j/4.1
     }
 
     private void rebuildCounts( long lastCommittedTransactionId )

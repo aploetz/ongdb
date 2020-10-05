@@ -24,12 +24,9 @@ import java.util.regex.Pattern;
 
 import org.neo4j.hashing.HashFunction;
 
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 import static org.neo4j.memory.HeapEstimator.sizeOf;
 
->>>>>>> neo4j/4.1
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 
 /**

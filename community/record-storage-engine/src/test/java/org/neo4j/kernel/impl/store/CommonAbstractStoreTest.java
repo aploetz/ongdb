@@ -50,10 +50,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.standard.Standard;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.logging.AssertableLogProvider;
-<<<<<<< HEAD
-=======
 import org.neo4j.logging.LogAssertions;
->>>>>>> neo4j/4.1
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.extension.Inject;
@@ -63,11 +60,7 @@ import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.String.format;
 import static java.nio.file.StandardOpenOption.DELETE_ON_CLOSE;
-<<<<<<< HEAD
-import static org.hamcrest.Matchers.containsString;
-=======
 import static org.eclipse.collections.api.factory.Sets.immutable;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -223,18 +216,10 @@ class CommonAbstractStoreTest
         AssertableLogProvider logProvider = new AssertableLogProvider();
 
         // when
-<<<<<<< HEAD
-        store.logIdUsage( logProvider.getLog( TheStore.class ).infoLogger() );
-
-        // then
-        logProvider.assertExactly( AssertableLogProvider.inLog( TheStore.class ).info(
-                containsString( format( "%s[%s]: used=0 high=0", TheStore.TYPE_DESCRIPTOR, storeFile.getName() ) ) ) );
-=======
         store.logIdUsage( logProvider.getLog( TheStore.class ).infoLogger(), NULL );
 
         // then
         LogAssertions.assertThat( logProvider ).containsMessages( format( "%s[%s]: used=0 high=0", TheStore.TYPE_DESCRIPTOR, storeFile.getName() ) );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -248,13 +233,8 @@ class CommonAbstractStoreTest
         store.logVersions( logProvider.getLog( TheStore.class ).infoLogger() );
 
         // then
-<<<<<<< HEAD
-        logProvider.assertExactly( AssertableLogProvider.inLog( TheStore.class ).info(
-                containsString( format( "%s[%s] %s", TheStore.TYPE_DESCRIPTOR, storeFile.getName(), TheStore.STORE_VERSION ) ) ) );
-=======
         LogAssertions.assertThat( logProvider ).containsMessages(
                 format( "%s[%s] %s", TheStore.TYPE_DESCRIPTOR, storeFile.getName(), TheStore.STORE_VERSION ) );
->>>>>>> neo4j/4.1
     }
 
     private TheStore newStore()
@@ -313,11 +293,7 @@ class CommonAbstractStoreTest
         }
 
         @Override
-<<<<<<< HEAD
-        public TheRecord clone()
-=======
         public AbstractBaseRecord copy()
->>>>>>> neo4j/4.1
         {
             return super.copy();
         }

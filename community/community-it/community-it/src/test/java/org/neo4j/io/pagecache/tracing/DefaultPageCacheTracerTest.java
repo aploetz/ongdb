@@ -165,11 +165,7 @@ public class DefaultPageCacheTracerTest
     @Test
     void usageRatio()
     {
-<<<<<<< HEAD
-        assertThat( tracer.usageRatio(), closeTo( 0d, 0.0001 ) );
-=======
         assertThat( tracer.usageRatio() ).isEqualTo( 0 );
->>>>>>> neo4j/4.1
         tracer.maxPages( 10 );
         assertThat( tracer.usageRatio() ).isCloseTo( 0d, within( 0.0001 ) );
         tracer.faults( 5 );
@@ -178,17 +174,10 @@ public class DefaultPageCacheTracerTest
         tracer.evictions( 5 );
         assertThat( tracer.usageRatio() ).isCloseTo( 0.5, within( 0.0001 ) );
         tracer.faults( 5 );
-<<<<<<< HEAD
-        assertThat( tracer.usageRatio(), closeTo( 1d, 0.0001 ) );
-
-        tracer.evictions( 500 );
-        assertThat( tracer.usageRatio(), closeTo( 0d, 0.0001 ) );
-=======
         assertThat( tracer.usageRatio() ).isCloseTo( 1d, within( 0.0001 ) );
 
         tracer.evictions( 500 );
         assertThat( tracer.usageRatio() ).isCloseTo( 0, within( 0.0001 ) );
->>>>>>> neo4j/4.1
     }
 
     private void assertCounts( long pins, long unpins, long hits, long faults, long evictions, long evictionExceptions,

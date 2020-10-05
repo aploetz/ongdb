@@ -100,11 +100,7 @@ public interface ProcedureITBase
                 proc( "dbms.queryJmx", "(query :: STRING?) :: (name :: STRING?, " + "description :: STRING?, attributes :: MAP?)",
                         "Query JMX management data by domain and name." + " For instance, \"*:*\"",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
-<<<<<<< HEAD
-                proc( "db.createLabel", "(newLabel :: STRING?) :: VOID", "Create a label", stringArray(  "publisher", "architect", "admin" ), "WRITE",
-=======
                 proc( "db.createLabel", "(newLabel :: STRING?) :: VOID", "Create a label", stringArray( "publisher", "architect", "admin" ), "WRITE",
->>>>>>> neo4j/4.1
                         false ),
                 proc( "db.createProperty", "(newProperty :: STRING?) :: VOID", "Create a Property", stringArray( "publisher", "architect", "admin" ),
                         "WRITE", false ), proc( "db.createRelationshipType", "(newRelationshipType :: STRING?) :: VOID", "Create a RelationshipType",
@@ -188,9 +184,6 @@ public interface ProcedureITBase
                       "This procedure can be used by client side tooling to test whether they are correctly connected to a database. " +
                       "The procedure is available in all databases and always returns true. A faulty connection can be detected by not being able to call " +
                       "this procedure.",
-<<<<<<< HEAD
-                        stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ", true )
-=======
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "READ", true ),
                 proc( "dbms.upgradeStatus", "() :: (status :: STRING?, description :: STRING?, resolution :: STRING?)",
                       "Report the current status of the system database sub-graph schema.",
@@ -198,7 +191,6 @@ public interface ProcedureITBase
                 proc( "dbms.upgrade", "() :: (status :: STRING?, upgradeResult :: STRING?)",
                       "Upgrade the system database schema if it is not the current schema.",
                       stringArray( "admin" ), "WRITE" )
->>>>>>> neo4j/4.1
         );
     }
 
@@ -211,15 +203,12 @@ public interface ProcedureITBase
                         "() :: (resourceType :: STRING?, resourceId :: INTEGER?, description :: STRING?)",
                         "List all locks at this database.",
                         stringArray( "admin" ), "DBMS"),
-<<<<<<< HEAD
-=======
                 proc( "dbms.listPools",
                         "() :: (pool :: STRING?, databaseName :: STRING?, heapMemoryUsed :: STRING?, heapMemoryUsedBytes :: STRING?, " +
                                 "nativeMemoryUsed :: STRING?, nativeMemoryUsedBytes :: STRING?, freeMemory :: STRING?, freeMemoryBytes :: STRING?, " +
                                 "totalPoolMemory :: STRING?, totalPoolMemoryBytes :: STRING?)",
                         "List all memory pools, including sub pools, currently registered at this instance that are visible to the user.",
                         stringArray( "reader", "editor", "publisher", "architect", "admin" ), "DBMS" ),
->>>>>>> neo4j/4.1
                 proc( "dbms.listTransactions",
                         "() :: (transactionId :: STRING?, username :: STRING?, metaData :: MAP?, startTime :: STRING?, protocol :: STRING?," +
                                 " clientAddress :: STRING?, requestUri :: STRING?, currentQueryId :: STRING?, currentQuery :: STRING?, " +

@@ -51,13 +51,6 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableChecksu
 
     public ReadAheadChannel( T channel, ByteBuffer byteBuffer )
     {
-<<<<<<< HEAD
-        this.aheadBuffer = byteBuffer;
-        this.aheadBuffer.position( aheadBuffer.capacity() );
-        this.channel = channel;
-        this.readAheadSize = byteBuffer.capacity();
-        this.checksumView = byteBuffer.duplicate();
-=======
         requireNonNull( channel );
         requireNonNull( byteBuffer );
         this.aheadBuffer = byteBuffer;
@@ -65,7 +58,6 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableChecksu
         this.channel = channel;
         this.readAheadSize = aheadBuffer.capacity();
         this.checksumView = aheadBuffer.duplicate();
->>>>>>> neo4j/4.1
         this.checksum = CHECKSUM_FACTORY.get();
     }
 
@@ -187,11 +179,6 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableChecksu
     public void close() throws IOException
     {
         if ( channel != null )
-<<<<<<< HEAD
-        {
-            channel.close();
-            channel = null;
-=======
         {
             channel.close();
             channel = null;
@@ -199,7 +186,6 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableChecksu
         if ( scopedBuffer != null )
         {
             scopedBuffer.close();
->>>>>>> neo4j/4.1
         }
     }
 

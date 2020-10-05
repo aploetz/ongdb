@@ -22,15 +22,10 @@ package org.neo4j.cypher.internal.runtime.interpreted
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito
 import org.mockito.invocation.InvocationOnMock
-<<<<<<< HEAD
-import org.mockito.stubbing.Answer
-import org.mockito.{ArgumentMatchers, Mockito}
-=======
 import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.ExpressionCursors
 import org.neo4j.cypher.internal.runtime.NoOpQueryMemoryTracker
 import org.neo4j.cypher.internal.runtime.QueryContext
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.ResourceManager
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.IndexSearchMonitor
 import org.neo4j.cypher.internal.runtime.interpreted.pipes.ExternalCSVResource

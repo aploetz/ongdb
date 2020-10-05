@@ -214,12 +214,7 @@ public interface Status
                 "This query is not supported by the chosen runtime." ),
         NotSystemDatabaseError( ClientError,
                 "This is an administration command and it should be executed against the system database." ),
-        NotSystemDatabaseOnLeaderError( ClientError,
-                "This is an administration command and it should be executed against the LEADER server of the system database." ),
-<<<<<<< HEAD
-=======
         AccessMode( ClientError, "The request could not be completed due to access mode violation" ),
->>>>>>> neo4j/4.1
 
         // database errors
         ExecutionFailed( DatabaseError,
@@ -502,23 +497,14 @@ public interface Status
     enum Cluster implements Status
     {
         // transient errors
-        ReplicationFailure( TransientError, "Replication failure." ),
+        ReplicationFailure( TransientError,
+                "Replication failure." ),
 
-        // client errors
-        NotALeader( ClientError, "The request cannot be processed by this server. Write requests can only be processed by the leader." ),
-        TransactionSizeExceedsLimit( ClientError, "Transaction size exceeds supported limit." ),
-
-<<<<<<< HEAD
-        // database errors
-        SerializationFailure( DatabaseError, "Failed to serialise the transaction." )
-        ;
-=======
         NotALeader( ClientError,
                 "The request cannot be processed by this server. Write requests can only be processed by the leader." ),
 
         Routing( TransientError, "Unable to route the request to the appropriate server" )
                 ;
->>>>>>> neo4j/4.1
 
         private final Code code;
 

@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <parent>
-        <groupId>org.graphfoundation.ongdb</groupId>
+        <groupId>org.neo4j</groupId>
         <artifactId>parent</artifactId>
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../..</relativePath>
@@ -16,14 +16,10 @@
     </properties>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
-    <artifactId>ongdb-csv</artifactId>
-=======
     <artifactId>neo4j-csv</artifactId>
->>>>>>> neo4j/4.1
 
     <packaging>jar</packaging>
-    <name>ONgDB - CSV reading and parsing</name>
+    <name>Neo4j - CSV reading and parsing</name>
     <description>Efficient reading and parsing of CSV input streams.</description>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
@@ -61,32 +57,24 @@
             <artifactId>annotations</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-collections</artifactId>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-collections</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-values</artifactId>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-values</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-io</artifactId>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-io</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- test dependencies -->
         <dependency>
-<<<<<<< HEAD
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>io-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

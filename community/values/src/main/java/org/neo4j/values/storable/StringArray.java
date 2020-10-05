@@ -26,12 +26,9 @@ import org.neo4j.values.AnyValue;
 import org.neo4j.values.ValueMapper;
 
 import static java.lang.String.format;
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 import static org.neo4j.memory.HeapEstimator.sizeOf;
 import static org.neo4j.memory.HeapEstimator.sizeOfObjectArray;
->>>>>>> neo4j/4.1
 import static org.neo4j.values.storable.NoValue.NO_VALUE;
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 

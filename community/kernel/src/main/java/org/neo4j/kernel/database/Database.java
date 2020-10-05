@@ -548,11 +548,7 @@ public class Database extends LifecycleAdapter
         return extensionsLife;
     }
 
-<<<<<<< HEAD
-    private void upgradeStore( DatabaseConfig databaseConfig, DatabasePageCache databasePageCache )
-=======
     private void upgradeStore( DatabaseConfig databaseConfig, DatabasePageCache databasePageCache, MemoryTracker memoryTracker )
->>>>>>> neo4j/4.1
     {
         new DatabaseMigratorFactory( fs, databaseConfig, databaseLogService, databasePageCache, scheduler, namedDatabaseId, tracers.getPageCacheTracer(),
                 memoryTracker ).createDatabaseMigrator( databaseLayout, storageEngineFactory, databaseDependencies ).migrate();

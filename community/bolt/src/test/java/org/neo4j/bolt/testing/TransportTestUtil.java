@@ -41,10 +41,6 @@ import org.neo4j.bolt.packstream.Neo4jPackV2;
 import org.neo4j.bolt.runtime.AccessMode;
 import org.neo4j.bolt.testing.client.TransportConnection;
 import org.neo4j.bolt.v3.messaging.response.RecordMessage;
-<<<<<<< HEAD
-import org.neo4j.bolt.v4.BoltProtocolV4;
-=======
->>>>>>> neo4j/4.1
 import org.neo4j.bolt.v4.messaging.BoltV4Messages;
 import org.neo4j.bolt.v4.messaging.RunMessage;
 import org.neo4j.bolt.v41.BoltProtocolV41;
@@ -248,55 +244,6 @@ public class TransportTestUtil
         };
     }
 
-<<<<<<< HEAD
-    @SafeVarargs
-    public final Matcher<TransportConnection> eventuallyReceives( int skip, final Matcher<ResponseMessage>... messages )
-    {
-        return new TypeSafeMatcher<TransportConnection>()
-        {
-            @Override
-            protected boolean matchesSafely( TransportConnection conn )
-            {
-                try
-                {
-                    for ( int i = 0; i < skip; i++ )
-                    {
-                        var message = receiveOneResponseMessage( conn );
-                        // we skip all record messages as it is not really a reply to a request message
-                        while ( message instanceof RecordMessage )
-                        {
-                            message = receiveOneResponseMessage( conn );
-                        }
-                    }
-                    for ( Matcher<ResponseMessage> matchesMessage : messages )
-                    {
-                        final ResponseMessage message = receiveOneResponseMessage( conn );
-                        assertThat( message, matchesMessage );
-                    }
-                    return true;
-                }
-                catch ( Exception e )
-                {
-                    throw new RuntimeException( e );
-                }
-            }
-
-            @Override
-            public void describeTo( Description description )
-            {
-                description.appendValueList( "Messages[", ",", "]", messages );
-            }
-        };
-    }
-
-    public enum ResponseMatcherOptionality
-    {
-        REQUIRED,
-        OPTIONAL
-    }
-
-=======
->>>>>>> neo4j/4.1
     @SafeVarargs
     public final <T extends TransportConnection> Consumer<T> eventuallyReceives( int skip,
             Consumer<ResponseMessage>... messagesConsumers )

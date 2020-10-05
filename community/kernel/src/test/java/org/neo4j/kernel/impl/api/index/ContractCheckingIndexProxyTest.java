@@ -33,15 +33,10 @@ import org.neo4j.test.DoubleLatch;
 import org.neo4j.test.ThreadTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
-<<<<<<< HEAD
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-=======
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
->>>>>>> neo4j/4.1
 import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.mockIndexProxy;
 
 class ContractCheckingIndexProxyTest
@@ -169,11 +164,7 @@ class ContractCheckingIndexProxyTest
         IndexProxy outer = newContractCheckingIndexProxy( inner );
 
         // WHEN
-<<<<<<< HEAD
-        outer.force( IOLimiter.UNLIMITED );
-=======
         outer.force( IOLimiter.UNLIMITED, NULL );
->>>>>>> neo4j/4.1
         verifyNoMoreInteractions( inner );
     }
 
@@ -186,19 +177,11 @@ class ContractCheckingIndexProxyTest
 
         // WHEN
         outer.start();
-<<<<<<< HEAD
-        outer.close();
-
-        outer.force( IOLimiter.UNLIMITED );
-        verify( inner ).start();
-        verify( inner ).close();
-=======
         outer.close( NULL );
 
         outer.force( IOLimiter.UNLIMITED, NULL );
         verify( inner ).start();
         verify( inner ).close( any() );
->>>>>>> neo4j/4.1
         verifyNoMoreInteractions( inner );
     }
 

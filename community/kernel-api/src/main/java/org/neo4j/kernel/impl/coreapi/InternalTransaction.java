@@ -21,7 +21,9 @@ package org.neo4j.kernel.impl.coreapi;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
+import org.neo4j.graphdb.Entity;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.internal.kernel.api.connectioninfo.ClientConnectionInfo;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
@@ -56,4 +58,10 @@ public interface InternalTransaction extends Transaction, TransactionalEntityFac
     boolean isOpen();
 
     void terminate( Status reason );
+
+    UUID getDatabaseId();
+
+    String getDatabaseName();
+
+    <E extends Entity> E validateSameDB( E entity );
 }

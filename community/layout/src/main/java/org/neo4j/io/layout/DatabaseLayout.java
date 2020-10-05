@@ -33,8 +33,6 @@ import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.configuration.helpers.NormalizedDatabaseName;
 import org.neo4j.io.fs.FileUtils;
 
-import static org.neo4j.configuration.helpers.DatabaseNameValidator.validateInternalDatabaseName;
-
 /**
  * File layout representation of the particular database. Facade for any kind of file lookup for a particular database storage implementation.
  * Any file retrieved from a layout can be considered a canonical file.

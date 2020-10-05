@@ -90,11 +90,6 @@ public class PageCacheSupportExtension extends StatefulFieldExtension<PageCache>
         return new PageCacheRule().getPageCache( factory, config );
     }
 
-    public PageCache getPageCache( PageSwapperFactory factory )
-    {
-        return new PageCacheRule().getPageCache( factory, config() );
-    }
-
     @Override
     protected Namespace getNameSpace()
     {

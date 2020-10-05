@@ -121,14 +121,6 @@ public enum PrivilegeAction
                 @Override
                 public boolean satisfies( PrivilegeAction action )
                 {
-                    return INDEX.satisfies( action ) || CONSTRAINT.satisfies( action ) || this == action;
-                }
-            },
-
-    CONSTRAINT
-            {
-                public boolean satisfies( PrivilegeAction action )
-                {
                     switch ( action )
                     {
                     case CREATE_CONSTRAINT:
@@ -142,10 +134,7 @@ public enum PrivilegeAction
 
     INDEX
             {
-<<<<<<< HEAD
-=======
                 @Override
->>>>>>> neo4j/4.1
                 public boolean satisfies( PrivilegeAction action )
                 {
                     switch ( action )
@@ -382,18 +371,6 @@ public enum PrivilegeAction
         try
         {
             return PrivilegeAction.valueOf( name.toUpperCase( Locale.ROOT ) );
-        }
-        catch ( IllegalArgumentException e )
-        {
-            return null;
-        }
-    }
-
-    public static PrivilegeAction from( String name )
-    {
-        try
-        {
-            return PrivilegeAction.valueOf( name.toUpperCase() );
         }
         catch ( IllegalArgumentException e )
         {

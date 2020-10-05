@@ -483,11 +483,7 @@ class GBPTreeCountsStoreTest
     {
         final File file = directory.file( "non-existing" );
         final IllegalStateException e = assertThrows( IllegalStateException.class,
-<<<<<<< HEAD
-                () -> new GBPTreeCountsStore( pageCache, file, fs, immediate(), CountsBuilder.EMPTY, true, NO_MONITOR ) );
-=======
                 () -> new GBPTreeCountsStore( pageCache, file, fs, immediate(), CountsBuilder.EMPTY, true, PageCacheTracer.NULL, NO_MONITOR ) );
->>>>>>> neo4j/4.1
         assertTrue( Exceptions.contains( e, t -> t instanceof NoSuchFileException ) );
         assertTrue( Exceptions.contains( e, t -> t instanceof TreeFileNotFoundException ) );
         assertTrue( Exceptions.contains( e, t -> t instanceof IllegalStateException ) );
@@ -587,11 +583,7 @@ class GBPTreeCountsStoreTest
     void shouldDeleteAndMarkForRebuildOnCorruptStore() throws Exception
     {
         // given
-<<<<<<< HEAD
-        try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1 ) )
-=======
         try ( CountsAccessor.Updater updater = countsStore.apply( BASE_TX_ID + 1, NULL ) )
->>>>>>> neo4j/4.1
         {
             updater.incrementNodeCount( LABEL_ID_1, 9 );
         }
@@ -615,21 +607,12 @@ class GBPTreeCountsStoreTest
             CountsAccessor.Updater updater = invocationOnMock.getArgument( 0, CountsAccessor.Updater.class );
             updater.incrementNodeCount( LABEL_ID_1, 3 );
             return null;
-<<<<<<< HEAD
-        } ).when( countsBuilder ).initialize( any() );
-        openCountsStore( countsBuilder );
-
-        // then rebuild store instead of throwing exception
-        verify( countsBuilder ).initialize( any() );
-        assertEquals( 3, countsStore.nodeCount( LABEL_ID_1 ) );
-=======
         } ).when( countsBuilder ).initialize( any(), any(), any() );
         openCountsStore( countsBuilder );
 
         // then rebuild store instead of throwing exception
         verify( countsBuilder ).initialize( any(), any(), any() );
         assertEquals( 3, countsStore.nodeCount( LABEL_ID_1, NULL ) );
->>>>>>> neo4j/4.1
     }
 
     private void incrementNodeCount( long txId, int labelId, int delta )
@@ -758,9 +741,6 @@ class GBPTreeCountsStoreTest
 
     private void instantiateCountsStore( CountsBuilder builder, boolean readOnly, GBPTreeCountsStore.Monitor monitor ) throws IOException
     {
-<<<<<<< HEAD
-        countsStore = new GBPTreeCountsStore( pageCache, countsStoreFile(), fs, immediate(), builder, readOnly, monitor );
-=======
         countsStore = new GBPTreeCountsStore( pageCache, countsStoreFile(), fs, immediate(), builder, readOnly, PageCacheTracer.NULL, monitor );
     }
 
@@ -778,7 +758,6 @@ class GBPTreeCountsStoreTest
         assertThat( pageCacheTracer.pins() ).isZero();
         assertThat( pageCacheTracer.unpins() ).isZero();
         assertThat( pageCacheTracer.hits() ).isZero();
->>>>>>> neo4j/4.1
     }
 
     private static class TestableCountsBuilder implements CountsBuilder

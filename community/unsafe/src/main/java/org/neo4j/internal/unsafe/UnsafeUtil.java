@@ -400,25 +400,6 @@ public final class UnsafeUtil
      */
     public static void freeByteBuffer( ByteBuffer byteBuffer, MemoryTracker memoryTracker )
     {
-<<<<<<< HEAD
-        try
-        {
-            long addr = allocateMemory( size );
-            setMemory( addr, size, (byte) 0 );
-            return newDirectByteBuffer( addr, size );
-        }
-        catch ( Exception e )
-        {
-            throw new RuntimeException( e );
-        }
-    }
-
-    /**
-     * Allocates a {@link ByteBuffer}
-     * @param byteBuffer The ByteBuffer to free, allocated by {@link #allocateByteBuffer(int)}
-     */
-    public static void freeByteBuffer( ByteBuffer byteBuffer )
-    {
         int bytes = byteBuffer.capacity();
         long addr = getDirectByteBufferAddress( byteBuffer );
         if ( addr == 0 )
@@ -426,15 +407,6 @@ public final class UnsafeUtil
             return; // This buffer has already been freed.
         }
 
-=======
-        int bytes = byteBuffer.capacity();
-        long addr = getDirectByteBufferAddress( byteBuffer );
-        if ( addr == 0 )
-        {
-            return; // This buffer has already been freed.
-        }
-
->>>>>>> neo4j/4.1
         // Nerf the byte buffer, causing all future accesses to get out-of-bounds.
         unsafe.putInt( byteBuffer, directByteBufferMarkOffset, -1 );
         unsafe.putInt( byteBuffer, directByteBufferPositionOffset, 0 );
@@ -443,11 +415,7 @@ public final class UnsafeUtil
         unsafe.putLong( byteBuffer, directByteBufferAddressOffset, 0 );
 
         // Free the buffer.
-<<<<<<< HEAD
-        free( addr, bytes );
-=======
         free( addr, bytes, memoryTracker );
->>>>>>> neo4j/4.1
     }
 
     /**
@@ -477,33 +445,11 @@ public final class UnsafeUtil
         }
 
         addAllocatedPointer( pointer, bytes );
-<<<<<<< HEAD
-        GlobalMemoryTracker.INSTANCE.allocated( bytes );
-=======
         memoryTracker.allocateNative( bytes );
->>>>>>> neo4j/4.1
         if ( DIRTY_MEMORY )
         {
             setMemory( pointer, bytes, (byte) 0xA5 );
         }
-<<<<<<< HEAD
-        return pointer;
-    }
-
-    /**
-     * Allocate a block of memory of the given size in bytes and update memory allocation tracker accordingly.
-     * <p>
-     * The memory is aligned such that it can be used for any data type.
-     * The memory is uninitialised, so it may contain random garbage, or it may not.
-     * @return a pointer to the allocated memory
-     */
-    public static long allocateMemory( long bytes, MemoryAllocationTracker allocationTracker ) throws NativeMemoryAllocationRefusedError
-    {
-        assert allocationTracker != GlobalMemoryTracker.INSTANCE;
-        final long pointer = allocateMemory( bytes );
-        allocationTracker.allocated( bytes );
-=======
->>>>>>> neo4j/4.1
         return pointer;
     }
 

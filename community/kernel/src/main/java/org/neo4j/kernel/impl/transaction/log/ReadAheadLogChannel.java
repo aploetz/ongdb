@@ -20,19 +20,12 @@
 package org.neo4j.kernel.impl.transaction.log;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import org.neo4j.io.fs.ReadAheadChannel;
 import org.neo4j.io.fs.StoreChannel;
-<<<<<<< HEAD
-import org.neo4j.io.memory.ByteBuffers;
-
-import static org.neo4j.io.memory.ByteBuffers.allocateDirect;
-=======
 import org.neo4j.io.memory.NativeScopedBuffer;
 import org.neo4j.io.memory.ScopedBuffer;
 import org.neo4j.memory.MemoryTracker;
->>>>>>> neo4j/4.1
 
 /**
  * Basically a sequence of {@link StoreChannel channels} seamlessly seen as one.
@@ -40,40 +33,24 @@ import org.neo4j.memory.MemoryTracker;
 public class ReadAheadLogChannel extends ReadAheadChannel<LogVersionedStoreChannel> implements ReadableLogChannel
 {
     private final LogVersionBridge bridge;
-    private final ByteBuffer buffer;
 
     public ReadAheadLogChannel( LogVersionedStoreChannel startingChannel, MemoryTracker memoryTracker )
     {
-<<<<<<< HEAD
-        this( startingChannel, LogVersionBridge.NO_MORE_CHANNELS, allocateDirect( DEFAULT_READ_AHEAD_SIZE ) );
-=======
         this( startingChannel, LogVersionBridge.NO_MORE_CHANNELS, new NativeScopedBuffer( DEFAULT_READ_AHEAD_SIZE, memoryTracker ) );
->>>>>>> neo4j/4.1
     }
 
     public ReadAheadLogChannel( LogVersionedStoreChannel startingChannel, LogVersionBridge bridge, MemoryTracker memoryTracker )
     {
-<<<<<<< HEAD
-        this( startingChannel, bridge, allocateDirect( DEFAULT_READ_AHEAD_SIZE ) );
-=======
         this( startingChannel, bridge, new NativeScopedBuffer( DEFAULT_READ_AHEAD_SIZE, memoryTracker ) );
->>>>>>> neo4j/4.1
     }
 
     /**
      * This constructor is private to ensure that the given buffer always comes form one of our own constructors.
      */
-<<<<<<< HEAD
-    private ReadAheadLogChannel( LogVersionedStoreChannel startingChannel, LogVersionBridge bridge, ByteBuffer buffer )
-    {
-        super( startingChannel, buffer );
-=======
     private ReadAheadLogChannel( LogVersionedStoreChannel startingChannel, LogVersionBridge bridge, ScopedBuffer scopedBuffer )
     {
         super( startingChannel, scopedBuffer );
->>>>>>> neo4j/4.1
         this.bridge = bridge;
-        this.buffer = buffer;
     }
 
     @Override
@@ -105,9 +82,5 @@ public class ReadAheadLogChannel extends ReadAheadChannel<LogVersionedStoreChann
     public void close() throws IOException
     {
         super.close();
-<<<<<<< HEAD
-        ByteBuffers.releaseBuffer( buffer );
-=======
->>>>>>> neo4j/4.1
     }
 }

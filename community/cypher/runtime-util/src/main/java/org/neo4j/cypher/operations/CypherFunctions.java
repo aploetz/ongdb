@@ -585,10 +585,7 @@ public final class CypherFunctions
         }
     }
 
-<<<<<<< HEAD
-=======
     @CalledFromGeneratedCode
->>>>>>> neo4j/4.1
     public static boolean containerIndexExists( AnyValue container,
                                                 AnyValue index,
                                                 DbAccess dbAccess,
@@ -599,30 +596,17 @@ public final class CypherFunctions
         assert container != NO_VALUE && index != NO_VALUE : "NO_VALUE checks need to happen outside this call";
         if ( container instanceof VirtualNodeValue )
         {
-<<<<<<< HEAD
-            return dbAccess.nodeHasProperty( ((VirtualNodeValue) container).id(),  dbAccess.propertyKey( asString( index ) ),
-=======
             return dbAccess.nodeHasProperty( ((VirtualNodeValue) container).id(), dbAccess.propertyKey( asString( index ) ),
->>>>>>> neo4j/4.1
                                              nodeCursor, propertyCursor );
         }
         else if ( container instanceof VirtualRelationshipValue )
         {
-<<<<<<< HEAD
-            return dbAccess.relationshipHasProperty( ((VirtualRelationshipValue) container).id(),  dbAccess.propertyKey( asString( index ) ),
-                                             relationshipScanCursor, propertyCursor );
-        }
-        if ( container instanceof MapValue )
-        {
-            return ((MapValue) container).containsKey(  asString( index ) );
-=======
             return dbAccess.relationshipHasProperty( ((VirtualRelationshipValue) container).id(), dbAccess.propertyKey( asString( index ) ),
                                                      relationshipScanCursor, propertyCursor );
         }
         if ( container instanceof MapValue )
         {
             return ((MapValue) container).containsKey( asString( index ) );
->>>>>>> neo4j/4.1
         }
         else
         {
@@ -633,10 +617,7 @@ public final class CypherFunctions
         }
     }
 
-<<<<<<< HEAD
-=======
     @CalledFromGeneratedCode
->>>>>>> neo4j/4.1
     public static AnyValue head( AnyValue container )
     {
         assert container != NO_VALUE : "NO_VALUE checks need to happen outside this call";

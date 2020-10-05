@@ -54,10 +54,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.neo4j.internal.id.indexed.IdRange.IdState.DELETED;
 import static org.neo4j.internal.id.indexed.IndexedIdGenerator.NO_MONITOR;
-<<<<<<< HEAD
-=======
 import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
->>>>>>> neo4j/4.1
 
 @PageCacheExtension
 class IdRangeMarkerTest
@@ -241,11 +238,7 @@ class IdRangeMarkerTest
 
         // when
         MutableLongSet expectedIds = LongSets.mutable.empty();
-<<<<<<< HEAD
-        try ( IdRangeMarker marker = new IdRangeMarker( idsPerEntry, layout, tree.writer(), mock( Lock.class ), IdRangeMerger.DEFAULT, true,
-=======
         try ( IdRangeMarker marker = new IdRangeMarker( idsPerEntry, layout, tree.writer( NULL ), mock( Lock.class ), IdRangeMerger.DEFAULT, true,
->>>>>>> neo4j/4.1
                 new AtomicBoolean(), 1, new AtomicLong( reservedId - 1 ), true, NO_MONITOR ) )
         {
             for ( long id = reservedId - 1; id <= reservedId + 1; id++ )
@@ -314,10 +307,6 @@ class IdRangeMarkerTest
 
     private IdRangeMarker instantiateMarker( Lock lock, ValueMerger merger ) throws IOException
     {
-<<<<<<< HEAD
-        return new IdRangeMarker( idsPerEntry, layout, tree.writer(), lock, merger, true, new AtomicBoolean(), 1, highestWritternId, true, NO_MONITOR );
-=======
         return new IdRangeMarker( idsPerEntry, layout, tree.writer( NULL ), lock, merger, true, new AtomicBoolean(), 1, highestWritternId, true, NO_MONITOR );
->>>>>>> neo4j/4.1
     }
 }

@@ -169,11 +169,7 @@ public class RecordStorageEngineFactory implements StorageEngineFactory
     public TransactionMetaDataStore transactionMetaDataStore( FileSystemAbstraction fs, DatabaseLayout databaseLayout, Config config, PageCache pageCache,
             PageCacheTracer cacheTracer )
     {
-<<<<<<< HEAD
-        RecordFormats recordFormats = selectForStoreOrConfig( Config.defaults(), databaseLayout, fs, pageCache, NullLogProvider.getInstance() );
-=======
         RecordFormats recordFormats = selectForStoreOrConfig( Config.defaults(), databaseLayout, fs, pageCache, NullLogProvider.getInstance(), cacheTracer );
->>>>>>> neo4j/4.1
         IdGeneratorFactory factory;
         if ( config.get( GraphDatabaseSettings.read_only ) )
         {
@@ -183,11 +179,7 @@ public class RecordStorageEngineFactory implements StorageEngineFactory
         {
             factory = new DefaultIdGeneratorFactory( fs, immediate() );
         }
-<<<<<<< HEAD
-        return new StoreFactory( databaseLayout, config, factory, pageCache, fs, recordFormats, NullLogProvider.getInstance() )
-=======
         return new StoreFactory( databaseLayout, config, factory, pageCache, fs, recordFormats, NullLogProvider.getInstance(), cacheTracer, immutable.empty() )
->>>>>>> neo4j/4.1
                 .openNeoStores( META_DATA ).getMetaDataStore();
     }
 
@@ -268,13 +260,8 @@ public class RecordStorageEngineFactory implements StorageEngineFactory
             keyTokenRecord.initialize( true, nameId );
             keyTokenRecord.setInternal( internal );
             keyTokenRecord.setCreated();
-<<<<<<< HEAD
-            keyTokenStore.prepareForCommit( keyTokenRecord );
-            keyTokenStore.updateRecord( keyTokenRecord );
-=======
             keyTokenStore.prepareForCommit( keyTokenRecord, cursorTracer );
             keyTokenStore.updateRecord( keyTokenRecord, cursorTracer );
->>>>>>> neo4j/4.1
             keyTokenStore.setHighestPossibleIdInUse( keyTokenRecord.getId() );
             return Math.toIntExact( tokenId );
         };

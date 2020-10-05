@@ -173,12 +173,8 @@ abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("a", "b")
       .apply()
-<<<<<<< HEAD
-      .|.limit(limit) // assuming this won't be fused
-=======
       .|.limit(limit)
       .|.nonFuseable()
->>>>>>> neo4j/4.1
       .|.unwind("range(1, 10) AS b")
       .|.argument("a")
       .input(variables = Seq("a"))
@@ -204,12 +200,8 @@ abstract class UnwindTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("a", "b", "c")
       .apply()
-<<<<<<< HEAD
-      .|.limit(limit) // assuming this won't be fused
-=======
       .|.limit(limit)
       .|.nonFuseable()
->>>>>>> neo4j/4.1
       .|.unwind("range(-a*10, -a*10 + 10) AS c")
       .|.unwind("range( a*10,  a*10 + 10) AS b")
       .|.argument("a")

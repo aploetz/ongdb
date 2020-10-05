@@ -32,8 +32,6 @@ import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
 
 import scala.collection.immutable.BitSet
 
-import scala.collection.immutable.BitSet
-
 class JoinSolverStepTest extends CypherFunSuite with LogicalPlanningTestSupport2 {
 
   implicit def converter(s: Symbol): String = s.toString()

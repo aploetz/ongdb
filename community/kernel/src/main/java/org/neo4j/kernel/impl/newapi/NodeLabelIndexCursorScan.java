@@ -25,10 +25,7 @@ import org.eclipse.collections.impl.factory.primitive.LongSets;
 
 import org.neo4j.internal.index.label.TokenScan;
 import org.neo4j.internal.kernel.api.NodeLabelIndexCursor;
-<<<<<<< HEAD
-=======
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.index.IndexProgressor;
 import org.neo4j.kernel.api.txstate.TransactionState;
 
@@ -41,11 +38,7 @@ class NodeLabelIndexCursorScan extends BaseCursorScan<NodeLabelIndexCursor,Token
 
     NodeLabelIndexCursorScan( Read read, int label, TokenScan tokenScan, PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        super( labelScan, read, () -> read.txState().nodesWithLabelChanged( label ).getAdded().toArray() );
-=======
         super( tokenScan, read, () -> read.txState().nodesWithLabelChanged( label ).getAdded().toArray(), cursorTracer );
->>>>>>> neo4j/4.1
         this.label = label;
         if ( hasChanges )
         {
@@ -64,11 +57,7 @@ class NodeLabelIndexCursorScan extends BaseCursorScan<NodeLabelIndexCursor,Token
     {
         DefaultNodeLabelIndexCursor indexCursor = (DefaultNodeLabelIndexCursor) cursor;
         indexCursor.setRead( read );
-<<<<<<< HEAD
-        IndexProgressor indexProgressor = storageScan.initializeBatch( indexCursor.nodeLabelClient(), sizeHint );
-=======
         IndexProgressor indexProgressor = storageScan.initializeBatch( indexCursor.nodeLabelClient(), sizeHint, cursorTracer );
->>>>>>> neo4j/4.1
 
         if ( indexProgressor == IndexProgressor.EMPTY && !addedItems.hasNext() )
         {

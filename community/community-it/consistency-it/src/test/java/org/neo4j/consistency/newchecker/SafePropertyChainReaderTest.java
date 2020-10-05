@@ -374,11 +374,7 @@ class SafePropertyChainReaderTest extends CheckerTestBase
 
     private void checkNode( SafePropertyChainReader checker, long nodeId )
     {
-<<<<<<< HEAD
-        boolean chainOk = checker.read( new IntObjectHashMap<>(), loadNode( nodeId ), reporter::forNode );
-=======
         boolean chainOk = checker.read( new IntObjectHashMap<>(), loadNode( nodeId ), reporter::forNode, PageCursorTracer.NULL );
->>>>>>> neo4j/4.1
         assertFalse( chainOk );
     }
 }

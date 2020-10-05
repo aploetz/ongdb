@@ -736,17 +736,11 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
             }
         } );
         KernelTransactionImplementation transaction = newNotInitializedTransaction( leaseClient );
-<<<<<<< HEAD
-        transaction.initialize( 0, BASE_TX_COMMIT_TIMESTAMP, mock( StatementLocks.class ), KernelTransaction.Type.implicit,
-=======
         transaction.initialize( 0, BASE_TX_COMMIT_TIMESTAMP, mock( StatementLocks.class ), KernelTransaction.Type.IMPLICIT,
->>>>>>> neo4j/4.1
                 mock( SecurityContext.class ), 0, 1L, EMBEDDED_CONNECTION );
         assertEquals( "KernelTransaction[lease:" + leaseId + "]", transaction.toString() );
     }
 
-<<<<<<< HEAD
-=======
     @Test
     void dynamicChangeTransactionHeapLimit() throws TransactionFailureException
     {
@@ -766,7 +760,6 @@ class KernelTransactionImplementationTest extends KernelTransactionTestBase
         }
     }
 
->>>>>>> neo4j/4.1
     private LoginContext loginContext( boolean isWriteTx )
     {
         return isWriteTx ? AnonymousContext.write() : AnonymousContext.read();

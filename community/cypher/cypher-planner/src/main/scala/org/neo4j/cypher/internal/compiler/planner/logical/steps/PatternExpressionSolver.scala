@@ -19,18 +19,10 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.steps
 
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.compiler.planner.logical.{LogicalPlanningContext, patternExpressionRewriter}
-import org.neo4j.cypher.internal.ir.InterestingOrder
-import org.neo4j.cypher.internal.ir.{HasMappableExpressions, QueryGraph}
-import org.neo4j.cypher.internal.logical.plans.{Argument, LogicalPlan}
-import org.neo4j.cypher.internal.v4_0.expressions._
-import org.neo4j.cypher.internal.v4_0.expressions.functions.{Coalesce, Exists, Head}
-import org.neo4j.cypher.internal.v4_0.rewriting.rewriters.{PatternExpressionPatternElementNamer, projectNamedPaths}
-import org.neo4j.cypher.internal.v4_0.util.{FreshIdNameGenerator, Rewriter, UnNamedNameGenerator, topDown}
-=======
 import org.neo4j.cypher.internal.compiler.planner.logical.LogicalPlanningContext
 import org.neo4j.cypher.internal.compiler.planner.logical.patternExpressionRewriter
+import org.neo4j.cypher.internal.compiler.planner.logical.steps.selectPatternPredicates.planPredicates
+import org.neo4j.cypher.internal.compiler.planner.logical.steps.selectPatternPredicates.onePredicate
 import org.neo4j.cypher.internal.expressions.CaseExpression
 import org.neo4j.cypher.internal.expressions.ContainerIndex
 import org.neo4j.cypher.internal.expressions.EveryPath
@@ -39,6 +31,8 @@ import org.neo4j.cypher.internal.expressions.Expression
 import org.neo4j.cypher.internal.expressions.FunctionInvocation
 import org.neo4j.cypher.internal.expressions.ListSlice
 import org.neo4j.cypher.internal.expressions.NodePattern
+import org.neo4j.cypher.internal.expressions.Not
+import org.neo4j.cypher.internal.expressions.Ors
 import org.neo4j.cypher.internal.expressions.PathExpression
 import org.neo4j.cypher.internal.expressions.PathStep
 import org.neo4j.cypher.internal.expressions.PatternComprehension
@@ -62,7 +56,6 @@ import org.neo4j.cypher.internal.util.FreshIdNameGenerator
 import org.neo4j.cypher.internal.util.Rewriter
 import org.neo4j.cypher.internal.util.UnNamedNameGenerator
 import org.neo4j.cypher.internal.util.topDown
->>>>>>> neo4j/4.1
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -90,21 +83,6 @@ object PatternExpressionSolver {
   private val pathStepBuilder: EveryPath => PathStep = projectNamedPaths.patternPartPathExpression
 
   /**
-<<<<<<< HEAD
-    * Get a Solver to solve multiple expressions and finally return a rewritten plan of the given source.
-    *
-    * The usage pattern is like this:
-    *
-    * {{{
-    * val solver = PatternExpressionSolver.solverFor(source, context)
-    * val rewrittenExpression = solver.solve(someExpressionForANewPlan)
-    * val rewrittenSource = solver.rewrittenPlan()
-    * // Proceed to plan a new operator using rewrittenExpression instead of someExpressionForANewPlan, and rewrittenSource instead of source
-    * }}}
-    *
-    * @param source the LogicalPlan that a new operator will be put on top of.
-    */
-=======
    * Get a Solver to solve multiple expressions and finally return a rewritten plan of the given source.
    *
    * The usage pattern is like this:
@@ -118,27 +96,10 @@ object PatternExpressionSolver {
    *
    * @param source the LogicalPlan that a new operator will be put on top of.
    */
->>>>>>> neo4j/4.1
   def solverFor(source: LogicalPlan,
                 context: LogicalPlanningContext): SolverForInnerPlan = new SolverForInnerPlan(source, context)
 
   /**
-<<<<<<< HEAD
-    * Get a Solver to solve multiple expressions and finally rewrite a planned leaf plan.
-    *
-    * The usage pattern is like this:
-    *
-    * {{{
-    * val solver = PatternExpressionSolver.solverForLeafPlan(argumentIds, context)
-    * val rewrittenExpression = solver.solve(someExpressionForANewPlan)
-    * val newArguments = solver.newArguments
-    * val plan = // plan leaf plan using `argumentIds ++ newArguments`
-    * val rewrittenPlan = solver.rewriteLeafPlan(plan)
-    * }}}
-    *
-    * @param argumentIds the argument IDs of the leaf plan that is about to be planned
-    */
-=======
    * Get a Solver to solve multiple expressions and finally rewrite a planned leaf plan.
    *
    * The usage pattern is like this:
@@ -153,17 +114,12 @@ object PatternExpressionSolver {
    *
    * @param argumentIds the argument IDs of the leaf plan that is about to be planned
    */
->>>>>>> neo4j/4.1
   def solverForLeafPlan(argumentIds: Set[String],
                         context: LogicalPlanningContext): SolverForLeafPlan = new SolverForLeafPlan(argumentIds, context)
 
   abstract class Solver(initialPlan: LogicalPlan,
-<<<<<<< HEAD
-                                context: LogicalPlanningContext) {
-=======
 
                         context: LogicalPlanningContext) {
->>>>>>> neo4j/4.1
     private val patternExpressionSolver = solvePatternExpressions(initialPlan.availableSymbols, context)
     private val patternComprehensionSolver = solvePatternComprehensions(initialPlan.availableSymbols, context)
     protected var resultPlan: LogicalPlan = initialPlan
@@ -207,16 +163,10 @@ object PatternExpressionSolver {
   }
 
   class SolverForLeafPlan(argumentIds: Set[String],  context: LogicalPlanningContext)
-<<<<<<< HEAD
-      extends Solver(
-        context.logicalPlanProducer.ForPatternExpressionSolver.planArgument(argumentIds, context), // When we have a leaf plan, we start with a single row on the LHS of the RollupApply
-        context){
-=======
     extends Solver(
       context.logicalPlanProducer.ForPatternExpressionSolver.planArgument(argumentIds, context), // When we have a leaf plan, we start with a single row on the LHS of the RollupApply
 
       context){
->>>>>>> neo4j/4.1
 
     def newArguments: Set[String] = {
       arguments.result()
@@ -418,19 +368,29 @@ object PatternExpressionSolver {
   object ForExistentialSubquery {
     def solve(source: LogicalPlan, expressions: Seq[Expression], interestingOrder: InterestingOrder, context: LogicalPlanningContext): (Seq[Expression], LogicalPlan) = {
       expressions.foldLeft((Seq.empty[Expression], source)) {
-<<<<<<< HEAD
           case ((solvedExprs, plan), e: ExistsSubClause) =>
             val subQueryPlan = selectPatternPredicates.planInnerOfSubquery(plan, context, interestingOrder, e)
             val semiApplyPlan = context.logicalPlanProducer.planSemiApplyInHorizon(plan, subQueryPlan, e, context)
             (solvedExprs :+ e, semiApplyPlan)
+          case ((solvedExprs, plan), not@Not(e: ExistsSubClause)) =>
+            val subQueryPlan = selectPatternPredicates.planInnerOfSubquery(plan, context, interestingOrder, e)
+            val antiSemiApplyPlan = context.logicalPlanProducer.planAntiSemiApplyInHorizon(plan, subQueryPlan, not, context)
+            (solvedExprs :+ not, antiSemiApplyPlan)
+          case ((solvedExprs, plan), ors@Ors(exprs)) =>
+            val (patternExpressions, expressions) = exprs.partition {
+              case ExistsSubClause(_, _) => true
+              case Not(ExistsSubClause(_, _)) => true
+              case Exists(_: PatternExpression) => true
+              case Not(Exists(_: PatternExpression)) => true
+              case _ => false
+            }
+            // Only plan if the OR contains an EXISTS.
+            if (patternExpressions.nonEmpty) {
+              val (newPlan, solvedPredicates) = planPredicates(plan, patternExpressions, expressions, None, interestingOrder, context)
+              val orsPlan = context.logicalPlanProducer.solvePredicateInHorizon(newPlan, onePredicate(solvedPredicates), context)
+              (solvedExprs :+ ors, orsPlan)
+            } else (solvedExprs, plan)
           case (acc, _) => acc
-=======
-        case ((solvedExprs, plan), e: ExistsSubClause) =>
-          val subQueryPlan = selectPatternPredicates.planInnerOfSubquery(plan, context, interestingOrder, e)
-          val semiApplyPlan = context.logicalPlanProducer.planSemiApplyInHorizon(plan, subQueryPlan, e, context)
-          (solvedExprs :+ e, semiApplyPlan)
-        case (acc, _) => acc
->>>>>>> neo4j/4.1
       }
     }
   }

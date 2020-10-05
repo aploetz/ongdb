@@ -292,11 +292,7 @@ public class NodeRelationshipCacheTest
         int typeId = 10;
         int chunkSize = 10;
         List<Long> changedNodes = new ArrayList<>();
-<<<<<<< HEAD
-        cache = new NodeRelationshipCache( NumberArrayFactory.HEAP, 2, chunkSize, base );
-=======
         cache = new NodeRelationshipCache( NumberArrayFactory.HEAP, 2, chunkSize, base, INSTANCE );
->>>>>>> neo4j/4.1
         cache.setNodeCount( nodes );
         for ( long nodeId = 0; nodeId < nodes; nodeId++ )
         {

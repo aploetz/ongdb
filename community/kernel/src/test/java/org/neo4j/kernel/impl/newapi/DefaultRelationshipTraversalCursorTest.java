@@ -70,26 +70,9 @@ class DefaultRelationshipTraversalCursorTest
     void regularTraversalWithTxState() throws NoSuchFieldException
     {
         // given
-<<<<<<< HEAD
-        StorageRelationshipTraversalCursor storeCursor =
-                storeCursor(
-                        rel( 100, node, 50, type ), // <- the filter template
-                        rel( 102, node, 51, type ),
-                        rel( 104, node, 52, type ) );
-
-        DefaultRelationshipTraversalCursor cursor = new DefaultRelationshipTraversalCursor( pool::accept, storeCursor, mock( DefaultNodeCursor.class ) );
-        Read read = txState(
-                rel( 3, node, 50, type ),
-                rel( 4, 50, node, type ),
-                rel( 5, node, 50, type2 ),
-                rel( 6, node, node, type ),
-                rel( 7, node, 52, type )
-        );
-=======
         StorageRelationshipTraversalCursor storeCursor = storeCursor( 100, 102, 104 );
         DefaultRelationshipTraversalCursor cursor = new DefaultRelationshipTraversalCursor( pool::accept, storeCursor, mock( DefaultNodeCursor.class ) );
         Read read = txState( 3, 4 );
->>>>>>> neo4j/4.1
 
         // when
         cursor.init( node, relationship, ALL_RELATIONSHIPS, read );
@@ -200,37 +183,6 @@ class DefaultRelationshipTraversalCursorTest
 
     // HELPERS
 
-<<<<<<< HEAD
-    private void regularTraversal( long reference, boolean dense ) throws NoSuchFieldException
-    {
-        // given
-        StorageRelationshipTraversalCursor storeCursor = storeCursor( 100, 102, 104 );
-        DefaultRelationshipTraversalCursor cursor = new DefaultRelationshipTraversalCursor( pool::accept, storeCursor, mock( DefaultNodeCursor.class ) );
-        Read read = emptyTxState();
-
-        // when
-        cursor.init( node, reference, dense, read );
-
-        // then
-        assertRelationships( cursor, 100, 102, 104 );
-    }
-
-    private void regularTraversalWithTxState( long reference, boolean dense ) throws NoSuchFieldException
-    {
-        // given
-        StorageRelationshipTraversalCursor storeCursor = storeCursor( 100, 102, 104 );
-        DefaultRelationshipTraversalCursor cursor = new DefaultRelationshipTraversalCursor( pool::accept, storeCursor, mock( DefaultNodeCursor.class ) );
-        Read read = txState( 3, 4 );
-
-        // when
-        cursor.init( node, reference, dense, read );
-
-        // then
-        assertRelationships( cursor, 3, 4, 100, 102, 104 );
-    }
-
-=======
->>>>>>> neo4j/4.1
     private static Read emptyTxState() throws NoSuchFieldException
     {
         Read read = mock( Read.class );

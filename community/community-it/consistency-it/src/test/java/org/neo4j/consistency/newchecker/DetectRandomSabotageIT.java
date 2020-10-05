@@ -137,11 +137,6 @@ public class DetectRandomSabotageIT
     private NeoStores neoStores;
     private DependencyResolver resolver;
 
-<<<<<<< HEAD
-    protected DatabaseManagementService getDbms( File home )
-    {
-        return new TestDatabaseManagementServiceBuilder( home ).build();
-=======
     private DatabaseManagementService getDbms( File home )
     {
         return addConfig( createBuilder( home ) ).build();
@@ -150,7 +145,6 @@ public class DetectRandomSabotageIT
     protected TestDatabaseManagementServiceBuilder createBuilder( File home )
     {
         return new TestDatabaseManagementServiceBuilder( home );
->>>>>>> neo4j/4.1
     }
 
     @BeforeEach
@@ -482,11 +476,7 @@ public class DetectRandomSabotageIT
                     {
                         RelationshipStore store = stores.getRelationshipStore();
                         RelationshipRecord relationship = randomRecord( random, store, usedRecord() );
-<<<<<<< HEAD
-                        RelationshipRecord before = store.getRecord( relationship.getId(), store.newRecord(), RecordLoad.NORMAL );
-=======
                         RelationshipRecord before = store.getRecord( relationship.getId(), store.newRecord(), RecordLoad.NORMAL, NULL );
->>>>>>> neo4j/4.1
                         LongSupplier rng = () -> randomIdOrSometimesDefault( random, NULL_REFERENCE.longValue(), id -> true );
                         switch ( random.nextInt( 4 ) )
                         {
@@ -542,11 +532,7 @@ public class DetectRandomSabotageIT
                                     }
 
                                     PropertyStore propertyStore = stores.getPropertyStore();
-<<<<<<< HEAD
-                                    PropertyRecord record = propertyStore.getRecord( propertyId, propertyStore.newRecord(), RecordLoad.CHECK );
-=======
                                     PropertyRecord record = propertyStore.getRecord( propertyId, propertyStore.newRecord(), RecordLoad.CHECK, NULL );
->>>>>>> neo4j/4.1
                                     return !record.inUse() || !NULL_REFERENCE.is( record.getPrevProp() );
                                 } ) );
                     }
@@ -950,21 +936,12 @@ public class DetectRandomSabotageIT
         }
 
         protected long randomLargeSometimesNegative( RandomRule random )
-<<<<<<< HEAD
         {
             return randomLargeSometimesNegative( random, id -> true );
         }
 
         protected long randomLargeSometimesNegative( RandomRule random, LongPredicate filter )
         {
-=======
-        {
-            return randomLargeSometimesNegative( random, id -> true );
-        }
-
-        protected long randomLargeSometimesNegative( RandomRule random, LongPredicate filter )
-        {
->>>>>>> neo4j/4.1
             long value;
             do
             {

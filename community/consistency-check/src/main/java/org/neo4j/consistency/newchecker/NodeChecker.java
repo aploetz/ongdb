@@ -234,13 +234,8 @@ class NodeChecker implements Checker
             {
                 int label = toIntExact( longLabel );
                 checkValidToken( nodeCursor, label, tokenHolders.labelTokens(), neoStores.getLabelTokenStore(),
-<<<<<<< HEAD
-                        ( node, token ) -> reporter.forNode( recordLoader.node( node.getId() ) ).illegalLabel(),
-                        ( node, token ) -> reporter.forNode( recordLoader.node( node.getId() ) ).labelNotInUse( token ) );
-=======
                         ( node, token ) -> reporter.forNode( recordLoader.node( node.getId(), cursorTracer ) ).illegalLabel(),
                         ( node, token ) -> reporter.forNode( recordLoader.node( node.getId(), cursorTracer ) ).labelNotInUse( token ), cursorTracer );
->>>>>>> neo4j/4.1
                 if ( prevLabel != label )
                 {
                     observedCounts.incrementNodeLabel( label, 1 );
@@ -433,12 +428,8 @@ class NodeChecker implements Checker
         PropertySchemaType propertySchemaType = schema.propertySchemaType();
         long[] indexEntityTokenIds = toLongArray( schema.getEntityTokenIds() );
         indexEntityTokenIds = sortAndDeduplicate( indexEntityTokenIds );
-<<<<<<< HEAD
-        try ( BoundedIterable<Long> allEntriesReader = accessor.newAllEntriesReader( range.from(), lastRange ? Long.MAX_VALUE : range.to() ) )
-=======
         try ( var cursorTracer = context.pageCacheTracer.createPageCursorTracer( NODE_INDEXES_CHECKER_TAG );
               var allEntriesReader = accessor.newAllEntriesReader( range.from(), lastRange ? Long.MAX_VALUE : range.to(), cursorTracer ) )
->>>>>>> neo4j/4.1
         {
             for ( long entityId : allEntriesReader )
             {

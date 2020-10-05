@@ -36,11 +36,8 @@ import org.neo4j.values.virtual.MapValue;
 
 import static java.lang.String.format;
 import static java.util.Collections.singletonList;
-<<<<<<< HEAD
-=======
 import static org.neo4j.memory.HeapEstimator.shallowSizeOfInstance;
 import static org.neo4j.memory.HeapEstimator.sizeOf;
->>>>>>> neo4j/4.1
 import static org.neo4j.values.utils.ValueMath.HASH_CONSTANT;
 
 public class PointValue extends ScalarValue implements Point, Comparable<PointValue>

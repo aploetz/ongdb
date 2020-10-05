@@ -21,6 +21,7 @@ package org.neo4j.kernel.api;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.graphdb.NotInTransactionException;
@@ -415,4 +416,16 @@ public interface KernelTransaction extends AssertOpen, AutoCloseable
         @Override
         void close();
     }
+
+    /**
+     * The id of the database which the transaction is connected to.
+     * @return database id.
+     */
+    UUID getDatabaseId();
+
+    /**
+     * The name of the database which the transaction is connected to.
+     * @return database name.
+     */
+    String getDatabaseName();
 }

@@ -9,16 +9,9 @@ Apache Software License, Version 2.0
   Apache Commons Lang
   Caffeine cache
   Gherkin Repackaged Dependencies
-<<<<<<< HEAD
-  Java Concurrency Tools Core Library
-  Joda convert
-  Joda-Time
-  Lucene codecs
-=======
   Java Agent for Memory Measurements
   Java Concurrency Tools Core Library
   Jettison
->>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
   Lucene Memory

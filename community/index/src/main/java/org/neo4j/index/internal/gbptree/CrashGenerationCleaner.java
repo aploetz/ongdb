@@ -108,11 +108,7 @@ class CrashGenerationCleaner
 
         try
         {
-<<<<<<< HEAD
-            activeThreadLatch.await();
-=======
             Futures.getAll( cleanerFutures );
->>>>>>> neo4j/4.1
         }
         catch ( Throwable e )
         {

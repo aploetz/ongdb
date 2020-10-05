@@ -28,15 +28,23 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.stream.Stream;
@@ -46,6 +54,7 @@ import org.neo4j.internal.helpers.Exceptions;
 import org.neo4j.internal.id.FreeIds;
 import org.neo4j.internal.id.IdCapacityExceededException;
 import org.neo4j.internal.id.IdGenerator.Marker;
+import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.internal.id.IdValidator;
 import org.neo4j.io.pagecache.PageCache;
@@ -64,10 +73,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-<<<<<<< HEAD
-import static org.junit.jupiter.api.Assertions.fail;
-=======
->>>>>>> neo4j/4.1
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -108,15 +113,9 @@ class IndexedIdGeneratorTest
     @AfterEach
     void stop()
     {
-<<<<<<< HEAD
-        if ( freelist != null )
-        {
-            freelist.close();
-=======
         if ( idGenerator != null )
         {
             idGenerator.close();
->>>>>>> neo4j/4.1
         }
     }
 
@@ -355,11 +354,7 @@ class IndexedIdGeneratorTest
         markUsed( id );
         markDeleted( id );
         markFree( id );
-<<<<<<< HEAD
-        try ( IdRangeMarker marker = freelist.lockAndInstantiateMarker( true ) )
-=======
         try ( IdRangeMarker marker = idGenerator.lockAndInstantiateMarker( true, NULL ) )
->>>>>>> neo4j/4.1
         {
             marker.markReserved( id );
         }
@@ -548,16 +543,6 @@ class IndexedIdGeneratorTest
     {
         stop();
         IndexedIdGenerator.Monitor monitor = mock( IndexedIdGenerator.Monitor.class );
-<<<<<<< HEAD
-        freelist = new IndexedIdGenerator( pageCache, file, immediate(), IdType.LABEL_TOKEN, false, () -> 0, MAX_ID, false, monitor );
-        verify( monitor ).opened( -1, 0 );
-        freelist.start( NO_FREE_IDS );
-
-        long allocatedHighId = freelist.nextId();
-        verify( monitor ).allocatedFromHigh( allocatedHighId );
-
-        try ( Marker marker = freelist.marker() )
-=======
         idGenerator = new IndexedIdGenerator( pageCache, file, immediate(), IdType.LABEL_TOKEN, false, () -> 0, MAX_ID, false, NULL, monitor,
                 immutable.empty() );
         verify( monitor ).opened( -1, 0 );
@@ -567,7 +552,6 @@ class IndexedIdGeneratorTest
         verify( monitor ).allocatedFromHigh( allocatedHighId );
 
         try ( Marker marker = idGenerator.marker( NULL ) )
->>>>>>> neo4j/4.1
         {
             marker.markUsed( allocatedHighId );
             verify( monitor ).markedAsUsed( allocatedHighId );
@@ -577,18 +561,6 @@ class IndexedIdGeneratorTest
             verify( monitor ).markedAsFree( allocatedHighId );
         }
 
-<<<<<<< HEAD
-        long reusedId = freelist.nextId();
-        verify( monitor ).allocatedFromReused( reusedId );
-        freelist.checkpoint( IOLimiter.UNLIMITED );
-        // two times, one in start and one now in checkpoint
-        verify( monitor, times( 2 ) ).checkpoint( anyLong(), anyLong() );
-        freelist.clearCache();
-        verify( monitor ).clearingCache();
-        verify( monitor ).clearedCache();
-
-        try ( Marker marker = freelist.marker() )
-=======
         long reusedId = idGenerator.nextId( NULL );
         verify( monitor ).allocatedFromReused( reusedId );
         idGenerator.checkpoint( UNLIMITED, NULL );
@@ -599,22 +571,12 @@ class IndexedIdGeneratorTest
         verify( monitor ).clearedCache();
 
         try ( Marker marker = idGenerator.marker( NULL ) )
->>>>>>> neo4j/4.1
         {
             marker.markUsed( allocatedHighId + 3 );
             verify( monitor ).bridged( allocatedHighId + 1 );
             verify( monitor ).bridged( allocatedHighId + 2 );
         }
 
-<<<<<<< HEAD
-        freelist.close();
-        verify( monitor ).close();
-
-        // Also test normalization (which requires a restart)
-        freelist = new IndexedIdGenerator( pageCache, file, immediate(), IdType.LABEL_TOKEN, false, () -> 0, MAX_ID, false, monitor );
-        freelist.start( NO_FREE_IDS );
-        try ( Marker marker = freelist.marker() )
-=======
         idGenerator.close();
         verify( monitor ).close();
 
@@ -623,16 +585,11 @@ class IndexedIdGeneratorTest
                 immutable.empty() );
         idGenerator.start( NO_FREE_IDS, NULL );
         try ( Marker marker = idGenerator.marker( NULL ) )
->>>>>>> neo4j/4.1
         {
             marker.markUsed( allocatedHighId + 1 );
         }
         verify( monitor ).normalized( 0 );
 
-<<<<<<< HEAD
-        freelist.close();
-        freelist = null;
-=======
         idGenerator.close();
         idGenerator = null;
     }
@@ -813,7 +770,56 @@ class IndexedIdGeneratorTest
                 assertThat( cursorTracer.hits() ).isOne();
             }
         }
->>>>>>> neo4j/4.1
+    }
+
+    @Test
+    void shouldAllocateConsecutiveIdBatches()
+    {
+        // given
+        AtomicInteger numAllocations = new AtomicInteger();
+        Race race = new Race().withEndCondition( () -> numAllocations.get() >= 10_000 );
+        Collection<IdRange> allocations = ConcurrentHashMap.newKeySet();
+        race.addContestants( 4, () ->
+        {
+            int size = ThreadLocalRandom.current().nextInt( 10, 1_000 );
+            IdRange idRange = idGenerator.nextIdBatch( size, true, NULL );
+            assertEquals( 0, idRange.getDefragIds().length );
+            assertEquals( size, idRange.getRangeLength() );
+            allocations.add( idRange );
+            numAllocations.incrementAndGet();
+        } );
+
+        // when
+        race.goUnchecked();
+
+        // then
+        IdRange[] sortedAllocations = allocations.toArray( new IdRange[allocations.size()] );
+        Arrays.sort( sortedAllocations, Comparator.comparingLong( IdRange::getRangeStart ) );
+        long prevEndExclusive = 0;
+        for ( IdRange allocation : sortedAllocations )
+        {
+            assertEquals( prevEndExclusive, allocation.getRangeStart() );
+            prevEndExclusive = allocation.getRangeStart() + allocation.getRangeLength();
+        }
+    }
+
+    @ValueSource( booleans = {true, false} )
+    @ParameterizedTest
+    void shouldNotAllocateReservedIdsInBatchedAllocation( boolean consecutive ) throws IOException
+    {
+        // given
+        idGenerator.start( NO_FREE_IDS, NULL );
+        idGenerator.setHighId( IdValidator.INTEGER_MINUS_ONE - 100 );
+
+        // when
+        IdRange batch = idGenerator.nextIdBatch( 200, consecutive, NULL );
+
+        // then
+        assertFalse( IdValidator.hasReservedIdInRange( batch.getRangeStart(), batch.getRangeStart() + batch.getRangeLength() ) );
+        for ( long defragId : batch.getDefragIds() )
+        {
+            assertFalse( IdValidator.isReservedId( defragId ) );
+        }
     }
 
     private void assertOperationThrowInReadOnlyMode( Function<IndexedIdGenerator,Executable> operation ) throws IOException

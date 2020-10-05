@@ -149,11 +149,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public NodeRecord clone( NodeRecord nodeRecord )
-=======
             public NodeRecord copy( NodeRecord nodeRecord )
->>>>>>> neo4j/4.1
             {
                 return new NodeRecord( nodeRecord );
             }
@@ -198,11 +194,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public PropertyRecord clone( PropertyRecord propertyRecord )
-=======
             public PropertyRecord copy( PropertyRecord propertyRecord )
->>>>>>> neo4j/4.1
             {
                 return new PropertyRecord( propertyRecord );
             }
@@ -232,11 +224,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public RelationshipRecord clone( RelationshipRecord relationshipRecord )
-=======
             public RelationshipRecord copy( RelationshipRecord relationshipRecord )
->>>>>>> neo4j/4.1
             {
                 return new RelationshipRecord( relationshipRecord );
             }
@@ -268,11 +256,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public RelationshipGroupRecord clone( RelationshipGroupRecord record )
-=======
             public RelationshipGroupRecord copy( RelationshipGroupRecord record )
->>>>>>> neo4j/4.1
             {
                 return new RelationshipGroupRecord( record );
             }
@@ -301,11 +285,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public SchemaRecord clone( SchemaRecord record )
-=======
             public SchemaRecord copy( SchemaRecord record )
->>>>>>> neo4j/4.1
             {
                 return new SchemaRecord( record );
             }
@@ -336,11 +316,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public PropertyKeyTokenRecord clone( PropertyKeyTokenRecord record )
-=======
             public PropertyKeyTokenRecord copy( PropertyKeyTokenRecord record )
->>>>>>> neo4j/4.1
             {
                 return new PropertyKeyTokenRecord( record );
             }
@@ -371,11 +347,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public LabelTokenRecord clone( LabelTokenRecord record )
-=======
             public LabelTokenRecord copy( LabelTokenRecord record )
->>>>>>> neo4j/4.1
             {
                 return new LabelTokenRecord( record );
             }
@@ -406,11 +378,7 @@ public class Loaders
             }
 
             @Override
-<<<<<<< HEAD
-            public RelationshipTypeTokenRecord clone( RelationshipTypeTokenRecord record )
-=======
             public RelationshipTypeTokenRecord copy( RelationshipTypeTokenRecord record )
->>>>>>> neo4j/4.1
             {
                 return new RelationshipTypeTokenRecord( record );
             }

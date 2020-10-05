@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -109,7 +110,7 @@ import static org.neo4j.values.storable.Values.utf8Value;
 /**
  * Default implementation of {@link org.neo4j.graphdb.Transaction}
  */
-public class TransactionImpl implements InternalTransaction
+public class TransactionImpl extends EntityValidationTransactionImpl
 {
     private static final String UNABLE_TO_COMPLETE_TRANSACTION = "Unable to complete transaction.";
     private static final EntityLocker locker = new EntityLocker();
@@ -492,6 +493,32 @@ public class TransactionImpl implements InternalTransaction
         if ( terminationCallback != null )
         {
             terminationCallback.accept( reason );
+        }
+    }
+
+    @Override
+    public UUID getDatabaseId()
+    {
+        if ( this.transaction != null )
+        {
+            return this.transaction.getDatabaseId();
+        }
+        else
+        {
+            return null;
+        }
+    }
+
+    @Override
+    public String getDatabaseName()
+    {
+        if ( this.transaction != null )
+        {
+            return this.transaction.getDatabaseName();
+        }
+        else
+        {
+            return null;
         }
     }
 

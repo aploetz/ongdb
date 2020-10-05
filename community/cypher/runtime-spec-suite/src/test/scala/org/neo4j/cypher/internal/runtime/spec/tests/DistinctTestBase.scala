@@ -242,8 +242,6 @@ abstract class DistinctTestBase[CONTEXT <: RuntimeContext](
     runtimeResult should beColumns("x").withRows(aNodes.map(a => Array(a)))
   }
 
-<<<<<<< HEAD
-=======
   test("should work on cached property, one column") {
     // given
     val nodes = given {
@@ -268,7 +266,6 @@ abstract class DistinctTestBase[CONTEXT <: RuntimeContext](
     runtimeResult should beColumns("bar").withRows(singleColumn(expected))
   }
 
->>>>>>> neo4j/4.1
   test("should support filter after a distinct") {
     // given
     val n = sizeHint
@@ -295,8 +292,6 @@ abstract class DistinctTestBase[CONTEXT <: RuntimeContext](
     // then
     runtimeResult should beColumns("yprop").withRows(rowCount(1))
   }
-<<<<<<< HEAD
-=======
 
   test("should work with aggregation") {
     // given
@@ -402,5 +397,4 @@ abstract class DistinctTestBase[CONTEXT <: RuntimeContext](
     // then
     runtimeResult should beColumns("bar").withRows(singleColumn((0 until 10).map(i => s"bar$i")))
   }
->>>>>>> neo4j/4.1
 }

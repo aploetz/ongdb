@@ -33,10 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementService;
-<<<<<<< HEAD
-=======
 import org.neo4j.exceptions.KernelException;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -49,10 +46,7 @@ import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.kernel.api.exceptions.schema.IndexNotFoundKernelException;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.RelationTypeSchemaDescriptor;
-<<<<<<< HEAD
-=======
 import org.neo4j.io.pagecache.tracing.PageCacheTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.Kernel;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
@@ -60,10 +54,7 @@ import org.neo4j.kernel.impl.coreapi.schema.IndexDefinitionImpl;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.SimpleTriggerInfo;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-<<<<<<< HEAD
-=======
 import org.neo4j.storageengine.api.IndexEntryUpdate;
->>>>>>> neo4j/4.1
 import org.neo4j.test.Race;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 import org.neo4j.test.rule.TestDirectory;
@@ -86,11 +77,6 @@ public class IndexingServiceIntegrationTest
     private static final int NUMBER_OF_NODES = 100;
 
     @Rule
-<<<<<<< HEAD
-    public ExpectedException expectedException = ExpectedException.none();
-    @Rule
-=======
->>>>>>> neo4j/4.1
     public TestDirectory directory = TestDirectory.testDirectory();
     private GraphDatabaseService database;
     private DatabaseManagementService managementService;
@@ -246,21 +232,12 @@ public class IndexingServiceIntegrationTest
         race.addContestant( Race.throwing( () -> indexingService.dropIndex( indexDescriptor ) ) );
         race.go();
     }
-<<<<<<< HEAD
 
     @Test
     public void dropIndexRaceWithCheckpoint() throws Throwable
     {
         CheckPointer checkPointer = getCheckPointer( database );
 
-=======
-
-    @Test
-    public void dropIndexRaceWithCheckpoint() throws Throwable
-    {
-        CheckPointer checkPointer = getCheckPointer( database );
-
->>>>>>> neo4j/4.1
         int nbrOfIndexes = 100;
         try ( Transaction tx = database.beginTx() )
         {

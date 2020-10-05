@@ -362,8 +362,6 @@ public final class SettingValueParsers
         public String valueToString( Duration value )
         {
             return Duration.ZERO.equals( value ) ? "0s" : TimeUtil.nanosToString( value.toNanos() );
-<<<<<<< HEAD
-=======
         }
     };
 
@@ -391,7 +389,6 @@ public final class SettingValueParsers
         public String valueToString( DurationRange value )
         {
             return value.valueToString();
->>>>>>> neo4j/4.1
         }
     };
 

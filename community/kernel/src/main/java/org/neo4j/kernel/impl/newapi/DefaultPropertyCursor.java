@@ -20,17 +20,11 @@
 package org.neo4j.kernel.impl.newapi;
 
 import java.util.Iterator;
-<<<<<<< HEAD
-
-import org.neo4j.internal.kernel.api.LabelSet;
-import org.neo4j.internal.kernel.api.PropertyCursor;
-=======
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import org.neo4j.internal.kernel.api.PropertyCursor;
 import org.neo4j.internal.kernel.api.TokenSet;
->>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.AssertOpen;
 import org.neo4j.storageengine.api.StorageProperty;
@@ -42,19 +36,11 @@ import org.neo4j.values.storable.ValueGroup;
 import static org.neo4j.kernel.impl.newapi.Read.NO_ID;
 import static org.neo4j.token.api.TokenConstants.NO_TOKEN;
 
-<<<<<<< HEAD
-public class DefaultPropertyCursor extends TraceableCursor implements PropertyCursor
-=======
 public class DefaultPropertyCursor extends TraceableCursor implements PropertyCursor, Supplier<TokenSet>, IntSupplier
->>>>>>> neo4j/4.1
 {
     private static final int NODE = -2;
     private Read read;
-<<<<<<< HEAD
-    private StoragePropertyCursor storeCursor;
-=======
     private final StoragePropertyCursor storeCursor;
->>>>>>> neo4j/4.1
     private final FullAccessNodeCursor nodeCursor;
     private final FullAccessRelationshipScanCursor relCursor;
     private EntityState propertiesState;
@@ -68,13 +54,8 @@ public class DefaultPropertyCursor extends TraceableCursor implements PropertyCu
     //stores relationship type or NODE if not a relationship
     private int type = NO_TOKEN;
 
-<<<<<<< HEAD
-    DefaultPropertyCursor( CursorPool<DefaultPropertyCursor> pool, StoragePropertyCursor storeCursor, FullAccessNodeCursor nodeCursor,
-                           FullAccessRelationshipScanCursor relCursor )
-=======
     DefaultPropertyCursor( CursorPool<DefaultPropertyCursor> pool, StoragePropertyCursor storeCursor,
                            FullAccessNodeCursor nodeCursor, FullAccessRelationshipScanCursor relCursor )
->>>>>>> neo4j/4.1
     {
         this.pool = pool;
         this.storeCursor = storeCursor;
@@ -137,12 +118,8 @@ public class DefaultPropertyCursor extends TraceableCursor implements PropertyCu
     {
         if ( isNode() )
         {
-<<<<<<< HEAD
-            return accessMode.allowsReadNodeProperty( this::labelsIgnoringTxStateSetRemove, propertyKey );
-=======
             ensureAccessMode();
             return accessMode.allowsReadNodeProperty( this, propertyKey() );
->>>>>>> neo4j/4.1
         }
         else
         {
@@ -274,26 +251,18 @@ public class DefaultPropertyCursor extends TraceableCursor implements PropertyCu
         }
     }
 
-<<<<<<< HEAD
-    private LabelSet labelsIgnoringTxStateSetRemove()
-=======
     /**
      * Gets the label while ignoring removes in the tx state. Implemented as a Supplier so that we don't need additional
      * allocations.
      */
     @Override
     public TokenSet get()
->>>>>>> neo4j/4.1
     {
         assert isNode();
 
         if ( labels == null )
         {
-<<<<<<< HEAD
-            read.singleNode( nodeReference, nodeCursor );
-=======
             read.singleNode( entityReference, nodeCursor );
->>>>>>> neo4j/4.1
             nodeCursor.next();
             labels = nodeCursor.labelsIgnoringTxStateSetRemove();
         }
@@ -305,11 +274,6 @@ public class DefaultPropertyCursor extends TraceableCursor implements PropertyCu
     {
         assert isRelationship();
 
-<<<<<<< HEAD
-        read.singleRelationship( relationshipReference, relCursor );
-        relCursor.next();
-        return relCursor.type();
-=======
         if ( type < 0 )
         {
             read.singleRelationship( entityReference, relCursor );
@@ -325,7 +289,6 @@ public class DefaultPropertyCursor extends TraceableCursor implements PropertyCu
         {
             accessMode = read.ktx.securityContext().mode();
         }
->>>>>>> neo4j/4.1
     }
 
     public void release()

@@ -2,24 +2,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <parent>
-        <groupId>org.graphfoundation.ongdb</groupId>
+        <groupId>org.neo4j</groupId>
         <artifactId>parent</artifactId>
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-<<<<<<< HEAD
-    <groupId>org.graphfoundation.ongdb.app</groupId>
-    <artifactId>ongdb-server</artifactId>
-    <name>ONgDB - Server</name>
-    <description>Standalone Neo4j server application.</description>
-=======
     <groupId>org.neo4j.app</groupId>
     <artifactId>neo4j-server</artifactId>
     <name>Neo4j - Server</name>
     <description>Neo4j web server.</description>
->>>>>>> neo4j/4.1
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
     <packaging>jar</packaging>
@@ -28,15 +21,6 @@
         <license-text.header>headers/GPL-3-header.txt</license-text.header>
         <licensing.prepend.text>licensing/notice-gpl-prefix.txt</licensing.prepend.text>
         <neo4j.version>${project.version}</neo4j.version>
-<<<<<<< HEAD
-
-        <neo4j-server.mainClass>org.neo4j.server.CommunityEntryPoint</neo4j-server.mainClass>
-
-        <test.runner.jvm.settings.additional>
-            -Dorg.neo4j.kernel.impl.api.KernelStatement.trackStatements=false
-        </test.runner.jvm.settings.additional>
-=======
->>>>>>> neo4j/4.1
         <moduleName>org.neo4j.server</moduleName>
     </properties>
 
@@ -68,79 +52,36 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
+            <groupId>org.neo4j</groupId>
             <artifactId>annotations</artifactId>
         </dependency>
-<<<<<<< HEAD
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb</artifactId>
-            <version>${project.version}</version>
-            <type>pom</type>
-        </dependency>
 
         <dependency>
-            <!-- We need this one, or transitive dependencies of kernel
-        will end up in the test scope. -->
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-=======
->>>>>>> neo4j/4.1
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-security</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-dbms</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-command-line</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
+            <artifactId>neo4j-security</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.neo4j</groupId>
             <artifactId>server-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-cypher</artifactId>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-cypher</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-exceptions</artifactId>
-=======
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-ssl</artifactId>
->>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-bolt</artifactId>
-=======
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-exceptions</artifactId>
->>>>>>> neo4j/4.1
             <version>${project.version}</version>
         </dependency>
 
@@ -221,69 +162,33 @@
             <artifactId>jaxb-api</artifactId>
         </dependency>
 
-<<<<<<< HEAD
-        <!-- Test dependencies -->
         <dependency>
-            <groupId>org.graphfoundation.ongdb.community</groupId>
-            <artifactId>it-test-support</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-kernel</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-
-=======
->>>>>>> neo4j/4.1
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-security</artifactId>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-security</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
+            <groupId>org.neo4j</groupId>
             <artifactId>log-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
+            <groupId>org.neo4j</groupId>
             <artifactId>test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
+            <groupId>org.neo4j</groupId>
             <artifactId>io-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
-<<<<<<< HEAD
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-bolt</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-=======
->>>>>>> neo4j/4.1
         <dependency>
             <groupId>org.junit.vintage</groupId>
             <artifactId>junit-vintage-engine</artifactId>

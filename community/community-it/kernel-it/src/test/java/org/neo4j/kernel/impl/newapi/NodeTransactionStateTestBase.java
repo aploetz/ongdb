@@ -32,10 +32,7 @@ import org.neo4j.internal.kernel.api.Write;
 import org.neo4j.internal.kernel.api.security.AuthSubject;
 import org.neo4j.internal.kernel.api.security.SecurityContext;
 import org.neo4j.internal.kernel.api.security.TestAccessMode;
-<<<<<<< HEAD
-=======
 import org.neo4j.internal.schema.IndexOrder;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.values.storable.ValueGroup;
 

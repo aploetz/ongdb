@@ -28,15 +28,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
->>>>>>> neo4j/4.1
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.ProgressReporter;
 import org.neo4j.configuration.Config;
@@ -540,9 +537,6 @@ public class StoreUpgraderTest
         return newUpgrader( storeVersionCheck, pageCache, allowMigrateConfig, pageCacheTracer );
     }
 
-<<<<<<< HEAD
-    private StoreUpgrader newUpgrader( StoreVersionCheck storeVersionCheck, PageCache pageCache, Config config, MigrationProgressMonitor progressMonitor )
-=======
     private StoreUpgrader newUpgrader( StoreVersionCheck storeVersionCheck, PageCache pageCache, Config config,
             PageCacheTracer pageCacheTracer ) throws IOException
     {
@@ -556,7 +550,6 @@ public class StoreUpgraderTest
 
     private StoreUpgrader newUpgrader( StoreVersionCheck storeVersionCheck, PageCache pageCache, Config config,
             MigrationProgressMonitor progressMonitor, PageCacheTracer pageCacheTracer )
->>>>>>> neo4j/4.1
     {
         NullLogService instance = NullLogService.getInstance();
         BatchImporterFactory batchImporterFactory = BatchImporterFactory.withHighestPriority();
@@ -568,15 +561,10 @@ public class StoreUpgraderTest
         LegacyTransactionLogsLocator logsLocator = new LegacyTransactionLogsLocator( config, databaseLayout );
         Dependencies dependencies = new Dependencies();
         dependencies.satisfyDependencies( new Monitors() );
-<<<<<<< HEAD
-        LogsUpgrader logsUpgrader = new LogsUpgrader( fileSystem, storageEngineFactory, databaseLayout, pageCache, logsLocator, config, dependencies );
-        StoreUpgrader upgrader = new StoreUpgrader( storeVersionCheck, progressMonitor, config, fileSystem, NullLogProvider.getInstance(), logsUpgrader );
-=======
         LogsUpgrader logsUpgrader = new LogsUpgrader( fileSystem, storageEngineFactory, databaseLayout, pageCache,
                 logsLocator, config, dependencies, pageCacheTracer, INSTANCE );
         StoreUpgrader upgrader = new StoreUpgrader(
                 storeVersionCheck, progressMonitor, config, fileSystem, NullLogProvider.getInstance(), logsUpgrader, pageCacheTracer );
->>>>>>> neo4j/4.1
         upgrader.addParticipant( indexMigrator );
         upgrader.addParticipant( NOT_PARTICIPATING );
         upgrader.addParticipant( NOT_PARTICIPATING );

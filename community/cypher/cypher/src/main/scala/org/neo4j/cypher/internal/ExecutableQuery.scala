@@ -39,19 +39,6 @@ import scala.collection.JavaConverters.asScalaBufferConverter
 trait ExecutableQuery extends CacheabilityInfo {
 
   /**
-<<<<<<< HEAD
-    * Execute this executable query.
-    *
-    * @param transactionalContext           the transaction in which to execute
-    * @param isOutermostQuery               provide `true` if this is the outer-most query and should close the transaction when finished or error
-    * @param queryOptions                   execution options
-    * @param params                         the parameters
-    * @param prePopulateResults             if false, nodes and relationships might be returned as references in the results
-    * @param input                          stream of existing records as input
-    * @param subscriber                     The subscriber where results should be streamed to.
-    * @return the QueryExecution that controls the demand to the subscriber
-    */
-=======
    * Execute this executable query.
    *
    * @param transactionalContext           the transaction in which to execute
@@ -64,17 +51,13 @@ trait ExecutableQuery extends CacheabilityInfo {
    * @param subscriber                     The subscriber where results should be streamed to.
    * @return the QueryExecution that controls the demand to the subscriber
    */
->>>>>>> neo4j/4.1
   def execute(transactionalContext: TransactionalContext,
               isOutermostQuery: Boolean,
               queryOptions: QueryOptions,
               params: MapValue,
               prePopulateResults: Boolean,
               input: InputDataStream,
-<<<<<<< HEAD
-=======
               queryMonitor: QueryExecutionMonitor,
->>>>>>> neo4j/4.1
               subscriber: QuerySubscriber): QueryExecution
 
   /**

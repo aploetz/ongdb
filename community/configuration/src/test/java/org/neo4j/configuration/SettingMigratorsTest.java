@@ -363,15 +363,6 @@ class SettingMigratorsTest
         String msg = "Note that since you did not explicitly set the port in %s Neo4j automatically set it to %s to match %s." +
                 " This behavior may change in the future and we recommend you to explicitly set it.";
 
-<<<<<<< HEAD
-        logProvider.assertAtLeastOnce( inLog( Config.class ).info( msg, advertisedAddr.name(), 111, listenAddr.name() ) );
-        logProvider.assertAtLeastOnce( inLog( Config.class ).info( msg, advertisedAddr.name(), 222, listenAddr.name() ) );
-        logProvider.assertAtLeastOnce( inLog( Config.class ).warn( msg, advertisedAddr.name(), 333, listenAddr.name() ) );
-
-        logProvider.assertNone( inLog( Config.class ).warn( msg, advertisedAddr.name(), 444, listenAddr.name() ) );
-        logProvider.assertNone( inLog( Config.class ).info( msg, advertisedAddr.name(), 555, listenAddr.name() ) );
-        logProvider.assertNone( inLog( Config.class ).warn( msg, advertisedAddr.name(), 666, listenAddr.name() ) );
-=======
         var warnMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( WARN );
         var infoMatcher = assertThat( logProvider ).forClass( Config.class ).forLevel( INFO );
         infoMatcher.containsMessageWithArguments( msg, advertisedAddr.name(), 111, listenAddr.name() );
@@ -381,7 +372,6 @@ class SettingMigratorsTest
         warnMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 444, listenAddr.name() );
         infoMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 555, listenAddr.name() );
         warnMatcher.doesNotContainMessageWithArguments( msg, advertisedAddr.name(), 666, listenAddr.name() );
->>>>>>> neo4j/4.1
     }
 
     private static void testMigrateSslPolicy( String oldGroupnameSetting, SslPolicyConfig policyConfig )

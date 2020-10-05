@@ -19,12 +19,7 @@
  */
 package org.neo4j.kernel.impl.util.collection;
 
-<<<<<<< HEAD
-import org.jctools.queues.QueueFactory;
-import org.jctools.queues.spec.ConcurrentQueueSpec;
-=======
 import org.jctools.queues.MpmcArrayQueue;
->>>>>>> neo4j/4.1
 
 import java.util.Queue;
 
@@ -74,16 +69,11 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
         this.maxCacheableBlockSize = requirePowerOfTwo( maxCacheableBlockSize );
 
         final int numOfCaches = log2floor( maxCacheableBlockSize ) + 1;
-        ConcurrentQueueSpec spec = ConcurrentQueueSpec.createBoundedMpmc( maxCachedBlocks );
         //noinspection unchecked
         this.caches = new Queue[numOfCaches];
         for ( int i = 0; i < caches.length; i++ )
         {
-<<<<<<< HEAD
-            caches[i] = QueueFactory.newQueue( spec );
-=======
             caches[i] = new MpmcArrayQueue<>( maxCachedBlocks );
->>>>>>> neo4j/4.1
         }
     }
 
@@ -146,11 +136,7 @@ public class CachingOffHeapBlockAllocator implements OffHeapBlockAllocator
             MemoryBlock block;
             while ( (block = cache.poll()) != null )
             {
-<<<<<<< HEAD
-                UnsafeUtil.free( block.unalignedAddr, block.unalignedSize );
-=======
                 UnsafeUtil.free( block.addr, block.size, INSTANCE );
->>>>>>> neo4j/4.1
             }
         }
     }

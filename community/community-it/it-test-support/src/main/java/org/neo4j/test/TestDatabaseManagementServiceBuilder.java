@@ -46,12 +46,8 @@ import org.neo4j.kernel.extension.ExtensionFactory;
 import org.neo4j.kernel.impl.index.schema.AbstractIndexProviderFactory;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.monitoring.Monitors;
-<<<<<<< HEAD
-import org.neo4j.procedure.impl.GlobalProceduresRegistry;
-=======
 import org.neo4j.procedure.LazyProcedures;
 import org.neo4j.test.fabric.TestFabricDatabaseManagementServiceFactory;
->>>>>>> neo4j/4.1
 import org.neo4j.time.SystemNanoClock;
 import org.neo4j.util.FeatureToggles;
 
@@ -75,11 +71,7 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
     protected boolean impermanent;
     protected Config fromConfig;
     private boolean noOpSystemGraphInitializer;
-<<<<<<< HEAD
-    private boolean emptyExternalProcedures;
-=======
     private boolean lazyProcedures = true;
->>>>>>> neo4j/4.1
 
     public TestDatabaseManagementServiceBuilder()
     {
@@ -116,17 +108,10 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
         {
             dependencies = TestDatabaseIdRepository.noOpSystemGraphInitializer( dependencies, cfg );
         }
-<<<<<<< HEAD
-        if ( emptyExternalProcedures )
-        {
-            var dependencyWrapper = new Dependencies( dependencies );
-            dependencyWrapper.satisfyDependency( new GlobalProceduresRegistry() );
-=======
         if ( lazyProcedures )
         {
             var dependencyWrapper = new Dependencies( dependencies );
             dependencyWrapper.satisfyDependency( new LazyProcedures() );
->>>>>>> neo4j/4.1
             dependencies = dependencyWrapper;
         }
 
@@ -253,15 +238,9 @@ public class TestDatabaseManagementServiceBuilder extends DatabaseManagementServ
         return this;
     }
 
-<<<<<<< HEAD
-    public TestDatabaseManagementServiceBuilder useEmptyExternalProcedures( boolean useEmptyExternalProcedureSet )
-    {
-        this.emptyExternalProcedures = useEmptyExternalProcedureSet;
-=======
     public TestDatabaseManagementServiceBuilder useLazyProcedures( boolean useLazyProcedures )
     {
         this.lazyProcedures = useLazyProcedures;
->>>>>>> neo4j/4.1
         return this;
     }
 

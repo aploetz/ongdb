@@ -26,7 +26,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
@@ -222,12 +221,6 @@ public class RecordBuilders
             {
                 return nextId++;
             }
-
-            @Override
-            public IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
-            {
-                throw new UnsupportedOperationException();
-            }
         }, NULL );
     }
 
@@ -262,11 +255,7 @@ public class RecordBuilders
 
         @SuppressWarnings( "unchecked" )
         @Override
-<<<<<<< HEAD
-        public T clone( T record )
-=======
         public T copy( T record )
->>>>>>> neo4j/4.1
         {
             return (T)record.copy();
         }

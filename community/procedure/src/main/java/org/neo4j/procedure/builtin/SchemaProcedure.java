@@ -72,10 +72,6 @@ public class SchemaProcedure
         {
             Read dataRead = kernelTransaction.dataRead();
             TokenRead tokenRead = kernelTransaction.tokenRead();
-<<<<<<< HEAD
-            TokenNameLookup tokenNameLookup = new SilentTokenNameLookup( tokenRead );
-=======
->>>>>>> neo4j/4.1
             SchemaRead schemaRead = kernelTransaction.schemaRead();
 
             List<Pair<String,Integer>> labelNamesAndIds = new ArrayList<>();
@@ -96,40 +92,24 @@ public class SchemaProcedure
                     Map<String,Object> properties = new HashMap<>();
 
                     Iterator<IndexDescriptor> indexReferences = schemaRead.indexesGetForLabel( labelId );
-<<<<<<< HEAD
-                    ArrayList<String> indexes = new ArrayList<>();
-=======
                     List<String> indexes = new ArrayList<>();
->>>>>>> neo4j/4.1
                     while ( indexReferences.hasNext() )
                     {
                         IndexDescriptor index = indexReferences.next();
                         if ( !index.isUnique() )
                         {
-<<<<<<< HEAD
-                            String[] propertyNames = PropertyNameUtils.getPropertyKeys( tokenNameLookup, index.schema().getPropertyIds() );
-=======
                             String[] propertyNames = PropertyNameUtils.getPropertyKeys( tokenRead, index.schema().getPropertyIds() );
->>>>>>> neo4j/4.1
                             indexes.add( String.join( ",", propertyNames ) );
                         }
                     }
                     properties.put( "indexes", indexes );
 
                     Iterator<ConstraintDescriptor> nodePropertyConstraintIterator = schemaRead.constraintsGetForLabel( labelId );
-<<<<<<< HEAD
-                    ArrayList<String> constraints = new ArrayList<>();
-                    while ( nodePropertyConstraintIterator.hasNext() )
-                    {
-                        ConstraintDescriptor constraint = nodePropertyConstraintIterator.next();
-                        constraints.add( constraint.prettyPrint( tokenNameLookup ) );
-=======
                     List<String> constraints = new ArrayList<>();
                     while ( nodePropertyConstraintIterator.hasNext() )
                     {
                         ConstraintDescriptor constraint = nodePropertyConstraintIterator.next();
                         constraints.add( constraint.userDescription( tokenRead ) );
->>>>>>> neo4j/4.1
                     }
                     properties.put( "constraints", constraints );
 

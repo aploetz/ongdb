@@ -22,14 +22,9 @@ package org.neo4j.kernel.impl.newapi;
 import org.neo4j.common.EntityType;
 import org.neo4j.configuration.Config;
 import org.neo4j.exceptions.KernelException;
-<<<<<<< HEAD
-import org.neo4j.internal.index.label.LabelScan;
-import org.neo4j.internal.index.label.LabelScanReader;
-=======
 import org.neo4j.internal.index.label.RelationshipTypeScanStoreSettings;
 import org.neo4j.internal.index.label.TokenScan;
 import org.neo4j.internal.index.label.TokenScanReader;
->>>>>>> neo4j/4.1
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.IndexQuery;
 import org.neo4j.internal.kernel.api.IndexQueryConstraints;
@@ -115,11 +110,7 @@ abstract class Read implements TxStateHolder,
         EntityIndexSeekClient client = (EntityIndexSeekClient) cursor;
         client.setRead( this );
         IndexProgressor.EntityValueClient withFullPrecision = injectFullValuePrecision( client, query, indexSession.reader );
-<<<<<<< HEAD
-        indexSession.reader.query( this, withFullPrecision, indexOrder, needsValues, query );
-=======
         indexSession.reader.query( this, withFullPrecision, constraints, query );
->>>>>>> neo4j/4.1
     }
 
     @Override
@@ -136,23 +127,7 @@ abstract class Read implements TxStateHolder,
         IndexReader reader = indexReader( index, false );
         client.setRead( this );
         IndexProgressor.EntityValueClient withFullPrecision = injectFullValuePrecision( client, query, reader );
-<<<<<<< HEAD
-        reader.query( this, withFullPrecision, IndexOrder.NONE, false, query );
-    }
-
-    @Override
-    public void nodeIndexDistinctValues( IndexDescriptor index, NodeValueIndexCursor cursor, boolean needsValues ) throws IndexNotFoundKernelException
-    {
-        ktx.assertOpen();
-        DefaultNodeValueIndexCursor cursorImpl = (DefaultNodeValueIndexCursor) cursor;
-        cursorImpl.disableSecurity();
-        IndexReader reader = indexReader( index, true );
-        cursorImpl.setRead( this );
-        CursorPropertyAccessor accessor = new CursorPropertyAccessor( cursors.allocateNodeCursor(), cursors.allocatePropertyCursor(), this );
-        reader.distinctValues( cursorImpl, accessor, needsValues );
-=======
         reader.query( this, withFullPrecision, constraints, query );
->>>>>>> neo4j/4.1
     }
 
     private IndexProgressor.EntityValueClient injectFullValuePrecision( IndexProgressor.EntityValueClient cursor,
@@ -265,11 +240,7 @@ abstract class Read implements TxStateHolder,
 
         DefaultNodeValueIndexCursor cursorImpl = (DefaultNodeValueIndexCursor) cursor;
         cursorImpl.setRead( this );
-<<<<<<< HEAD
-        indexSession.reader.query( this, cursorImpl, indexOrder, needsValues, IndexQuery.exists( firstProperty ) );
-=======
         indexSession.reader.query( this, cursorImpl, constraints, IndexQuery.exists( firstProperty ) );
->>>>>>> neo4j/4.1
     }
 
     @Override
@@ -279,13 +250,8 @@ abstract class Read implements TxStateHolder,
 
         DefaultNodeLabelIndexCursor indexCursor = (DefaultNodeLabelIndexCursor) cursor;
         indexCursor.setRead( this );
-<<<<<<< HEAD
-        LabelScan labelScan = labelScanReader().nodeLabelScan( label );
-        indexCursor.scan( labelScan.initialize( indexCursor.nodeLabelClient() ), label );
-=======
         TokenScan labelScan = labelScanReader().entityTokenScan( label, cursorTracer );
         indexCursor.scan( labelScan.initialize( indexCursor.nodeLabelClient(), order, cursorTracer ), label, order );
->>>>>>> neo4j/4.1
     }
 
     @Override

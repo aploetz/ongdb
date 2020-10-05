@@ -55,16 +55,10 @@ public class DatabaseMigrator
     private final PageCacheTracer pageCacheTracer;
     private final MemoryTracker memoryTracker;
 
-<<<<<<< HEAD
-    public DatabaseMigrator( FileSystemAbstraction fs, Config config, LogService logService, DependencyResolver dependencyResolver, PageCache pageCache,
-                             JobScheduler jobScheduler, DatabaseLayout databaseLayout, LegacyTransactionLogsLocator legacyLogsLocator,
-                             StorageEngineFactory storageEngineFactory )
-=======
     public DatabaseMigrator(
             FileSystemAbstraction fs, Config config, LogService logService, DependencyResolver dependencyResolver, PageCache pageCache,
             JobScheduler jobScheduler, DatabaseLayout databaseLayout, StorageEngineFactory storageEngineFactory,
             PageCacheTracer pageCacheTracer, MemoryTracker memoryTracker )
->>>>>>> neo4j/4.1
     {
         this.fs = fs;
         this.config = config;
@@ -85,20 +79,12 @@ public class DatabaseMigrator
      */
     public void migrate()
     {
-<<<<<<< HEAD
-        StoreVersionCheck versionCheck = storageEngineFactory.versionCheck( fs, databaseLayout, config, pageCache, logService );
-        LogsUpgrader logsUpgrader = new LogsUpgrader( fs, storageEngineFactory, databaseLayout, pageCache, legacyLogsLocator, config, dependencyResolver );
-        VisibleMigrationProgressMonitor progress = new VisibleMigrationProgressMonitor( logService.getUserLog( DatabaseMigrator.class ) );
-        LogProvider logProvider = logService.getInternalLogProvider();
-        StoreUpgrader storeUpgrader = new StoreUpgrader( versionCheck, progress, config, fs, logProvider, logsUpgrader );
-=======
         StoreVersionCheck versionCheck = storageEngineFactory.versionCheck( fs, databaseLayout, config, pageCache, logService, pageCacheTracer );
         LogsUpgrader logsUpgrader = new LogsUpgrader(
                 fs, storageEngineFactory, databaseLayout, pageCache, legacyLogsLocator, config, dependencyResolver, pageCacheTracer, memoryTracker );
         VisibleMigrationProgressMonitor progress = new VisibleMigrationProgressMonitor( logService.getUserLog( DatabaseMigrator.class ) );
         LogProvider logProvider = logService.getInternalLogProvider();
         StoreUpgrader storeUpgrader = new StoreUpgrader( versionCheck, progress, config, fs, logProvider, logsUpgrader, pageCacheTracer );
->>>>>>> neo4j/4.1
 
         // Get all the participants from the storage engine and add them where they want to be
         var storeParticipants = storageEngineFactory.migrationParticipants(
@@ -107,12 +93,8 @@ public class DatabaseMigrator
 
         IndexProviderMap indexProviderMap = dependencyResolver.resolveDependency( IndexProviderMap.class );
         Log userLog = logService.getUserLog( IndexConfigMigrator.class );
-<<<<<<< HEAD
-        IndexConfigMigrator indexConfigMigrator = new IndexConfigMigrator( fs, config, pageCache, logService, storageEngineFactory, indexProviderMap, userLog );
-=======
         IndexConfigMigrator indexConfigMigrator = new IndexConfigMigrator(
                 fs, config, pageCache, logService, storageEngineFactory, indexProviderMap, userLog, pageCacheTracer, memoryTracker );
->>>>>>> neo4j/4.1
         storeUpgrader.addParticipant( indexConfigMigrator );
 
         IndexProviderMigrator indexProviderMigrator = new IndexProviderMigrator(

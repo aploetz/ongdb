@@ -196,28 +196,21 @@ class CheckerTestBase
 
     CheckerContext context() throws Exception
     {
-<<<<<<< HEAD
-        return context( NUMBER_OF_THREADS );
-=======
         return context( NUMBER_OF_THREADS, ConsistencyFlags.DEFAULT );
     }
 
     CheckerContext context( ConsistencyFlags consistencyFlags ) throws Exception
     {
         return context( NUMBER_OF_THREADS, consistencyFlags );
->>>>>>> neo4j/4.1
     }
 
     CheckerContext context( int numberOfThreads ) throws Exception
     {
-<<<<<<< HEAD
-=======
         return context( numberOfThreads, ConsistencyFlags.DEFAULT );
     }
 
     CheckerContext context( int numberOfThreads, ConsistencyFlags consistencyFlags ) throws Exception
     {
->>>>>>> neo4j/4.1
         if ( context != null )
         {
             return context;
@@ -230,7 +223,7 @@ class CheckerTestBase
         IndexProviderMap indexProviders = dependencies.resolveDependency( IndexProviderMap.class );
         IndexingService indexingService = dependencies.resolveDependency( IndexingService.class );
         IndexAccessors indexAccessors = new IndexAccessors( indexProviders, neoStores, new IndexSamplingConfig( config ),
-                new LookupAccessorsFromRunningDb( indexingService ), PageCacheTracer.NULL );
+                new LookupAccessorsFromRunningDb( indexingService ), PageCacheTracer.NULL, tokenHolders );
         ConsistencySummaryStatistics inconsistenciesSummary = new ConsistencySummaryStatistics();
         InconsistencyReport report = new InconsistencyReport( new InconsistencyMessageLogger( NullLog.getInstance() ), inconsistenciesSummary );
         monitor = mock( ConsistencyReporter.Monitor.class );
@@ -239,15 +232,9 @@ class CheckerTestBase
         NodeBasedMemoryLimiter limiter = new NodeBasedMemoryLimiter( pageCache.pageSize() * pageCache.maxCachedPages(),
                 Runtime.getRuntime().maxMemory(), Long.MAX_VALUE, CacheSlots.CACHE_LINE_SIZE_BYTES, nodeStore.getHighId() );
         ProgressMonitorFactory.MultiPartBuilder progress = ProgressMonitorFactory.NONE.multipleParts( "Test" );
-<<<<<<< HEAD
-        ParallelExecution execution = new ParallelExecution( numberOfThreads, NOOP_EXCEPTION_HANDLER, 100 );
-        context = new CheckerContext( neoStores, indexAccessors, labelIndex, execution, reporter, cacheAccess, tokenHolders, new RecordLoading( neoStores ),
-                countsState, limiter, progress, pageCache, false, ConsistencyFlags.DEFAULT );
-=======
         ParallelExecution execution = new ParallelExecution( numberOfThreads, NOOP_EXCEPTION_HANDLER, IDS_PER_CHUNK );
         context = new CheckerContext( neoStores, indexAccessors, labelIndex, relationshipTypeIndex, execution, reporter, cacheAccess, tokenHolders,
                 new RecordLoading( neoStores ), countsState, limiter, progress, pageCache, PageCacheTracer.NULL, INSTANCE, false, consistencyFlags );
->>>>>>> neo4j/4.1
         context.initialize();
         return context;
     }

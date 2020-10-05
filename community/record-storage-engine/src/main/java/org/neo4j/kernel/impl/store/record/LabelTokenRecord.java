@@ -49,11 +49,7 @@ public class LabelTokenRecord extends TokenRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public LabelTokenRecord clone()
-=======
     public LabelTokenRecord copy()
->>>>>>> neo4j/4.1
     {
         return new LabelTokenRecord( this );
     }

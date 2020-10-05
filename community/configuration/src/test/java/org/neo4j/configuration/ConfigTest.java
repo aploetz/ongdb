@@ -22,7 +22,6 @@ package org.neo4j.configuration;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.junit.jupiter.api.Test;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.neo4j.configuration.SettingConstraints.dependency;
@@ -64,11 +64,7 @@ import static org.neo4j.configuration.SettingValueParsers.INT;
 import static org.neo4j.configuration.SettingValueParsers.PATH;
 import static org.neo4j.configuration.SettingValueParsers.STRING;
 import static org.neo4j.configuration.SettingValueParsers.listOf;
-<<<<<<< HEAD
-import static org.neo4j.test.AssumptionHelper.withoutReadPermissions;
-=======
 import static org.neo4j.logging.LogAssertions.assertThat;
->>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 class ConfigTest
@@ -468,23 +464,12 @@ class ConfigTest
         Log log = logProvider.getLog( Config.class );
         File confFile = testDirectory.file( "test.conf" );
         assertTrue( confFile.createNewFile() );
-<<<<<<< HEAD
-        try ( Closeable ignored = withoutReadPermissions( confFile ) )
-        {
-            Config config = Config.emptyBuilder().fromFileNoThrow( confFile ).build();
-
-            config.setLogger( log );
-
-            logProvider.rawMessageMatcher().assertContains( "Unable to load config file [%s]" );
-        }
-=======
         assumeTrue( confFile.setReadable( false ) );
 
         Config config = Config.emptyBuilder().fromFileNoThrow( confFile ).build();
         config.setLogger( log );
 
         assertThat( logProvider ).containsMessages( "Unable to load config file [%s]" );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -515,10 +500,8 @@ class ConfigTest
     {
         File confFile = testDirectory.file( "test.conf" );
         assertTrue( confFile.createNewFile() );
-        try ( Closeable ignored = withoutReadPermissions( confFile ) )
-        {
-            assertThrows( IllegalArgumentException.class, () -> Config.emptyBuilder().fromFile( confFile ).build() );
-        }
+        assumeTrue( confFile.setReadable( false ) );
+        assertThrows( IllegalArgumentException.class, () -> Config.emptyBuilder().fromFile( confFile ).build() );
     }
 
     @Test
@@ -679,11 +662,7 @@ class ConfigTest
         static final Setting<String> stringSetting = newBuilder( "test.setting.string", STRING, "hello" ).build();
         static final Setting<Integer> intSetting = newBuilder( "test.setting.integer", INT, 1 ).dynamic().build();
         static final Setting<Integer> constrainedIntSetting = newBuilder( "test.setting.constrained-integer", INT, 1 )
-<<<<<<< HEAD
-                .addConstraint( SettingConstraints.max( 3 ) ).dynamic().build();
-=======
                 .addConstraint( max( 3 ) ).dynamic().build();
->>>>>>> neo4j/4.1
         static final Setting<List<Integer>> intListSetting = newBuilder( "test.setting.integerlist", listOf( INT ), List.of( 1 ) ).build();
         static final Setting<Boolean> boolSetting = newBuilder( "test.setting.bool", BOOL, null ).immutable().build();
     }
@@ -810,4 +789,5 @@ class ConfigTest
 
         static final Setting<String> dependingString = newBuilder( "test.default.dependency.dep", DefaultParser, null ).setDependency( baseString ).build();
     }
+
 }

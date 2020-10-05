@@ -24,16 +24,10 @@ import java.util.concurrent.ThreadLocalRandom
 import org.neo4j.cypher.internal.CypherRuntime
 import org.neo4j.cypher.internal.RuntimeContext
 import org.neo4j.cypher.internal.logical.plans.Ascending
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.runtime.spec._
-import org.neo4j.cypher.internal.CypherRuntime
-import org.neo4j.cypher.internal.RuntimeContext
-=======
 import org.neo4j.cypher.internal.logical.plans.IndexOrderNone
 import org.neo4j.cypher.internal.runtime.spec.Edition
 import org.neo4j.cypher.internal.runtime.spec.LogicalQueryBuilder
 import org.neo4j.cypher.internal.runtime.spec.RuntimeTestSuite
->>>>>>> neo4j/4.1
 import org.neo4j.exceptions.InvalidArgumentException
 import org.neo4j.graphdb.Label.label
 import org.neo4j.graphdb.RelationshipType.withName
@@ -174,11 +168,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .|.limit(10)
       .|.expandAll("(x)-->(y)")
       .|.argument()
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -200,11 +190,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .apply()
       .|.expandAll("(x)-->(y)")
       .|.argument()
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -226,11 +212,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .|.sort(Seq(Ascending("y")))
       .|.expandAll("(x)-->(y)")
       .|.argument()
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -258,11 +240,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .|.limit(LIMIT)
       .|.expandAll("(x)-->(y)")
       .|.argument()
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -286,11 +264,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .expandAll("(b1)<--(a1)")
       .limit(10)
       .expandAll("(x)-->(b1)")
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -318,11 +292,7 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .limit(18)
       .limit(19)
       .limit(20)
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     // then
@@ -382,19 +352,13 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       .|.argument()
       .expand("(x)-[rel]->(y)")
       .limit(1)
-<<<<<<< HEAD
-      .nodeByLabelScan("x", "A")
-=======
       .nodeByLabelScan("x", "A", IndexOrderNone)
->>>>>>> neo4j/4.1
       .build()
 
     val runtimeResult = execute(logicalQuery, runtime)
 
     runtimeResult should beColumns("x", "rel", "y").withRows(rowCount(nodesPerLabel))
   }
-<<<<<<< HEAD
-=======
 
   test("limit followed by aggregation") {
     // when
@@ -1118,5 +1082,4 @@ abstract class LimitTestBase[CONTEXT <: RuntimeContext](edition: Edition[CONTEXT
       runtimeResult should beColumns("a").withRows(rowCount(topLimit))
     }
   }
->>>>>>> neo4j/4.1
 }

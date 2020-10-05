@@ -53,13 +53,8 @@ class PhysicalFlushableChecksumChannelTest
     {
         final File firstFile = new File( directory.homeDir(), "file1" );
         StoreChannel storeChannel = fileSystem.write( firstFile );
-        ByteBuffer chanBuf = ByteBuffer.allocate( 100 );
         int channelChecksum;
-<<<<<<< HEAD
-        try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, chanBuf ) )
-=======
         try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, new HeapScopedBuffer( 100, INSTANCE ) ) )
->>>>>>> neo4j/4.1
         {
             channel.beginChecksum();
             channel.put( (byte) 10 );
@@ -88,13 +83,8 @@ class PhysicalFlushableChecksumChannelTest
     {
         final File firstFile = new File( directory.homeDir(), "file1" );
         StoreChannel storeChannel = fileSystem.write( firstFile );
-        ByteBuffer chanBuf = ByteBuffer.allocate( 100 );
         int channelChecksum;
-<<<<<<< HEAD
-        try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, chanBuf ) )
-=======
         try ( PhysicalFlushableChecksumChannel channel = new PhysicalFlushableChecksumChannel( storeChannel, new HeapScopedBuffer( 100, INSTANCE ) ) )
->>>>>>> neo4j/4.1
         {
             channel.put( (byte) 5 );
             channel.beginChecksum();

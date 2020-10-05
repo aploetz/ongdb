@@ -84,16 +84,10 @@ class ImportPanicIT
         try ( JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
             BatchImporter importer = new ParallelBatchImporter(
-<<<<<<< HEAD
-                    databaseLayout, testDirectory.getFileSystem(), null, Configuration.DEFAULT, NullLogService.getInstance(), ExecutionMonitors.invisible(),
-                    AdditionalInitialIds.EMPTY, Config.defaults(), StandardV3_4.RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
-                    LogFilesInitializer.NULL );
-=======
                     databaseLayout, testDirectory.getFileSystem(), null, PageCacheTracer.NULL,
                     Configuration.DEFAULT, NullLogService.getInstance(), ExecutionMonitors.invisible(), AdditionalInitialIds.EMPTY,
                     Config.defaults(), StandardV3_4.RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
                     LogFilesInitializer.NULL, EmptyMemoryTracker.INSTANCE );
->>>>>>> neo4j/4.1
             Iterable<DataFactory> nodeData =
                 DataFactories.datas( DataFactories.data( InputEntityDecorators.NO_DECORATOR, fileAsCharReadable( nodeCsvFileWithBrokenEntries() ) ) );
             Input brokenCsvInput = new CsvInput(

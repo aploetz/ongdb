@@ -31,10 +31,7 @@ import org.neo4j.memory.MemoryTracker;
 
 import static java.lang.Math.min;
 import static java.lang.Math.toIntExact;
-<<<<<<< HEAD
-=======
 import static org.neo4j.io.memory.HeapScopedBuffer.EMPTY_BUFFER;
->>>>>>> neo4j/4.1
 
 /**
  * The main implementation of {@link FlushableChannel}. This class provides buffering over a simple {@link StoreChannel}
@@ -50,15 +47,9 @@ public class PhysicalFlushableChannel implements FlushableChannel
     protected StoreChannel channel;
     protected ByteBuffer buffer;
 
-<<<<<<< HEAD
-    public PhysicalFlushableChannel( StoreChannel channel )
-    {
-        this( channel, ByteBuffers.allocate( DEFAULT_BUFFER_SIZE ) );
-=======
     public PhysicalFlushableChannel( StoreChannel channel, MemoryTracker memoryTracker )
     {
         this( channel, new HeapScopedBuffer( DEFAULT_BUFFER_SIZE, memoryTracker ) );
->>>>>>> neo4j/4.1
     }
 
     public PhysicalFlushableChannel( StoreChannel channel, ScopedBuffer scopedBuffer )

@@ -44,18 +44,11 @@ import org.neo4j.values.virtual.MapValue
  * Execution plan for performing system commands, i.e. creating databases or showing roles and users.
  */
 case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: ExecutionEngine, query: String, systemParams: MapValue,
-<<<<<<< HEAD
-                                      queryHandler: QueryHandler = QueryHandler.handleError(identity),
-                                      source: Option[ExecutionPlan] = None,
-                                      checkCredentialsExpired: Boolean = true,
-                                      parameterGenerator: Transaction => MapValue = _ => MapValue.EMPTY)
-=======
                                       queryHandler: QueryHandler = QueryHandler.handleError((t, _) => t),
                                       source: Option[ExecutionPlan] = None,
                                       checkCredentialsExpired: Boolean = true,
                                       parameterGenerator: (Transaction, SecurityContext) => MapValue = (_, _) => MapValue.EMPTY,
                                       parameterConverter: (Transaction, MapValue) => MapValue = (_, p) => p)
->>>>>>> neo4j/4.1
   extends ChainedExecutionPlan(source) {
 
   override def runSpecific(ctx: SystemUpdateCountingQueryContext,
@@ -69,15 +62,6 @@ case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: Execu
 
     var revertAccessModeChange: KernelTransaction.Revertable = null
     try {
-<<<<<<< HEAD
-      if (checkCredentialsExpired) tc.securityContext().assertCredentialsNotExpired()
-      val fullReadAccess = tc.securityContext().withMode(AccessMode.Static.READ)
-      revertAccessModeChange = tc.kernelTransaction().overrideWith(fullReadAccess)
-
-      val updatedSystemParams = systemParams.updatedWith(parameterGenerator.apply(tc.transaction()))
-      val systemSubscriber = new SystemCommandQuerySubscriber(ctx, subscriber, queryHandler)
-      val execution = normalExecutionEngine.executeSubQuery(query, updatedSystemParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
-=======
       val securityContext = tc.securityContext()
       if (checkCredentialsExpired) securityContext.assertCredentialsNotExpired()
       val fullReadAccess = securityContext.withMode(AccessMode.Static.READ)
@@ -86,7 +70,6 @@ case class SystemCommandExecutionPlan(name: String, normalExecutionEngine: Execu
       val updatedParams = parameterConverter(tx, safeMergeParameters(systemParams, params, parameterGenerator.apply(tx, securityContext)))
       val systemSubscriber = new SystemCommandQuerySubscriber(ctx, subscriber, queryHandler, updatedParams)
       val execution = normalExecutionEngine.executeSubQuery(query, updatedParams, tc, isOutermostQuery = false, executionMode == ProfileMode, prePopulateResults, systemSubscriber).asInstanceOf[InternalExecutionResult]
->>>>>>> neo4j/4.1
       systemSubscriber.assertNotFailed()
 
       if (systemSubscriber.shouldIgnoreResult()) {

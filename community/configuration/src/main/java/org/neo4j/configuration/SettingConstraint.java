@@ -21,10 +21,7 @@ package org.neo4j.configuration;
 
 import java.util.function.Function;
 
-<<<<<<< HEAD
-=======
 import org.neo4j.graphdb.config.Configuration;
->>>>>>> neo4j/4.1
 import org.neo4j.graphdb.config.Setting;
 
 /**
@@ -43,11 +40,7 @@ public abstract class SettingConstraint<T>
      * @param config the config the value belongs to
      * @throws IllegalArgumentException if the constraint is not satisfied
      */
-<<<<<<< HEAD
-    public abstract void validate( T value );
-=======
     public abstract void validate( T value, Configuration config );
->>>>>>> neo4j/4.1
 
     /**
      * A textual representation of the constraint, including information about valid/invalid values

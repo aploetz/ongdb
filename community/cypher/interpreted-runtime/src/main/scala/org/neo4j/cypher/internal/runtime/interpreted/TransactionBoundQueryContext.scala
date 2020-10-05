@@ -115,22 +115,14 @@ import scala.collection.mutable.ArrayBuffer
 
 sealed class TransactionBoundQueryContext(val transactionalContext: TransactionalContextWrapper,
                                           val resources: ResourceManager)
-<<<<<<< HEAD
-                                        (implicit indexSearchMonitor: IndexSearchMonitor)
-=======
                                          (implicit indexSearchMonitor: IndexSearchMonitor)
->>>>>>> neo4j/4.1
   extends TransactionBoundTokenContext(transactionalContext.kernelTransaction) with QueryContext {
 
   override val nodeOps: NodeOperations = new NodeOperations
   override val relationshipOps: RelationshipOperations = new RelationshipOperations
   override lazy val entityAccessor: TransactionalEntityFactory = transactionalContext.tc.transaction()
-<<<<<<< HEAD
-  private lazy val valueMapper: ValueMapper[java.lang.Object] = new DefaultValueMapper(transactionalContext.tc.transaction())
-=======
   private lazy val valueMapper: ValueMapper[java.lang.Object] = new DefaultValueMapper(
     transactionalContext.tc.transaction())
->>>>>>> neo4j/4.1
 
   override def setLabelsOnNode(node: Long, labelIds: Iterator[Int]): Int = labelIds.foldLeft(0) {
     case (count, labelId) => if (writes().nodeAddLabel(node, labelId)) count + 1 else count
@@ -1020,13 +1012,8 @@ object TransactionBoundQueryContext {
 
   class RelationshipCursorIterator(selectionCursor: RelationshipTraversalCursor) extends RelationshipIterator with AutoCloseable {
 
-<<<<<<< HEAD
-    import RelationshipCursorIterator.NOT_INITIALIZED
-    import RelationshipCursorIterator.NO_ID
-=======
     import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.RelationshipCursorIterator.NOT_INITIALIZED
     import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.RelationshipCursorIterator.NO_ID
->>>>>>> neo4j/4.1
 
     private var _next = NOT_INITIALIZED
     private var typeId: Int = NO_ID
@@ -1085,64 +1072,6 @@ object TransactionBoundQueryContext {
     private val NO_ID = -1
   }
 
-<<<<<<< HEAD
-  abstract class PrimitiveCursorIterator extends PrimitiveLongResourceIterator {
-    private var _next: Long = fetchNext()
-
-    protected def fetchNext(): Long
-
-    override def hasNext: Boolean = _next >= 0
-
-    override def next(): Long = {
-      if (!hasNext) {
-        close()
-        Iterator.empty.next()
-      }
-
-      val current = _next
-      _next = fetchNext()
-      if (!hasNext) close()
-
-      current
-    }
-  }
-
-  class ValuedNodeIndexCursor(inner: NodeValueIndexCursor, values: Array[Value]) extends DefaultCloseListenable with NodeValueIndexCursor {
-
-    override def numberOfProperties(): Int = values.length
-
-    override def propertyKey(offset: Int): Int = inner.propertyKey(offset)
-
-    override def hasValue: Boolean = true
-
-    override def propertyValue(offset: Int): Value = values(offset)
-
-    override def node(cursor: NodeCursor): Unit = inner.node(cursor)
-
-    override def nodeReference(): Long = inner.nodeReference()
-
-    override def next(): Boolean = inner.next()
-
-    override def closeInternal(): Unit = inner.close()
-
-    // We do not call getCloseListener.onClosed(inner) here since
-    // that will already happen in closeInternal.
-    override def close(): Unit = closeInternal()
-
-    override def isClosed: Boolean = inner.isClosed
-
-    override def score(): Float = inner.score()
-
-    override def setTracer(tracer: KernelReadTracer): Unit = inner.setTracer(tracer)
-
-    override def removeTracer(): Unit = inner.removeTracer()
-  }
-}
-
-object TransactionBoundQueryContext {
-
-=======
->>>>>>> neo4j/4.1
   trait IndexSearchMonitor {
 
     def indexSeek(index: IndexDescriptor, values: Seq[Any]): Unit

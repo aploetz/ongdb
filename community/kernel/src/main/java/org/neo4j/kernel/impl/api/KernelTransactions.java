@@ -399,13 +399,8 @@ public class KernelTransactions extends LifecycleAdapter implements Supplier<IdC
                             transactionCommitProcess, transactionMonitor, localTxPool, clock, cpuClockRef,
                             tracers, storageEngine, accessCapability,
                             versionContextSupplier, collectionsFactorySupplier, constraintSemantics,
-<<<<<<< HEAD
-                            schemaState, tokenHolders, indexingService, labelScanStore, indexStatisticsStore,
-                            databaseDependendies, namedDatabaseId, leaseService );
-=======
                             schemaState, tokenHolders, indexingService, labelScanStore, relationshipTypeScanStore, indexStatisticsStore,
                             databaseDependendies, namedDatabaseId, leaseService, transactionMemoryPool );
->>>>>>> neo4j/4.1
             this.transactions.add( tx );
             return tx;
         }

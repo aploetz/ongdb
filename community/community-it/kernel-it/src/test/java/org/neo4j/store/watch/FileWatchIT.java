@@ -23,10 +23,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.condition.OS;
->>>>>>> neo4j/4.1
 
 import java.io.File;
 import java.io.IOException;
@@ -62,17 +59,12 @@ import org.neo4j.test.extension.Neo4jLayoutExtension;
 import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.condition.OS.LINUX;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
 import static org.neo4j.logging.LogAssertions.assertThat;
 
 @Neo4jLayoutExtension
-<<<<<<< HEAD
-@EnabledOnOs( LINUX )
-=======
 @EnabledOnOs( OS.LINUX )
->>>>>>> neo4j/4.1
 class FileWatchIT
 {
     @Inject

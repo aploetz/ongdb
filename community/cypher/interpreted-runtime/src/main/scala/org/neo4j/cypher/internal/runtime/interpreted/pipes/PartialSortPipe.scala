@@ -35,14 +35,6 @@ case class PartialSortPipe(source: Pipe,
   extends PipeWithSource(source) with OrderedInputPipe {
 
   class PartialSortReceiver(state: QueryState) extends OrderedChunkReceiver {
-<<<<<<< HEAD
-    private val buffer = new java.util.ArrayList[ExecutionContext]()
-
-    override def clear(): Unit = {
-      buffer.forEach(x => state.memoryTracker.deallocated(x))
-      buffer.clear()
-    }
-=======
     private val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
     private val rowsMemoryTracker = memoryTracker.getScopedMemoryTracker
     private val buffer = HeapTrackingArrayList.newArrayList[CypherRow](16, memoryTracker)
@@ -56,17 +48,11 @@ case class PartialSortPipe(source: Pipe,
       buffer.close()
       rowsMemoryTracker.close()
     }
->>>>>>> neo4j/4.1
 
     override def isSameChunk(first: CypherRow, current: CypherRow): Boolean = prefixComparator.compare(first, current) == 0
 
-<<<<<<< HEAD
-    override def processRow(row: ExecutionContext): Unit = {
-      state.memoryTracker.allocated(row)
-=======
     override def processRow(row: CypherRow): Unit = {
       rowsMemoryTracker.allocateHeap(row.estimatedHeapUsage)
->>>>>>> neo4j/4.1
       buffer.add(row)
     }
 

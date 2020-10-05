@@ -102,13 +102,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-<<<<<<< HEAD
-import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
-import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
-=======
 import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
->>>>>>> neo4j/4.1
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 import static org.neo4j.configuration.GraphDatabaseSettings.store_internal_log_path;
@@ -829,11 +824,7 @@ class ImportCommandTest
                 "--additional-config", dbConfig.getAbsolutePath(),
                 "--nodes", nodeData( true, config, nodeIds, TRUE ).getAbsolutePath(),
                 "--database", "__incorrect_db__") );
-<<<<<<< HEAD
-        assertThat( e.getMessage(),  containsString( "Invalid database name '__incorrect_db__'." ) );
-=======
         assertThat( e ).hasMessageContaining( "Invalid database name '__incorrect_db__'." );
->>>>>>> neo4j/4.1
     }
 
     @Test

@@ -43,9 +43,6 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
-<<<<<<< HEAD
-  Java Concurrency Tools Core Library
-=======
   fastinfoset
   Jackson module: JAXB Annotations
   Jackson-annotations
@@ -70,7 +67,6 @@ Apache Software License, Version 2.0
   Jetty :: Utilities
   Jetty :: Webapp Application Support
   Jetty :: XML utilities
->>>>>>> neo4j/4.1
   jPowerShell
   jProcesses
   Lucene Common Analyzers

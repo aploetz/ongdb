@@ -39,21 +39,6 @@ import org.neo4j.memory.MemoryTracker;
 public class StubCursorFactory implements CursorFactory
 {
     private final boolean continueWithLastItem;
-<<<<<<< HEAD
-    private Queue<NodeCursor> nodeCursors = new LinkedList<>();
-    private Queue<NodeCursor> fullNodeCursors = new LinkedList<>();
-    private Queue<RelationshipScanCursor> relationshipScanCursors = new LinkedList<>();
-    private Queue<RelationshipScanCursor> fullRelationshipScanCursors = new LinkedList<>();
-    private Queue<RelationshipTraversalCursor> relationshiTraversalCursors = new LinkedList<>();
-    private Queue<PropertyCursor> propertyCursors = new LinkedList<>();
-    private Queue<PropertyCursor> fullPropertyCursors = new LinkedList<>();
-    private Queue<RelationshipGroupCursor> groupCursors = new LinkedList<>();
-    private Queue<NodeValueIndexCursor> nodeValueIndexCursors = new LinkedList<>();
-    private Queue<NodeValueIndexCursor> fullNodeValueIndexCursors = new LinkedList<>();
-    private Queue<NodeLabelIndexCursor> nodeLabelIndexCursors = new LinkedList<>();
-    private Queue<NodeLabelIndexCursor> fullNodeLabelIndexCursors = new LinkedList<>();
-    private Queue<RelationshipIndexCursor> relationshipIndexCursors = new LinkedList<>();
-=======
     private final Queue<NodeCursor> nodeCursors = new ArrayDeque<>();
     private final Queue<NodeCursor> fullNodeCursors = new ArrayDeque<>();
     private final Queue<RelationshipScanCursor> relationshipScanCursors = new ArrayDeque<>();
@@ -65,7 +50,6 @@ public class StubCursorFactory implements CursorFactory
     private final Queue<NodeLabelIndexCursor> nodeLabelIndexCursors = new ArrayDeque<>();
     private final Queue<RelationshipIndexCursor> relationshipIndexCursors = new ArrayDeque<>();
     private final Queue<RelationshipTypeIndexCursor> relationshipTypeIndexCursors = new ArrayDeque<>();
->>>>>>> neo4j/4.1
 
     public StubCursorFactory()
     {

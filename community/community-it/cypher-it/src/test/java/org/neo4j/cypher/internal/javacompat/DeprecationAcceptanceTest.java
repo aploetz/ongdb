@@ -219,30 +219,6 @@ public class DeprecationAcceptanceTest extends NotificationTestSupport
         }
     }
 
-    @Test
-    void deprecatedFutureAmbiguousRelTypeSeparator()
-    {
-        List<String> deprecatedQueries = Arrays.asList( "explain MATCH (a)-[:A|:B|:C {foo:'bar'}]-(b) RETURN a,b", "explain MATCH (a)-[x:A|:B|:C]-() RETURN a",
-                "explain MATCH (a)-[:A|:B|:C*]-() RETURN a" );
-
-        List<String> nonDeprecatedQueries =
-                Arrays.asList( "explain MATCH (a)-[:A|B|C {foo:'bar'}]-(b) RETURN a,b", "explain MATCH (a)-[:A|:B|:C]-(b) RETURN a,b",
-                        "explain MATCH (a)-[:A|B|C]-(b) RETURN a,b" );
-
-        for ( String query : deprecatedQueries )
-        {
-            assertNotifications( "CYPHER 3.5 " + query, containsItem( deprecatedSeparatorWarning ) );
-        }
-
-        // clear caches of the rewritten queries to not keep notifications around
-        db.getDependencyResolver().resolveDependency( QueryExecutionEngine.class ).clearQueryCaches();
-
-        for ( String query : nonDeprecatedQueries )
-        {
-            assertNotifications( "CYPHER 3.5 " + query, containsNoItem( deprecatedSeparatorWarning ) );
-        }
-    }
-
     // MATCHERS & HELPERS
 
     public static class ChangedResults

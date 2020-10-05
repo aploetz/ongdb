@@ -192,20 +192,6 @@ class BigStoreIT
 
     private static boolean machineIsOkToRunThisTest( int requiredHeapMb )
     {
-<<<<<<< HEAD
-        if ( SystemUtils.IS_OS_WINDOWS )
-        {
-            // This test cannot be run on Windows because it can't handle files of this size in a timely manner
-            return false;
-        }
-        if ( SystemUtils.IS_OS_MAC_OSX )
-        {
-            // This test cannot be run on macOS because macOS doesn't support sparse files
-            return false;
-        }
-
-=======
->>>>>>> neo4j/4.1
         // Not 1024, matches better wanted result with -Xmx
         long heapMb = Runtime.getRuntime().maxMemory() / (1000 * 1000);
         return heapMb >= requiredHeapMb;

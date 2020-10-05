@@ -35,3 +35,4 @@ public class SslSystemSettings implements SettingsDeclaration
     public static final Setting<SslProvider> netty_ssl_provider =
             SettingImpl.newBuilder( "dbms.netty.ssl.provider", ofEnum( SslProvider.class ), SslProvider.JDK ).build();
 }
+

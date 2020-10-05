@@ -41,13 +41,9 @@ Apache Software License, Version 2.0
   Apache Shiro :: Event
   Apache Shiro :: Lang
   Caffeine cache
-<<<<<<< HEAD
-  Java Concurrency Tools Core Library
-=======
   Java Agent for Memory Measurements
   Java Concurrency Tools Core Library
   Jettison
->>>>>>> neo4j/4.1
   jPowerShell
   jProcesses
   Lucene Common Analyzers

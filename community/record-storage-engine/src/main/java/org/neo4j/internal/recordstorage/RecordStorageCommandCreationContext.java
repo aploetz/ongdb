@@ -19,10 +19,7 @@
  */
 package org.neo4j.internal.recordstorage;
 
-<<<<<<< HEAD
-=======
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
->>>>>>> neo4j/4.1
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.StandardDynamicRecordAllocator;
@@ -67,11 +64,7 @@ class RecordStorageCommandCreationContext implements CommandCreationContext
 
     private long nextId( StoreType storeType )
     {
-<<<<<<< HEAD
-        return neoStores.getRecordStore( storeType ).nextId();
-=======
         return neoStores.getRecordStore( storeType ).nextId( cursorTracer );
->>>>>>> neo4j/4.1
     }
 
     @Override

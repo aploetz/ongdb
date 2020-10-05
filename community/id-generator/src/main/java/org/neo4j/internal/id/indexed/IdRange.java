@@ -53,11 +53,7 @@ class IdRange
     static final int BITSET_SIZE = Long.SIZE;
 
     private long generation;
-<<<<<<< HEAD
-    private transient boolean addition;
-=======
     private boolean addition;
->>>>>>> neo4j/4.1
     private final long[][] bitSets;
     private final int numOfLongs;
 

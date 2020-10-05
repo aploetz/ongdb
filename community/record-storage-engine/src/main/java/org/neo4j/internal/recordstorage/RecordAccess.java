@@ -94,10 +94,6 @@ public interface RecordAccess<RECORD,ADDITIONAL>
 
         void ensureHeavy( RECORD record, PageCursorTracer cursorTracer );
 
-<<<<<<< HEAD
-        RECORD clone( RECORD record );
-=======
         RECORD copy( RECORD record );
->>>>>>> neo4j/4.1
     }
 }

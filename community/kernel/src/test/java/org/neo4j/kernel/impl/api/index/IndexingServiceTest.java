@@ -47,6 +47,7 @@ import java.util.function.IntPredicate;
 
 import org.neo4j.collection.Dependencies;
 import org.neo4j.common.DependencyResolver;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.exceptions.UnderlyingStorageException;
@@ -145,16 +146,11 @@ import static org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer.NULL;
 import static org.neo4j.kernel.impl.api.index.IndexUpdateMode.RECOVERY;
 import static org.neo4j.kernel.impl.api.index.TestIndexProviderDescriptor.PROVIDER_DESCRIPTOR;
 import static org.neo4j.kernel.impl.api.index.sampling.IndexSamplingMode.backgroundRebuildAll;
-<<<<<<< HEAD
-import static org.neo4j.logging.AssertableLogProvider.inLog;
-import static org.neo4j.register.Registers.newDoubleLongRegister;
-=======
 import static org.neo4j.logging.AssertableLogProvider.Level.DEBUG;
 import static org.neo4j.logging.AssertableLogProvider.Level.ERROR;
 import static org.neo4j.logging.AssertableLogProvider.Level.INFO;
 import static org.neo4j.logging.LogAssertions.assertThat;
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 import static org.neo4j.values.storable.Values.stringValue;
 
 @ExtendWith( SuppressOutputExtension.class )
@@ -497,11 +493,7 @@ class IndexingServiceTest
             {
                 IndexDescriptor index = storeIndex( id, 1, id, indexProviderDescriptor );
                 indexDescriptors.add( index );
-<<<<<<< HEAD
-                when( indexProvider.getInitialState( index ) ).thenReturn( ONLINE );
-=======
                 when( indexProvider.getInitialState( index, NULL ) ).thenReturn( ONLINE );
->>>>>>> neo4j/4.1
                 id++;
             }
         }
@@ -515,21 +507,13 @@ class IndexingServiceTest
         IndexingService indexingService = IndexingServiceFactory.createIndexingService( config,
                 mock( JobScheduler.class ), providerMap, storeView, nameLookup,
                 indexDescriptors, internalLogProvider, userLogProvider,
-<<<<<<< HEAD
-                IndexingService.NO_MONITOR, schemaState, indexStatisticsStore, false );
-=======
                 IndexingService.NO_MONITOR, schemaState, indexStatisticsStore, PageCacheTracer.NULL, INSTANCE, false );
->>>>>>> neo4j/4.1
 
         // when starting IndexingService
         indexingService.init();
         for ( IndexProviderDescriptor indexProviderDescriptor : indexProviderDescriptors )
         {
-<<<<<<< HEAD
-            onBothLogProviders( logProvider -> logProvider.rawMessageMatcher().assertNotContains( indexProviderDescriptor.name() ) );
-=======
             onBothLogProviders( logProvider -> assertThat( logProvider ).doesNotContainMessage( indexProviderDescriptor.name() ) );
->>>>>>> neo4j/4.1
         }
 
         userLogProvider.clear();
@@ -540,19 +524,6 @@ class IndexingServiceTest
         {
             if ( isDeprecated( indexProviderDescriptor ) )
             {
-<<<<<<< HEAD
-                userLogProvider.rawMessageMatcher().assertContainsSingle(
-                        Matchers.allOf(
-                                Matchers.containsString( "Deprecated index providers in use:" ),
-                                Matchers.containsString( indexProviderDescriptor.name() + " (2 indexes)" ),
-                                Matchers.containsString( "Use procedure 'db.indexes()' to see what indexes use which index provider." )
-                        )
-                );
-            }
-            else
-            {
-                onBothLogProviders( logProvider -> logProvider.rawMessageMatcher().assertNotContains( indexProviderDescriptor.name() ) );
-=======
                 assertThat( userLogProvider ).containsMessages( "Deprecated index providers in use:",
                         indexProviderDescriptor.name() + " (2 indexes)",
                         "Use procedure 'db.indexes()' to see what indexes use which index provider." );
@@ -560,7 +531,6 @@ class IndexingServiceTest
             else
             {
                 onBothLogProviders( logProvider -> assertThat( logProvider ).doesNotContainMessage( indexProviderDescriptor.name() ) );
->>>>>>> neo4j/4.1
             }
         }
     }
@@ -764,8 +734,8 @@ class IndexingServiceTest
         IndexUpdater updater2 = mock( IndexUpdater.class );
         when( accessor2.newUpdater( any( IndexUpdateMode.class ), any( PageCursorTracer.class ) ) ).thenReturn( updater2 );
 
-        when( indexProvider.getOnlineAccessor( eq( index1 ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor1 );
-        when( indexProvider.getOnlineAccessor( eq( index2 ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor2 );
+        when( indexProvider.getOnlineAccessor( eq( index1 ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) ).thenReturn( accessor1 );
+        when( indexProvider.getOnlineAccessor( eq( index2 ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) ).thenReturn( accessor2 );
 
         life.start();
 
@@ -965,11 +935,11 @@ class IndexingServiceTest
         // THEN
         IndexPrototype prototype = forSchema( forLabel( 0, 0 ) ).withIndexProvider( PROVIDER_DESCRIPTOR );
         verify( indexProvider ).getPopulator( eq( prototype.withName( "index_0" ).materialise( 0 ) ),
-                any( IndexSamplingConfig.class ), any(), any() );
+                any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
         verify( indexProvider ).getPopulator( eq( prototype.withSchemaDescriptor( forLabel( 0, 1 ) ).withName( "index_1" ).materialise( 1 ) ),
-                any( IndexSamplingConfig.class ), any(), any() );
+                any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
         verify( indexProvider ).getPopulator( eq( prototype.withSchemaDescriptor( forLabel( 1, 0 ) ).withName( "index_2" ).materialise( 2 ) ),
-                any( IndexSamplingConfig.class ), any(), any() );
+                any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
 
         waitForIndexesToComeOnline( indexing, index1, index2, index3 );
     }
@@ -984,7 +954,7 @@ class IndexingServiceTest
         nameLookup.label( labelId, "TheLabel" );
         nameLookup.propertyKey( propertyKeyId, "propertyKey" );
 
-        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) )
+        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
                 .thenThrow( exception );
 
         life.start();
@@ -1019,7 +989,7 @@ class IndexingServiceTest
         nameLookup.propertyKey( propertyKeyId, "propertyKey" );
 
         when( indexProvider.getInitialState( index, NULL ) ).thenReturn( POPULATING );
-        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) )
+        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
                 .thenThrow( exception );
 
         life.start();
@@ -1295,7 +1265,7 @@ class IndexingServiceTest
         when( accessor.newReader() ).thenReturn( IndexReader.EMPTY );
         when( accessor.newUpdater( any( IndexUpdateMode.class ), any( PageCursorTracer.class ) ) ).thenReturn( updater );
         when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ),
-                any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
+                any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) ).thenReturn( accessor );
 
         life.init();
 
@@ -1377,11 +1347,7 @@ class IndexingServiceTest
 
         // when
         IndexProxy proxy = indexingService.getIndexProxy( indexDescriptor );
-<<<<<<< HEAD
-        try ( IndexUpdater updater = proxy.newUpdater( IndexUpdateMode.ONLINE ) )
-=======
         try ( IndexUpdater updater = proxy.newUpdater( IndexUpdateMode.ONLINE, NULL ) )
->>>>>>> neo4j/4.1
         {
             updater.process( IndexEntryUpdate.add( 123, indexDescriptor, stringValue( "some value" ) ) );
         }
@@ -1491,10 +1457,10 @@ class IndexingServiceTest
     {
         when( indexProvider.getInitialState( any( IndexDescriptor.class ), any( PageCursorTracer.class ) ) ).thenReturn( ONLINE );
         when( indexProvider.getProviderDescriptor() ).thenReturn( PROVIDER_DESCRIPTOR );
-        when( indexProvider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) )
+        when( indexProvider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) ) )
                 .thenReturn( populator );
         data.getsProcessedByStoreScanFrom( storeView );
-        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) )
+        when( indexProvider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
                 .thenReturn( accessor );
         when( indexProvider.storeMigrationParticipant( any( FileSystemAbstraction.class ), any( PageCache.class ), any() ) )
                 .thenReturn( StoreMigrationParticipant.NOT_PARTICIPATING );
@@ -1676,7 +1642,7 @@ class IndexingServiceTest
     {
         IndexProvider provider = mockIndexProvider( descriptor );
         IndexAccessor indexAccessor = mock( IndexAccessor.class );
-        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) )
+        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
                 .thenReturn( indexAccessor );
         return provider;
     }

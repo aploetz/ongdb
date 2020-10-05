@@ -19,10 +19,7 @@
  */
 package org.neo4j.kernel.impl.store;
 
-<<<<<<< HEAD
-=======
 import org.eclipse.collections.api.set.ImmutableSet;
->>>>>>> neo4j/4.1
 import org.eclipse.collections.api.set.primitive.MutableLongSet;
 import org.eclipse.collections.impl.factory.primitive.LongSets;
 
@@ -42,7 +39,6 @@ import org.neo4j.internal.helpers.collection.Visitor;
 import org.neo4j.internal.id.FreeIds;
 import org.neo4j.internal.id.IdGenerator;
 import org.neo4j.internal.id.IdGeneratorFactory;
-import org.neo4j.internal.id.IdRange;
 import org.neo4j.internal.id.IdSequence;
 import org.neo4j.internal.id.IdType;
 import org.neo4j.internal.id.IdValidator;
@@ -495,13 +491,6 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
         }
     }
 
-    @Override
-    public IdRange nextIdBatch( int size, PageCursorTracer cursorTracer )
-    {
-        assertIdGeneratorInitialized();
-        return idGenerator.nextIdBatch( size, cursorTracer );
-    }
-
     /**
      * Return the highest id in use. If this store is not OK yet, the high id is calculated from the highest
      * in use record on the store, using {@link #scanForHighId(PageCursorTracer)}.
@@ -832,12 +821,8 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
 
     void logIdUsage( Logger logger, PageCursorTracer cursorTracer )
     {
-<<<<<<< HEAD
-        logger.log( format( "%s[%s]: used=%s high=%s", getTypeDescriptor(), getStorageFile().getName(), getNumberOfIdsInUse(), getHighestPossibleIdInUse() ) );
-=======
         logger.log( format( "%s[%s]: used=%s high=%s", getTypeDescriptor(), getStorageFile().getName(), getNumberOfIdsInUse(),
                 getHighestPossibleIdInUse( cursorTracer ) ) );
->>>>>>> neo4j/4.1
     }
 
     @Override

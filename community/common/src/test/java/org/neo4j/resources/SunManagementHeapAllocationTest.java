@@ -19,10 +19,6 @@
  */
 package org.neo4j.resources;
 
-<<<<<<< HEAD
-import org.hamcrest.Matchers;
-=======
->>>>>>> neo4j/4.1
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

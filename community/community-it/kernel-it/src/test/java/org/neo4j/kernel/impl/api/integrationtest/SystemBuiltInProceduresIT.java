@@ -38,15 +38,7 @@ import org.neo4j.values.AnyValue;
 import org.neo4j.values.virtual.VirtualValues;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
-<<<<<<< HEAD
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.arrayWithSize;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.hasItemInArray;
-import static org.hamcrest.core.IsEqual.equalTo;
-=======
 import static org.assertj.core.api.Assertions.assertThat;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,13 +72,8 @@ class SystemBuiltInProceduresIT extends CommunityProcedureITBase
         var procedureResult = asList( stream );
         assertFalse( procedureResult.isEmpty() );
         var dbInfoRow = procedureResult.get( 0 );
-<<<<<<< HEAD
-        assertThat( dbInfoRow, hasItemInArray( stringValue( SYSTEM_DATABASE_NAME ) ) );
-        assertThat( dbInfoRow, arrayWithSize( 3 ) );
-=======
         assertThat( dbInfoRow ).contains( stringValue( SYSTEM_DATABASE_NAME ) );
         assertThat( dbInfoRow ).hasSize( 3 );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -98,13 +85,8 @@ class SystemBuiltInProceduresIT extends CommunityProcedureITBase
         var procedureResult = asList( stream );
         assertFalse( procedureResult.isEmpty() );
         var dbmsInfoRow = procedureResult.get( 0 );
-<<<<<<< HEAD
-        assertThat( dbmsInfoRow, hasItemInArray( stringValue( SYSTEM_DATABASE_NAME ) ) );
-        assertThat( dbmsInfoRow, arrayWithSize( 3 ) );
-=======
         assertThat( dbmsInfoRow ).contains( stringValue( SYSTEM_DATABASE_NAME ) );
         assertThat( dbmsInfoRow ).hasSize( 3 );
->>>>>>> neo4j/4.1
     }
 
     @Test

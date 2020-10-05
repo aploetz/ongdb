@@ -182,11 +182,7 @@ public class DynamicRecord extends AbstractBaseRecord
     }
 
     @Override
-<<<<<<< HEAD
-    public DynamicRecord clone()
-=======
     public DynamicRecord copy()
->>>>>>> neo4j/4.1
     {
         return new DynamicRecord( this );
     }

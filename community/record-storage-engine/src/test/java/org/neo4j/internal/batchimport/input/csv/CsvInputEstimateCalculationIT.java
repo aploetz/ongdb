@@ -164,15 +164,9 @@ class CsvInputEstimateCalculationIT
         FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
         try ( JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
-<<<<<<< HEAD
-            new ParallelBatchImporter( databaseLayout, fs, null, Configuration.DEFAULT, NullLogService.getInstance(),
-                                       invisible(), EMPTY, config, format, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
-                                       LogFilesInitializer.NULL ).doImport( input );
-=======
             new ParallelBatchImporter( databaseLayout, fs, null, PageCacheTracer.NULL, PBI_CONFIG, NullLogService.getInstance(),
                     invisible(), EMPTY, config, format, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
                     LogFilesInitializer.NULL, EmptyMemoryTracker.INSTANCE ).doImport( input );
->>>>>>> neo4j/4.1
 
             // then compare estimates with actual disk sizes
             VersionContextSupplier contextSupplier = EmptyVersionContextSupplier.EMPTY;

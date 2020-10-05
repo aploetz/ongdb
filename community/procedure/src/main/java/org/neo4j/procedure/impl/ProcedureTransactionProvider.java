@@ -21,7 +21,7 @@ package org.neo4j.procedure.impl;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.UUID;
 
 import org.neo4j.function.ThrowingFunction;
 import org.neo4j.graphdb.Entity;
@@ -297,6 +297,24 @@ public class ProcedureTransactionProvider implements ThrowingFunction<Context,Tr
         public void terminate( Status reason )
         {
             transaction.terminate( reason );
+        }
+
+        @Override
+        public UUID getDatabaseId()
+        {
+            return transaction.getDatabaseId();
+        }
+
+        @Override
+        public String getDatabaseName()
+        {
+            return transaction.getDatabaseName();
+        }
+
+        @Override
+        public <E extends Entity> E validateSameDB( E entity )
+        {
+            return transaction.validateSameDB( entity );
         }
 
         @Override

@@ -62,14 +62,8 @@ case class ExpandIntoPipe(source: Pipe,
     case SemanticDirection.BOTH => Direction.BOTH
   }
 
-<<<<<<< HEAD
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    //cache of known connected nodes
-    val relCache = new RelationshipsCache(CACHE_SIZE, state.memoryTracker)
-=======
   protected def internalCreateResults(input: Iterator[CypherRow], state: QueryState): Iterator[CypherRow] = {
     val query = state.query
->>>>>>> neo4j/4.1
 
     val expandInto = new CachingExpandInto(query.transactionalContext.dataRead, kernelDirection, state.memoryTracker.memoryTrackerForOperator(id.x))
     input.flatMap {

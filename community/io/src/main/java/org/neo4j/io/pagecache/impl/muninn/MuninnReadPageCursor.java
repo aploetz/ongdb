@@ -132,11 +132,7 @@ final class MuninnReadPageCursor extends MuninnPageCursor
         // The page might have been evicted while we held the optimistic
         // read lock, so we need to check with page.pin that this is still
         // the page we're actually interested in:
-<<<<<<< HEAD
-        if ( !pagedFile.isBoundTo( pageRef, pagedFile.swapperId, currentPageId ) )
-=======
         if ( !pagedFile.isBoundTo( pageRef, pagedFile.swapperId, loadPlainCurrentPageId() ) )
->>>>>>> neo4j/4.1
         {
             // This is no longer the page we're interested in, so we have
             // to redo the pinning.

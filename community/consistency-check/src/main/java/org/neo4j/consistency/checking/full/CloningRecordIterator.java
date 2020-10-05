@@ -40,12 +40,7 @@ public class CloningRecordIterator<R extends AbstractBaseRecord> extends Prefetc
     {
         if ( actualIterator.hasNext() )
         {
-<<<<<<< HEAD
-            R next = actualIterator.next();
-            return (R) next.clone();
-=======
             return (R) actualIterator.next().copy();
->>>>>>> neo4j/4.1
         }
         else
         {

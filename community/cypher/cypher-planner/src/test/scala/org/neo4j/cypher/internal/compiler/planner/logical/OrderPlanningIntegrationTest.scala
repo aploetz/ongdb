@@ -250,11 +250,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
 
     val aAt7 = "  a@7"
     val aAt43 = "  a@43"
-<<<<<<< HEAD
-    val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty)
-=======
     val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty, IndexOrderNone)
->>>>>>> neo4j/4.1
     val ageProperty = prop(aAt43, "age")
     val nameProperty = prop(aAt7, "name")
 
@@ -298,11 +294,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
 
     val aAt7 = "  a@7"
     val aAt34 = "  a@34"
-<<<<<<< HEAD
-    val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty)
-=======
     val labelScan = NodeByLabelScan(aAt7, labelName("A"), Set.empty, IndexOrderNone)
->>>>>>> neo4j/4.1
     val ageProperty = prop(aAt7, "age")
     val nameProperty = prop(aAt7, "name")
     val fooProperty = prop(aAt34, "foo")
@@ -736,11 +728,7 @@ class OrderPlanningIntegrationTest extends CypherFunSuite with LogicalPlanningTe
         |  Label_OPERATIONS_Operation: [(n_labels)-[:`OPERATIONS`]->(n_labels_operations:`Operation`)|n_labels_operations{.id, .date, .description, .amount}]}]} ORDER by n.id
         |""".stripMargin
 
-<<<<<<< HEAD
-    val (_, plan, _, _, _) = new given().getLogicalPlanFor(query)
-=======
     val (_, plan, _, _) = new given().getLogicalPlanFor(query)
->>>>>>> neo4j/4.1
     plan shouldBe a[Sort]
   }
 }

@@ -31,13 +31,7 @@ public interface NodeCursor extends Cursor
 
     TokenSet labels();
 
-<<<<<<< HEAD
-    LabelSet labelsIgnoringTxStateSetRemove();
-
-    boolean hasLabel( int label );
-=======
     TokenSet labelsIgnoringTxStateSetRemove();
->>>>>>> neo4j/4.1
 
     boolean hasLabel( int label );
 

@@ -19,13 +19,7 @@
  */
 package org.neo4j.server.http.cypher.format.input.json;
 
-<<<<<<< HEAD
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.Test;
-=======
 import org.junit.jupiter.api.Test;
->>>>>>> neo4j/4.1
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
@@ -49,11 +43,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 class StatementDeserializerTest
 {
-<<<<<<< HEAD
-    private final JsonFactory jsonFactory = new JsonFactory().setCodec( new ObjectMapper() );
-=======
     private final JsonFactory jsonFactory = new JsonFactory().setCodec(new ObjectMapper());
->>>>>>> neo4j/4.1
 
     @Test
     void shouldDeserializeSingleStatement()

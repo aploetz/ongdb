@@ -210,13 +210,8 @@ public class ConsistencyCheckService
         LifeSupport life = new LifeSupport();
         final DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fileSystem, immediate() );
         StoreFactory factory =
-<<<<<<< HEAD
-                new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache, fileSystem, logProvider );
-        CountsManager countsManager = new CountsManager( pageCache, fileSystem, databaseLayout );
-=======
                 new StoreFactory( databaseLayout, config, idGeneratorFactory, pageCache, fileSystem, logProvider, pageCacheTracer );
         CountsManager countsManager = new CountsManager( pageCache, fileSystem, databaseLayout, pageCacheTracer, memoryTracker );
->>>>>>> neo4j/4.1
         // Don't start the counts store here as part of life, instead only shut down. This is because it's better to let FullCheck
         // start it and add its missing/broken detection where it can report to user.
         life.add( countsManager );
@@ -418,12 +413,8 @@ public class ConsistencyCheckService
         private final MemoryTracker memoryTracker;
         private GBPTreeCountsStore counts;
 
-<<<<<<< HEAD
-        CountsManager( PageCache pageCache, FileSystemAbstraction fileSystem, DatabaseLayout databaseLayout )
-=======
         CountsManager( PageCache pageCache, FileSystemAbstraction fileSystem, DatabaseLayout databaseLayout, PageCacheTracer pageCacheTracer,
                 MemoryTracker memoryTracker )
->>>>>>> neo4j/4.1
         {
             this.pageCache = pageCache;
             this.fileSystem = fileSystem;
@@ -436,13 +427,8 @@ public class ConsistencyCheckService
         public CountsStore get() throws IOException
         {
             counts = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem,
-<<<<<<< HEAD
-                    RecoveryCleanupWorkCollector.ignore(), new RebuildPreventingCountsInitializer(), true, GBPTreeCountsStore.NO_MONITOR );
-            counts.start();
-=======
                     RecoveryCleanupWorkCollector.ignore(), new RebuildPreventingCountsInitializer(), true, pageCacheTracer, GBPTreeCountsStore.NO_MONITOR );
             counts.start( NULL, memoryTracker );
->>>>>>> neo4j/4.1
             return counts;
         }
 

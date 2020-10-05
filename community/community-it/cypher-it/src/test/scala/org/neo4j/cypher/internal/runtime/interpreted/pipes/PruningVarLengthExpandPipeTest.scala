@@ -44,20 +44,6 @@ import scala.util.Random
 class PruningVarLengthExpandPipeTest extends GraphDatabaseFunSuite {
   val types = RelationshipTypes(Array.empty[String])
 
-<<<<<<< HEAD
-  test("should register owning pipe") {
-    val src = new FakePipe(Iterator.empty)
-    val pred1 = True()
-    val pred2 = True()
-    val pipeUnderTest = createPipe(src, 1, 2, SemanticDirection.OUTGOING, pred1, pred2)
-
-    pipeUnderTest.filteringStep.predicateExpressions.foreach(_.owningPipe should equal(pipeUnderTest))
-    pred1.owningPipe should equal(pipeUnderTest)
-    pred2.owningPipe should equal(pipeUnderTest)
-  }
-
-=======
->>>>>>> neo4j/4.1
   test("random and compare") {
     // runs DistinctVarExpand and VarExpand side-by-side and checks that the reachable nodes are the same
     val POPULATION: Int = 1 * 1000

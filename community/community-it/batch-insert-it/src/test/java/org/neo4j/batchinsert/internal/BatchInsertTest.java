@@ -36,14 +36,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.neo4j.batchinsert.BatchInserter;
 import org.neo4j.batchinsert.BatchInserters;
 import org.neo4j.collection.PrimitiveLongResourceIterator;
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.counts.CountsAccessor;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.Direction;
@@ -52,11 +55,16 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
+import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.schema.ConstraintDefinition;
 import org.neo4j.graphdb.schema.ConstraintType;
 import org.neo4j.graphdb.schema.IndexDefinition;
+import org.neo4j.index.internal.gbptree.RecoveryCleanupWorkCollector;
+import org.neo4j.internal.counts.CountsBuilder;
+import org.neo4j.internal.counts.GBPTreeCountsStore;
 import org.neo4j.internal.helpers.collection.Iterables;
+import org.neo4j.internal.helpers.collection.Iterators;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.internal.index.label.LabelScanStore;
 import org.neo4j.internal.index.label.TokenScanReader;
@@ -90,6 +98,7 @@ import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.kernel.impl.store.record.SchemaRecord;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.memory.MemoryTracker;
 import org.neo4j.monitoring.Monitors;
 import org.neo4j.storageengine.api.NodePropertyAccessor;
 import org.neo4j.test.TestDatabaseManagementServiceBuilder;
@@ -116,6 +125,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
+import static org.neo4j.configuration.GraphDatabaseSettings.dense_node_threshold;
 import static org.neo4j.configuration.GraphDatabaseSettings.neo4j_home;
 import static org.neo4j.configuration.GraphDatabaseSettings.preallocate_logical_logs;
 import static org.neo4j.graphdb.Label.label;
@@ -874,9 +884,11 @@ class BatchInsertTest
         IndexAccessor accessor = mock( IndexAccessor.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) ) )
+                .thenReturn( populator );
         when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
-        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
+        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
+                .thenReturn( accessor );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 
         BatchInserter inserter = newBatchInserterWithIndexProvider(
@@ -892,7 +904,7 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
         verify( populator ).create();
         verify( populator ).add( argThat( c -> c.contains( add( nodeId, internalIndex.schema(), Values.of( "Jakewins" ) ) ) ), any( PageCursorTracer.class ) );
         verify( populator ).verifyDeferredConstraints( any( NodePropertyAccessor.class ) );
@@ -911,9 +923,11 @@ class BatchInsertTest
         IndexAccessor accessor = mock( IndexAccessor.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) ) )
+                .thenReturn( populator );
         when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
-        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
+        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
+                .thenReturn( accessor );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 
         BatchInserter inserter = newBatchInserterWithIndexProvider(
@@ -929,7 +943,7 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
         verify( populator ).create();
         verify( populator ).add( argThat( c -> c.contains( add( nodeId, internalUniqueIndex.schema(), Values.of( "Jakewins" ) ) ) ),
                 any( PageCursorTracer.class ) );
@@ -952,9 +966,11 @@ class BatchInsertTest
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) ).thenReturn( populator );
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) ) )
+                .thenReturn( populator );
         when( populator.sample( any( PageCursorTracer.class ) ) ).thenReturn( new IndexSample() );
-        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ) ) ).thenReturn( accessor );
+        when( provider.getOnlineAccessor( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any( TokenNameLookup.class ) ) )
+                .thenReturn( accessor );
 
         BatchInserter inserter = newBatchInserterWithIndexProvider(
                 singleInstanceIndexProviderFactory( KEY, provider ), provider.getProviderDescriptor(), denseNodeThreshold );
@@ -967,7 +983,7 @@ class BatchInsertTest
         // THEN
         verify( provider ).init();
         verify( provider ).start();
-        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() );
+        verify( provider ).getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) );
         verify( populator ).create();
         verify( populator ).add( argThat( c -> c.contains( add( jakewins, internalIndex.schema(), Values.of( "Jakewins" ) ) ) &&
                                                c.contains( add( boggle, internalIndex.schema(), Values.of( "b0ggl3" ) ) ) ), any( PageCursorTracer.class ) );
@@ -1391,6 +1407,114 @@ class BatchInsertTest
         inserter.shutdown();
     }
 
+    @Test
+    void shouldStartOnAndUpdateDbContainingFulltextIndex() throws Exception
+    {
+        // given
+        // this test cannot run on an impermanent db since there's a test issue causing problems when flipping/closing RAMDirectory Lucene indexes
+        boolean impermanent = false;
+        int denseNodeThreshold = GraphDatabaseSettings.dense_node_threshold.defaultValue();
+        GraphDatabaseService db = instantiateGraphDatabaseService( denseNodeThreshold );
+        String key = "key";
+        Label label = Label.label( "Label" );
+        String indexName = "ftsNodes";
+        try
+        {
+            try ( Transaction tx = db.beginTx() )
+            {
+                db.executeTransactionally( format( "CALL db.index.fulltext.createNodeIndex('%s', ['%s'], ['%s'] )", indexName, label.name(), key ) );
+                tx.commit();
+            }
+            try ( Transaction tx = db.beginTx() )
+            {
+                tx.schema().awaitIndexesOnline( 1, TimeUnit.MINUTES );
+                tx.commit();
+            }
+        }
+        finally
+        {
+            managementService.shutdown();
+        }
+
+        // when
+        String value = "hey";
+        BatchInserter inserter = newBatchInserter( denseNodeThreshold );
+        long node = inserter.createNode( Collections.singletonMap( key, value ), label );
+
+        // then
+        inserter.shutdown();
+        GraphDatabaseAPI dbAfterInsert = instantiateGraphDatabaseService( denseNodeThreshold );
+        try
+        {
+            try ( Transaction tx = dbAfterInsert.beginTx() )
+            {
+                // Check that the store has this node
+                ResourceIterator<Node> nodes = tx.findNodes( label, key, value );
+                Node foundNode = Iterators.single( nodes );
+                assertEquals( node, foundNode.getId() );
+
+                // Check that the fulltext index has this node
+                dbAfterInsert.executeTransactionally( format( "CALL db.index.fulltext.queryNodes('%s', '%s')", indexName, value ), new HashMap<>(), result ->
+                {
+                    assertTrue( result.hasNext() );
+                    Map<String,Object> hit = result.next();
+                    Node indexedNode = (Node) hit.get( "node" );
+                    assertFalse( result.hasNext() );
+                    return indexedNode;
+                } );
+            }
+        }
+        finally
+        {
+            managementService.shutdown();
+        }
+    }
+
+    @Test
+    public void shouldBuildCorrectCountsStoreOnIncrementalImport() throws Exception
+    {
+        // given
+        Label label = Label.label( "Person" );
+        int denseNodeThreshold = dense_node_threshold.defaultValue();
+        for ( int r = 0; r < 3; r++ )
+        {
+            // when
+            BatchInserter inserter = newBatchInserter( denseNodeThreshold );
+            try
+            {
+                for ( int i = 0; i < 100; i++ )
+                {
+                    inserter.createNode( null, label );
+                }
+            }
+            finally
+            {
+                inserter.shutdown();
+            }
+
+            // then
+            try ( GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fs, RecoveryCleanupWorkCollector.immediate(),
+                    new CountsBuilder()
+                    {
+                        @Override
+                        public void initialize( CountsAccessor.Updater updater, PageCursorTracer cursorTracer, MemoryTracker memoryTracker )
+                        {
+                            throw new UnsupportedOperationException( "Should not be required" );
+                        }
+
+                        @Override
+                        public long lastCommittedTxId()
+                        {
+                            return 0;
+                        }
+                    }, true, PageCacheTracer.NULL, GBPTreeCountsStore.NO_MONITOR ) )
+            {
+                countsStore.start( NULL, INSTANCE );
+                assertEquals( (r + 1) * 100, countsStore.nodeCount( 0, NULL ) );
+            }
+        }
+    }
+
     private Config configuration( int denseNodeThreshold )
     {
 
@@ -1414,15 +1538,20 @@ class BatchInsertTest
         return BatchInserters.inserter( databaseLayout, fs, configuration, singletonList( provider ) );
     }
 
-    private GraphDatabaseService switchToEmbeddedGraphDatabaseService( BatchInserter inserter, int denseNodeThreshold )
+    private GraphDatabaseAPI switchToEmbeddedGraphDatabaseService( BatchInserter inserter, int denseNodeThreshold )
     {
         inserter.shutdown();
+        return instantiateGraphDatabaseService( denseNodeThreshold );
+    }
+
+    private GraphDatabaseAPI instantiateGraphDatabaseService( int denseNodeThreshold )
+    {
         TestDatabaseManagementServiceBuilder factory = new TestDatabaseManagementServiceBuilder( databaseLayout );
         factory.setFileSystem( fs );
         managementService = factory.impermanent()
             // Shouldn't be necessary to set dense node threshold since it's a stick config
             .setConfig( configuration( denseNodeThreshold ) ).build();
-        return managementService.database( DEFAULT_DATABASE_NAME );
+        return (GraphDatabaseAPI) managementService.database( DEFAULT_DATABASE_NAME );
     }
 
     private LabelScanStore getLabelScanStore()
@@ -1474,7 +1603,7 @@ class BatchInsertTest
         IndexProvider provider = mock( IndexProvider.class );
 
         when( provider.getProviderDescriptor() ).thenReturn( DESCRIPTOR );
-        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any() ) )
+        when( provider.getPopulator( any( IndexDescriptor.class ), any( IndexSamplingConfig.class ), any(), any(), any( TokenNameLookup.class ) ) )
                 .thenReturn( populator );
         when( provider.completeConfiguration( any( IndexDescriptor.class ) ) ).then( inv -> inv.getArgument( 0 ) );
 

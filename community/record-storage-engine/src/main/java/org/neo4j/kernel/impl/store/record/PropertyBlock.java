@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.store.record;
 
-import org.apache.commons.lang3.exception.CloneFailedException;
-
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -270,35 +268,6 @@ public class PropertyBlock
         return result.toString();
     }
 
-<<<<<<< HEAD
-    @Override
-    public PropertyBlock clone()
-    {
-        try
-        {
-            PropertyBlock clone = (PropertyBlock) super.clone();
-            if ( valueBlocks != null )
-            {
-                clone.valueBlocks = valueBlocks.clone();
-            }
-            if ( valueRecords != null )
-            {
-                clone.valueRecords = new ArrayList<>( valueRecords.size() );
-                for ( DynamicRecord valueRecord : valueRecords )
-                {
-                    clone.valueRecords.add( valueRecord.clone() );
-                }
-            }
-            return clone;
-        }
-        catch ( CloneNotSupportedException e )
-        {
-            throw new CloneFailedException( e );
-        }
-    }
-
-=======
->>>>>>> neo4j/4.1
     public boolean hasSameContentsAs( PropertyBlock other )
     {
         // Assumption (which happens to be true) that if a heavy (long string/array) property

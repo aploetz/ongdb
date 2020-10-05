@@ -770,14 +770,6 @@ public class MultipleIndexPopulator
         private void logCompletionMessage()
         {
             log.info( "Index creation finished for index [%s].", indexUserDescription );
-<<<<<<< HEAD
-        }
-
-        private boolean isIndexPopulationOngoing( InternalIndexState postPopulationState )
-        {
-            return InternalIndexState.POPULATING == postPopulationState;
-=======
->>>>>>> neo4j/4.1
         }
 
         @Override

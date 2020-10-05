@@ -103,55 +103,7 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
             throw new IllegalStateException(
                     "Index statistics store file could not be found, most likely this database needs to be recovered, file:" + file, e );
         }
-<<<<<<< HEAD
-        scanTree( ( key, value ) -> cache.put( key.getIndexId(), new ImmutableIndexStatistics( value ) ) );
-    }
-
-    /**
-     * The provided {@code target} will be filled with:
-     * <ol>
-     *     <li>{@link DoubleLongRegister#readFirst()}: Number of updates made to this index since last resampling</li>
-     *     <li>{@link DoubleLongRegister#readSecond()}: Total size of the index</li>
-     * </ol>
-     *
-     * @param target a register to store the read values in
-     * @return the input register for convenience
-     */
-    public DoubleLongRegister indexUpdatesAndSize( long indexId, DoubleLongRegister target )
-    {
-        ImmutableIndexStatistics value = cache.get( indexId );
-        if ( value != null )
-        {
-            target.write( value.updatesCount, value.indexSize );
-        }
-        else
-        {
-            target.write( 0, 0 );
-        }
-        return target;
-    }
-
-    /**
-     * The provided {@code target} will be filled with:
-     * <ol>
-     *     <li>{@link DoubleLongRegister#readFirst()}: Number of unique values in the last sample set made of this index</li>
-     *     <li>{@link DoubleLongRegister#readSecond()}: Number of values in the last sample set made of this index</li>
-     * </ol>
-     *
-     * @param target a register to store the read values in
-     * @return the input register for convenience
-     */
-    public DoubleLongRegister indexSample( long indexId, DoubleLongRegister target )
-    {
-        ImmutableIndexStatistics value = cache.get( indexId );
-        if ( value != null )
-        {
-            target.write( value.sampleUniqueValues, value.sampleSize );
-        }
-        else
-=======
         try ( var cursorTracer = pageCacheTracer.createPageCursorTracer( INIT_TAG ) )
->>>>>>> neo4j/4.1
         {
             scanTree( ( key, value ) -> cache.put( key.getIndexId(), new ImmutableIndexStatistics( value ) ), cursorTracer );
         }
@@ -165,29 +117,16 @@ public class IndexStatisticsStore extends LifecycleAdapter implements IndexStati
 
     public void replaceStats( long indexId, IndexSample sample )
     {
-<<<<<<< HEAD
-        assertNotReadOnly();
-        cache.put( indexId, new ImmutableIndexStatistics( numberOfUniqueValuesInSample, sampleSize, updatesCount, indexSize ) );
-=======
         cache.put( indexId, new ImmutableIndexStatistics( sample.uniqueValues(), sample.sampleSize(), sample.updates(), sample.indexSize() ) );
->>>>>>> neo4j/4.1
     }
 
     public void removeIndex( long indexId )
     {
-<<<<<<< HEAD
-        assertNotReadOnly();
-=======
->>>>>>> neo4j/4.1
         cache.remove( indexId );
     }
 
     public void incrementIndexUpdates( long indexId, long delta )
     {
-<<<<<<< HEAD
-        assertNotReadOnly();
-=======
->>>>>>> neo4j/4.1
         cache.computeIfPresent( indexId, ( id, existing ) ->
                 new ImmutableIndexStatistics( existing.sampleUniqueValues, existing.sampleSize, existing.updatesCount + delta, existing.indexSize ) );
     }

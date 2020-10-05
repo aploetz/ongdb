@@ -227,15 +227,12 @@ public class LogFilesBuilder
         return this;
     }
 
-<<<<<<< HEAD
-=======
     public LogFilesBuilder withCommandReaderFactory( CommandReaderFactory commandReaderFactory )
     {
         this.commandReaderFactory = commandReaderFactory;
         return this;
     }
 
->>>>>>> neo4j/4.1
     public LogFilesBuilder withLogsDirectory( File logsDirectory )
     {
         this.logsDirectory = logsDirectory;

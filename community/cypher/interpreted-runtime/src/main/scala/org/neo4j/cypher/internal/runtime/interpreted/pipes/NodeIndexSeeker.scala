@@ -19,10 +19,6 @@
  */
 package org.neo4j.cypher.internal.runtime.interpreted.pipes
 
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.logical.plans._
-import org.neo4j.cypher.internal.runtime.CompositeValueIndexCursor
-=======
 import org.neo4j.cypher.internal.frontend.helpers.SeqCombiner.combine
 import org.neo4j.cypher.internal.logical.plans.CompositeQueryExpression
 import org.neo4j.cypher.internal.logical.plans.ExistenceQueryExpression
@@ -45,36 +41,22 @@ import org.neo4j.cypher.internal.runtime.CypherRow
 import org.neo4j.cypher.internal.runtime.IsList
 import org.neo4j.cypher.internal.runtime.IsNoValue
 import org.neo4j.cypher.internal.runtime.ReadableRow
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.Expression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.InequalitySeekRangeExpression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.PointDistanceSeekRangeExpression
 import org.neo4j.cypher.internal.runtime.interpreted.commands.expressions.PrefixSeekRangeExpression
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.runtime.ExecutionContext
-import org.neo4j.cypher.internal.runtime.IsList
-import org.neo4j.cypher.internal.runtime.IsNoValue
 import org.neo4j.cypher.internal.runtime.makeValueNeoSafe
-import org.neo4j.cypher.internal.v4_0.frontend.helpers.SeqCombiner.combine
-=======
-import org.neo4j.cypher.internal.runtime.makeValueNeoSafe
->>>>>>> neo4j/4.1
 import org.neo4j.exceptions.CypherTypeException
 import org.neo4j.exceptions.InternalException
 import org.neo4j.internal.kernel.api.IndexQuery
 import org.neo4j.internal.kernel.api.IndexReadSession
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor
 import org.neo4j.values.AnyValue
-<<<<<<< HEAD
-import org.neo4j.values.storable.Values.COMPARATOR
-import org.neo4j.values.storable._
-=======
 import org.neo4j.values.storable.NumberValue
 import org.neo4j.values.storable.PointValue
 import org.neo4j.values.storable.TextValue
 import org.neo4j.values.storable.Value
 import org.neo4j.values.storable.Values
->>>>>>> neo4j/4.1
 
 import scala.collection.JavaConverters.asScalaBufferConverter
 
@@ -97,11 +79,7 @@ trait NodeIndexSeeker {
                                             index: IndexReadSession,
                                             needsValues: Boolean,
                                             indexOrder: IndexOrder,
-<<<<<<< HEAD
-                                            baseContext: ExecutionContext): NodeValueIndexCursor =
-=======
                                             baseContext: CypherRow): NodeValueIndexCursor =
->>>>>>> neo4j/4.1
     indexMode match {
       case _: ExactSeek |
            _: SeekByRange =>
@@ -129,11 +107,7 @@ trait NodeIndexSeeker {
     case IndexOrderDescending => CompositeValueIndexCursor.descending(cursors)
   }
 
-<<<<<<< HEAD
-  private val BY_VALUE: MinMaxOrdering[Value] = MinMaxOrdering(Ordering.comparatorToOrdering(COMPARATOR))
-=======
   private val BY_VALUE: MinMaxOrdering[Value] = MinMaxOrdering(Ordering.comparatorToOrdering(Values.COMPARATOR))
->>>>>>> neo4j/4.1
 
   def computeIndexQueries(state: QueryState, row: ReadableRow): Seq[Seq[IndexQuery]] =
     valueExpr match {
@@ -202,11 +176,7 @@ trait NodeIndexSeeker {
             case RangeBetween(rangeGreaterThan, rangeLessThan) =>
               val greaterThanLimit = rangeGreaterThan.limit(BY_VALUE).get
               val lessThanLimit = rangeLessThan.limit(BY_VALUE).get
-<<<<<<< HEAD
-              val compare = COMPARATOR.compare(greaterThanLimit.endPoint, lessThanLimit.endPoint)
-=======
               val compare = Values.COMPARATOR.compare(greaterThanLimit.endPoint, lessThanLimit.endPoint)
->>>>>>> neo4j/4.1
               if (compare < 0) {
                     List(IndexQuery.range(propertyId,
                       greaterThanLimit.endPoint,

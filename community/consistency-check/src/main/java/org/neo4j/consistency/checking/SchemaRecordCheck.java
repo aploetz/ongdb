@@ -270,14 +270,6 @@ public class SchemaRecordCheck implements RecordCheck<SchemaRecord, ConsistencyR
         checkNamesAndDuplicates( rule, record, engine );
     }
 
-<<<<<<< HEAD
-    private SchemaRecord cloneRecord( SchemaRecord record )
-    {
-        return record.clone();
-    }
-
-=======
->>>>>>> neo4j/4.1
     static class CheckSchema implements SchemaProcessor
     {
         private final CheckerEngine<SchemaRecord,ConsistencyReport.SchemaConsistencyReport> engine;

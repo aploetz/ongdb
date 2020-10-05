@@ -192,19 +192,10 @@ public class BatchingNeoStores implements AutoCloseable, MemoryStatsVisitor.Visi
         // There may have been a previous import which was killed before it even started, where the label scan store could
         // be in a semi-initialized state. Better to be on the safe side and deleted it. We get her after determining that
         // the db is either completely empty or non-existent anyway, so deleting this file is OK.
-<<<<<<< HEAD
-        fileSystem.deleteFile( NativeLabelScanStore.getLabelScanStoreFile( databaseLayout ) );
-=======
         fileSystem.deleteFile( databaseLayout.labelScanStore() );
->>>>>>> neo4j/4.1
         deleteCountsStore();
 
         instantiateStores();
-    }
-
-    private void deleteCountsStore()
-    {
-        fileSystem.deleteFile( databaseLayout.countStore() );
     }
 
     private void deleteCountsStore()
@@ -387,11 +378,7 @@ public class BatchingNeoStores implements AutoCloseable, MemoryStatsVisitor.Visi
     {
         deleteCountsStore();
         try ( GBPTreeCountsStore countsStore = new GBPTreeCountsStore( pageCache, databaseLayout.countStore(), fileSystem,
-<<<<<<< HEAD
-                RecoveryCleanupWorkCollector.immediate(), builder, false, GBPTreeCountsStore.NO_MONITOR ) )
-=======
                 RecoveryCleanupWorkCollector.immediate(), builder, false, cacheTracer, GBPTreeCountsStore.NO_MONITOR ) )
->>>>>>> neo4j/4.1
         {
             countsStore.start( cursorTracer, memoryTracker );
             countsStore.checkpoint( UNLIMITED, cursorTracer );

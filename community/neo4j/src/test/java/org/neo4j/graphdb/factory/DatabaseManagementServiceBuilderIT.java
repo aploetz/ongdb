@@ -41,10 +41,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.neo4j.configuration.GraphDatabaseInternalSettings.databases_root_path;
 import static org.neo4j.configuration.GraphDatabaseSettings.DEFAULT_DATABASE_NAME;
 import static org.neo4j.configuration.GraphDatabaseSettings.SYSTEM_DATABASE_NAME;
-<<<<<<< HEAD
-import static org.neo4j.configuration.GraphDatabaseSettings.databases_root_path;
-=======
->>>>>>> neo4j/4.1
 import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.io.fs.FileSystemUtils.isEmptyOrNonExistingDirectory;
 import static org.neo4j.kernel.database.DatabaseIdRepository.NAMED_SYSTEM_DATABASE_ID;

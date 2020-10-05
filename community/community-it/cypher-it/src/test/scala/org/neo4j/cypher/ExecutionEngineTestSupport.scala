@@ -28,15 +28,11 @@ import org.neo4j.cypher.internal.ExecutionEngine
 import org.neo4j.cypher.internal.FullyParsedQuery
 import org.neo4j.cypher.internal.RewindableExecutionResult
 import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.runtime.ResourceManager
-=======
 import org.neo4j.cypher.internal.runtime.InputDataStream
 import org.neo4j.cypher.internal.runtime.ResourceManager
 import org.neo4j.cypher.internal.runtime.RuntimeJavaValueConverter
 import org.neo4j.cypher.internal.runtime.RuntimeScalaValueConverter
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionBoundQueryContext.IndexSearchMonitor
 import org.neo4j.cypher.internal.runtime.interpreted.TransactionalContextWrapper
 import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite

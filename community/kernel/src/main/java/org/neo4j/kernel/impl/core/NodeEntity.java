@@ -630,6 +630,11 @@ public class NodeEntity implements Node, RelationshipFactory<Relationship>
         }
     }
 
+    public InternalTransaction getTransaction()
+    {
+        return internalTransaction;
+    }
+
     @Override
     public int getDegree()
     {

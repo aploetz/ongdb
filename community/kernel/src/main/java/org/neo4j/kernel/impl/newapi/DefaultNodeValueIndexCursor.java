@@ -75,10 +75,6 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
     private SortedMergeJoin sortedMergeJoin = new SortedMergeJoin();
     private AccessMode accessMode;
     private boolean shortcutSecurity;
-<<<<<<< HEAD
-    private boolean disableSecurity;
-=======
->>>>>>> neo4j/4.1
     private int[] propertyIds;
 
     DefaultNodeValueIndexCursor( CursorPool<DefaultNodeValueIndexCursor> pool, DefaultNodeCursor nodeCursor )
@@ -245,11 +241,7 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
 
     protected boolean allowed( long reference )
     {
-<<<<<<< HEAD
-        if ( disableSecurity || shortcutSecurity )
-=======
         if ( shortcutSecurity )
->>>>>>> neo4j/4.1
         {
             return true;
         }
@@ -270,20 +262,6 @@ class DefaultNodeValueIndexCursor extends IndexCursor<IndexProgressor>
         return allowed;
     }
 
-<<<<<<< HEAD
-    /**
-     * This is to let {@link Read#nodeIndexDistinctValues(IndexDescriptor, NodeValueIndexCursor, boolean)} work.
-     * The security checks in {@link DefaultNodeValueIndexCursor#allowed(long)} expect the reference to be a node,
-     * but when it comes from the mentioned method it is the count of value in the index, thus we must ignore the
-     * security check here.
-     */
-    void disableSecurity()
-    {
-        disableSecurity = true;
-    }
-
-=======
->>>>>>> neo4j/4.1
     @Override
     public boolean needsValues()
     {

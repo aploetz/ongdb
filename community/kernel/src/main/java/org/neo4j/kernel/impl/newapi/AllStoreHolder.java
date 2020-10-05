@@ -203,20 +203,12 @@ public class AllStoreHolder extends Read
             // We need to calculate the counts through expensive operations. We cannot use a NodeLabelScan because the
             // label requested might not be allowed for that node, and yet the node might be visible due to Traverse rules.
             long count = 0;
-<<<<<<< HEAD
-            try ( DefaultNodeCursor nodes = cursors.allocateNodeCursor() ) // DefaultNodeCursor already contains traversal checks within next()
-=======
             try ( DefaultNodeCursor nodes = cursors.allocateNodeCursor( cursorTracer ) ) // DefaultNodeCursor already contains traversal checks within next()
->>>>>>> neo4j/4.1
             {
                 this.allNodesScan( nodes );
                 while ( nodes.next() )
                 {
-<<<<<<< HEAD
-                    if ( labelId == TokenRead.ANY_LABEL || nodes.labels().contains( labelId ) )
-=======
                     if ( labelId == TokenRead.ANY_LABEL || nodes.hasLabel( labelId ) )
->>>>>>> neo4j/4.1
                     {
                         count++;
                     }
@@ -236,11 +228,7 @@ public class AllStoreHolder extends Read
             try
             {
                 TransactionState txState = ktx.txState();
-<<<<<<< HEAD
-                try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts ) )
-=======
                 try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts, cursorTracer ) )
->>>>>>> neo4j/4.1
                 {
                     txState.accept( countingVisitor );
                 }
@@ -261,8 +249,6 @@ public class AllStoreHolder extends Read
     public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
     {
         return countsForRelationshipWithoutTxState( startLabelId, typeId, endLabelId ) + countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
-<<<<<<< HEAD
-=======
     }
 
     @Override
@@ -304,21 +290,13 @@ public class AllStoreHolder extends Read
             }
             return count - countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
         }
->>>>>>> neo4j/4.1
     }
 
     private static long countRelationshipsWithEndLabels( DefaultRelationshipScanCursor relationship, DefaultNodeCursor sourceNode, DefaultNodeCursor targetNode,
             int startLabelId, int endLabelId )
     {
-<<<<<<< HEAD
-        AccessMode mode = ktx.securityContext().mode();
-        if ( mode.allowsTraverseRelType( typeId ) &&
-             mode.allowsTraverseNode( startLabelId ) &&
-             mode.allowsTraverseNode( endLabelId ) )
-=======
         long internalCount = 0;
         while ( relationship.next() )
->>>>>>> neo4j/4.1
         {
             relationship.source( sourceNode );
             relationship.target( targetNode );
@@ -336,15 +314,8 @@ public class AllStoreHolder extends Read
         long count = 0;
         if ( ktx.hasTxStateWithChanges() )
         {
-<<<<<<< HEAD
-            long count = 0;
-            try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor();
-                    DefaultNodeCursor sourceNode = cursors.allocateFullAccessNodeCursor();
-                    DefaultNodeCursor targetNode = cursors.allocateFullAccessNodeCursor() )
-=======
             CountsDelta counts = new CountsDelta();
             try
->>>>>>> neo4j/4.1
             {
                 TransactionState txState = ktx.txState();
                 try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts, cursorTracer ) )
@@ -356,31 +327,6 @@ public class AllStoreHolder extends Read
                     count += counts.relationshipCount( startLabelId, typeId, endLabelId, cursorTracer );
                 }
             }
-<<<<<<< HEAD
-            return count - countsForRelationshipInTxState( startLabelId, typeId, endLabelId );
-        }
-    }
-
-    private long countsForRelationshipInTxState( int startLabelId, int typeId, int endLabelId )
-    {
-        long count = 0;
-        if ( ktx.hasTxStateWithChanges() )
-        {
-            CountsDelta counts = new CountsDelta();
-            try
-            {
-                TransactionState txState = ktx.txState();
-                try ( var countingVisitor = new TransactionCountingStateVisitor( EMPTY, storageReader, txState, counts ) )
-                {
-                    txState.accept( countingVisitor );
-                }
-                if ( counts.hasChanges() )
-                {
-                    count += counts.relationshipCount( startLabelId, typeId, endLabelId );
-                }
-            }
-=======
->>>>>>> neo4j/4.1
             catch ( KernelException e )
             {
                 throw new IllegalArgumentException( "Unexpected error: " + e.getMessage() );
@@ -407,11 +353,7 @@ public class AllStoreHolder extends Read
             }
         }
         AccessMode mode = ktx.securityContext().mode();
-<<<<<<< HEAD
-        boolean existsInRelStore = storageReader.relationshipExists( reference );
-=======
         boolean existsInRelStore = storageReader.relationshipExists( reference, cursorTracer );
->>>>>>> neo4j/4.1
 
         if ( mode.allowsTraverseAllRelTypes() )
         {
@@ -424,11 +366,7 @@ public class AllStoreHolder extends Read
         else
         {
             // DefaultNodeCursor already contains traversal checks within next()
-<<<<<<< HEAD
-            try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor() )
-=======
             try ( DefaultRelationshipScanCursor rels = cursors.allocateRelationshipScanCursor( cursorTracer ) )
->>>>>>> neo4j/4.1
             {
                 ktx.dataRead().singleRelationship( reference, rels );
                 return rels.next();
@@ -797,19 +735,6 @@ public class AllStoreHolder extends Read
     public long relationshipsGetCount( )
     {
         return countsForRelationship( TokenRead.ANY_LABEL, TokenRead.ANY_RELATIONSHIP_TYPE, TokenRead.ANY_LABEL );
-<<<<<<< HEAD
-    }
-
-    @Override
-    public DoubleLongRegister indexUpdatesAndSize( IndexDescriptor index, DoubleLongRegister target )
-            throws IndexNotFoundKernelException
-    {
-        ktx.assertOpen();
-        assertValidIndex( index );
-        return indexStatisticsStore.indexUpdatesAndSize( index.getId(), target );
-
-=======
->>>>>>> neo4j/4.1
     }
 
     @Override

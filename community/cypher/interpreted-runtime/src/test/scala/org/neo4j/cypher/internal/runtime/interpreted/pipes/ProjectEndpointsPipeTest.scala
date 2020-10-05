@@ -481,11 +481,7 @@ class ProjectEndpointsPipeTest extends CypherFunSuite {
     result should be(empty)
   }
 
-<<<<<<< HEAD
-  private def row(values: (String, AnyValue)*) = ExecutionContext.from(values: _*)
-=======
   private def row(values: (String, AnyValue)*) = CypherRow.from(values: _*)
->>>>>>> neo4j/4.1
 
   private def newMockedNode(id: Int) = {
     val node = mock[Node]

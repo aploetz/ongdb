@@ -24,10 +24,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.zip.Checksum;
 
-<<<<<<< HEAD
-=======
 import org.neo4j.io.memory.ScopedBuffer;
->>>>>>> neo4j/4.1
 import org.neo4j.util.FeatureToggles;
 
 /**
@@ -41,17 +38,10 @@ public class PhysicalFlushableChecksumChannel extends PhysicalFlushableChannel i
     private final ByteBuffer checksumView;
     private final Checksum checksum;
 
-<<<<<<< HEAD
-    public PhysicalFlushableChecksumChannel( StoreChannel channel, ByteBuffer byteBuffer )
-    {
-        super( channel, byteBuffer );
-        this.checksumView = byteBuffer.duplicate();
-=======
     public PhysicalFlushableChecksumChannel( StoreChannel channel, ScopedBuffer scopedBuffer )
     {
         super( channel, scopedBuffer );
         this.checksumView = scopedBuffer.getBuffer().duplicate();
->>>>>>> neo4j/4.1
         checksum = CHECKSUM_FACTORY.get();
     }
 

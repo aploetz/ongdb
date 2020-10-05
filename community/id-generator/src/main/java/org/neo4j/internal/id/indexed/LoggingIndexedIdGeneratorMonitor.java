@@ -40,11 +40,7 @@ import org.neo4j.io.fs.FlushableChannel;
 import org.neo4j.io.fs.PhysicalFlushableChannel;
 import org.neo4j.io.fs.ReadAheadChannel;
 import org.neo4j.io.fs.ReadPastEndException;
-<<<<<<< HEAD
-import org.neo4j.io.memory.BufferScope;
-=======
 import org.neo4j.io.memory.NativeScopedBuffer;
->>>>>>> neo4j/4.1
 import org.neo4j.time.Clocks;
 import org.neo4j.time.SystemNanoClock;
 import org.neo4j.util.FeatureToggles;
@@ -54,11 +50,8 @@ import static java.util.concurrent.TimeUnit.DAYS;
 import static org.neo4j.internal.helpers.Format.date;
 import static org.neo4j.internal.id.indexed.IndexedIdGenerator.NO_MONITOR;
 import static org.neo4j.io.ByteUnit.mebiBytes;
-<<<<<<< HEAD
-=======
 import static org.neo4j.io.fs.ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE;
 import static org.neo4j.memory.EmptyMemoryTracker.INSTANCE;
->>>>>>> neo4j/4.1
 
 /**
  * Logs all monitor calls into a {@link FlushableChannel}.
@@ -81,15 +74,9 @@ public class LoggingIndexedIdGeneratorMonitor implements IndexedIdGenerator.Moni
     private final File file;
     private final SystemNanoClock clock;
     private FlushableChannel channel;
-<<<<<<< HEAD
-    private AtomicLong position = new AtomicLong();
-    private long rotationThreshold;
-    private long pruneThreshold;
-=======
     private final AtomicLong position = new AtomicLong();
     private final long rotationThreshold;
     private final long pruneThreshold;
->>>>>>> neo4j/4.1
 
     /**
      * Looks at feature toggle and instantiates a LoggingMonitor if enabled, otherwise a no-op monitor.
@@ -339,11 +326,7 @@ public class LoggingIndexedIdGeneratorMonitor implements IndexedIdGenerator.Moni
 
     private PhysicalFlushableChannel instantiateChannel() throws IOException
     {
-<<<<<<< HEAD
-        return new PhysicalFlushableChannel( fs.write( file ) );
-=======
         return new PhysicalFlushableChannel( fs.write( file ), INSTANCE );
->>>>>>> neo4j/4.1
     }
 
     private File timestampedFile()
@@ -368,11 +351,7 @@ public class LoggingIndexedIdGeneratorMonitor implements IndexedIdGenerator.Moni
     public static void main( String[] args ) throws IOException
     {
         Args arguments = Args.withFlags( ARG_TOFILE ).parse( args );
-<<<<<<< HEAD
-        if ( arguments.orphans().size() == 0 )
-=======
         if ( arguments.orphans().isEmpty() )
->>>>>>> neo4j/4.1
         {
             System.err.println( "Please supply base name of log file" );
             return;
@@ -411,12 +390,7 @@ public class LoggingIndexedIdGeneratorMonitor implements IndexedIdGenerator.Moni
     private static void dumpFile( FileSystemAbstraction fs, File file, Dumper dumper ) throws IOException
     {
         dumper.file( file );
-<<<<<<< HEAD
-        try ( BufferScope bufferScope = new BufferScope( ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE );
-              var channel = new ReadAheadChannel<>( fs.read( file ), bufferScope.buffer ) )
-=======
         try ( var channel = new ReadAheadChannel<>( fs.read( file ), new NativeScopedBuffer( DEFAULT_READ_AHEAD_SIZE, INSTANCE ) ) )
->>>>>>> neo4j/4.1
         {
             while ( true )
             {

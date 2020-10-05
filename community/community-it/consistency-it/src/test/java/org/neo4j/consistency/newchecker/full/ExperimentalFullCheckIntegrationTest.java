@@ -171,18 +171,11 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
                 long node = next.node();
                 long otherNode = next.node();
                 long rel = next.relationship();
-<<<<<<< HEAD
-                tx.create( new NodeRecord( node, false, rel, NO_NEXT_PROPERTY.intValue() ) );
-                tx.create( new NodeRecord( otherNode, false, rel, NO_NEXT_PROPERTY.intValue() ) );
-
-                RelationshipRecord relationship = new RelationshipRecord( rel, node, otherNode, C );
-=======
                 tx.create( new NodeRecord( node ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
                 tx.create( new NodeRecord( otherNode ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, rel, 0 ) );
 
                 RelationshipRecord relationship = new RelationshipRecord( rel );
                 relationship.setLinks( node, otherNode, C );
->>>>>>> neo4j/4.1
                 relationship.setFirstNextRel( -3 ); //Set some negative pointers
                 relationship.setFirstPrevRel( -4 );
                 relationship.setSecondNextRel( -5 );
@@ -213,11 +206,7 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-<<<<<<< HEAD
-                tx.create( new NodeRecord( next.node(), false, -6, NO_NEXT_PROPERTY.intValue() ) );
-=======
                 tx.create( new NodeRecord( next.node() ).initialize( false, NO_NEXT_PROPERTY.intValue(), false, -6, 0 ) );
->>>>>>> neo4j/4.1
             }
         } );
 
@@ -239,13 +228,9 @@ public class ExperimentalFullCheckIntegrationTest extends FullCheckIntegrationTe
             protected void transactionData( GraphStoreFixture.TransactionDataBuilder tx,
                     GraphStoreFixture.IdGenerator next )
             {
-<<<<<<< HEAD
-                tx.create( new RelationshipRecord( next.relationship(), -2, -3, C ) );
-=======
                 RelationshipRecord relationship = new RelationshipRecord( next.relationship() );
                 relationship.setLinks( -2, -3, C );
                 tx.create( relationship );
->>>>>>> neo4j/4.1
 
                 tx.incrementRelationshipCount( ANY_LABEL, ANY_RELATIONSHIP_TYPE, ANY_LABEL, 1 );
                 tx.incrementRelationshipCount( ANY_LABEL, C, ANY_LABEL, 1 );

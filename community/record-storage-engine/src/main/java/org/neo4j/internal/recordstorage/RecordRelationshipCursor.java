@@ -19,8 +19,6 @@
  */
 package org.neo4j.internal.recordstorage;
 
-import org.apache.commons.lang3.exception.CloneFailedException;
-
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.impl.store.RelationshipStore;
@@ -136,14 +134,8 @@ abstract class RecordRelationshipCursor extends RelationshipRecord implements Re
     }
 
     @Override
-<<<<<<< HEAD
-    public final RelationshipRecord clone()
-    {
-        throw new CloneFailedException( "Record cursors are not cloneable." );
-=======
     public RelationshipRecord copy()
     {
         throw new UnsupportedOperationException( "Record cursors are not copyable." );
->>>>>>> neo4j/4.1
     }
 }

@@ -33,6 +33,8 @@ import org.neo4j.cypher.internal.util.test_helpers.CypherFunSuite
  */
 class SemanticAnalysisErrorMessagesTest extends CypherFunSuite {
 
+  private val emptyTokenErrorMessage = "'' is not a valid token name. Token names cannot be empty or contain any null-bytes."
+
   // This test invokes SemanticAnalysis twice because that's what the production pipeline does
   private val pipeline = Parsing andThen SemanticAnalysis(warn = true) andThen SemanticAnalysis(warn = false)
 
@@ -739,82 +741,6 @@ class SemanticAnalysisErrorMessagesTest extends CypherFunSuite {
 
     context.errors.map(_.msg) should equal(List(emptyTokenErrorMessage))
   }
-
-  test("Should not allow to use aggregate functions inside aggregate functions") {
-    val query = "WITH 1 AS x RETURN sum(max(x)) AS sumOfMax"
-
-    val startState = initStartState(query, Map.empty)
-    val context = new ErrorCollectingContext()
-
-    pipeline.transform(startState, context)
-
-    context.errors.map(_.msg) should equal(List("Can't use aggregate functions inside of aggregate functions."))
-  }
-
-  test("Should not allow to use count(*) inside aggregate functions") {
-    val query = "WITH 1 AS x RETURN min(count(*)) AS minOfCount"
-
-    val startState = initStartState(query, Map.empty)
-    val context = new ErrorCollectingContext()
-
-    pipeline.transform(startState, context)
-
-    context.errors.map(_.msg) should equal(List("Can't use aggregate functions inside of aggregate functions."))
-  }
-
-  test("Should not allow repeating rel variable in pattern") {
-    val query = "MATCH ()-[r]-()-[r]-() RETURN r AS r"
-
-    val startState = initStartState(query, Map.empty)
-    val context = new ErrorCollectingContext()
-
-    pipeline.transform(startState, context)
-
-    context.errors.map(_.msg) should equal(List("Cannot use the same relationship variable 'r' for multiple patterns"))
-  }
-
-  test("Should warn about repeated rel variable in pattern expression") {
-    val query = "MATCH ()-[r]-() RETURN size( ()-[r]-()-[r]-() ) AS size"
-
-    val startState = initStartState(query, Map.empty)
-    val context = new ErrorCollectingContext()
-
-    val resultState = pipeline.transform(startState, context)
-
-    resultState.semantics().notifications should equal(Set(DeprecatedRepeatedRelVarInPatternExpression(InputPosition(33, 1, 33), "r")))
-    context.errors should be(empty)
-  }
-
-  test("Should warn about repeated rel variable in pattern comprehension") {
-    val query = "MATCH ()-[r]-() RETURN [ ()-[r]-()-[r]-() | r ] AS rs"
-
-    val startState = initStartState(query, Map.empty)
-    val context = new ErrorCollectingContext()
-
-    val resultState = pipeline.transform(startState, context)
-
-    resultState.semantics().notifications should equal(Set(DeprecatedRepeatedRelVarInPatternExpression(InputPosition(29, 1, 29), "r")))
-    context.errors should be(empty)
-  }
-
-  test("Should type check predicates in FilteringExpression") {
-    val queries = Seq(
-      "RETURN [x IN [1,2,3] WHERE 42 | x + 1] AS foo",
-      "RETURN all(x IN [1,2,3] WHERE 42) AS foo",
-      "RETURN any(x IN [1,2,3] WHERE 42) AS foo",
-      "RETURN none(x IN [1,2,3] WHERE 42) AS foo",
-      "RETURN single(x IN [1,2,3] WHERE 42) AS foo",
-    )
-    queries.foreach { query =>
-      withClue(query) {
-        val context = new ErrorCollectingContext()
-        pipeline.transform(initStartState(query, Map.empty), context)
-        context.errors.map(_.msg) should equal(List("Type mismatch: expected Boolean but was Integer"))
-      }
-    }
-  }
-
-  private val emptyTokenErrorMessage = "'' is not a valid token name. Token names cannot be empty, or contain any null-bytes or back-ticks."
 
   private def initStartState(query: String, initialFields: Map[String, CypherType]) =
     InitialState(query, None, NoPlannerName, initialFields)

@@ -103,11 +103,7 @@ abstract class PageCacheHarnessTest<T extends PageCache> extends PageCacheTestSu
             {
                 File file = filesTouched.iterator().next();
                 try ( PagedFile pf = cache.map( file, cache.pageSize() );
-<<<<<<< HEAD
-                      PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK ) )
-=======
                       PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK, NULL ) )
->>>>>>> neo4j/4.1
                 {
                     for ( int pageId = 0; pageId < filePageCount; pageId++ )
                     {

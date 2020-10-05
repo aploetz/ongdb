@@ -28,6 +28,7 @@ import java.util.EventListener;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.exceptions.KernelException;
@@ -809,6 +810,18 @@ class QueryExecutionLocksIT
 
         @Override
         public MemoryTracker memoryTracker()
+        {
+            return null;
+        }
+
+        @Override
+        public UUID getDatabaseId()
+        {
+            return null;
+        }
+
+        @Override
+        public String getDatabaseName()
         {
             return null;
         }

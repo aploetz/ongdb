@@ -108,36 +108,6 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
                        params: MapValue
                       ): ExecutableQuery = {
 
-<<<<<<< HEAD
-    def resolveParameterForManagementCommands(logicalPlan: LogicalPlan): LogicalPlan = {
-      def getParamValue(paramPassword: Parameter) = {
-        params.get(paramPassword.name) match {
-          case param: TextValue => UTF8.encode(param.stringValue())
-          case IsNoValue() => throw new ParameterNotFoundException("Expected parameter(s): " + paramPassword.name)
-          case param => throw new ParameterWrongTypeException("Only string values are accepted as password, got: " + param.getTypeName)
-        }
-      }
-
-      logicalPlan match {
-        case l@LogSystemCommand(source: MultiDatabaseLogicalPlan, _) =>
-          LogSystemCommand(resolveParameterForManagementCommands(source).asInstanceOf[MultiDatabaseLogicalPlan], l.command)(new SequentialIdGen(l.id.x + 1))
-        case c@CreateUser(_, _, _, Some(paramPassword), _, _) =>
-          CreateUser(c.source, c.userName, Some(getParamValue(paramPassword)), None, c.requirePasswordChange, c.suspended)(new SequentialIdGen(c.id.x + 1))
-        case a@AlterUser(_, _, _, Some(paramPassword), _, _) =>
-          AlterUser(a.source, a.userName, Some(getParamValue(paramPassword)), None, a.requirePasswordChange, a.suspended)(new SequentialIdGen(a.id.x + 1))
-        case p@SetOwnPassword(_, Some(newParamPassword), _, None) =>
-          SetOwnPassword(Some(getParamValue(newParamPassword)), None, p.currentStringPassword, None)(new SequentialIdGen(p.id.x + 1))
-        case p@SetOwnPassword(_, None, _, Some(currentParamPassword)) =>
-          SetOwnPassword(p.newStringPassword, None, Some(getParamValue(currentParamPassword)), None)(new SequentialIdGen(p.id.x + 1))
-        case p@SetOwnPassword(_, Some(newParamPassword), _, Some(currentParamPassword)) =>
-          SetOwnPassword(Some(getParamValue(newParamPassword)), None, Some(getParamValue(currentParamPassword)), None)(new SequentialIdGen(p.id.x + 1))
-        case _ => // Not an administration command that needs resolving, do nothing
-          logicalPlan
-      }
-    }
-
-=======
->>>>>>> neo4j/4.1
     // we only pass in the runtime to be able to support checking against the correct CommandManagementRuntime
     val logicalPlanResult = query match {
       case fullyParsedQuery: FullyParsedQuery => planner.plan(fullyParsedQuery, tracer, transactionalContext, params, runtime)
@@ -294,10 +264,7 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
                          params: MapValue,
                          prePopulateResults: Boolean,
                          input: InputDataStream,
-<<<<<<< HEAD
-=======
                          queryMonitor: QueryExecutionMonitor,
->>>>>>> neo4j/4.1
                          subscriber: QuerySubscriber): QueryExecution = {
 
       val taskCloser = new TaskCloser
@@ -312,9 +279,6 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
       })
       taskCloser.addTask(_ => queryContext.resources.close())
       try {
-<<<<<<< HEAD
-        innerExecute(transactionalContext, queryOptions, taskCloser, queryContext, params, prePopulateResults, input, subscriber, isOutermostQuery)
-=======
         innerExecute(transactionalContext,
                      queryOptions,
                      taskCloser,
@@ -325,7 +289,6 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
                      queryMonitor,
                      subscriber,
                      isOutermostQuery)
->>>>>>> neo4j/4.1
       } catch {
         case e: Throwable =>
           QuerySubscriber.safelyOnError(subscriber, e)
@@ -352,12 +315,9 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
         case CypherExecutionMode.normal => NormalMode
       }
 
-<<<<<<< HEAD
-=======
       val monitor = if (isOutermostQuery) queryMonitor else QueryExecutionMonitor.NO_OP
       monitor.startExecution(transactionalContext.executingQuery())
 
->>>>>>> neo4j/4.1
       val inner = if (innerExecutionMode == ExplainMode) {
         taskCloser.close(success = true)
         val columns = columnNames(logicalPlan)
@@ -378,17 +338,6 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
         taskCloser.addTask(_ => runtimeResult.close())
 
         new StandardInternalExecutionResult(queryContext,
-<<<<<<< HEAD
-                                            executionPlan.runtimeName,
-                                            runtimeResult,
-                                            taskCloser,
-                                            internalQueryType,
-                                            innerExecutionMode,
-                                            planDescriptionBuilder,
-                                            subscriber)
-        }
-      val monitor = if (isOutermostQuery) kernelMonitors.newMonitor(classOf[QueryExecutionMonitor]) else QueryExecutionMonitor.NO_OP
-=======
           executionPlan.runtimeName,
           runtimeResult,
           taskCloser,
@@ -398,7 +347,6 @@ case class CypherCurrentCompiler[CONTEXT <: RuntimeContext](planner: CypherPlann
           subscriber)
       }
 
->>>>>>> neo4j/4.1
       ClosingExecutionResult.wrapAndInitiate(
         transactionalContext.executingQuery(),
         inner,

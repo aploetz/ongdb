@@ -186,12 +186,8 @@ class CsvImporter implements Importer
                     new PrintingImportLogicMonitor( stdOut, stdErr ),
                     jobScheduler,
                     badCollector,
-<<<<<<< HEAD
-                    TransactionLogInitializer.getLogFilesInitializer() );
-=======
                     TransactionLogInitializer.getLogFilesInitializer(),
                     memoryTracker );
->>>>>>> neo4j/4.1
 
             printOverview( databaseLayout.databaseDirectory(), nodeFiles, relationshipFiles, importConfig, stdOut );
 

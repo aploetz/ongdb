@@ -89,34 +89,4 @@ class SchemaLoggingIT
             tx.commit();
         }
     }
-<<<<<<< HEAD
-
-    private class LogMessageMatcher extends BaseMatcher<Object>
-    {
-        private static final String CREATION_FINISHED = "Index creation finished for index [%s].";
-        private final LogMatcherBuilder match;
-        private final IndexProviderDescriptor descriptor;
-
-        LogMessageMatcher( LogMatcherBuilder match, IndexProviderDescriptor descriptor )
-        {
-            this.match = match;
-            this.descriptor = descriptor;
-        }
-
-        @Override
-        public boolean matches( Object item )
-        {
-            return logProvider.containsMatchingLogCall( match.info( containsString( CREATION_FINISHED ),
-                    ":User(name) [provider: {key=" + descriptor.getKey() + ", version=" + descriptor.getVersion() + "}]" ) );
-        }
-
-        @Override
-        public void describeTo( Description description )
-        {
-            description.appendText( " expected log message containing: '" ).appendText( CREATION_FINISHED )
-                    .appendText( "', but not found. Messages was: '" ).appendText( logProvider.serialize() ).appendText( "." );
-        }
-    }
-=======
->>>>>>> neo4j/4.1
 }

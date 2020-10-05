@@ -204,33 +204,18 @@ class MemoryAllocatorTest
     }
 
     @Test
-    void allAllocatedMemoryMustBeAccessibleForAllAlignments() throws Exception
+    void bufferCannotBeAlignedOutsideAllocatedSlot()
     {
         // This test relies on the native access bounds checks that are enabled in Unsafeutil during tests.
-        int k512 = (int) ByteUnit.kibiBytes( 512 );
-        int maxAlign = PageCache.PAGE_SIZE >> 2;
-        for ( int align = 1; align <= maxAlign; align += Long.BYTES )
-        {
-            for ( int alloc = PageCache.PAGE_SIZE; alloc <= k512; alloc += PageCache.PAGE_SIZE )
-            {
-                createAllocator( "2 MiB" );
-                long addr = allocator.allocateAligned( alloc, align );
-                int i = 0;
-                try
-                {
-                    // This must not throw any bad access exceptions.
-                    UnsafeUtil.getLong( addr + i ); // Start of allocation.
-                    i = alloc - Long.BYTES;
-                    UnsafeUtil.getLong( addr + i ); // End of allocation.
-                }
-                catch ( Throwable e )
-                {
-                    throw new Exception( String.format(
-                            "Access failed at offset %s (%x) into allocated address %s (%x) of size %s (align %s).",
-                            i, i, addr, addr, alloc, align ), e );
-                }
-            }
-        }
+        MemoryAllocator mman = createAllocator( ONE_PAGE );
+        // let's choose a really ridiculous alignment to make it very unlikely
+        // that the allocated grab will be aligned with it
+        long address = mman.allocateAligned( PageCache.PAGE_SIZE, PageCache.PAGE_SIZE - 1 );
+        assertThat( address ).isNotEqualTo( 0L );
+
+        // This must not throw any bad access exceptions.
+        UnsafeUtil.getLong( address ); // Start of allocation.
+        UnsafeUtil.getLong( address + ONE_PAGE - Long.BYTES ); // End of allocation.
     }
 
     private void closeAllocator()

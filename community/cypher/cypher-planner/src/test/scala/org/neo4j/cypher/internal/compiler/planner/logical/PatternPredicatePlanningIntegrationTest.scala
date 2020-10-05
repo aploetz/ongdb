@@ -134,22 +134,6 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
         Sort(
           Projection(
             RollUpApply(
-<<<<<<< HEAD
-              NodeByLabelScan("u", LabelName("User")(pos), Set.empty),
-              Projection(
-                Selection(
-                  Seq(hasLabels("u2", "User")),
-                  CacheProperties(
-                    Expand(
-                      Argument(Set("u")),
-                      "u",
-                      OUTGOING,
-                      Seq(RelTypeName("FOLLOWS")(pos)),
-                      "u2",
-                      "r"
-                    ),
-                    Set(CachedProperty("u", Variable("u")(pos), PropertyKeyName("id")(pos), NODE_TYPE)(pos))
-=======
               NodeByLabelScan("u", LabelName("User")(pos), Set.empty, IndexOrderNone),
               Projection(
                 Selection(
@@ -161,7 +145,6 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
                     Seq(RelTypeName("FOLLOWS")(pos)),
                     "u2",
                     "r"
->>>>>>> neo4j/4.1
                   )
                 ),
                 Map("  FRESHID41" -> prop("u2", "id"))
@@ -174,11 +157,7 @@ class PatternPredicatePlanningIntegrationTest extends CypherFunSuite with Logica
           ),
           Seq(Ascending(patternComprehensionExpressionKeyString))
         ),
-<<<<<<< HEAD
-        Map("u.id" -> cachedNodeProp("u", "id"))
-=======
         Map("u.id" -> prop("u", "id"))
->>>>>>> neo4j/4.1
       )
     )
   }

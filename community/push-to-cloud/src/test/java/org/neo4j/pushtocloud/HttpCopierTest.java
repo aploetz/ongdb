@@ -20,23 +20,15 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
-<<<<<<< HEAD
-import org.hamcrest.CoreMatchers;
-import org.hamcrest.Matcher;
-=======
->>>>>>> neo4j/4.1
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import wiremock.com.fasterxml.jackson.databind.ObjectMapper;
-<<<<<<< HEAD
-=======
 import wiremock.org.hamcrest.BaseMatcher;
 import wiremock.org.hamcrest.CoreMatchers;
 import wiremock.org.hamcrest.Description;
 import wiremock.org.hamcrest.Matcher;
->>>>>>> neo4j/4.1
 
 import java.io.File;
 import java.io.IOException;
@@ -76,16 +68,8 @@ import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE;
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
-<<<<<<< HEAD
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.core.StringContains.containsString;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-=======
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
->>>>>>> neo4j/4.1
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Matchers.anyLong;
@@ -97,12 +81,9 @@ import static org.neo4j.pushtocloud.HttpCopier.ERROR_REASON_UNSUPPORTED_INDEXES;
 import static org.neo4j.pushtocloud.HttpCopier.HTTP_RESUME_INCOMPLETE;
 import static org.neo4j.pushtocloud.HttpCopier.HTTP_UNPROCESSABLE_ENTITY;
 import static org.neo4j.pushtocloud.HttpCopier.StatusBody;
-<<<<<<< HEAD
-=======
 import static wiremock.org.hamcrest.CoreMatchers.allOf;
 import static wiremock.org.hamcrest.CoreMatchers.containsString;
 import static wiremock.org.hamcrest.MatcherAssert.assertThat;
->>>>>>> neo4j/4.1
 
 @TestDirectoryExtension
 class HttpCopierTest
@@ -156,11 +137,7 @@ class HttpCopierTest
         Path source = createDump();
         runHappyPathTest( source, true );
         // assert dump was deleted
-<<<<<<< HEAD
-        assertEquals( false, source.toFile().exists() );
-=======
         assertFalse( source.toFile().exists() );
->>>>>>> neo4j/4.1
     }
 
     @Test
@@ -170,11 +147,7 @@ class HttpCopierTest
         Path source = createDump();
         runHappyPathTest( source, false );
         // assert externally provided dump was not deleted
-<<<<<<< HEAD
-        assertEquals( true, source.toFile().exists() );
-=======
         assertTrue( source.toFile().exists() );
->>>>>>> neo4j/4.1
     }
 
     private void runHappyPathTest( Path source, boolean sourceProvided ) throws CommandFailedException
@@ -291,11 +264,7 @@ class HttpCopierTest
                                                                              .withStatus( HTTP_NOT_FOUND ) ) );
 
         // when/then
-<<<<<<< HEAD
-        assertThrows( CommandFailedException.class, CoreMatchers.containsString( "please check your Bolt URI" ),
-=======
         assertThrows( CommandFailedException.class, containsString( "please check your Bolt URI" ),
->>>>>>> neo4j/4.1
                       () -> authenticateAndCopy( copier, source, true, "user", "pass".toCharArray() ) );
     }
 
@@ -316,11 +285,7 @@ class HttpCopierTest
                                                                                    .withStatus( HTTP_NOT_FOUND ) ) );
 
         // when/then
-<<<<<<< HEAD
-        assertThrows( CommandFailedException.class, CoreMatchers.containsString( "please contact support" ),
-=======
         assertThrows( CommandFailedException.class, containsString( "please contact support" ),
->>>>>>> neo4j/4.1
                       () -> authenticateAndCopy( copier, source, true, "user", "pass".toCharArray() ) );
     }
 
@@ -346,11 +311,7 @@ class HttpCopierTest
                                                                             .withStatus( HTTP_NOT_FOUND ) ) );
 
         // when/then
-<<<<<<< HEAD
-        assertThrows( CommandFailedException.class, CoreMatchers.containsString( "please contact support" ),
-=======
         assertThrows( CommandFailedException.class, containsString( "please contact support" ),
->>>>>>> neo4j/4.1
                       () -> authenticateAndCopy( copier, source, true, "user", "pass".toCharArray() ) );
     }
 
@@ -997,8 +958,6 @@ class HttpCopierTest
             throw new UnsupportedOperationException( "Should not be called" );
         }
     }
-<<<<<<< HEAD
-=======
 
     private static <T> Matcher<T> not( Matcher<T> matcher )
     {
@@ -1017,5 +976,4 @@ class HttpCopierTest
             }
         };
     }
->>>>>>> neo4j/4.1
 }

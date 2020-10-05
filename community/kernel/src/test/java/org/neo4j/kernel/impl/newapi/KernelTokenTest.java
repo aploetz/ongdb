@@ -32,9 +32,7 @@ import org.neo4j.kernel.impl.api.KernelTransactionImplementation;
 import org.neo4j.storageengine.api.CommandCreationContext;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.token.TokenHolders;
-import org.neo4j.token.api.NamedToken;
 import org.neo4j.token.api.TokenHolder;
-import org.neo4j.token.api.TokenNotFoundException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -111,7 +109,7 @@ class KernelTokenTest
     @Test
     void invalidTokenNamesAreNotAllowed()
     {
-        List<String> invalidNames = List.of( "", "\0", "`", "``", "`a`", "a`b", "a``b" );
+        List<String> invalidNames = List.of( "", "\0" );
 
         assertThrows( IllegalTokenNameException.class, () -> kernelToken.labelGetOrCreateForName( null ),
                 "label name should be invalid: null" );
@@ -134,7 +132,8 @@ class KernelTokenTest
     @Test
     void allowedSpecialCharactersInTokenNames() throws KernelException
     {
-        List<String> validFancyTokenNames = List.of( "\t", " ", "  ", "\n", "\r", "\uD83D\uDE02", "\"", "'", "%", "@", "#", "$", "{", "}" );
+        List<String> validFancyTokenNames =
+                List.of( "\t", " ", "  ", "\n", "\r", "\uD83D\uDE02", "\"", "'", "%", "@", "#", "$", "{", "}", "`", "``", "`a`", "a`b", "a``b" );
 
         for ( String validName : validFancyTokenNames )
         {

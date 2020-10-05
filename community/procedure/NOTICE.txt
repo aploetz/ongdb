@@ -30,10 +30,6 @@ Apache Software License, Version 2.0
   Apache Commons Collections
   Apache Commons Lang
   Apache Commons Text
-<<<<<<< HEAD
-  Java Concurrency Tools Core Library
-  Lucene codecs
-=======
   Apache Shiro :: Cache
   Apache Shiro :: Configuration :: Core
   Apache Shiro :: Configuration :: OGDL
@@ -47,7 +43,6 @@ Apache Software License, Version 2.0
   Java Agent for Memory Measurements
   Java Concurrency Tools Core Library
   Jettison
->>>>>>> neo4j/4.1
   Lucene Common Analyzers
   Lucene Core
   Lucene Memory

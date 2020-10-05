@@ -912,11 +912,7 @@ class StatementConvertersTest extends CypherFunSuite with LogicalPlanningTestSup
         groupingExpressions = Map("  owner@20" -> varFor("  owner@7")),
         aggregationExpressions = Map("collected" -> CountStar()(pos)),
         selections = Selections(Set(Predicate(Set("  owner@20", "  REL62", "  NODE64"),
-<<<<<<< HEAD
-                                              exists(patternExpression))))),
-=======
           exists(patternExpression))))),
->>>>>>> neo4j/4.1
       tail = Some(RegularSinglePlannerQuery(
         queryGraph = QueryGraph(argumentIds = Set("collected", "  owner@20")),
         horizon = RegularQueryProjection(projections = Map("  owner@20" -> varFor("  owner@20")))

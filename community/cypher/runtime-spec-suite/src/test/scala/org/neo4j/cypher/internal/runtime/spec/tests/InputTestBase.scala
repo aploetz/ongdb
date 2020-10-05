@@ -114,10 +114,7 @@ abstract class InputTestBase[CONTEXT <: RuntimeContext](
     val logicalQuery = new LogicalQueryBuilder(this)
       .produceResults("y")
       .limit(1)
-<<<<<<< HEAD
-=======
       .nonFuseable()
->>>>>>> neo4j/4.1
       .unwind("range(x, x + 10) as y")
       .input(variables = Seq("x"))
       .build()

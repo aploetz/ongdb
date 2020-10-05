@@ -39,15 +39,6 @@ case class PartialTopNPipe(source: Pipe,
 
   override def getReceiver(state: QueryState): OrderedChunkReceiver = throw new IllegalStateException()
 
-<<<<<<< HEAD
-  class TopNReceiver(var remainingLimit: Long, state: QueryState) extends OrderedChunkReceiver {
-    private val buffer = new java.util.ArrayList[ExecutionContext]()
-    private var topTable: DefaultComparatorTopTable[ExecutionContext] = _
-
-    override def clear(): Unit = {
-      buffer.forEach(state.memoryTracker.deallocated)
-      buffer.clear()
-=======
   class PartialTopNReceiver(var remainingLimit: Long, state: QueryState) extends OrderedChunkReceiver {
     private val memoryTracker = state.memoryTracker.memoryTrackerForOperator(id.x)
     private val rowsMemoryTracker = memoryTracker.getScopedMemoryTracker
@@ -56,7 +47,6 @@ case class PartialTopNPipe(source: Pipe,
     override def clear(): Unit = {
       topTable.reset(remainingLimit)
       rowsMemoryTracker.reset()
->>>>>>> neo4j/4.1
     }
 
     override def close(): Unit = {
@@ -64,33 +54,6 @@ case class PartialTopNPipe(source: Pipe,
       rowsMemoryTracker.close()
     }
 
-<<<<<<< HEAD
-    override def processRow(row: ExecutionContext): Unit = {
-      // add to either Buffer or TopTable
-      if (remainingLimit > 0) {
-        remainingLimit -= 1
-        buffer.add(row)
-        state.memoryTracker.allocated(row)
-      } else {
-        if (topTable == null) {
-          // At this point we switch from a buffer for the whole chunk to a TopTable
-          topTable = new DefaultComparatorTopTable[ExecutionContext](suffixComparator, buffer.size())
-          // Transfer everything buffered so far into the TopTable
-          var i = 0
-          while (i < buffer.size()) {
-            topTable.add(buffer.get(i))
-            // Only calling allocated here for the rows that are already buffered,
-            // and not for any rows after that, makes the assumption that rows have more or less the same size.
-            // We don't know which ones are actually kept in the TopTable.
-            state.memoryTracker.allocated(row)
-            i += 1
-          }
-          // Clean up the buffer
-          clear()
-        }
-        // Add the current row to the TopTable
-        topTable.add(row)
-=======
     override def isSameChunk(first: CypherRow, current: CypherRow): Boolean = prefixComparator.compare(first, current) == 0
 
     override def processRow(row: CypherRow): Unit = {
@@ -99,7 +62,6 @@ case class PartialTopNPipe(source: Pipe,
         rowsMemoryTracker.allocateHeap(row.estimatedHeapUsage)
         if (evictedRow != null)
           rowsMemoryTracker.releaseHeap(evictedRow.estimatedHeapUsage)
->>>>>>> neo4j/4.1
       }
 
       remainingLimit = math.max(0, remainingLimit - 1)
@@ -127,11 +89,7 @@ case class PartialTopNPipe(source: Pipe,
 
         // We have to re-attach the already read first row to the iterator
         val restoredInput = Iterator.single(first) ++ input
-<<<<<<< HEAD
-        val receiver = new TopNReceiver(longCount, state)
-=======
         val receiver = new PartialTopNReceiver(longCount, state)
->>>>>>> neo4j/4.1
         internalCreateResultsWithReceiver(restoredInput, state, receiver)
       }
     }

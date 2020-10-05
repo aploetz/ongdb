@@ -31,15 +31,12 @@ import java.util.UUID;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Stream;
 
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
->>>>>>> neo4j/4.1
 import org.neo4j.common.DependencyResolver;
 import org.neo4j.configuration.Config;
 import org.neo4j.configuration.GraphDatabaseSettings;
@@ -185,13 +182,8 @@ public class ParallelBatchImporterTest
         // This will have statistically half the nodes be considered dense
         Config dbConfig = Config.defaults( GraphDatabaseSettings.dense_node_threshold, RELATIONSHIPS_PER_NODE * 2 );
         final BatchImporter inserter = new ParallelBatchImporter(
-<<<<<<< HEAD
-                databaseLayout, fs, null, config, NullLogService.getInstance(), monitor, EMPTY, dbConfig, getFormat(), ImportLogic.NO_MONITOR, jobScheduler,
-                Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer() );
-=======
                 databaseLayout, fs, null, pageCacheTracer, config, NullLogService.getInstance(), monitor, EMPTY, dbConfig, getFormat(),
                 ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY, TransactionLogInitializer.getLogFilesInitializer(), INSTANCE );
->>>>>>> neo4j/4.1
         LongAdder propertyCount = new LongAdder();
         LongAdder relationshipCount = new LongAdder();
         try

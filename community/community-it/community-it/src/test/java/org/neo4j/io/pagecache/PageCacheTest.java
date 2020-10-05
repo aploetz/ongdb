@@ -1037,11 +1037,7 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
         {
             configureStandardPageCache();
             PagedFile pagedFile = pageCache.map( file( "a" ), pageCachePageSize );
-<<<<<<< HEAD
-            try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_WRITE_LOCK ) )
-=======
             try ( PageCursor cursor = pagedFile.io( 0, PF_SHARED_WRITE_LOCK, NULL ) )
->>>>>>> neo4j/4.1
             {
                 for ( int i = 0; i < 20; i++ )
                 {
@@ -1051,11 +1047,7 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
             }
             pagedFile.close();
             try ( PagedFile b = pageCache.map( existingFile( "b" ), pageCachePageSize );
-<<<<<<< HEAD
-                  PageCursor cursor = b.io( 0, PF_SHARED_WRITE_LOCK ) )
-=======
                   PageCursor cursor = b.io( 0, PF_SHARED_WRITE_LOCK, NULL ) )
->>>>>>> neo4j/4.1
             {
                 for ( int i = 0; i < 200; i++ )
                 {
@@ -4910,21 +4902,13 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
     void copyToDirectByteBufferFromReadPageCursorMustCheckBounds() throws Exception
     {
         configureStandardPageCache();
-<<<<<<< HEAD
-        ByteBuffer buffer = allocateDirect( filePageSize );
-=======
         ByteBuffer buffer = allocateDirect( filePageSize, INSTANCE );
->>>>>>> neo4j/4.1
         try
         {
             File file = file( "a" );
             generateFileWithRecords( file, recordsPerFilePage, recordSize );
             try ( PagedFile pf = map( file, filePageSize );
-<<<<<<< HEAD
-                  PageCursor cursor = pf.io( 0, PF_SHARED_READ_LOCK ) )
-=======
                   PageCursor cursor = pf.io( 0, PF_SHARED_READ_LOCK, NULL ) )
->>>>>>> neo4j/4.1
             {
                 assertTrue( cursor.next() );
                 verifyCopyToBufferBounds( cursor, buffer );
@@ -4932,11 +4916,7 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
         }
         finally
         {
-<<<<<<< HEAD
-            releaseBuffer( buffer );
-=======
             releaseBuffer( buffer, INSTANCE );
->>>>>>> neo4j/4.1
         }
     }
 
@@ -4959,21 +4939,13 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
     void copyToDirectByteBufferFromWritePageCursorMustCheckBounds() throws Exception
     {
         configureStandardPageCache();
-<<<<<<< HEAD
-        ByteBuffer buffer = allocateDirect( filePageSize );
-=======
         ByteBuffer buffer = allocateDirect( filePageSize, INSTANCE );
->>>>>>> neo4j/4.1
         try
         {
             File file = file( "a" );
             generateFileWithRecords( file, recordsPerFilePage, recordSize );
             try ( PagedFile pf = map( file, filePageSize );
-<<<<<<< HEAD
-                  PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK ) )
-=======
                   PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK, NULL ) )
->>>>>>> neo4j/4.1
             {
                 assertTrue( cursor.next() );
                 verifyCopyToBufferBounds( cursor, buffer );
@@ -4981,11 +4953,7 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
         }
         finally
         {
-<<<<<<< HEAD
-            releaseBuffer( buffer );
-=======
             releaseBuffer( buffer, INSTANCE );
->>>>>>> neo4j/4.1
         }
     }
 
@@ -5085,20 +5053,12 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
     void copyToReadOnlyDirectByteBufferMustThrow() throws Exception
     {
         configureStandardPageCache();
-<<<<<<< HEAD
-        ByteBuffer allocation = allocateDirect( filePageSize );
-=======
         ByteBuffer allocation = allocateDirect( filePageSize, INSTANCE );
->>>>>>> neo4j/4.1
         try
         {
             ByteBuffer buf = allocation.asReadOnlyBuffer();
             try ( PagedFile pf = map( file( "a" ), filePageSize );
-<<<<<<< HEAD
-                  PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK ) )
-=======
                   PageCursor cursor = pf.io( 0, PF_SHARED_WRITE_LOCK, NULL ) )
->>>>>>> neo4j/4.1
             {
                 assertTrue( cursor.next() );
                 assertThrows( ReadOnlyBufferException.class, () -> cursor.copyTo( 0, buf ) );
@@ -5106,11 +5066,7 @@ public abstract class PageCacheTest<T extends PageCache> extends PageCacheTestSu
         }
         finally
         {
-<<<<<<< HEAD
-            releaseBuffer( allocation );
-=======
             releaseBuffer( allocation, INSTANCE );
->>>>>>> neo4j/4.1
         }
     }
 

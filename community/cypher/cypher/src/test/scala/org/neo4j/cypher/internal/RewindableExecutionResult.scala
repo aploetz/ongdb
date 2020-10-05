@@ -25,9 +25,11 @@ import org.neo4j.cypher.internal.runtime.ExecutionMode
 import org.neo4j.cypher.internal.runtime.NormalMode
 import org.neo4j.cypher.internal.runtime.QueryContext
 import org.neo4j.cypher.internal.runtime.QueryStatistics
+import org.neo4j.cypher.internal.runtime.QueryTransactionalContext
 import org.neo4j.cypher.internal.runtime.RuntimeScalaValueConverter
 import org.neo4j.cypher.internal.runtime.isGraphKernelResultValue
 import org.neo4j.cypher.result.RuntimeResult
+import org.neo4j.graphdb.Entity
 import org.neo4j.graphdb.Notification
 import org.neo4j.graphdb.Result
 import org.neo4j.kernel.impl.query.QueryExecution
@@ -141,7 +143,11 @@ object RewindableExecutionResult {
       val result = new ArrayBuffer[Map[String, AnyRef]]()
       subscriber.getOrThrow().asScala.foreach( record => {
         val row = columns.zipWithIndex.map {
-          case (value, index) => value -> scalaValues.asDeepScalaValue(queryContext.asObject(record(index))).asInstanceOf[AnyRef]
+          case (value, index) => {
+            val atIndex = scalaValues.asDeepScalaValue(queryContext.asObject(record(index))).asInstanceOf[AnyRef]
+            checkValidInput(queryContext.transactionalContext, atIndex)
+            value -> atIndex
+          }
         }
         if (row.nonEmpty) result.append(row.toMap)
       })
@@ -152,5 +158,18 @@ object RewindableExecutionResult {
         subscriber.queryStatistics().asInstanceOf[QueryStatistics],
         notifications)
     } finally subscription.cancel()
+  }
+
+  private def checkValidInput(context: QueryTransactionalContext, input: AnyRef): Unit = input match {
+    case entity: Entity =>
+      val transaction = context.transaction
+      if(transaction != null) {
+        val internalTransaction = context.transaction.internalTransaction()
+
+        if (internalTransaction != null) {
+          internalTransaction.validateSameDB(entity)
+        }
+      }
+    case _ => ()
   }
 }

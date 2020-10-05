@@ -58,18 +58,6 @@ case class OrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol]
         i += 1
       }
 
-<<<<<<< HEAD
-      if (currentOrderedGroupingValue == null || currentOrderedGroupingValue != orderedGroupingValue) {
-        currentOrderedGroupingValue = orderedGroupingValue
-        seen.foreach(state.memoryTracker.deallocated)
-        seen = mutable.Set[AnyValue]()
-      }
-      val added = seen.add(groupingValue)
-      if (added) {
-        state.memoryTracker.allocated(groupingValue)
-      }
-      added
-=======
       val orderedGroupingValues = buildValueList(ctx, orderedKeyNames)
       val unorderedGroupingValues = buildValueList(ctx, unorderedKeyNames)
 
@@ -92,7 +80,6 @@ case class OrderedDistinctPipe(source: Pipe, groupingColumns: Array[GroupingCol]
 
       override def next(): CypherRow =
         resultIter.next()
->>>>>>> neo4j/4.1
     }
   }
 

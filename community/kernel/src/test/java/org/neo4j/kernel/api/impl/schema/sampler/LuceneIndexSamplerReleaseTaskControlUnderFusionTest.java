@@ -24,12 +24,15 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
+import org.neo4j.common.TokenNameLookup;
 import org.neo4j.configuration.Config;
 import org.neo4j.internal.helpers.TaskControl;
 import org.neo4j.internal.schema.IndexDescriptor;
 import org.neo4j.internal.schema.IndexPrototype;
 import org.neo4j.internal.schema.IndexProviderDescriptor;
 import org.neo4j.io.fs.FileSystemAbstraction;
+import org.neo4j.io.pagecache.tracing.PageCacheTracer;
+import org.neo4j.io.pagecache.tracing.cursor.PageCursorTracer;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
 import org.neo4j.kernel.api.impl.schema.LuceneIndexProvider;
@@ -69,6 +72,7 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
     private static final Config config = Config.defaults();
     private static final IndexSamplingConfig samplingConfig = new IndexSamplingConfig( config );
     private static final RuntimeException sampleException = new RuntimeException( "Killroy messed with your index sample." );
+    private static final TokenNameLookup tokenNameLookup = SIMPLE_NAME_LOOKUP;
 
     @Inject
     private FileSystemAbstraction fs;
@@ -88,7 +92,7 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
      * <p>
      * A fusion index has multiple {@link IndexSampler index samplers} that are called sequentially. If one fails, then the other will never be invoked.
      * This was a problem for {@link LuceneIndexSampler}. It owns a {@link TaskControl} that it will try to release in try-finally
-     * in {@link LuceneIndexSampler#sampleIndex()}. But it never gets here because a prior {@link IndexSampler} fails.
+     * in {@link LuceneIndexSampler#sampleIndex(PageCursorTracer)}. But it never gets here because a prior {@link IndexSampler} fails.
      * <p>
      * Because the {@link TaskControl} was never released the lucene accessor would block forever, waiting for
      * {@link TaskCoordinator#awaitCompletion()}.
@@ -104,7 +108,7 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
 
         IndexProvider failingProvider = failingProvider();
         FusionIndexProvider fusionProvider = createFusionProvider( luceneProvider, failingProvider );
-        try ( IndexAccessor fusionAccessor = fusionProvider.getOnlineAccessor( descriptor, samplingConfig ) )
+        try ( IndexAccessor fusionAccessor = fusionProvider.getOnlineAccessor( descriptor, samplingConfig, tokenNameLookup ) )
         {
             IndexSamplingJob indexSamplingJob = createIndexSamplingJob( fusionAccessor );
 
@@ -115,7 +119,7 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
             }
             catch ( RuntimeException e )
             {
-                assertSame( e, sampleException );
+                assertSame( sampleException, e );
             }
 
             // then
@@ -126,8 +130,8 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
 
     private void makeSureIndexHasSomeData( IndexProvider provider ) throws IOException, IndexEntryConflictException
     {
-        try ( IndexAccessor accessor = provider.getOnlineAccessor( descriptor, samplingConfig );
-              IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE ) )
+        try ( IndexAccessor accessor = provider.getOnlineAccessor( descriptor, samplingConfig, tokenNameLookup );
+              IndexUpdater updater = accessor.newUpdater( IndexUpdateMode.ONLINE, PageCursorTracer.NULL ) )
         {
             updater.process( IndexEntryUpdate.add( 1, descriptor, Values.of( "some string" ) ) );
         }
@@ -156,7 +160,8 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
                 return fusionAccessor.newReader();
             }
         };
-        OnlineIndexSamplingJobFactory onlineIndexSamplingJobFactory = new OnlineIndexSamplingJobFactory( null, SIMPLE_NAME_LOOKUP, getInstance() );
+        OnlineIndexSamplingJobFactory onlineIndexSamplingJobFactory = new OnlineIndexSamplingJobFactory( null, SIMPLE_NAME_LOOKUP, getInstance(),
+                PageCacheTracer.NULL );
         return onlineIndexSamplingJobFactory.create( 1, indexProxy );
     }
 
@@ -174,7 +179,7 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
         return new IndexProvider.Adaptor( providerDescriptor, directoryFactory )
         {
             @Override
-            public IndexAccessor getOnlineAccessor( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig ) throws IOException
+            public IndexAccessor getOnlineAccessor( IndexDescriptor descriptor, IndexSamplingConfig samplingConfig, TokenNameLookup tokenNameLookup )
             {
                 return failingIndexAccessor();
             }
@@ -193,7 +198,8 @@ class LuceneIndexSamplerReleaseTaskControlUnderFusionTest
                     @Override
                     public IndexSampler createSampler()
                     {
-                        return () -> {
+                        return cursorTracer ->
+                        {
                             throw sampleException;
                         };
                     }

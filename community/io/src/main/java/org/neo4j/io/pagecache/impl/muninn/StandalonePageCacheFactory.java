@@ -52,17 +52,9 @@ public final class StandalonePageCacheFactory
         return createPageCache( factory, jobScheduler, cacheTracer );
     }
 
-<<<<<<< HEAD
-        return createPageCache( factory, jobScheduler );
-    }
-
-    public static PageCache createPageCache( PageSwapperFactory factory, JobScheduler jobScheduler )
-    {
-=======
     public static PageCache createPageCache( FileSystemAbstraction fileSystem, JobScheduler jobScheduler )
     {
         SingleFilePageSwapperFactory factory = new SingleFilePageSwapperFactory( fileSystem );
->>>>>>> neo4j/4.1
         PageCacheTracer cacheTracer = PageCacheTracer.NULL;
         return createPageCache( factory, jobScheduler, cacheTracer );
     }

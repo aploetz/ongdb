@@ -337,10 +337,7 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
                 switch ( state )
                 {
                 case ONLINE:
-<<<<<<< HEAD
-=======
                 case FAILED:
->>>>>>> neo4j/4.1
                     proxy.start();
                     break;
                 case POPULATING:
@@ -532,9 +529,9 @@ public class IndexingService extends LifecycleAdapter implements IndexUpdateList
     }
 
     @Override
-    public void validateBeforeCommit( IndexDescriptor index, Value[] tuple )
+    public void validateBeforeCommit( IndexDescriptor index, Value[] tuple, long entityId )
     {
-        indexMapRef.validateBeforeCommit( index, tuple );
+        indexMapRef.validateBeforeCommit( index, tuple, entityId );
     }
 
     @Override

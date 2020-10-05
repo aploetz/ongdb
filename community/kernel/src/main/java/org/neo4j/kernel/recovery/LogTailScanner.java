@@ -115,11 +115,7 @@ public class LogTailScanner
             CheckPoint latestCheckPoint = null;
             StoreId storeId = StoreId.UNKNOWN;
             try ( LogVersionedStoreChannel channel = logFiles.openForVersion( version );
-<<<<<<< HEAD
-                  LogEntryCursor cursor = new LogEntryCursor( logEntryReader, new ReadAheadLogChannel( channel ) ) )
-=======
                   LogEntryCursor cursor = new LogEntryCursor( logEntryReader, new ReadAheadLogChannel( channel, memoryTracker ) ) )
->>>>>>> neo4j/4.1
             {
                 LogHeader logHeader = logFiles.extractHeader( version );
                 storeId = logHeader.getStoreId();
@@ -299,11 +295,7 @@ public class LogTailScanner
                 try ( LogVersionedStoreChannel storeChannel = logFiles.openForVersion( logVersion ) )
                 {
                     storeChannel.position( currentPosition.getByteOffset() );
-<<<<<<< HEAD
-                    try ( LogEntryCursor cursor = new LogEntryCursor( logEntryReader, new ReadAheadLogChannel( storeChannel ) ) )
-=======
                     try ( LogEntryCursor cursor = new LogEntryCursor( logEntryReader, new ReadAheadLogChannel( storeChannel, memoryTracker ) ) )
->>>>>>> neo4j/4.1
                     {
                         while ( cursor.next() )
                         {

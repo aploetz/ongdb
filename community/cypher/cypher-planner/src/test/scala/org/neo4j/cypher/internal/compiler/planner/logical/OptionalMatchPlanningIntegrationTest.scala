@@ -350,12 +350,6 @@ class OptionalMatchPlanningIntegrationTest extends CypherFunSuite with LogicalPl
 
     val plan = cfg.getLogicalPlanFor(query)._2
     inside(plan) {
-<<<<<<< HEAD
-      case Apply(_:Projection, Apply(_:AllNodesScan, Optional(Expand(Selection(_, AllNodesScan("c", arguments)), _, _, _, _, _, _), _))) =>
-        arguments should equal(Set("a", "x"))
-    }
-  }
-=======
       case Apply(_:Projection, Apply(_:AllNodesScan, Optional(Expand(Selection(_, AllNodesScan("c", arguments)), _, _, _, _, _, _, _), _))) =>
         arguments should equal(Set("a", "x"))
     }
@@ -408,5 +402,4 @@ class OptionalMatchPlanningIntegrationTest extends CypherFunSuite with LogicalPl
 
 
 
->>>>>>> neo4j/4.1
 }

@@ -19,36 +19,23 @@
  */
 package org.neo4j.cypher.internal.compiler.planner.logical.cardinality.assumeIndependence
 
-<<<<<<< HEAD
-=======
 import org.neo4j.cypher.internal.ast.semantics.SemanticTable
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphCardinalityModel
 import org.neo4j.cypher.internal.compiler.planner.logical.Metrics.QueryGraphSolverInput
 import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.ExpressionSelectivityCalculator
 import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.SelectivityCombiner
-<<<<<<< HEAD
-=======
 import org.neo4j.cypher.internal.expressions.LabelName
->>>>>>> neo4j/4.1
 import org.neo4j.cypher.internal.ir.QueryGraph
 import org.neo4j.cypher.internal.ir.Selections
 import org.neo4j.cypher.internal.ir.SimplePatternLength
 import org.neo4j.cypher.internal.ir.VarPatternLength
 import org.neo4j.cypher.internal.planner.spi.GraphStatistics
-<<<<<<< HEAD
-import org.neo4j.cypher.internal.v4_0.ast.semantics.SemanticTable
-import org.neo4j.cypher.internal.v4_0.expressions.LabelName
-import org.neo4j.cypher.internal.v4_0.util.Cardinality
-import org.neo4j.cypher.internal.v4_0.util.Selectivity
-=======
 import org.neo4j.cypher.internal.util.Cardinality
 import org.neo4j.cypher.internal.util.Selectivity
->>>>>>> neo4j/4.1
 
 case class AssumeIndependenceQueryGraphCardinalityModel(stats: GraphStatistics, combiner: SelectivityCombiner)
   extends QueryGraphCardinalityModel {
-  import org.neo4j.cypher.internal.compiler.planner.logical.cardinality.assumeIndependence.AssumeIndependenceQueryGraphCardinalityModel.MAX_OPTIONAL_MATCH
+  import AssumeIndependenceQueryGraphCardinalityModel.MAX_OPTIONAL_MATCH
 
   override val expressionSelectivityCalculator = ExpressionSelectivityCalculator(stats, combiner)
   private val patternSelectivityCalculator = PatternSelectivityCalculator(stats, combiner)
@@ -100,17 +87,12 @@ case class AssumeIndependenceQueryGraphCardinalityModel(stats: GraphStatistics, 
      * The existence of any arguments means that the cardinality is dependent on the inbound cardinality.
      * Unless the current node pattern is already solved by the arguments, the cost for solving it is 1.0.
      * The cardinality factor c is the maximum of those two parts.
-<<<<<<< HEAD
-     */
-    val c = if (qg.argumentIds.nonEmpty) {
-=======
      *
      * We can't always rely on arguments being present to indicate we need to multiply the cardinality
      * For example, when planning to solve an OPTIONAL MATCH with a join, we remove all the arguments. We
      * could still be beneath an Apply a this point though.
      */
     val c = if (input.alwaysMultiply || qg.argumentIds.nonEmpty) {
->>>>>>> neo4j/4.1
       if ((qg.argumentIds intersect qg.patternNodes).isEmpty) {
         Cardinality.max(Cardinality(1.0), input.inboundCardinality)
       } else {

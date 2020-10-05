@@ -19,16 +19,10 @@
  */
 package org.neo4j.procedure.builtin;
 
-<<<<<<< HEAD
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-=======
->>>>>>> neo4j/4.1
 import java.security.NoSuchAlgorithmException;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -46,7 +40,6 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.hashing.HashFunction;
 import org.neo4j.internal.kernel.api.InternalIndexState;
 import org.neo4j.internal.kernel.api.PopulationProgress;
 import org.neo4j.internal.kernel.api.SchemaReadCore;
@@ -73,16 +66,9 @@ import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Mode;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
-<<<<<<< HEAD
-import org.neo4j.storageengine.api.StoreId;
-import org.neo4j.string.HexString;
-=======
 import org.neo4j.storageengine.api.StoreIdProvider;
->>>>>>> neo4j/4.1
 import org.neo4j.values.storable.Value;
 
-import static java.nio.charset.StandardCharsets.US_ASCII;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.neo4j.internal.helpers.collection.Iterators.asList;
 import static org.neo4j.internal.helpers.collection.Iterators.stream;
 import static org.neo4j.kernel.impl.api.TokenAccess.LABELS;
@@ -119,16 +105,9 @@ public class BuiltInProcedures
     @Procedure( name = "db.info", mode = READ )
     public Stream<DatabaseInfo> databaseInfo() throws NoSuchAlgorithmException
     {
-<<<<<<< HEAD
-        var storeId = graphDatabaseAPI.storeId();
-        var creationTime = formatTime( storeId.getCreationTime(), getConfiguredTimeZone() );
-        var id = decodeId( storeId );
-        return Stream.of( new DatabaseInfo( id, graphDatabaseAPI.databaseName(), creationTime ) );
-=======
         var storeIdProvider = graphDatabaseAPI.getDependencyResolver().resolveDependency( StoreIdProvider.class );
         var creationTime = formatTime( storeIdProvider.getStoreId().getCreationTime(), getConfiguredTimeZone() );
         return Stream.of( new DatabaseInfo( decodeId( storeIdProvider ), graphDatabaseAPI.databaseName(), creationTime ) );
->>>>>>> neo4j/4.1
     }
 
     @SystemProcedure
@@ -526,15 +505,6 @@ public class BuiltInProcedures
         return Stream.of( new BooleanResult( Boolean.TRUE ) );
     }
 
-<<<<<<< HEAD
-    private ZoneId getConfiguredTimeZone()
-    {
-        Config config = resolver.resolveDependency( Config.class );
-        return config.get( GraphDatabaseSettings.db_timezone ).getZoneId();
-    }
-
-=======
->>>>>>> neo4j/4.1
     private static List<String> propertyNames( TokenNameLookup tokens, IndexDescriptor index )
     {
         int[] propertyIds = index.schema().getPropertyIds();

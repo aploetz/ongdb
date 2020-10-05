@@ -92,16 +92,9 @@ class HumanUnderstandableExecutionMonitorIT
         // when
         try ( JobScheduler jobScheduler = new ThreadPoolJobScheduler() )
         {
-<<<<<<< HEAD
-            new ParallelBatchImporter( databaseLayout, fileSystem, pageCache, Configuration.DEFAULT, NullLogService.getInstance(), monitor,
-                                       EMPTY, defaults(), LATEST_RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY,
-                                       LogFilesInitializer.NULL )
-                    .doImport( input );
-=======
             new ParallelBatchImporter( databaseLayout, fileSystem, pageCache, NULL, Configuration.DEFAULT, NullLogService.getInstance(), monitor,
                     EMPTY, defaults(), LATEST_RECORD_FORMATS, ImportLogic.NO_MONITOR, jobScheduler, Collector.EMPTY, LogFilesInitializer.NULL,
                     EmptyMemoryTracker.INSTANCE ).doImport( input );
->>>>>>> neo4j/4.1
 
             // then
             progress.assertAllProgressReachedEnd();

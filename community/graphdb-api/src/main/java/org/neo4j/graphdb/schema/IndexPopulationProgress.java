@@ -19,11 +19,8 @@
  */
 package org.neo4j.graphdb.schema;
 
-<<<<<<< HEAD
-=======
 import java.util.Locale;
 
->>>>>>> neo4j/4.1
 import org.neo4j.annotations.api.PublicApi;
 
 /**

@@ -2,28 +2,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-<<<<<<< HEAD
-        <groupId>org.graphfoundation.ongdb</groupId>
-=======
         <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
         <artifactId>parent</artifactId>
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
-<<<<<<< HEAD
-    <artifactId>ongdb-push-to-cloud</artifactId>
-    <version>4.1.2-SNAPSHOT</version>
-
-    <name>ONgDB - Push To Cloud - Admin command</name>
-    <description>ONgDB Admin command for pushing a database to the Neo4j cloud service</description>
-=======
     <artifactId>neo4j-push-to-cloud</artifactId>
     <version>4.1.2-SNAPSHOT</version>
 
     <name>Neo4j - Push To Cloud - Admin command</name>
     <description>Neo4j Admin command for pushing a database to the Neo4j cloud service</description>
->>>>>>> neo4j/4.1
     <packaging>jar</packaging>
     <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
@@ -54,21 +42,6 @@
 
     <dependencies>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-command-line</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-dbms</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-command-line</artifactId>
-=======
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-command-line</artifactId>
             <version>${project.version}</version>
@@ -86,19 +59,13 @@
         <dependency>
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-command-line</artifactId>
->>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-            <artifactId>ongdb-io</artifactId>
-=======
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-io</artifactId>
->>>>>>> neo4j/4.1
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -118,50 +85,31 @@
         <dependency>
             <groupId>com.github.tomakehurst</groupId>
             <artifactId>wiremock-jre8-standalone</artifactId>
-<<<<<<< HEAD
-            <version>2.24.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <version>2.26.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>io-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb</groupId>
-=======
             <groupId>org.neo4j</groupId>
->>>>>>> neo4j/4.1
             <artifactId>layout-test-utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-<<<<<<< HEAD
-            <groupId>org.graphfoundation.ongdb.community</groupId>
-=======
             <groupId>org.neo4j.community</groupId>
->>>>>>> neo4j/4.1
             <artifactId>it-test-support</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
-<<<<<<< HEAD
-=======
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
->>>>>>> neo4j/4.1
     </dependencies>
 </project>

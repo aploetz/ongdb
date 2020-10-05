@@ -32,19 +32,11 @@ object ListLiteral {
 case class ListLiteral(override val arguments: Expression*) extends Expression {
   private val size = arguments.size
 
-<<<<<<< HEAD
-  override def apply(ctx: ExecutionContext, state: QueryState): AnyValue = {
-    val result = new Array[AnyValue](size)
-    var i = 0
-    while (i < size) {
-      result(i) = arguments(i).apply(ctx, state)
-=======
   override def apply(row: ReadableRow, state: QueryState): AnyValue = {
     val result = new Array[AnyValue](size)
     var i = 0
     while (i < size) {
       result(i) = arguments(i).apply(row, state)
->>>>>>> neo4j/4.1
       i += 1
     }
     VirtualValues.list(result:_*)
