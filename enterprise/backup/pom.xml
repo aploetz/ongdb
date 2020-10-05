@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>ongdb-backup</artifactId>
-    <version>4.0.7-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
 
     <name>ONgDB - Backup Tool</name>
     <description>Command line tool for grabbing backups from a running ONgDB instance</description>

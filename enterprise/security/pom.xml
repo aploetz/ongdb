@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>ongdb-security-enterprise</artifactId>
-    <version>4.0.7-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
 
     <name>ONgDB - Enterprise Graph Database Security Features</name>
     <description>Enterprise security features for ONgDB</description>

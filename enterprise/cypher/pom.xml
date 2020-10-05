@@ -10,7 +10,7 @@
   </parent>
 
   <artifactId>cypher-enterprise-parent</artifactId>
-  <version>4.0.7-SNAPSHOT</version>
+  <version>4.1.4-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>ONgDB - Enterprise Cypher Build</name>
   <description>Project that builds the ONgDB Cypher modules as part of the Enterprise distribution.</description>

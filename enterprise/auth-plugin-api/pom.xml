@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>ongdb-auth-plugin-api</artifactId>
-    <version>4.0.7-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
 
     <name>ONgDB - Enterprise Graph Database Auth Plugin API</name>
     <description>Enterprise auth plugin API for adding custom auth providers to the Neo4j database</description>
