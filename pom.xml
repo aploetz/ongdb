@@ -774,7 +774,7 @@
                         <version>1.0.0</version>
                     </dependency>
                     <dependency>
-                        <groupId>org.neo4j.build</groupId>
+                        <groupId>org.graphfoundation.ongdb.build</groupId>
                         <artifactId>build-resources</artifactId>
                         <version>${project.version}</version>
                     </dependency>

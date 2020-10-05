@@ -23,11 +23,9 @@ for current_file in $(grep -l -r '<artifactId>ongdb-' .); do
 done
 
 # <artifactId>neo4j-java-driver
-for sub_space in ongdb-java-driver; do
-  for current_file in $(grep -l -r '<artifactId>neo4j-java-driver' .); do
-    echo "Migrating: $current_file"
-    sed -i 's/<artifactId>neo4j-java-driver/<artifactId>neo4j-java-driver/g' "$current_file"
-  done
+for current_file in $(grep -l -r "<artifactId>neo4j-java-driver" .); do
+  echo "Migrating: $current_file"
+  sed -i "s/<artifactId>neo4j-java-driver/<artifactId>neo4j-java-driver/g" "$current_file"
 done
 
 # <name>ONgDB

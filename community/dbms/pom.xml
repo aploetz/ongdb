@@ -21,7 +21,7 @@
     <description>
         This component provides management functionality and product surface for Neo4j instances.
     </description>
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}/</url>
+    <url>http://components.graphfoundation.org/${project.artifactId}/${project.version}/</url>
     <packaging>jar</packaging>
 
     <scm>

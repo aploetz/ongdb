@@ -23,7 +23,7 @@
     <description>Internal component that provides access to unsafe memory
         intrinsics
     </description>
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+    <url>http://components.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
     <licenses>
         <license>
