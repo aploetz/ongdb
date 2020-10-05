@@ -32,6 +32,7 @@ import org.neo4j.cypher.internal.ast.DropNodeKeyConstraint
 import org.neo4j.cypher.internal.ast.DropNodePropertyExistenceConstraint
 import org.neo4j.cypher.internal.ast.DropRelationshipPropertyExistenceConstraint
 import org.neo4j.cypher.internal.ast.DropUniquePropertyConstraint
+import org.neo4j.cypher.internal.ast.IfExistsDoNothing
 import org.neo4j.cypher.internal.compiler.phases.LogicalPlanState
 import org.neo4j.cypher.internal.compiler.phases.PlannerContext
 import org.neo4j.cypher.internal.frontend.phases.BaseState
@@ -59,8 +60,12 @@ case object SchemaCommandPlanBuilder extends Phase[PlannerContext, BaseState, Lo
     implicit val idGen = new SequentialIdGen()
     val maybeLogicalPlan: Option[LogicalPlan] = from.statement() match {
       // CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY
-      case CreateNodeKeyConstraint(node, label, props, name, _) =>
-        Some(plans.CreateNodeKeyConstraint(node.name, label, props, name))
+      case CreateNodeKeyConstraint(node, label, props, name, ifExistsDo, _) =>
+        val source = ifExistsDo match {
+          case IfExistsDoNothing() => Some(plans.DoNothingIfExistsForConstraint(node.name, scala.util.Left(label), props, plans.NodeKey, name))
+          case _ => None
+        }
+        Some(plans.CreateNodeKeyConstraint(source, node.name, label, props, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY
       case DropNodeKeyConstraint(_, label, props, _) =>
@@ -68,8 +73,12 @@ case object SchemaCommandPlanBuilder extends Phase[PlannerContext, BaseState, Lo
 
       // CREATE CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE
       // CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE
-      case CreateUniquePropertyConstraint(node, label, props, name, _) =>
-        Some(plans.CreateUniquePropertyConstraint(node.name, label, props, name))
+      case CreateUniquePropertyConstraint(node, label, props, name, ifExistsDo, _) =>
+        val source = ifExistsDo match {
+          case IfExistsDoNothing() => Some(plans.DoNothingIfExistsForConstraint(node.name, scala.util.Left(label), props, plans.Uniqueness, name))
+          case _ => None
+        }
+        Some(plans.CreateUniquePropertyConstraint(source, node.name, label, props, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE
       // DROP CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE
@@ -77,41 +86,54 @@ case object SchemaCommandPlanBuilder extends Phase[PlannerContext, BaseState, Lo
         Some(plans.DropUniquePropertyConstraint(label, props))
 
       // CREATE CONSTRAINT ON (node:Label) ASSERT node.prop EXISTS
-      case CreateNodePropertyExistenceConstraint(_, label, prop, name, _) =>
-        Some(plans.CreateNodePropertyExistenceConstraint(label, prop, name))
+      case CreateNodePropertyExistenceConstraint(_, label, prop, name, ifExistsDo, _) =>
+        val source = ifExistsDo match {
+          case IfExistsDoNothing() => Some(plans.DoNothingIfExistsForConstraint(prop.map.asCanonicalStringVal, scala.util.Left(label), Seq(prop), plans.NodePropertyExistence, name))
+          case _ => None
+        }
+        Some(plans.CreateNodePropertyExistenceConstraint(source, label, prop, name))
 
       // DROP CONSTRAINT ON (node:Label) ASSERT node.prop EXISTS
       case DropNodePropertyExistenceConstraint(_, label, prop, _) =>
         Some(plans.DropNodePropertyExistenceConstraint(label, prop))
 
       // CREATE CONSTRAINT ON ()-[r:R]-() ASSERT r.prop EXISTS
-      case CreateRelationshipPropertyExistenceConstraint(_, relType, prop, name, _) =>
-        Some(plans.CreateRelationshipPropertyExistenceConstraint(relType, prop, name))
+      case CreateRelationshipPropertyExistenceConstraint(_, relType, prop, name, ifExistsDo, _) =>
+        val source = ifExistsDo match {
+          case IfExistsDoNothing() => Some(plans.DoNothingIfExistsForConstraint(prop.map.asCanonicalStringVal, scala.util.Right(relType), Seq(prop), plans.RelationshipPropertyExistence, name))
+          case _ => None
+        }
+        Some(plans.CreateRelationshipPropertyExistenceConstraint(source, relType, prop, name))
 
       // DROP CONSTRAINT ON ()-[r:R]-() ASSERT r.prop EXISTS
       case DropRelationshipPropertyExistenceConstraint(_, relType, prop, _) =>
         Some(plans.DropRelationshipPropertyExistenceConstraint(relType, prop))
 
       // DROP CONSTRAINT name
-      case DropConstraintOnName(name, _) =>
-        Some(plans.DropConstraintOnName(name))
+      case DropConstraintOnName(name, ifExists, _) =>
+        Some(plans.DropConstraintOnName(name, ifExists))
 
       // CREATE INDEX ON :LABEL(prop)
       case CreateIndex(label, props, _) =>
-        Some(plans.CreateIndex(label, props, None))
+        Some(plans.CreateIndex(None, label, props, None))
 
       // CREATE INDEX FOR (n:LABEL) ON (n.prop)
       // CREATE INDEX name FOR (n:LABEL) ON (n.prop)
-      case CreateIndexNewSyntax(_, label, props, name, _) =>
-        Some(plans.CreateIndex(label, props.map(_.propertyKey), name))
+      case CreateIndexNewSyntax(_, label, props, name, ifExistsDo, _) =>
+        val propKeys = props.map(_.propertyKey)
+        val source = ifExistsDo match {
+          case _:IfExistsDoNothing => Some(plans.DoNothingIfExistsForIndex(label, propKeys, name))
+          case _ => None
+        }
+        Some(plans.CreateIndex(source, label, propKeys, name))
 
       // DROP INDEX ON :LABEL(prop)
       case DropIndex(label, props, _) =>
         Some(plans.DropIndex(label, props))
 
       // DROP INDEX name
-      case DropIndexOnName(name, _) =>
-        Some(plans.DropIndexOnName(name))
+      case DropIndexOnName(name, ifExists, _) =>
+        Some(plans.DropIndexOnName(name, ifExists))
 
       case _ => None
     }

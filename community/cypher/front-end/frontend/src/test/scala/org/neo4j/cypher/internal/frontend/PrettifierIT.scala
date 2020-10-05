@@ -165,6 +165,18 @@ class PrettifierIT extends CypherFunSuite {
       "create INDEX `$foo` FOR (n:A) ON (n.p1, n.p2, n.p3)" ->
         "CREATE INDEX `$foo` FOR (n:A) ON (n.p1, n.p2, n.p3)",
 
+      "create or REPLACE INDEX FOR (n:A) ON (n.p)" ->
+        "CREATE OR REPLACE INDEX FOR (n:A) ON (n.p)",
+
+      "create or REPLACE INDEX foo FOR (n:A) ON (n.p)" ->
+        "CREATE OR REPLACE INDEX foo FOR (n:A) ON (n.p)",
+
+      "create INDEX IF not EXISTS FOR (n:A) ON (n.p)" ->
+        "CREATE INDEX IF NOT EXISTS FOR (n:A) ON (n.p)",
+
+      "create INDEX foo IF not EXISTS FOR (n:A) ON (n.p)" ->
+        "CREATE INDEX foo IF NOT EXISTS FOR (n:A) ON (n.p)",
+
       "drop INDEX ON :A(p)" ->
         "DROP INDEX ON :A(p)",
 
@@ -180,6 +192,9 @@ class PrettifierIT extends CypherFunSuite {
       "drop INDEX `$foo`" ->
         "DROP INDEX `$foo`",
 
+      "drop INDEX foo if EXISTS" ->
+        "DROP INDEX foo IF EXISTS",
+
       "create CONSTRAINT ON (n:A) ASSERT (n.p) IS NODE KEY" ->
         "CREATE CONSTRAINT ON (n:A) ASSERT (n.p) IS NODE KEY",
 
@@ -191,6 +206,12 @@ class PrettifierIT extends CypherFunSuite {
 
       "create CONSTRAINT `$foo` ON (n:A) ASSERT (n.p) IS NODE KEY" ->
         "CREATE CONSTRAINT `$foo` ON (n:A) ASSERT (n.p) IS NODE KEY",
+
+      "create OR replace CONSTRAINT ON (n:A) ASSERT (n.p) IS NODE KEY" ->
+        "CREATE OR REPLACE CONSTRAINT ON (n:A) ASSERT (n.p) IS NODE KEY",
+
+      "create CONSTRAINT foo IF NOT EXISTS ON (n:A) ASSERT (n.p) IS NODE KEY" ->
+        "CREATE CONSTRAINT foo IF NOT EXISTS ON (n:A) ASSERT (n.p) IS NODE KEY",
 
       "create CONSTRAINT ON (n:A) ASSERT (n.p1, n.p2) IS NODE KEY" ->
         "CREATE CONSTRAINT ON (n:A) ASSERT (n.p1, n.p2) IS NODE KEY",
@@ -222,6 +243,12 @@ class PrettifierIT extends CypherFunSuite {
       "create CONSTRAINT `$foo` ON (n:A) ASSERT (n.p) IS UNIQUE" ->
         "CREATE CONSTRAINT `$foo` ON (n:A) ASSERT (n.p) IS UNIQUE",
 
+      "create or REPLACE CONSTRAINT foo ON (n:A) ASSERT n.p IS UNIQUE" ->
+        "CREATE OR REPLACE CONSTRAINT foo ON (n:A) ASSERT (n.p) IS UNIQUE",
+
+      "create CONSTRAINT IF NoT ExistS ON (n:A) ASSERT (n.p) IS UNIQUE" ->
+        "CREATE CONSTRAINT IF NOT EXISTS ON (n:A) ASSERT (n.p) IS UNIQUE",
+
       "create CONSTRAINT ON (n:A) ASSERT (n.p1, n.p2) IS UNIQUE" ->
         "CREATE CONSTRAINT ON (n:A) ASSERT (n.p1, n.p2) IS UNIQUE",
 
@@ -252,6 +279,12 @@ class PrettifierIT extends CypherFunSuite {
       "create CONSTRAINT `$foo` ON (a:A) ASSERT exists(a.p)" ->
         "CREATE CONSTRAINT `$foo` ON (a:A) ASSERT exists(a.p)",
 
+      "create OR replace CONSTRAINT ON (a:A) ASSERT exists(a.p)" ->
+        "CREATE OR REPLACE CONSTRAINT ON (a:A) ASSERT exists(a.p)",
+
+      "create CONSTRAINT foo if not EXISTS ON (a:A) ASSERT exists(a.p)" ->
+        "CREATE CONSTRAINT foo IF NOT EXISTS ON (a:A) ASSERT exists(a.p)",
+
       "drop CONSTRAINT ON (a:A) ASSERT exists(a.p)" ->
         "DROP CONSTRAINT ON (a:A) ASSERT exists(a.p)",
 
@@ -267,6 +300,12 @@ class PrettifierIT extends CypherFunSuite {
       "create CONSTRAINT `$foo` ON ()-[r:R]-() ASSERT exists(r.p)" ->
         "CREATE CONSTRAINT `$foo` ON ()-[r:R]-() ASSERT exists(r.p)",
 
+      "create or Replace CONSTRAINT foo ON ()-[r:R]-() ASSERT exists(r.p)" ->
+        "CREATE OR REPLACE CONSTRAINT foo ON ()-[r:R]-() ASSERT exists(r.p)",
+
+      "create CONSTRAINT IF not exists ON ()-[r:R]-() ASSERT exists(r.p)" ->
+        "CREATE CONSTRAINT IF NOT EXISTS ON ()-[r:R]-() ASSERT exists(r.p)",
+
       "drop CONSTRAINT ON ()-[r:R]-() ASSERT exists(r.p)" ->
         "DROP CONSTRAINT ON ()-[r:R]-() ASSERT exists(r.p)",
 
@@ -278,6 +317,9 @@ class PrettifierIT extends CypherFunSuite {
 
       "drop CONSTRAINT `$foo`" ->
         "DROP CONSTRAINT `$foo`",
+
+      "drop CONSTRAINT foo IF exists" ->
+        "DROP CONSTRAINT foo IF EXISTS",
 
       "match (n) UNION match (n)" ->
         """MATCH (n)

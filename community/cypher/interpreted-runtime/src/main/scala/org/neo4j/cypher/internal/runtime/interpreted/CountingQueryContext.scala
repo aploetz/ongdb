@@ -17,36 +17,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.neo4j.kernel.impl.transaction.log.checkpoint;
+package org.neo4j.cypher.internal.runtime.interpreted
 
-public class ReachedThreshold extends AbstractCheckPointThreshold
-{
-    ReachedThreshold( String description )
-    {
-        super( description );
-    }
+import org.neo4j.cypher.internal.runtime.QueryContext
+import org.neo4j.cypher.internal.runtime.QueryStatistics
 
-    @Override
-    protected boolean thresholdReached( long lastCommittedTransactionId, long lastCommittedTransactionLogVersion )
-    {
-        return true;
-    }
+trait CountingQueryContext {
+  this: QueryContext =>
 
-    @Override
-    public void initialize( long transactionId )
-    {
+  def getStatistics(): QueryStatistics
 
-    }
-
-    @Override
-    public void checkPointHappened( long transactionId )
-    {
-
-    }
-
-    @Override
-    public long checkFrequencyMillis()
-    {
-        return 0;
-    }
 }

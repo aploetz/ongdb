@@ -18,6 +18,10 @@ package org.neo4j.cypher.internal.parser
 
 import org.neo4j.cypher.internal.ast
 import org.neo4j.cypher.internal.ast.AstConstructionTestSupport
+import org.neo4j.cypher.internal.ast.IfExistsDoNothing
+import org.neo4j.cypher.internal.ast.IfExistsInvalidSyntax
+import org.neo4j.cypher.internal.ast.IfExistsReplace
+import org.neo4j.cypher.internal.ast.IfExistsThrowError
 import org.neo4j.cypher.internal.expressions
 import org.parboiled.scala.Rule1
 
@@ -49,27 +53,51 @@ class SchemaCommandParserTest
   // new syntax
 
   test("CREATE INDEX FOR (n:Person) ON (n.name)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None, IfExistsThrowError()))
   }
 
   test("USE neo4j CREATE INDEX FOR (n:Person) ON (n.name)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None, Some(use(varFor("neo4j")))))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None, IfExistsThrowError(), Some(use(varFor("neo4j")))))
   }
 
   test("CREATE INDEX FOR (n:Person) ON (n.name, n.age)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), None))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), None, IfExistsThrowError()))
   }
 
   test("CREATE INDEX my_index FOR (n:Person) ON (n.name)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("my_index")))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("my_index"), IfExistsThrowError()))
   }
 
   test("CREATE INDEX my_index FOR (n:Person) ON (n.name, n.age)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), Some("my_index")))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), Some("my_index"), IfExistsThrowError()))
   }
 
   test("CREATE INDEX `$my_index` FOR (n:Person) ON (n.name)") {
-    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("$my_index")))
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("$my_index"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE INDEX FOR (n:Person) ON (n.name)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None, IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE INDEX my_index FOR (n:Person) ON (n.name, n.age)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), Some("my_index"), IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE INDEX IF NOT EXISTS FOR (n:Person) ON (n.name)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), None, IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE OR REPLACE INDEX my_index IF NOT EXISTS FOR (n:Person) ON (n.name)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("my_index"), IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE INDEX IF NOT EXISTS FOR (n:Person) ON (n.name, n.age)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name"), prop("n", "age")), None, IfExistsDoNothing()))
+  }
+
+  test("CREATE INDEX my_index IF NOT EXISTS FOR (n:Person) ON (n.name)") {
+    yields(ast.CreateIndexNewSyntax(varFor("n"), labelName("Person"), List(prop("n", "name")), Some("my_index"), IfExistsDoNothing()))
   }
 
   test("CREATE INDEX $my_index FOR (n:Person) ON (n.name)") {
@@ -96,11 +124,15 @@ class SchemaCommandParserTest
   }
 
   test("DROP INDEX my_index") {
-    yields(ast.DropIndexOnName("my_index"))
+    yields(ast.DropIndexOnName("my_index", ifExists = false))
   }
 
   test("DROP INDEX `$my_index`") {
-    yields(ast.DropIndexOnName("$my_index"))
+    yields(ast.DropIndexOnName("$my_index", ifExists = false))
+  }
+
+  test("DROP INDEX my_index IF EXISTS") {
+    yields(ast.DropIndexOnName("my_index", ifExists = true))
   }
 
   test("DROP INDEX $my_index") {
@@ -114,41 +146,91 @@ class SchemaCommandParserTest
   // Create constraint
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop) IS NODE KEY") {
-    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None))
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT ON (node:Label) ASSERT (node.prop) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsReplace()))
+  }
+
+  test("CREATE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT (node.prop) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY") {
     yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"),
-      Seq(prop("node", "prop1"), prop("node", "prop2")), None))
+      Seq(prop("node", "prop1"), prop("node", "prop2")), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), None, IfExistsInvalidSyntax()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE") {
-    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None))
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT ON (node:Label) ASSERT node.prop IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsReplace()))
+  }
+
+  test("CREATE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT node.prop IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop) IS UNIQUE") {
-    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None))
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), None, IfExistsThrowError()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE") {
     yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"),
-      Seq(prop("node", "prop1"), prop("node", "prop2")), None))
+      Seq(prop("node", "prop1"), prop("node", "prop2")), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), None, IfExistsInvalidSyntax()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT EXISTS (node.prop)") {
-    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), None))
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), None, IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), None, IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE CONSTRAINT IF NOT EXISTS ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), None, IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT ON ()-[r:R]-() ASSERT EXISTS (r.prop)") {
-    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None))
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsThrowError()))
   }
 
   test("CREATE CONSTRAINT ON ()-[r:R]->() ASSERT EXISTS (r.prop)") {
-    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None))
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsThrowError()))
   }
 
   test("CREATE CONSTRAINT ON ()<-[r:R]-() ASSERT EXISTS (r.prop)") {
-    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None))
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT ON ()<-[r:R]-() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT IF NOT EXISTS ON ()-[r:R]-() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE CONSTRAINT IF NOT EXISTS ON ()-[r:R]->() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), None, IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT ON (node:Label) ASSERT node.prop IS NODE KEY") {
@@ -172,33 +254,85 @@ class SchemaCommandParserTest
   }
 
   test("USE neo4j CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop) IS NODE KEY") {
-    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), Some(use(varFor("neo4j")))))
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), IfExistsThrowError(), Some(use(varFor("neo4j")))))
+  }
+
+  test("USE neo4j CREATE OR REPLACE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT (node.prop) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), IfExistsInvalidSyntax(), Some(use(varFor("neo4j")))))
   }
 
   test("CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY") {
     yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"),
-      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint")))
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsReplace()))
+  }
+
+  test("CREATE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT (node.prop1,node.prop2) IS NODE KEY") {
+    yields(ast.CreateNodeKeyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT node.prop IS UNIQUE") {
-    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint")))
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), IfExistsThrowError()))
   }
 
   test("CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop) IS UNIQUE") {
-    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint")))
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT (node.prop) IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"), Seq(prop("node", "prop")), Some("my_constraint"), IfExistsInvalidSyntax()))
   }
 
   test("CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE") {
     yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"),
-      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint")))
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT my_constraint ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsReplace()))
+  }
+
+  test("CREATE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT (node.prop1,node.prop2) IS UNIQUE") {
+    yields(ast.CreateUniquePropertyConstraint(varFor("node"), labelName("Label"),
+      Seq(prop("node", "prop1"), prop("node", "prop2")), Some("my_constraint"), IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT my_constraint ON (node:Label) ASSERT EXISTS (node.prop)") {
-    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), Some("my_constraint")))
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), Some("my_constraint"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT my_constraint ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), Some("my_constraint"), IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), Some("my_constraint"), IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE CONSTRAINT my_constraint IF NOT EXISTS ON (node:Label) ASSERT EXISTS (node.prop)") {
+    yields(ast.CreateNodePropertyExistenceConstraint(varFor("node"), labelName("Label"), prop("node", "prop"), Some("my_constraint"), IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT `$my_constraint` ON ()-[r:R]-() ASSERT EXISTS (r.prop)") {
-    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), Some("$my_constraint")))
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), Some("$my_constraint"), IfExistsThrowError()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT `$my_constraint` ON ()-[r:R]-() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), Some("$my_constraint"), IfExistsReplace()))
+  }
+
+  test("CREATE OR REPLACE CONSTRAINT `$my_constraint` IF NOT EXISTS ON ()-[r:R]->() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), Some("$my_constraint"), IfExistsInvalidSyntax()))
+  }
+
+  test("CREATE CONSTRAINT `$my_constraint` IF NOT EXISTS ON ()<-[r:R]-() ASSERT EXISTS (r.prop)") {
+    yields(ast.CreateRelationshipPropertyExistenceConstraint(varFor("r"), relTypeName("R"), prop("r", "prop"), Some("$my_constraint"), IfExistsDoNothing()))
   }
 
   test("CREATE CONSTRAINT $my_constraint ON ()-[r:R]-() ASSERT EXISTS (r.prop)") {
@@ -258,11 +392,15 @@ class SchemaCommandParserTest
   }
 
   test("DROP CONSTRAINT my_constraint") {
-    yields(ast.DropConstraintOnName("my_constraint"))
+    yields(ast.DropConstraintOnName("my_constraint", ifExists = false))
   }
 
   test("DROP CONSTRAINT `$my_constraint`") {
-    yields(ast.DropConstraintOnName("$my_constraint"))
+    yields(ast.DropConstraintOnName("$my_constraint", ifExists = false))
+  }
+
+  test("DROP CONSTRAINT my_constraint IF EXISTS") {
+    yields(ast.DropConstraintOnName("my_constraint", ifExists = true))
   }
 
   test("DROP CONSTRAINT $my_constraint") {
