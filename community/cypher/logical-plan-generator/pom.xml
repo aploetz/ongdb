@@ -4,18 +4,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <parent>
-    <groupId>org.neo4j</groupId>
+    <groupId>org.graphfoundation.ongdb</groupId>
     <artifactId>cypher-parent</artifactId>
     <version>4.1.2-SNAPSHOT</version>
     <relativePath>../</relativePath>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
-  <artifactId>neo4j-cypher-logical-plan-generator</artifactId>
+  <artifactId>ongdb-cypher-logical-plan-generator</artifactId>
   <packaging>jar</packaging>
   <version>4.1.2-SNAPSHOT</version>
-  <name>Neo4j - Cypher Logical Plan Generator</name>
-  <description>Neo4j - Cypher logical plan generator</description>
+  <name>ONgDB - Cypher Logical Plan Generator</name>
+  <description>ONgDB - Cypher logical plan generator</description>
   <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
 
   <scm>
@@ -75,32 +75,32 @@
     <!-- neo4j -->
 
     <dependency>
-      <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-parser</artifactId>
+      <groupId>org.graphfoundation.ongdb</groupId>
+      <artifactId>ongdb-parser</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-cypher-logical-plans</artifactId>
+      <groupId>org.graphfoundation.ongdb</groupId>
+      <artifactId>ongdb-cypher-logical-plans</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-cypher-planner</artifactId>
+      <groupId>org.graphfoundation.ongdb</groupId>
+      <artifactId>ongdb-cypher-planner</artifactId>
       <version>${project.version}</version>
     </dependency>
 
     <!-- neo4j testing -->
 
     <dependency>
-      <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-util</artifactId>
+      <groupId>org.graphfoundation.ongdb</groupId>
+      <artifactId>ongdb-util</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
     </dependency>
     <dependency>
-      <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-ast</artifactId>
+      <groupId>org.graphfoundation.ongdb</groupId>
+      <artifactId>ongdb-ast</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
     </dependency>

@@ -2,14 +2,14 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <parent>
-        <groupId>org.neo4j</groupId>
-        <artifactId>neo4j-front-end-parent</artifactId>
+        <groupId>org.graphfoundation.ongdb</groupId>
+        <artifactId>ongdb-front-end-parent</artifactId>
         <version>4.1.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>neo4j-front-end</artifactId>
+    <artifactId>ongdb-front-end</artifactId>
     <packaging>jar</packaging>
     <name>openCypher Front End</name>
 
@@ -52,71 +52,71 @@
         <!-- neo4j -->
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-expressions</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-rewriting</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-rewriting</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-rewriting</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-macros</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-macros</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- neo4j testing -->
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-util</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-expressions</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-expressions</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-ast</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-ast</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-parser</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
