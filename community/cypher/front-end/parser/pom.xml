@@ -86,18 +86,18 @@
             <version>${project.version}</version>
         </dependency>
 
-    <dependency>
-      <groupId>org.parboiled</groupId>
-      <artifactId>parboiled-scala_${scala.binary.version}</artifactId>
-        <exclusions>
-            <exclusion>
-                <artifactId>scala-library</artifactId>
-                <groupId>org.scala-lang</groupId>
-            </exclusion>
-        </exclusions>
-    </dependency>
+        <dependency>
+            <groupId>org.parboiled</groupId>
+            <artifactId>parboiled-scala_${scala.binary.version}</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>scala-library</artifactId>
+                    <groupId>org.scala-lang</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
 
-    <!-- scala -->
+        <!-- scala -->
 
     </dependencies>
 
