@@ -4,14 +4,14 @@
     <parent>
         <groupId>org.graphfoundation.ongdb</groupId>
         <artifactId>ongdb-front-end-parent</artifactId>
-        <version>4.1.2-SNAPSHOT</version>
+        <version>4.1.4-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
     <artifactId>ongdb-cypher-macros</artifactId>
     <packaging>jar</packaging>
-    <version>4.1.2-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
     <name>ONgDB - Cypher Macros</name>
 
     <description>Cypher runtime utilities</description>
