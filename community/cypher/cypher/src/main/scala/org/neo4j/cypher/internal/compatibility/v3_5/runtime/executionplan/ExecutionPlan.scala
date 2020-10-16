@@ -20,11 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.executionplan
 
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.RuntimeName
-import org.neo4j.cypher.internal.runtime.{ExecutionMode, QueryContext}
-import org.neo4j.cypher.internal.runtime.planDescription.Argument
-import org.neo4j.cypher.result.RuntimeResult
-import org.neo4j.values.virtual.MapValue
-import org.neo4j.cypher.internal.v3_6.util.InternalNotification
 
 abstract class ExecutionPlan {
 

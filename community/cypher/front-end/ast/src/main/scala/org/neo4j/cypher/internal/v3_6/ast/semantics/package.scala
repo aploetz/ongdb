@@ -16,8 +16,6 @@
  */
 package org.neo4j.cypher.internal.v3_6.ast
 
-import org.neo4j.cypher.internal.v3_6.util.symbols.TypeSpec
-
 package object semantics {
 
   type SemanticCheck = SemanticState => SemanticCheckResult

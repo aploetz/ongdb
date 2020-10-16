@@ -22,14 +22,6 @@ package org.neo4j.cypher.internal.compatibility.v3_6.notifications
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.neo4j.cypher.internal.compatibility.v3_6.notification.checkForIndexLimitation
-import org.neo4j.cypher.internal.compiler.v3_6.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.compiler.v3_6.{SuboptimalIndexForConstainsQueryNotification, SuboptimalIndexForEndsWithQueryNotification}
-import org.neo4j.cypher.internal.planner.v3_6.spi
-import org.neo4j.cypher.internal.planner.v3_6.spi.{IndexDescriptor, IndexLimitation, PlanContext, SlowContains}
-import org.neo4j.cypher.internal.v3_6.logical.plans._
-import org.neo4j.cypher.internal.v3_6.expressions._
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v3_6.util.{LabelId, PropertyKeyId}
 
 class CheckForIndexLimitationTest extends CypherFunSuite with LogicalPlanningTestSupport {
 

@@ -20,12 +20,6 @@
 package org.neo4j.cypher.internal
 
 import org.neo4j.cypher.internal.javacompat.ExecutionResult
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
-import org.neo4j.cypher.result.QueryResult.QueryResultVisitor
-import org.neo4j.cypher.result.{QueryResult, RuntimeResult}
-import org.neo4j.graphdb.Result.{ResultRow, ResultVisitor}
-import org.neo4j.graphdb.{Notification, Result}
 
 import scala.collection.mutable.ArrayBuffer
 

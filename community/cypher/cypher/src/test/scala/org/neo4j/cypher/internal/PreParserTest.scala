@@ -20,7 +20,6 @@
 package org.neo4j.cypher.internal
 
 import org.neo4j.cypher._
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
 
 class PreParserTest extends CypherFunSuite {
 

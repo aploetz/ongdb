@@ -21,14 +21,6 @@ package org.neo4j.cypher.internal.compatibility.v3_6.runtime
 
 import java.util
 
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.QueryState
-import org.neo4j.cypher.result.QueryResult.QueryResultVisitor
-import org.neo4j.cypher.result.RuntimeResult.ConsumptionState
-import org.neo4j.cypher.result.{QueryProfile, RuntimeResult}
-import org.neo4j.graphdb.ResourceIterator
-import org.neo4j.values.AnyValue
-
 class PipeExecutionResult(val result: IteratorBasedResult,
                           val fieldNames: Array[String],
                           val state: QueryState,

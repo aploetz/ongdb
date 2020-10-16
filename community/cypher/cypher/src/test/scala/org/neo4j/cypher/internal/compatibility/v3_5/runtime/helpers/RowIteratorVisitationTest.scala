@@ -20,18 +20,12 @@
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.helpers
 
 import org.mockito.Mockito.verifyZeroInteractions
-import org.neo4j.cypher.internal.runtime.RuntimeJavaValueConverter
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.result.QueryResult.{QueryResultVisitor, Record}
-import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.Values.{intValue, stringValue}
 
 import scala.collection.mutable.ArrayBuffer
 
 class RowIteratorVisitationTest extends CypherFunSuite {
 
   val javaValues = new RuntimeJavaValueConverter(_ => false)
-  import javaValues.feedIteratorToVisitable
 
   test("should convert non-empty iterator to visitor") {
     // Given

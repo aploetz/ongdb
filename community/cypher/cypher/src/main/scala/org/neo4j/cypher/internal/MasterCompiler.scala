@@ -21,17 +21,8 @@ package org.neo4j.cypher.internal
 
 import java.time.Clock
 
+import org.neo4j.cypher._
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.helpers.InternalWrapping.asKernelNotification
-import org.neo4j.cypher.internal.compiler.v3_6.{StatsDivergenceCalculator, _}
-import org.neo4j.cypher.{InvalidArgumentException, _}
-import org.neo4j.graphdb.Notification
-import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.impl.query.TransactionalContext
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-import org.neo4j.logging.LogProvider
-import org.neo4j.values.virtual.MapValue
-import org.neo4j.cypher.internal.v3_6.frontend.phases.{CompilationPhaseTracer, RecordingNotificationLogger}
-import org.neo4j.cypher.internal.v3_6.util.{DeprecatedStartNotification, InternalNotification, SyntaxException => InternalSyntaxException}
 
 object MasterCompiler {
   val DEFAULT_QUERY_CACHE_SIZE: Int = 128

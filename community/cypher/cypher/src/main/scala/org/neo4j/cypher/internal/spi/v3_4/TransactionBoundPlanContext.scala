@@ -21,20 +21,11 @@ package org.neo4j.cypher.internal.spi.v3_4
 
 import java.util.Optional
 
-import org.neo4j.cypher.MissingIndexException
 import org.neo4j.cypher.internal.frontend.v3_4.phases.InternalNotificationLogger
 import org.neo4j.cypher.internal.planner.v3_4.spi._
 import org.neo4j.cypher.internal.util.v3_4.symbols.CypherType
 import org.neo4j.cypher.internal.util.v3_4.{CypherExecutionException, symbols}
 import org.neo4j.cypher.internal.v3_4.logical.plans._
-import org.neo4j.internal.kernel.api.exceptions.KernelException
-import org.neo4j.internal.kernel.api.procs.Neo4jTypes.AnyType
-import org.neo4j.internal.kernel.api.procs.{DefaultParameterValue, Neo4jTypes}
-import org.neo4j.internal.kernel.api.{IndexReference, InternalIndexState, procs}
-import org.neo4j.kernel.api.KernelTransaction
-import org.neo4j.kernel.api.schema.SchemaDescriptorFactory
-import org.neo4j.procedure.Mode
-import org.neo4j.storageengine.api.schema.CapableIndexDescriptor
 
 import scala.collection.JavaConverters._
 

@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.profiler
 
-import org.neo4j.cypher.result.{OperatorProfile, QueryProfile}
-import org.neo4j.cypher.internal.v3_6.util.attribution.Id
-
 import scala.collection.mutable
 
 class InterpretedProfileInformation extends QueryProfile {

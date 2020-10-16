@@ -21,10 +21,6 @@ package org.neo4j.cypher.internal.compatibility.v3_4
 
 import org.neo4j.cypher.internal.compatibility.v3_4.helpers.as3_5
 import org.neo4j.cypher.internal.frontend.v3_4.{ast => astV3_4}
-import org.neo4j.cypher.internal.v3_6.ast.semantics.SemanticCheck
-import org.neo4j.cypher.internal.v3_6.util.InputPosition
-import org.neo4j.cypher.internal.v3_6.{ast => astv3_6}
-import org.neo4j.cypher.internal.v3_6.ast.Statement
 
 case class StatementWrapper(statement: astV3_4.Statement) extends Statement {
   override def semanticCheck: SemanticCheck = ???

@@ -25,37 +25,16 @@ import org.neo4j.cypher.internal.compatibility.v3_4.SemanticTableConverter.Expre
 import org.neo4j.cypher.internal.frontend.v3_4.{ast => astV3_4}
 import org.neo4j.cypher.internal.frontend.{v3_4 => frontendV3_4}
 import org.neo4j.cypher.internal.ir.{v3_4 => irV3_4}
-import org.neo4j.cypher.internal.planner.v3_4.spi.PlanningAttributes.{Cardinalities => CardinalitiesV3_4}
-import org.neo4j.cypher.internal.planner.v3_4.spi.PlanningAttributes.{Solveds => SolvedsV3_4}
-import org.neo4j.cypher.internal.planner.v3_6.spi.PlanningAttributes.{Cardinalities => CardinalitiesV3_5}
-import org.neo4j.cypher.internal.planner.v3_6.spi.PlanningAttributes.{Solveds => SolvedsV3_5}
+import org.neo4j.cypher.internal.planner.v3_4.spi.PlanningAttributes.{Cardinalities => CardinalitiesV3_4, Solveds => SolvedsV3_4}
 import org.neo4j.cypher.internal.util.v3_4.attribution.{SequentialIdGen => SequentialIdGenv3_4}
-import org.neo4j.cypher.internal.util.v3_4.{InputPosition => InputPositionV3_4}
-import org.neo4j.cypher.internal.util.v3_4.{symbols => symbolsV3_4}
+import org.neo4j.cypher.internal.util.v3_4.{InputPosition => InputPositionV3_4, symbols => symbolsV3_4}
 import org.neo4j.cypher.internal.util.{v3_4 => utilv3_4}
 import org.neo4j.cypher.internal.v3_4.logical.{plans => plansV3_4}
 import org.neo4j.cypher.internal.v3_4.{expressions => expressionsv3_4}
-import org.neo4j.cypher.internal.v3_6.logical.plans.ErrorPlan
-import org.neo4j.cypher.internal.v3_6.logical.plans.IndexOrderNone
-import org.neo4j.cypher.internal.v3_6.logical.plans.ProcedureCall
-import org.neo4j.cypher.internal.v3_6.logical.{plans => plansv3_6}
-import org.neo4j.cypher.internal.v3_6.expressions.PathExpression
-import org.neo4j.cypher.internal.v3_6.expressions.SemanticDirection
-import org.neo4j.cypher.internal.v3_6.util.attribution.{SequentialIdGen => SequentialIdGenv3_6}
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v3_6.util.InputPosition
-import org.neo4j.cypher.internal.v3_6.util.NonEmptyList
-import org.neo4j.cypher.internal.v3_6.util.{symbols => symbolsv3_6}
-import org.neo4j.cypher.internal.v3_6.{ast => astv3_6}
-import org.neo4j.cypher.internal.v3_6.{util => utilv3_6}
-import org.neo4j.cypher.internal.v3_6.{expressions => expressionsv3_6}
-import org.neo4j.cypher.internal.v3_6.ast.ProcedureResultItem
 import org.reflections.Reflections
 
 import scala.collection.JavaConverters._
-import scala.util.Failure
-import scala.util.Success
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 class LogicalPlanConverterTest extends CypherFunSuite {
 

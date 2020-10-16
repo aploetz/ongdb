@@ -20,7 +20,6 @@
 package org.neo4j.cypher.internal.codegen;
 
 import org.junit.Test;
-
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.kernel.api.KernelTransaction;
@@ -40,7 +39,6 @@ import org.neo4j.values.virtual.RelationshipReference;
 import org.neo4j.values.virtual.RelationshipValue;
 import org.neo4j.values.virtual.VirtualValues;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
 public class CompiledMaterializeValueMapperTest

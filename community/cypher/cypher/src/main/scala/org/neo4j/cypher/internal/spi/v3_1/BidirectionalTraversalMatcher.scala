@@ -25,10 +25,6 @@ import org.neo4j.cypher.internal.compiler.v3_1._
 import org.neo4j.cypher.internal.compiler.v3_1.pipes.matching.{ExpanderStep, TraversalMatcher, TraversalPathExpander}
 import org.neo4j.cypher.internal.compiler.v3_1.pipes.{EntityProducer, QueryState}
 import org.neo4j.cypher.internal.compiler.v3_1.planDescription.Argument
-import org.neo4j.graphdb.impl.traversal.StandardBranchCollisionDetector
-import org.neo4j.graphdb.traversal.{BranchCollisionPolicy, _}
-import org.neo4j.graphdb.{Node, Path}
-import org.neo4j.kernel.impl.traversal.{BidirectionalTraversalDescriptionImpl, MonoDirectionalTraversalDescription}
 
 import scala.collection.JavaConverters._
 

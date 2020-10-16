@@ -23,16 +23,6 @@ import java.io.PrintWriter
 import java.util
 import java.util.NoSuchElementException
 
-import org.neo4j.cypher.exceptionHandler.RunSafely
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
-import org.neo4j.cypher.result.QueryResult.QueryResultVisitor
-import org.neo4j.graphdb
-import org.neo4j.graphdb.Result.ResultVisitor
-import org.neo4j.graphdb.{Notification, ResourceIterator}
-import org.neo4j.kernel.api.query.ExecutingQuery
-import org.neo4j.kernel.impl.query.QueryExecutionMonitor
-
 /**
   * Ensures execution results are closed. This is tricky because we try to be smart about
   * closing results automatically when

@@ -20,7 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_4
 
 import org.neo4j.cypher.internal.v3_4.logical.plans.{LogicalPlan => LogicalPlanV3_4}
-import org.neo4j.cypher.internal.v3_6.util.attribution._
 
 trait IdConverter {
   def convertId(plan:LogicalPlanV3_4): IdGen

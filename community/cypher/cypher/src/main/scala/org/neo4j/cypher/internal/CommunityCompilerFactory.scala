@@ -19,19 +19,12 @@
  */
 package org.neo4j.cypher.internal
 
+import org.neo4j.cypher.internal.compatibility._
 import org.neo4j.cypher.internal.compatibility.v2_3.helpers._
 import org.neo4j.cypher.internal.compatibility.v3_1.helpers._
 import org.neo4j.cypher.internal.compatibility.v3_4.Cypher34Planner
 import org.neo4j.cypher.internal.compatibility.v3_6.Cypher35Planner
-import org.neo4j.cypher.internal.compatibility._
-import org.neo4j.cypher.internal.compiler.v3_6.CypherPlannerConfiguration
-import org.neo4j.cypher.internal.runtime.interpreted.LastCommittedTxIdProvider
 import org.neo4j.cypher.{CypherPlannerOption, CypherRuntimeOption, CypherUpdateStrategy, CypherVersion}
-import org.neo4j.helpers.Clock
-import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-import org.neo4j.logging.{Log, LogProvider}
-import org.neo4j.cypher.internal.v3_6.util.InvalidArgumentException
 
 /**
   * Factory which creates cypher compilers.

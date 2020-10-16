@@ -21,9 +21,6 @@ package org.neo4j.cypher.internal
 
 import org.neo4j.cypher.internal.compatibility.CypherCurrentCompiler
 import org.neo4j.cypher.{CypherPlannerOption, CypherRuntimeOption, CypherUpdateStrategy, CypherVersion}
-import org.neo4j.kernel.impl.util.CopyOnWriteHashMap
-
-import scala.collection.JavaConversions._
 
 /**
   * Keeps track of all cypher compilers, and finds the relevant compiler for a preparsed query.

@@ -20,7 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_4
 
 import org.neo4j.cypher.internal.planner.v3_4.spi.KernelStatisticProvider
-import org.neo4j.kernel.impl.query.statistic.StatisticProvider
 
 class ProfileKernelStatisticProvider(statisticProvider: StatisticProvider) extends KernelStatisticProvider {
 

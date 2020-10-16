@@ -24,15 +24,6 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.neo4j.cypher.internal.compatibility.v3_6.notification.checkForLoadCsvAndMatchOnLargeLabel
-import org.neo4j.cypher.internal.compiler.v3_6.LargeLabelWithLoadCsvNotification
-import org.neo4j.cypher.internal.compiler.v3_6.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.ir.v3_6.HasHeaders
-import org.neo4j.cypher.internal.planner.v3_6.spi.{GraphStatistics, InstrumentedGraphStatistics, PlanContext}
-import org.neo4j.cypher.internal.runtime.interpreted.CSVResources
-import org.neo4j.cypher.internal.v3_6.logical.plans._
-import org.neo4j.cypher.internal.v3_6.expressions.{LabelName, StringLiteral}
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v3_6.util.{Cardinality, LabelId}
 
 class CheckForLoadCsvAndMatchOnLargeLabelTest
     extends CypherFunSuite

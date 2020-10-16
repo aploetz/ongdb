@@ -19,19 +19,9 @@
  */
 package org.neo4j.cypher.internal.spi.v2_3
 
-import org.neo4j.cypher.MissingIndexException
 import org.neo4j.cypher.internal.compiler.v2_3.pipes.EntityProducer
 import org.neo4j.cypher.internal.compiler.v2_3.pipes.matching.ExpanderStep
 import org.neo4j.cypher.internal.compiler.v2_3.spi._
-import org.neo4j.cypher.internal.runtime.interpreted.TransactionalContextWrapper
-import org.neo4j.graphdb.Node
-import org.neo4j.internal.kernel.api.exceptions.KernelException
-import org.neo4j.internal.kernel.api.{IndexReference, InternalIndexState}
-import org.neo4j.kernel.api.schema.SchemaDescriptorFactory
-import org.neo4j.kernel.api.schema.constraints.ConstraintDescriptor
-import org.neo4j.kernel.impl.transaction.log.TransactionIdStore
-
-import scala.collection.JavaConverters._
 
 class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
   extends TransactionBoundTokenContext(tc.kernelTransaction) with PlanContext with SchemaDescriptorTranslation {
@@ -79,8 +69,6 @@ class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
   def getUniquenessConstraint(labelName: String, propertyKey: String): Option[SchemaTypes.UniquenessConstraint] = evalOrNone {
     val labelId = getLabelId(labelName)
     val propertyKeyId = getPropertyKeyId(propertyKey)
-
-    import scala.collection.JavaConverters._
     tc.schemaRead.constraintsGetForSchema(
       SchemaDescriptorFactory.forLabel(labelId, propertyKeyId)
     ).asScala.collectFirst {

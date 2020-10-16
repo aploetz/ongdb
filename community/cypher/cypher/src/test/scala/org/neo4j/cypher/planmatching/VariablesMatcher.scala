@@ -19,7 +19,6 @@
  */
 package org.neo4j.cypher.planmatching
 
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
 import org.scalatest.matchers.{MatchResult, Matcher}
 
 /**

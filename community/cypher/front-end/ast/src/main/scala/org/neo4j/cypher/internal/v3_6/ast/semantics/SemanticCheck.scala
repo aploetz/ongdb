@@ -16,8 +16,6 @@
  */
 package org.neo4j.cypher.internal.v3_6.ast.semantics
 
-import org.neo4j.cypher.internal.v3_6.expressions.Expression.SemanticContext
-
 object SemanticCheckResult {
   val success: SemanticCheck = SemanticCheckResult(_, Vector())
   def error(state: SemanticState, error: SemanticErrorDef): SemanticCheckResult = SemanticCheckResult(state, Vector(error))

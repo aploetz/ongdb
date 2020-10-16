@@ -20,7 +20,6 @@
 package org.neo4j.cypher.internal.codegen;
 
 import org.junit.Test;
-
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.IndexReference;
 import org.neo4j.internal.kernel.api.NodeValueIndexCursor;

@@ -19,10 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.util.InternalException
-import org.neo4j.cypher.internal.v3_6.ast.{Limit, Skip, SortItem}
-import org.neo4j.cypher.internal.v3_6.expressions.Expression
-
 final case class QueryShuffle(sortItems: Seq[SortItem] = Seq.empty,
                               skip: Option[Expression] = None,
                               limit: Option[Expression] = None) {

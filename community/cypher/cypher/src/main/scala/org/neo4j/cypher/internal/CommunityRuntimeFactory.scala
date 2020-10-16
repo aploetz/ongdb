@@ -19,8 +19,8 @@
  */
 package org.neo4j.cypher.internal
 
+import org.neo4j.cypher.CypherRuntimeOption
 import org.neo4j.cypher.internal.compatibility._
-import org.neo4j.cypher.{CypherRuntimeOption, InvalidArgumentException}
 
 object CommunityRuntimeFactory {
 

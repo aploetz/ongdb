@@ -22,17 +22,6 @@ package org.neo4j.cypher.internal.compatibility
 import java.io.PrintWriter
 import java.util
 
-import org.neo4j.cypher.exceptionHandler.RunSafely
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.result.QueryResult
-import org.neo4j.graphdb.Result.ResultVisitor
-import org.neo4j.graphdb.{Notification, ResourceIterator, Result}
-import org.neo4j.helpers.collection.Iterators
-import org.neo4j.kernel.api.query.ExecutingQuery
-import org.neo4j.kernel.impl.query.QueryExecutionMonitor
-
 class ClosingExecutionResultTest extends CypherFunSuite {
 
   private val query: ExecutingQuery = mock[ExecutingQuery]

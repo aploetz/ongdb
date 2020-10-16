@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility
 
-import org.neo4j.kernel.api.query.ExecutingQuery
-import org.neo4j.kernel.impl.query.QueryExecutionMonitor
-
 case class OnlyOnceQueryExecutionMonitor(monitor: QueryExecutionMonitor) extends QueryExecutionMonitor {
   private var closed = false
 

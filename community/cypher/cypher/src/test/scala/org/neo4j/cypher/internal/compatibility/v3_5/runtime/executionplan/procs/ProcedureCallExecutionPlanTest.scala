@@ -23,22 +23,6 @@ import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.neo4j.cypher.internal.planner.v3_6.spi.TokenContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.{CommunityExpressionConverter, ExpressionConverters}
-import org.neo4j.cypher.internal.runtime.{NormalMode, QueryContext, QueryTransactionalContext, ResourceManager}
-import org.neo4j.cypher.internal.v3_6.expressions._
-import org.neo4j.cypher.internal.v3_6.logical.plans._
-import org.neo4j.cypher.internal.v3_6.util.DummyPosition
-import org.neo4j.cypher.internal.v3_6.util.attribution.SequentialIdGen
-import org.neo4j.cypher.internal.v3_6.util.symbols._
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.result.RuntimeResult
-import org.neo4j.internal.kernel.api.Procedures
-import org.neo4j.internal.kernel.api.procs.ProcedureCallContext
-import org.neo4j.values.storable.LongValue
-import org.neo4j.values.virtual.VirtualValues.EMPTY_MAP
-
-import scala.collection.JavaConverters._
 
 class ProcedureCallExecutionPlanTest extends CypherFunSuite {
 

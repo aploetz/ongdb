@@ -24,15 +24,6 @@ import java.util
 
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.InterpretedRuntimeName
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.profiler.PlanDescriptionBuilder
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.result.RuntimeResult.ConsumptionState
-import org.neo4j.cypher.result.{QueryProfile, QueryResult, RuntimeResult}
-import org.neo4j.graphdb.ResourceIterator
-import org.neo4j.graphdb.Result.ResultVisitor
-import org.neo4j.values.AnyValue
-import org.neo4j.values.storable.Values
-import org.neo4j.cypher.internal.v3_6.util.TaskCloser
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
 
 import scala.collection.JavaConverters._
 

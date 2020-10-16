@@ -23,13 +23,6 @@ import java.io.PrintWriter
 import java.util
 import java.util.Collections
 
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
-import org.neo4j.cypher.result.QueryResult.QueryResultVisitor
-import org.neo4j.graphdb.Result.ResultVisitor
-import org.neo4j.graphdb.{Notification, ResourceIterator}
-import org.neo4j.helpers.collection.Iterators
-
 case class ExplainExecutionResult(fieldNames: Array[String],
                                   planDescription: InternalPlanDescription,
                                   queryType: InternalQueryType,

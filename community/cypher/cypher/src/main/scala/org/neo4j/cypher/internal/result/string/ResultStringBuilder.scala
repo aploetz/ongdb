@@ -21,11 +21,6 @@ package org.neo4j.cypher.internal.result.string
 
 import java.io.PrintWriter
 
-import org.neo4j.cypher.internal.runtime.interpreted.commands.values.KeyToken
-import org.neo4j.cypher.internal.runtime.{QueryTransactionalContext, RuntimeScalaValueConverter, isGraphKernelResultValue}
-import org.neo4j.graphdb.Result.{ResultRow, ResultVisitor}
-import org.neo4j.graphdb._
-
 import scala.collection.mutable.ArrayBuffer
 
 /**

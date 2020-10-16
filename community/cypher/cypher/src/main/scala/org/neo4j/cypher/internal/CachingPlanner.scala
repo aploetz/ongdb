@@ -19,7 +19,6 @@
  */
 package org.neo4j.cypher.internal
 
-import org.neo4j.cypher.SyntaxException
 import org.neo4j.cypher.internal.compatibility.LFUCache
 
 /**

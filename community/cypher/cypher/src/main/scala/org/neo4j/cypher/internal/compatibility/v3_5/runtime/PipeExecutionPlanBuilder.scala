@@ -19,12 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime
 
-import org.neo4j.cypher.internal.planner.v3_6.spi.TokenContext
-import org.neo4j.cypher.internal.runtime.interpreted.InterpretedPipeBuilder
-import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.ExpressionConverters
-import org.neo4j.cypher.internal.runtime.interpreted.pipes.{OwningPipeAsserter, Pipe, PipeBuilderFactory, PipeExecutionBuilderContext}
-import org.neo4j.cypher.internal.v3_6.logical.plans.{LogicalPlan, LogicalPlans}
-
 class PipeExecutionPlanBuilder(pipeBuilderFactory: PipeBuilderFactory,
                                expressionConverters: ExpressionConverters) {
   def build(plan: LogicalPlan)

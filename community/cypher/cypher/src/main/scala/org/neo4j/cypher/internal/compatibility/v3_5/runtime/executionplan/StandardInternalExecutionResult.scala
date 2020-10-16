@@ -26,15 +26,6 @@ import org.neo4j.cypher.internal.compatibility.v3_6.runtime._
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.helpers.MapBasedRow
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.profiler.PlanDescriptionBuilder
 import org.neo4j.cypher.internal.result.string.ResultStringBuilder
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription
-import org.neo4j.cypher.result.QueryResult.QueryResultVisitor
-import org.neo4j.cypher.result.RuntimeResult.ConsumptionState
-import org.neo4j.cypher.result.{QueryResult, RuntimeResult}
-import org.neo4j.graphdb.Result.{ResultRow, ResultVisitor}
-import org.neo4j.graphdb.{NotFoundException, Notification, ResourceIterator}
-import org.neo4j.values.AnyValue
-import org.neo4j.cypher.internal.v3_6.util.{ProfilerStatisticsNotReadyException, TaskCloser}
 
 import scala.collection.mutable
 

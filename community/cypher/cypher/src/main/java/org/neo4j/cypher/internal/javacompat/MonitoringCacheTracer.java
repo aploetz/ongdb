@@ -19,11 +19,10 @@
  */
 package org.neo4j.cypher.internal.javacompat;
 
-import scala.collection.immutable.Map;
-
 import org.neo4j.cypher.internal.CacheTracer;
 import org.neo4j.cypher.internal.StringCacheMonitor;
 import org.neo4j.helpers.collection.Pair;
+import scala.collection.immutable.Map;
 
 /**
  * Adapter for passing CacheTraces into the Monitoring infrastructure.

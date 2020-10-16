@@ -18,8 +18,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.cypher.internal.ir.v3_6
-
-import org.neo4j.cypher.internal.v3_6.expressions.{Expression, MapExpression, PropertyKeyName}
 /*
  * Used to simplify finding overlap between writing and reading properties
  */

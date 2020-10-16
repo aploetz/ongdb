@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.util.{Cardinality, Selectivity}
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-
 class SelectivityTest extends CypherFunSuite {
 
   test("negating a selectivity behaves as expected") {

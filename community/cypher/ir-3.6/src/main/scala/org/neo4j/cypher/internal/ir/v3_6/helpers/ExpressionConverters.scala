@@ -19,15 +19,7 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6.helpers
 
-import org.neo4j.cypher.internal.v3_6.util.{Rewriter, topDown}
-import org.neo4j.cypher.internal.v3_6.rewriting.rewriters.addUniquenessPredicates
-import org.neo4j.cypher.internal.v3_6.expressions.{Ands, Expression, HasLabels, Not, Ors, PatternComprehension, PatternExpression, RelationshipChain, Variable}
-import org.neo4j.cypher.internal.v3_6.util.UnNamedNameGenerator._
-import org.neo4j.cypher.internal.ir.v3_6._
-import org.neo4j.cypher.internal.ir.v3_6.helpers.PatternConverters._
-import org.neo4j.cypher.internal.ir.v3_6.QueryGraph
-import org.neo4j.cypher.internal.v3_6.expressions.Range
-import org.neo4j.cypher.internal.v3_6.rewriting.rewriters.{LabelPredicateNormalizer, MatchPredicateNormalizerChain, PropertyPredicateNormalizer, addUniquenessPredicates}
+import org.neo4j.cypher.internal.ir.v3_6.{QueryGraph, _}
 
 object ExpressionConverters {
   val normalizer = MatchPredicateNormalizerChain(PropertyPredicateNormalizer, LabelPredicateNormalizer)

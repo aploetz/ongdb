@@ -19,11 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.ast.AliasedReturnItem
-import org.neo4j.cypher.internal.v3_6.expressions.{Expression, StringLiteral, Variable}
-import org.neo4j.cypher.internal.v3_6.util.InternalException
-import org.neo4j.cypher.internal.ir.v3_6.helpers.ExpressionConverters._
-
 trait QueryHorizon {
 
   def exposedSymbols(coveredIds: Set[String]): Set[String]

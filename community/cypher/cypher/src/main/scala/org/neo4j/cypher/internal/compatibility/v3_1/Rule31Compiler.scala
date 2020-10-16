@@ -22,8 +22,6 @@ package org.neo4j.cypher.internal.compatibility.v3_1
 import java.time.Clock
 
 import org.neo4j.cypher.internal.compiler.v3_1.{CypherCompilerConfiguration, CypherCompilerFactory}
-import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
 
 case class Rule31Compiler(graph: GraphDatabaseQueryService,
                           config: CypherCompilerConfiguration,

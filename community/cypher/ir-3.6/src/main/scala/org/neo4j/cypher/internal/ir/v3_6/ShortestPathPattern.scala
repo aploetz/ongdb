@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.expressions.ShortestPaths
-
 final case class ShortestPathPattern(name: Option[String], rel: PatternRelationship, single: Boolean)
                                     (val expr: ShortestPaths) {
 

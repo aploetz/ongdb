@@ -20,10 +20,6 @@
 package org.neo4j.cypher.internal.spi.v3_1
 
 import org.neo4j.cypher.internal.compiler.v3_1.spi.TokenContext
-import org.neo4j.internal.kernel.api.TokenRead
-import org.neo4j.internal.kernel.api.exceptions.LabelNotFoundKernelException
-import org.neo4j.kernel.api.KernelTransaction
-import org.neo4j.kernel.api.exceptions.{PropertyKeyNotFoundException, RelationshipTypeNotFoundException}
 
 abstract class TransactionBoundTokenContext(transaction: => KernelTransaction) extends TokenContext {
   def getOptPropertyKeyId(propertyKeyName: String): Option[Int] = {

@@ -21,8 +21,6 @@ package org.neo4j.cypher.internal.compatibility.v3_6.runtime.executionplan
 
 import java.net.URL
 
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-
 class LoadCsvIteratorTest extends CypherFunSuite {
 
   val url = new URL("file://uselessinfo.csv")

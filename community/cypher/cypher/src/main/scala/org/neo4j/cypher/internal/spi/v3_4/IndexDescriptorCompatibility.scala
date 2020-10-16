@@ -20,10 +20,6 @@
 package org.neo4j.cypher.internal.spi.v3_4
 
 import org.neo4j.cypher.internal.planner.v3_4.spi.{IndexLimitation, SlowContains, IndexDescriptor => CypherIndexDescriptor}
-import org.neo4j.internal.kernel.api.schema.LabelSchemaDescriptor
-import org.neo4j.internal.kernel.api.{IndexLimitation => KernelIndexLimitation}
-import org.neo4j.kernel.api.schema.SchemaDescriptorFactory
-import org.neo4j.storageengine.api.schema.IndexDescriptor
 
 trait IndexDescriptorCompatibility {
   def kernelToCypher(index: IndexDescriptor): CypherIndexDescriptor =

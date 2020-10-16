@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher
 
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherTestSupport
-
 trait SystemPropertyTestSupport {
   self: CypherTestSupport =>
 

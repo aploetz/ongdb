@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6
 
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-
 class Cypher35PlannerTest extends CypherFunSuite {
   /**
     * This test is here to remind us that the customPlanContextCreator can be changed for

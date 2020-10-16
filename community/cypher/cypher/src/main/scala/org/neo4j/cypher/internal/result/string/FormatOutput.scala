@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.result.string
 
-import org.neo4j.graphdb.QueryStatistics
-
 /**
  * Creates formatted tabular output.
  */

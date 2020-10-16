@@ -19,10 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.ir.v3_6.helpers.ExpressionConverters._
-import org.neo4j.cypher.internal.v3_6.expressions._
-import org.neo4j.cypher.internal.v3_6.expressions.functions.Exists
-
 case class Selections(predicates: Set[Predicate] = Set.empty) {
   def isEmpty = predicates.isEmpty
 

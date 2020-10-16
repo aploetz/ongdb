@@ -30,19 +30,6 @@ import org.neo4j.cypher.internal.compiler.v2_3.{PlannerName, planDescription => 
 import org.neo4j.cypher.internal.frontend.v2_3
 import org.neo4j.cypher.internal.frontend.v2_3.notification.{InternalNotification, LegacyPlannerNotification, PlannerUnsupportedNotification, RuntimeUnsupportedNotification, _}
 import org.neo4j.cypher.internal.frontend.v2_3.{InputPosition => InternalInputPosition, SemanticDirection => SemanticDirection2_3}
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription.Arguments
-import org.neo4j.cypher.internal.runtime.planDescription.InternalPlanDescription.Arguments._
-import org.neo4j.cypher.internal.runtime.planDescription.{Children, NoChildren, PlanDescriptionImpl, SingleChild, TwoChildren, Argument => Argument3_4, InternalPlanDescription => InternalPlanDescription3_4}
-import org.neo4j.cypher.internal.runtime.{QueryStatistics, SCHEMA_WRITE, ExecutionMode => ExecutionModev3_6, _}
-import org.neo4j.cypher.result.QueryResult
-import org.neo4j.cypher.result.QueryResult.Record
-import org.neo4j.graphdb.Result.ResultVisitor
-import org.neo4j.graphdb._
-import org.neo4j.graphdb.impl.notification.{NotificationCode, NotificationDetail}
-import org.neo4j.kernel.impl.util.ValueUtils
-import org.neo4j.values.AnyValue
-import org.neo4j.cypher.internal.v3_6.expressions.SemanticDirection.{BOTH, INCOMING, OUTGOING}
-import org.neo4j.cypher.internal.v3_6.util.attribution.Id
 
 import scala.collection.JavaConverters._
 

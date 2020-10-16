@@ -20,14 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.executionplan
 
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime._
-import org.neo4j.cypher.internal.runtime._
-import org.neo4j.cypher.internal.runtime.interpreted.pipes._
-import org.neo4j.cypher.internal.runtime.interpreted.{CSVResources, ExecutionContext}
-import org.neo4j.cypher.internal.v3_6.logical.plans.LogicalPlan
-import org.neo4j.cypher.result.{QueryProfile, RuntimeResult}
-import org.neo4j.values.virtual.MapValue
-import org.neo4j.cypher.internal.v3_6.frontend.phases.InternalNotificationLogger
-import org.neo4j.cypher.internal.v3_6.util.CypherException
 
 import scala.collection.mutable
 

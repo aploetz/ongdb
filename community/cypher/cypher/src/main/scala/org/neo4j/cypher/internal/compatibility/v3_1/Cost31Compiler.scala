@@ -26,9 +26,6 @@ import org.neo4j.cypher.internal.compiler.v3_1.codegen._
 import org.neo4j.cypher.internal.compiler.v3_1.executionplan.GeneratedQuery
 import org.neo4j.cypher.internal.compiler.v3_1.planDescription.Id
 import org.neo4j.cypher.{CypherPlannerOption, CypherRuntimeOption, CypherUpdateStrategy}
-import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-import org.neo4j.logging.Log
 
 case class Cost31Compiler(graph: GraphDatabaseQueryService,
                           config: CypherCompilerConfiguration,

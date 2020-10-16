@@ -22,9 +22,6 @@ package org.neo4j.cypher.internal
 import java.util.concurrent.atomic.AtomicLong
 
 import org.neo4j.cypher.CypherVersion
-import org.neo4j.kernel.api.query.SchemaIndexUsage
-import org.neo4j.kernel.impl.api.SchemaStateKey
-import org.neo4j.kernel.impl.query.TransactionalContext
 
 case class SchemaToken(x: Long) extends AnyVal
 
@@ -63,7 +60,6 @@ class SchemaHelper(val queryCache: QueryCache[_,_,_]) {
   }
 
   private def extractPlanLabels(plan: ExecutableQuery, version: CypherVersion, tc: TransactionalContext): Seq[Long] = {
-    import scala.collection.JavaConverters._
 
     def planLabels = {
       plan.compilerInfo.indexes().asScala.collect { case item: SchemaIndexUsage => item.getLabelId.toLong }

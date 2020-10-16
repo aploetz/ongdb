@@ -23,12 +23,6 @@ import org.neo4j.cypher.internal.compiler.v2_3._
 import org.neo4j.cypher.internal.compiler.v2_3.pipes.matching.{ExpanderStep, TraversalMatcher, TraversalPathExpander}
 import org.neo4j.cypher.internal.compiler.v2_3.pipes.{EntityProducer, QueryState}
 import org.neo4j.cypher.internal.compiler.v2_3.planDescription.Argument
-import org.neo4j.graphdb.traversal.Uniqueness.RELATIONSHIP_PATH
-import org.neo4j.graphdb.traversal._
-import org.neo4j.graphdb.{Node, Path}
-import org.neo4j.kernel.impl.traversal.MonoDirectionalTraversalDescription
-
-import scala.collection.JavaConverters._
 
 class MonoDirectionalTraversalMatcher(steps: ExpanderStep, start: EntityProducer[Node])
   extends TraversalMatcher {

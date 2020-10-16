@@ -24,13 +24,6 @@ import java.time.Clock
 import org.neo4j.cypher.internal.QueryCache.ParameterTypeMap
 import org.neo4j.cypher.internal._
 import org.neo4j.cypher.internal.compatibility.v3_6.{WrappedMonitors => WrappedMonitorsv3_6}
-import org.neo4j.cypher.internal.compiler.v3_6._
-import org.neo4j.cypher.internal.compiler.v3_6.phases.LogicalPlanState
-import org.neo4j.cypher.internal.planner.v3_6.spi.PlanContext
-import org.neo4j.helpers.collection.Pair
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-import org.neo4j.logging.Log
-import org.neo4j.cypher.internal.v3_6.frontend.phases._
 
 /**
   * Base planner.

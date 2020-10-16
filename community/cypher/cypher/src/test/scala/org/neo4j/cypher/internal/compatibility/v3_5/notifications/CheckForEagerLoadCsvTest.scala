@@ -20,13 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_6.notifications
 
 import org.neo4j.cypher.internal.compatibility.v3_6.notification.checkForEagerLoadCsv
-import org.neo4j.cypher.internal.compiler.v3_6.EagerLoadCsvNotification
-import org.neo4j.cypher.internal.compiler.v3_6.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.ir.v3_6.NoHeaders
-import org.neo4j.cypher.internal.runtime.interpreted.CSVResources
-import org.neo4j.cypher.internal.v3_6.logical.plans.{AllNodesScan, Eager, LoadCSV}
-import org.neo4j.cypher.internal.v3_6.expressions.StringLiteral
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
 
 class CheckForEagerLoadCsvTest extends CypherFunSuite with LogicalPlanningTestSupport {
 

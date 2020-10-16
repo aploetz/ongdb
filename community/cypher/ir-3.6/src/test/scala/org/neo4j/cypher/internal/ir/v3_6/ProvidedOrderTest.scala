@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-
 class ProvidedOrderTest extends CypherFunSuite {
 
   test("should append provided order") {

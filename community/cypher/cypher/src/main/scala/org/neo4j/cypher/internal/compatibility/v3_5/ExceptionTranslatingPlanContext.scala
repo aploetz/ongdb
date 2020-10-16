@@ -19,10 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6
 
-import org.neo4j.cypher.internal.planner.v3_6.spi.{IndexDescriptor, InstrumentedGraphStatistics, PlanContext}
-import org.neo4j.cypher.internal.v3_6.frontend.phases.InternalNotificationLogger
-import org.neo4j.cypher.internal.v3_6.logical.plans.{ProcedureSignature, QualifiedName, UserFunctionSignature}
-
 class ExceptionTranslatingPlanContext(inner: PlanContext) extends PlanContext with ExceptionTranslationSupport {
 
   override def indexesGetForLabel(labelId: Int): Iterator[IndexDescriptor] =

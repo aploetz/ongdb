@@ -23,31 +23,9 @@ import java.time.Clock
 import java.util.function.BiFunction
 
 import org.neo4j.cypher._
-import org.neo4j.cypher.exceptionHandler.runSafely
 import org.neo4j.cypher.internal._
 import org.neo4j.cypher.internal.compatibility.v3_6.runtime.helpers.simpleExpressionEvaluator
 import org.neo4j.cypher.internal.compatibility.{CypherPlanner, _}
-import org.neo4j.cypher.internal.compiler.v3_6
-import org.neo4j.cypher.internal.compiler.v3_6._
-import org.neo4j.cypher.internal.compiler.v3_6.phases.{PlannerContext, PlannerContextCreator}
-import org.neo4j.cypher.internal.compiler.v3_6.planner.logical.idp._
-import org.neo4j.cypher.internal.compiler.v3_6.planner.logical.{CachedMetricsFactory, SimpleMetricsFactory}
-import org.neo4j.cypher.internal.planner.v3_6.spi.{CostBasedPlannerName, DPPlannerName, IDPPlannerName, PlanContext}
-import org.neo4j.cypher.internal.runtime.interpreted._
-import org.neo4j.cypher.internal.v3_6.expressions.Parameter
-import org.neo4j.cypher.internal.v3_6.frontend.PlannerName
-import org.neo4j.cypher.internal.v3_6.frontend.phases._
-import org.neo4j.cypher.internal.v3_6.util.InputPosition
-import org.neo4j.cypher.internal.v3_6.util.attribution.SequentialIdGen
-import org.neo4j.cypher.internal.v3_6.ast.Statement
-import org.neo4j.cypher.internal.v3_6.rewriting.RewriterStepSequencer
-import org.neo4j.helpers.collection.Pair
-import org.neo4j.kernel.impl.api.SchemaStateKey
-import org.neo4j.kernel.impl.query.TransactionalContext
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-import org.neo4j.logging.Log
-import org.neo4j.values.AnyValue
-import org.neo4j.values.virtual.MapValue
 
 object Cypher35Planner {
   /**
@@ -82,8 +60,6 @@ case class Cypher35Planner(config: CypherPlannerConfiguration,
   }
 
   protected val rewriterSequencer: String => RewriterStepSequencer = {
-    import RewriterStepSequencer._
-    import org.neo4j.helpers.Assertion._
 
     if (assertionsEnabled()) newValidating else newPlain
   }

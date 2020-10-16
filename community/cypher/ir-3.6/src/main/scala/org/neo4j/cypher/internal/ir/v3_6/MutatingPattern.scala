@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.ir.v3_6
 
-import org.neo4j.cypher.internal.v3_6.expressions._
-
 import scala.util.hashing.MurmurHash3
 
 sealed trait MutatingPattern extends Product {

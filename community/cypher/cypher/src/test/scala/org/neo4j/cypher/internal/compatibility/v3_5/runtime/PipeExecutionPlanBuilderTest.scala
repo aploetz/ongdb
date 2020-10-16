@@ -20,14 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime
 
 import org.mockito.Mockito.when
-import org.neo4j.cypher.internal.compiler.v3_6.planner.LogicalPlanningTestSupport
-import org.neo4j.cypher.internal.ir.v3_6.PlannerQuery
-import org.neo4j.cypher.internal.planner.v3_6.spi.TokenContext
-import org.neo4j.cypher.internal.runtime.interpreted.commands.convert.{CommunityExpressionConverter, ExpressionConverters}
-import org.neo4j.cypher.internal.runtime.interpreted.pipes._
-import org.neo4j.cypher.internal.v3_6.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.v3_6.util.attribution.{Id, SameId}
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
 
 class PipeExecutionPlanBuilderTest extends CypherFunSuite with LogicalPlanningTestSupport {
 

@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6
 
-import org.neo4j.cypher.internal.v3_6.frontend.phases.Monitors
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
-
 import scala.reflect.ClassTag
 
 case class WrappedMonitors(kernelMonitors: KernelMonitors) extends Monitors {

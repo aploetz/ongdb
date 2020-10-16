@@ -20,11 +20,6 @@
 package org.neo4j.cypher.internal.compatibility.v2_3
 
 import org.neo4j.cypher.internal.compiler.v2_3.{CypherCompilerConfiguration, CypherCompilerFactory}
-import org.neo4j.cypher.internal.javacompat.GraphDatabaseCypherService
-import org.neo4j.helpers.Clock
-import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.impl.core.EmbeddedProxySPI
-import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
 
 case class Rule23Compiler(graph: GraphDatabaseQueryService,
                           config: CypherCompilerConfiguration,

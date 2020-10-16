@@ -19,13 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.executionplan.builders
 
-import org.neo4j.cypher.internal.runtime.interpreted.commands.RelatedTo
-import org.neo4j.cypher.internal.runtime.interpreted.PatternGraphBuilder
-import org.neo4j.cypher.internal.runtime.interpreted.symbols.SymbolTable
-import org.neo4j.cypher.internal.v3_6.util.symbols._
-import org.neo4j.cypher.internal.v3_6.util.test_helpers.CypherFunSuite
-import org.neo4j.cypher.internal.v3_6.expressions.SemanticDirection
-
 class PatternGraphBuilderTest extends CypherFunSuite with PatternGraphBuilder {
 
   test("should_only_include_connected_patterns") {

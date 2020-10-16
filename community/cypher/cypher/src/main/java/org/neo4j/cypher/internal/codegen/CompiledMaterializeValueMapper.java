@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.codegen;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.neo4j.kernel.impl.core.EmbeddedProxySPI;
 import org.neo4j.kernel.impl.util.ValueUtils;
 import org.neo4j.values.AnyValue;
@@ -48,6 +45,9 @@ import org.neo4j.values.virtual.RelationshipValue;
 import org.neo4j.values.virtual.VirtualNodeValue;
 import org.neo4j.values.virtual.VirtualRelationshipValue;
 import org.neo4j.values.virtual.VirtualValues;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public final class CompiledMaterializeValueMapper
 {

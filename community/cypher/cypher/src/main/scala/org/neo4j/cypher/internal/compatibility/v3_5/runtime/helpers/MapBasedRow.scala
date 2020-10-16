@@ -19,9 +19,6 @@
  */
 package org.neo4j.cypher.internal.compatibility.v3_6.runtime.helpers
 
-import org.neo4j.graphdb.Result.ResultRow
-import org.neo4j.graphdb.{Node, Path, Relationship}
-
 import scala.collection.Map
 
 class MapBasedRow(var map: Map[String, Any] = Map.empty) extends ResultRow {

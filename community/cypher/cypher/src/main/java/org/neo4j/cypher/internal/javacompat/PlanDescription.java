@@ -19,11 +19,10 @@
  */
 package org.neo4j.cypher.internal.javacompat;
 
+import org.neo4j.cypher.ProfilerStatisticsNotReadyException;
 
 import java.util.List;
 import java.util.Map;
-
-import org.neo4j.cypher.ProfilerStatisticsNotReadyException;
 
 
 /**

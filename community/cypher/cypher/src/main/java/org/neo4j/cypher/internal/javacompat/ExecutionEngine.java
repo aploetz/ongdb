@@ -19,8 +19,6 @@
  */
 package org.neo4j.cypher.internal.javacompat;
 
-import java.time.Clock;
-
 import org.neo4j.cypher.CypherException;
 import org.neo4j.cypher.internal.CacheTracer;
 import org.neo4j.cypher.internal.CompilerFactory;
@@ -31,15 +29,15 @@ import org.neo4j.cypher.internal.tracing.TimingCompilationTracer;
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.Result;
 import org.neo4j.kernel.GraphDatabaseQueryService;
-import org.neo4j.kernel.impl.query.QueryExecution;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
-import org.neo4j.kernel.impl.query.ResultBuffer;
 import org.neo4j.kernel.impl.query.TransactionalContext;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.values.virtual.MapValue;
+
+import java.time.Clock;
 
 /**
  * To run a Cypher query, use this class.
