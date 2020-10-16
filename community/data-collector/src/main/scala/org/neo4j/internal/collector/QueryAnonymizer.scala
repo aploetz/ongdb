@@ -21,11 +21,12 @@ package org.neo4j.internal.collector
 
 import org.neo4j.cypher.{CypherExpressionEngineOption, CypherPlannerOption, CypherRuntimeOption, CypherVersion}
 import org.neo4j.cypher.internal.PreParser
-import org.neo4j.cypher.internal.v3_5.ast.Statement
-import org.neo4j.cypher.internal.v3_5.ast.prettifier.{ExpressionStringifier, Prettifier}
-import org.neo4j.cypher.internal.v3_5.expressions.Expression
-import org.neo4j.cypher.internal.v3_5.parser.CypherParser
-import org.neo4j.cypher.internal.v3_5.rewriting.rewriters.anonymizeQuery
+import org.neo4j.cypher.internal.v3_6.ast.Statement
+import org.neo4j.cypher.internal.v3_6.ast.prettifier.{ExpressionStringifier, Prettifier}
+import org.neo4j.cypher.internal.v3_6.expressions.Expression
+import org.neo4j.cypher.internal.v3_6.parser.CypherParser
+import org.neo4j.cypher.internal.v3_6.rewriting.rewriters
+import org.neo4j.cypher.internal.v3_6.rewriting.rewriters.{Anonymizer, anonymizeQuery}
 import org.neo4j.internal.kernel.api.TokenRead
 import org.neo4j.values.ValueMapper
 import org.neo4j.values.virtual.MapValue
@@ -54,7 +55,7 @@ case class IdAnonymizer(tokens: TokenRead) extends QueryAnonymizer {
   override def queryText(queryText: String): String = {
     val preParsedQuery = IdAnonymizer.preParser.preParseQuery(queryText, false)
     val originalAst = parser.parse(preParsedQuery.statement, None)
-    val anonymizer = anonymizeQuery(new IdAnonymizerState(tokens, prettifier))
+    val anonymizer = rewriters.anonymizeQuery(new IdAnonymizerState(tokens, prettifier))
     val rewrittenAst = anonymizer(originalAst).asInstanceOf[Statement]
     preParsedQuery.rawPreparserOptions ++ prettifier.asString(rewrittenAst)
   }
@@ -64,7 +65,7 @@ case class IdAnonymizer(tokens: TokenRead) extends QueryAnonymizer {
   }
 }
 
-class IdAnonymizerState(tokens: TokenRead, prettifier: Prettifier) extends org.neo4j.cypher.internal.v3_5.rewriting.rewriters.Anonymizer {
+class IdAnonymizerState(tokens: TokenRead, prettifier: Prettifier) extends Anonymizer {
 
   private val variables = mutable.Map[String, String]()
   private val parameters = mutable.Map[String, String]()

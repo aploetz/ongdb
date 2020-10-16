@@ -4,18 +4,18 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.neo4j</groupId>
+        <groupId>org.graphfoundation.ongdb</groupId>
         <artifactId>parent</artifactId>
-        <version>3.5.22-SNAPSHOT</version>
+        <version>3.6.1-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
 
     <artifactId>cypher-parent</artifactId>
-    <version>3.5.22-SNAPSHOT</version>
+    <version>3.6.1-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>Neo4j - Community Cypher Build</name>
+    <name>ONgDB - Community Cypher Build</name>
     <description>Project that builds the Neo4j Cypher modules as part of the Community distribution.</description>
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+    <url>https://ongdb.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
     <properties>
         <licensing.prepend.text>licensing/notice-gpl-prefix.txt</licensing.prepend.text>
@@ -23,9 +23,9 @@
     </properties>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <profiles>
@@ -37,11 +37,11 @@
                 </property>
             </activation>
             <modules>
-                <module>ir-3.5</module>
-                <module>cypher-planner-3.5</module>
-                <module>planner-spi-3.5</module>
+                <module>ir-3.6</module>
+                <module>cypher-planner-3.6</module>
+                <module>planner-spi-3.6</module>
                 <module>cypher</module>
-                <module>cypher-logical-plans-3.5</module>
+                <module>cypher-logical-plans-3.6</module>
                 <module>front-end</module>
                 <module>runtime-util</module>
                 <module>interpreted-runtime</module>
@@ -122,45 +122,45 @@
         <dependencies>
             <!-- neo4j -->
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-kernel</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-kernel</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-kernel</artifactId>
-                <version>${project.version}</version>
-                <type>test-jar</type>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-common</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-kernel</artifactId>
                 <version>${project.version}</version>
                 <type>test-jar</type>
                 <scope>test</scope>
             </dependency>
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-io</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-common</artifactId>
                 <version>${project.version}</version>
                 <type>test-jar</type>
                 <scope>test</scope>
             </dependency>
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-lucene-index</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-io</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-lucene-index</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- graph matching is used in old cypher compilers 3.1 and 2.3 we can use the old component -->
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-graph-matching</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-graph-matching</artifactId>
                 <version>${cypher.compatibility.31}</version>
             </dependency>
             <dependency>
-                <groupId>org.neo4j</groupId>
-                <artifactId>neo4j-graph-algo</artifactId>
+                <groupId>org.graphfoundation.ongdb</groupId>
+                <artifactId>ongdb-graph-algo</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

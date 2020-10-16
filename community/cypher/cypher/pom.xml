@@ -1,20 +1,20 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <parent>
-        <groupId>org.neo4j</groupId>
+        <groupId>org.graphfoundation.ongdb</groupId>
         <artifactId>cypher-parent</artifactId>
-        <version>3.5.22-SNAPSHOT</version>
+        <version>3.6.1-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>neo4j-cypher</artifactId>
+    <artifactId>ongdb-cypher</artifactId>
     <packaging>jar</packaging>
-    <version>3.5.22-SNAPSHOT</version>
-    <name>Neo4j - Cypher</name>
-    <description>Neo4j query language</description>
-    <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
+    <version>3.6.1-SNAPSHOT</version>
+    <name>ONgDB - Cypher</name>
+    <description>ONgDB query language</description>
+    <url>https://ongdb.graphfoundation.org/${project.artifactId}/${project.version}</url>
 
     <properties>
         <moduleName>org.neo4j.cypher</moduleName>
@@ -22,27 +22,15 @@
     </properties>
 
     <scm>
-        <connection>scm:git:git://github.com/neo4j/neo4j.git</connection>
-        <developerConnection>scm:git:git@github.com:neo4j/neo4j.git</developerConnection>
-        <url>https://github.com/neo4j/neo4j</url>
+        <connection>scm:git:git://github.com/graphfoundation/ongdb.git</connection>
+        <developerConnection>scm:git:git@github.com:graphfoundation/ongdb.git</developerConnection>
+        <url>https://github.com/graphfoundation/ongdb</url>
     </scm>
 
     <licenses>
         <license>
             <name>GNU General Public License, Version 3</name>
             <url>http://www.gnu.org/licenses/gpl-3.0-standalone.html</url>
-            <comments>The software ("Software") developed and owned by Neo4j Sweden AB (referred to in this notice as "Neo4j") is
-                licensed under the GNU GENERAL PUBLIC LICENSE Version 3 to all third
-                parties and that license is included below.
-
-                However, if you have executed an End User Software License and Services
-                Agreement or an OEM Software License and Support Services Agreement, or
-                another commercial license agreement with Neo4j or one of its
-                affiliates (each, a "Commercial Agreement"), the terms of the license in
-                such Commercial Agreement will supersede the GNU GENERAL PUBLIC LICENSE
-                Version 3 and you may use the Software solely pursuant to the terms of
-                the relevant Commercial Agreement.
-            </comments>
         </license>
     </licenses>
 
@@ -87,50 +75,50 @@
 
         <!-- neo4j -->
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-kernel</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-kernel</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-lucene-index</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-lucene-index</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-graph-matching</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-graph-matching</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-graph-algo</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-graph-algo</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-codegen</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-codegen</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- neo4j testing -->
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-common</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-common</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-io</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-io</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-logging</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-logging</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-kernel</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-kernel</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
@@ -147,25 +135,25 @@
 
         <!-- neo4j-cypher -->
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-compiler-2.3</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-compiler-2.3</artifactId>
             <version>${cypher.compatibility.23}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-kernel</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-kernel</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-lucene-index</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-lucene-index</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-graph-algo</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-graph-algo</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-cypher-commons</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-cypher-commons</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>org.scala-lang</groupId>
@@ -174,21 +162,21 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-compiler-3.1</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-compiler-3.1</artifactId>
             <version>${cypher.compatibility.31}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-kernel</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-kernel</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-lucene-index</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-lucene-index</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-graph-algo</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-graph-algo</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>org.scala-lang</groupId>
@@ -213,21 +201,21 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-planner-3.4</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-planner-3.4</artifactId>
             <version>${cypher.compatibility.34}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-kernel</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-kernel</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-lucene-index</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-lucene-index</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.neo4j</groupId>
-                    <artifactId>neo4j-graph-algo</artifactId>
+                    <groupId>org.graphfoundation.ongdb</groupId>
+                    <artifactId>ongdb-graph-algo</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>org.scala-lang</groupId>
@@ -253,86 +241,86 @@
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-legacy</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-legacy</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-util-3.6</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-planner-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-planner-3.6</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-planner-spi-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-planner-spi-3.6</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-runtime-util</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-runtime-util</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-interpreted-runtime</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-interpreted-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <!-- neo4j-cypher test -->
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-planner-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-planner-3.6</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-runtime-util</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-runtime-util</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-cypher-interpreted-runtime</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-cypher-interpreted-runtime</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-util-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-util-3.6</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-ast-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-ast-3.6</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>neo4j-parser-3.5</artifactId>
+            <groupId>org.graphfoundation.ongdb</groupId>
+            <artifactId>ongdb-parser-3.6</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

@@ -22,8 +22,8 @@ package org.neo4j.internal.collector
 import java.time.ZonedDateTime
 
 import org.neo4j.cypher.internal.PreParser
+import org.neo4j.cypher.internal.v3_6.parser.CypherParser
 import org.neo4j.cypher.{CypherExpressionEngineOption, CypherPlannerOption, CypherRuntimeOption, CypherVersion}
-import org.neo4j.cypher.internal.v3_5.parser.CypherParser
 import org.scalatest.matchers.{MatchResult, Matcher}
 
 import scala.collection.mutable.ArrayBuffer
