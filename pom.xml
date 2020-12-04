@@ -86,7 +86,7 @@
             -Dorg.org.neo4j.kernel.impl.newapi.DefaultCursors.trackCursors=true
             -XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields ${java.exports} ${test.runner.jvm.settings.additional}
         </test.runner.jvm.settings>
-        <jetty.version>9.4.17.v20190418</jetty.version>
+        <jetty.version>9.4.34.v20201102</jetty.version>
         <findbugs.version>3.0.1</findbugs.version>
         <git.commit>unknown-commit</git.commit>
         <forkCounts>0</forkCounts>
@@ -337,6 +337,26 @@
                                     <new>field org.neo4j.graphdb.factory.GraphDatabaseSettings.track_query_cpu_time</new>
                                     <justification>Updating setting description for documentation</justification>
                                 </item>
+                                <item>
+                                    <code>java.annotation.attributeValueChanged</code>
+                                    <new>field org.neo4j.graphdb.factory.GraphDatabaseSettings.store_user_log_max_archives</new>
+                                    <justification>Updating setting description for documentation</justification>
+                                </item>
+                                <item>
+                                    <code>java.annotation.attributeValueChanged</code>
+                                    <new>field org.neo4j.graphdb.factory.GraphDatabaseSettings.store_user_log_path</new>
+                                    <justification>Updating setting description for documentation</justification>
+                                </item>
+                                <item>
+                                    <code>java.annotation.attributeValueChanged</code>
+                                    <new>field org.neo4j.graphdb.factory.GraphDatabaseSettings.store_user_log_rotation_delay</new>
+                                    <justification>Updating setting description for documentation</justification>
+                                </item>
+                                <item>
+                                    <code>java.annotation.attributeValueChanged</code>
+                                    <new>field org.neo4j.graphdb.factory.GraphDatabaseSettings.store_user_log_rotation_threshold</new>
+                                    <justification>Updating setting description for documentation</justification>
+                                </item>
                             </revapi.ignore>
                             <revapi.semver.ignore>
                                 <enabled>true</enabled>
@@ -492,7 +512,7 @@
                 <plugin>
                     <groupId>org.neo4j.build.plugins</groupId>
                     <artifactId>licensing-maven-plugin</artifactId>
-                    <version>1.7.7</version>
+                    <version>1.7.9</version>
                     <configuration>
                         <failIfDisliked>false</failIfDisliked>
                         <failIfMissing>true</failIfMissing>
@@ -1067,7 +1087,7 @@
             <dependency>
                 <groupId>org.apache.shiro</groupId>
                 <artifactId>shiro-core</artifactId>
-                <version>1.6.0</version>
+                <version>1.7.0</version>
             </dependency>
             <dependency>
                 <groupId>com.github.ben-manes.caffeine</groupId>
@@ -1306,7 +1326,7 @@
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
-                <version>3.8.1</version>
+                <version>3.8</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.commons</groupId>
@@ -1339,7 +1359,7 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <version>4.1.43.Final</version>
+                <version>4.1.48.Final</version>
             </dependency>
 
             <dependency>
